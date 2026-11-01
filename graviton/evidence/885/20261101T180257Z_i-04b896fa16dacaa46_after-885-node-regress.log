@@ -1,0 +1,250 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-885-node-regress
+# instance: i-04b896fa16dacaa46   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T180257Z   end: 20261101T180929Z   rc: 0
+# script sha256: a51db62d725052c0f22d5759d182abdeede771df3fd6631259f1a74f98137335
+# ---- script ----
+# | cd /boot/home/tnet/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'protocols/(unix|udp|ipv6|tcp)' | awk '{print $NF}' | sort -u
+# | sha256sum /boot/system/kernel_arm64
+# | run() {
+# | 	local name=$1; shift
+# | 	local s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 60 -p tap "$@" > /tmp/regress-$name.tap 2>&1
+# | 	echo "=== $name: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/regress-$name.tap) notok=$(grep -c '^not ok ' /tmp/regress-$name.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/regress-$name.tap | sed 's/^/  /' | sort -k3
+# | }
+# | run repeat-concurrent-disconnect --repeat 10 parallel/test-cluster-concurrent-disconnect
+# | run pipe 'parallel/test-net-pipe-*' 'parallel/test-pipe-*' 'parallel/test-net-local-*'
+# | run cluster 'parallel/test-cluster-*'
+# | run child 'parallel/test-child-process-*'
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/system/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+=== repeat-concurrent-disconnect: rc=1 wall=6s ok=3 notok=7
+  not ok 1 parallel/test-cluster-concurrent-disconnect
+  not ok 10 parallel/test-cluster-concurrent-disconnect
+  not ok 3 parallel/test-cluster-concurrent-disconnect
+  not ok 5 parallel/test-cluster-concurrent-disconnect
+  not ok 6 parallel/test-cluster-concurrent-disconnect
+  not ok 7 parallel/test-cluster-concurrent-disconnect
+  not ok 9 parallel/test-cluster-concurrent-disconnect
+  ok 2 parallel/test-cluster-concurrent-disconnect
+  ok 4 parallel/test-cluster-concurrent-disconnect
+  ok 8 parallel/test-cluster-concurrent-disconnect
+=== pipe: rc=0 wall=2s ok=13 notok=0
+  ok 11 parallel/test-net-local-address-port
+  ok 2 parallel/test-net-pipe-connect-errors
+  ok 3 parallel/test-net-pipe-with-long-path
+  ok 1 parallel/test-pipe-abstract-socket # skip undefined
+  ok 4 parallel/test-pipe-abstract-socket-http # skip undefined
+  ok 5 parallel/test-pipe-address
+  ok 13 parallel/test-pipe-file-to-http
+  ok 6 parallel/test-pipe-head
+  ok 12 parallel/test-pipe-outgoing-message-data-emitted-after-ended
+  ok 7 parallel/test-pipe-return-val
+  ok 8 parallel/test-pipe-stream
+  ok 9 parallel/test-pipe-unref
+  ok 10 parallel/test-pipe-writev
+=== cluster: rc=1 wall=182s ok=77 notok=6
+  not ok 34 parallel/test-cluster-listen-pipe-readable-writable
+  not ok 39 parallel/test-cluster-net-listen-ipv6only-false
+  not ok 79 parallel/test-cluster-worker-kill-signal
+  not ok 82 parallel/test-cluster-dgram-1
+  not ok 83 parallel/test-cluster-disconnect
+  not ok 9 parallel/test-cluster-concurrent-disconnect
+  ok 3 parallel/test-cluster-accept-fail
+  ok 2 parallel/test-cluster-advanced-serialization
+  ok 4 parallel/test-cluster-basic
+  ok 1 parallel/test-cluster-bind-privileged-port # skip Test is not supposed to be run as root.
+  ok 6 parallel/test-cluster-bind-twice
+  ok 5 parallel/test-cluster-call-and-destroy
+  ok 7 parallel/test-cluster-child-index-dgram
+  ok 8 parallel/test-cluster-child-index-net
+  ok 11 parallel/test-cluster-cwd
+  ok 10 parallel/test-cluster-dgram-2
+  ok 12 parallel/test-cluster-dgram-bind-fd
+  ok 15 parallel/test-cluster-dgram-ipv6only
+  ok 14 parallel/test-cluster-dgram-reuse
+  ok 13 parallel/test-cluster-dgram-reuseport # skip The `reusePort` option is not supported
+  ok 16 parallel/test-cluster-disconnect-before-exit
+  ok 17 parallel/test-cluster-disconnect-exitedAfterDisconnect-race
+  ok 18 parallel/test-cluster-disconnect-idle-worker
+  ok 19 parallel/test-cluster-disconnect-leak
+  ok 20 parallel/test-cluster-disconnect-race
+  ok 21 parallel/test-cluster-disconnect-unshared-tcp
+  ok 23 parallel/test-cluster-disconnect-unshared-udp
+  ok 22 parallel/test-cluster-disconnect-with-no-workers
+  ok 24 parallel/test-cluster-eaccess
+  ok 25 parallel/test-cluster-eaddrinuse
+  ok 26 parallel/test-cluster-fork-env
+  ok 27 parallel/test-cluster-fork-stdio
+  ok 29 parallel/test-cluster-fork-windowsHide
+  ok 28 parallel/test-cluster-http-pipe
+  ok 30 parallel/test-cluster-invalid-message
+  ok 31 parallel/test-cluster-ipc-throw
+  ok 32 parallel/test-cluster-kill-disconnect
+  ok 33 parallel/test-cluster-kill-infinite-loop
+  ok 35 parallel/test-cluster-listening-port
+  ok 36 parallel/test-cluster-message
+  ok 37 parallel/test-cluster-net-listen
+  ok 38 parallel/test-cluster-net-listen-backlog
+  ok 41 parallel/test-cluster-net-listen-relative-path
+  ok 40 parallel/test-cluster-net-reuseport # skip The `reusePort` option is not supported
+  ok 42 parallel/test-cluster-net-send
+  ok 43 parallel/test-cluster-net-server-drop-connection
+  ok 44 parallel/test-cluster-primary-error
+  ok 48 parallel/test-cluster-primary-kill
+  ok 45 parallel/test-cluster-process-disconnect
+  ok 46 parallel/test-cluster-rr-domain-listen
+  ok 47 parallel/test-cluster-rr-handle-close
+  ok 60 parallel/test-cluster-rr-handle-keep-loop-alive
+  ok 49 parallel/test-cluster-rr-handle-ref-unref
+  ok 50 parallel/test-cluster-rr-ref
+  ok 51 parallel/test-cluster-send-deadlock
+  ok 52 parallel/test-cluster-send-handle-twice
+  ok 53 parallel/test-cluster-send-socket-to-worker-http-server
+  ok 54 parallel/test-cluster-server-restart-none
+  ok 55 parallel/test-cluster-server-restart-rr
+  ok 56 parallel/test-cluster-setup-primary
+  ok 57 parallel/test-cluster-setup-primary-argv
+  ok 58 parallel/test-cluster-setup-primary-cumulative
+  ok 59 parallel/test-cluster-setup-primary-emit
+  ok 63 parallel/test-cluster-setup-primary-multiple
+  ok 61 parallel/test-cluster-shared-handle-bind-error
+  ok 62 parallel/test-cluster-shared-handle-bind-privileged-port # skip as this test should not be run as `root`
+  ok 64 parallel/test-cluster-shared-leak
+  ok 65 parallel/test-cluster-uncaught-exception
+  ok 66 parallel/test-cluster-worker-constructor
+  ok 68 parallel/test-cluster-worker-death
+  ok 67 parallel/test-cluster-worker-destroy
+  ok 70 parallel/test-cluster-worker-disconnect
+  ok 69 parallel/test-cluster-worker-disconnect-on-error
+  ok 71 parallel/test-cluster-worker-events
+  ok 72 parallel/test-cluster-worker-exit
+  ok 73 parallel/test-cluster-worker-forced-exit
+  ok 74 parallel/test-cluster-worker-handle-close
+  ok 75 parallel/test-cluster-worker-init
+  ok 76 parallel/test-cluster-worker-isconnected
+  ok 77 parallel/test-cluster-worker-isdead
+  ok 78 parallel/test-cluster-worker-kill
+  ok 81 parallel/test-cluster-worker-no-exit
+  ok 80 parallel/test-cluster-worker-wait-server-close
+=== child: rc=1 wall=196s ok=106 notok=7
+  not ok 113 parallel/test-child-process-send-keep-open
+  not ok 13 parallel/test-child-process-env
+  not ok 17 parallel/test-child-process-exec-env
+  not ok 71 parallel/test-child-process-disconnect
+  not ok 8 parallel/test-child-process-default-options
+  not ok 86 parallel/test-child-process-fork-net
+  not ok 89 parallel/test-child-process-fork-net-socket
+  ok 2 parallel/test-child-process-advanced-serialization
+  ok 5 parallel/test-child-process-advanced-serialization-host-objects
+  ok 3 parallel/test-child-process-advanced-serialization-largebuffer
+  ok 1 parallel/test-child-process-advanced-serialization-splitted-length-field
+  ok 28 parallel/test-child-process-bad-stdio
+  ok 4 parallel/test-child-process-can-write-to-stdout
+  ok 6 parallel/test-child-process-constructor
+  ok 7 parallel/test-child-process-cwd
+  ok 9 parallel/test-child-process-destroy
+  ok 11 parallel/test-child-process-detached
+  ok 10 parallel/test-child-process-dgram-reuseport # skip The `reusePort` is not supported
+  ok 12 parallel/test-child-process-double-pipe
+  ok 15 parallel/test-child-process-exec-abortcontroller-promisified
+  ok 14 parallel/test-child-process-exec-any-shells-windows # skip Windows specific test.
+  ok 16 parallel/test-child-process-exec-cwd
+  ok 18 parallel/test-child-process-exec-encoding
+  ok 19 parallel/test-child-process-exec-error
+  ok 20 parallel/test-child-process-exec-kill-throws
+  ok 22 parallel/test-child-process-exec-maxbuf
+  ok 21 parallel/test-child-process-exec-std-encoding
+  ok 23 parallel/test-child-process-exec-stdout-stderr-data-string
+  ok 24 parallel/test-child-process-exec-timeout-expire
+  ok 25 parallel/test-child-process-exec-timeout-kill
+  ok 27 parallel/test-child-process-exec-timeout-not-expired
+  ok 26 parallel/test-child-process-execFile-promisified-abortController
+  ok 29 parallel/test-child-process-execfile
+  ok 30 parallel/test-child-process-execfile-maxbuf
+  ok 31 parallel/test-child-process-execfilesync-maxbuf
+  ok 34 parallel/test-child-process-execsync-maxbuf
+  ok 32 parallel/test-child-process-exit-code
+  ok 33 parallel/test-child-process-flush-stdio
+  ok 35 parallel/test-child-process-fork
+  ok 36 parallel/test-child-process-fork-abort-signal
+  ok 37 parallel/test-child-process-fork-advanced-header-serialization
+  ok 39 parallel/test-child-process-fork-and-spawn
+  ok 38 parallel/test-child-process-fork-args
+  ok 40 parallel/test-child-process-fork-close
+  ok 42 parallel/test-child-process-fork-closed-channel-segfault
+  ok 41 parallel/test-child-process-fork-detached
+  ok 43 parallel/test-child-process-fork-dgram
+  ok 45 parallel/test-child-process-fork-exec-argv
+  ok 47 parallel/test-child-process-fork-exec-path
+  ok 44 parallel/test-child-process-fork-getconnections
+  ok 46 parallel/test-child-process-fork-net-server
+  ok 48 parallel/test-child-process-fork-no-shell
+  ok 49 parallel/test-child-process-fork-ref
+  ok 50 parallel/test-child-process-fork-ref2
+  ok 51 parallel/test-child-process-fork-stdio
+  ok 52 parallel/test-child-process-fork-stdio-string-variant
+  ok 53 parallel/test-child-process-fork-timeout-kill-signal
+  ok 54 parallel/test-child-process-fork-url
+  ok 55 parallel/test-child-process-fork3
+  ok 56 parallel/test-child-process-http-socket-leak
+  ok 57 parallel/test-child-process-internal
+  ok 58 parallel/test-child-process-ipc
+  ok 59 parallel/test-child-process-ipc-next-tick
+  ok 60 parallel/test-child-process-kill
+  ok 61 parallel/test-child-process-kill-sigwinch
+  ok 62 parallel/test-child-process-net-reuseport # skip The `reusePort` option is not supported
+  ok 63 parallel/test-child-process-no-deprecation
+  ok 64 parallel/test-child-process-pipe-dataflow
+  ok 65 parallel/test-child-process-promisified
+  ok 66 parallel/test-child-process-prototype-tampering # skip undefined
+  ok 67 parallel/test-child-process-recv-handle
+  ok 68 parallel/test-child-process-reject-null-bytes
+  ok 69 parallel/test-child-process-send-after-close
+  ok 70 parallel/test-child-process-send-cb
+  ok 72 parallel/test-child-process-send-returns-boolean
+  ok 73 parallel/test-child-process-send-type-error
+  ok 74 parallel/test-child-process-send-utf8
+  ok 75 parallel/test-child-process-server-close
+  ok 76 parallel/test-child-process-set-blocking
+  ok 77 parallel/test-child-process-silent
+  ok 78 parallel/test-child-process-spawn-args
+  ok 79 parallel/test-child-process-spawn-argv0
+  ok 80 parallel/test-child-process-spawn-controller
+  ok 81 parallel/test-child-process-spawn-error
+  ok 82 parallel/test-child-process-spawn-event
+  ok 83 parallel/test-child-process-spawn-shell
+  ok 84 parallel/test-child-process-spawn-timeout-kill-signal
+  ok 85 parallel/test-child-process-spawn-typeerror
+  ok 91 parallel/test-child-process-spawn-windows-batch-file
+  ok 87 parallel/test-child-process-spawnsync
+  ok 88 parallel/test-child-process-spawnsync-args
+  ok 90 parallel/test-child-process-spawnsync-env
+  ok 94 parallel/test-child-process-spawnsync-input
+  ok 93 parallel/test-child-process-spawnsync-kill-signal
+  ok 92 parallel/test-child-process-spawnsync-maxbuf
+  ok 95 parallel/test-child-process-spawnsync-non-string-args
+  ok 96 parallel/test-child-process-spawnsync-shell
+  ok 98 parallel/test-child-process-spawnsync-timeout
+  ok 105 parallel/test-child-process-spawnsync-validation-errors
+  ok 97 parallel/test-child-process-stdin
+  ok 100 parallel/test-child-process-stdin-ipc
+  ok 99 parallel/test-child-process-stdio
+  ok 101 parallel/test-child-process-stdio-big-write-end
+  ok 102 parallel/test-child-process-stdio-inherit
+  ok 103 parallel/test-child-process-stdio-merge-stdouts-into-cat
+  ok 104 parallel/test-child-process-stdio-overlapped # skip overlapped-checker binary is not available
+  ok 106 parallel/test-child-process-stdio-reuse-readable-stdio
+  ok 107 parallel/test-child-process-stdout-flush
+  ok 108 parallel/test-child-process-stdout-flush-exit
+  ok 110 parallel/test-child-process-stdout-ipc
+  ok 109 parallel/test-child-process-uid-gid
+  ok 111 parallel/test-child-process-validate-stdio
+  ok 112 parallel/test-child-process-windows-hide

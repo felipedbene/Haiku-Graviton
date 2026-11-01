@@ -1,0 +1,241 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-0f66f22d9294ba2ed   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261101T171304Z   end: 20261101T171622Z   rc: 0
+# script sha256: 35742f890b72402dec9800231ef033a0644eccf7d163343d20da5bded7f3597a
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tnet
+# | apt-get update -qq
+# | apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /dev/null
+# | echo "apt rc=$?"
+# | if ! command -v aws; then
+# | 	curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
+# | 	(cd /tmp && unzip -q a.zip && ./aws/install > /dev/null)
+# | fi
+# | set +x
+# | mkdir -p /opt/tnet && cd /opt/tnet
+# | rm -rf hg buildtools out
+# | git clone -q --depth 40 --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | for b in fix/885-unix-connect-not-socket fix/886-sendmsg-zero-length-iovec fix/887-udp-sendto-any-loopback fix/888-ipv6-multicast-if-index fix/889-ipv6-bind-eaddrnotavail fix/890-unix-accepted-epipe fix/891-tcp-reset-data-after-close; do
+# | 	git -C hg fetch -q --depth 5 origin "$b:$b"
+# | done
+# | git -C hg log -1 --format='trunk %H %s'
+# | git -C hg cat-file -t a9d5585b19 && git -C hg log -1 --format='canonical-source %H %s' a9d5585b19
+# | git clone -q --depth 1 https://github.com/felipedbene/buildtools.git buildtools
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /dev/null 2>&1 && ./jam0 install > /dev/null 2>&1)
+# | command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C .
+# | ../configure --cross-tools-prefix /opt/tnet/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32 2>&1 | tail -1
+# | 
+# | path_of() {
+# | 	case $1 in
+# | 		kernel_arm64) echo objects/haiku/arm64/release/system/kernel/kernel_arm64 ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | 
+# | # build <label> <ref> <targets...>
+# | build() {
+# | 	local label=$1 ref=$2; shift 2
+# | 	git -C .. checkout -q --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log)"
+# | 	[ $rc = 0 ] || tail -30 jam-$label.log
+# | 	mkdir -p /opt/tnet/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/tnet/out/$label/$t && sha256sum /opt/tnet/out/$label/$t | sed "s|/opt/tnet/out/||"
+# | 	done
+# | }
+# | 
+# | build base a9d5585b19 unix udp ipv6 tcp kernel_arm64
+# | build trunk graviton unix udp ipv6 tcp kernel_arm64
+# | build 885 fix/885-unix-connect-not-socket unix
+# | build 890 fix/890-unix-accepted-epipe unix
+# | build 887 fix/887-udp-sendto-any-loopback udp
+# | build 888 fix/888-ipv6-multicast-if-index ipv6
+# | build 889 fix/889-ipv6-bind-eaddrnotavail ipv6
+# | build 891 fix/891-tcp-reset-data-after-close tcp
+# | build 886 fix/886-sendmsg-zero-length-iovec kernel_arm64
+# | 
+# | # the deployed kernel: canonical's source plus the issue 886 commit alone
+# | git -C .. checkout -q --detach a9d5585b19
+# | git -C .. -c user.name=x -c user.email=x@x cherry-pick fix/886-sendmsg-zero-length-iovec > /dev/null && git -C .. branch -f t886-on-canonical HEAD
+# | git -C .. diff --stat a9d5585b19 t886-on-canonical
+# | build 886-on-canonical t886-on-canonical kernel_arm64
+# | 
+# | # reproducibility: back to canonical's source, rebuilt incrementally
+# | build base-again a9d5585b19 unix udp ipv6 tcp kernel_arm64
+# | 
+# | for d in /opt/tnet/out/*; do
+# | 	for f in $d/*; do aws s3 cp --quiet "$f" "$OUT/mod/$(basename $d)/$(basename $f)"; done
+# | done
+# | aws s3 ls --recursive $OUT/mod/ | wc -l
+# | 
+# | # Linux reference run of the repros
+# | mkdir -p /opt/tnet/repro && cd /opt/tnet/repro
+# | aws s3 cp --quiet --recursive $OUT/src/ .
+# | uname -a
+# | for c in unix885 unix890 iov886 udp887 ipv6_888 ipv6_889 tcp891; do
+# | 	gcc -O2 -Wall -o $c $c.c || echo "compile $c failed"
+# | 	echo "=== linux $c (sha256 $(sha256sum $c.c | cut -c1-16))"
+# | 	if [ $c = tcp891 ]; then ./$c 3; else ./$c; fi
+# | 	echo "exit=$?"
+# | done
+# ---- raw output ----
+ssm-run: command 381ed143-1433-4a53-828e-1f3297d5c5c8 on i-0f66f22d9294ba2ed (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-61934-c5bc96)
+apt rc=0
+trunk e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
+commit
+canonical-source a9d5585b19b336ab6365349431f73513a8835ecd ports: add kubectl 1.37.1, the first Kubernetes tool for haiku/arm64 (#844)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+Configured successfully!
+JAM base ref=a9d5585b19 head=a9d5585b rc=0 wall=15s failed=0
+5c687b90415d2220dbd0682c6655f37261a04eed320886028cfeecde2564bdf2  base/unix
+0133f16134b5fef4bccf13cfb7cc45c9ae93882410538f390de9991bc1055cac  base/udp
+09f4fdbc06f628da7bd2030fa214b6a6e6101e534433284912945ec432098fba  base/ipv6
+a275262053d51bd688c6315ccb3e1f22e08f6d473094a7ad21bc18fd0c59ce38  base/tcp
+1270722e1f1c94615a096454636999697fb01211e10e88129c287cb3d658961b  base/kernel_arm64
+JAM trunk ref=graviton head=e7979ac2 rc=0 wall=9s failed=0
+5c687b90415d2220dbd0682c6655f37261a04eed320886028cfeecde2564bdf2  trunk/unix
+0133f16134b5fef4bccf13cfb7cc45c9ae93882410538f390de9991bc1055cac  trunk/udp
+09f4fdbc06f628da7bd2030fa214b6a6e6101e534433284912945ec432098fba  trunk/ipv6
+a275262053d51bd688c6315ccb3e1f22e08f6d473094a7ad21bc18fd0c59ce38  trunk/tcp
+aac0913f4b6218325cafdd8184bd5493c69a32cbe97562374822344f9670feed  trunk/kernel_arm64
+JAM 885 ref=fix/885-unix-connect-not-socket head=faed5d4f rc=0 wall=5s failed=0
+2669cd5f70efc420162c2e039b04f7aa907cdfc86c1933ee3659d73fa66b77eb  885/unix
+JAM 890 ref=fix/890-unix-accepted-epipe head=01112a87 rc=0 wall=5s failed=0
+2669cd5f70efc420162c2e039b04f7aa907cdfc86c1933ee3659d73fa66b77eb  890/unix
+JAM 887 ref=fix/887-udp-sendto-any-loopback head=5668d78b rc=0 wall=5s failed=0
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  887/udp
+JAM 888 ref=fix/888-ipv6-multicast-if-index head=246b333d rc=0 wall=5s failed=0
+12603fbc48a9d96bc283a9276d6ba4b55c6e63ec1f5205afe29530d982b6ecf3  888/ipv6
+JAM 889 ref=fix/889-ipv6-bind-eaddrnotavail head=3fcb2d00 rc=0 wall=5s failed=0
+12603fbc48a9d96bc283a9276d6ba4b55c6e63ec1f5205afe29530d982b6ecf3  889/ipv6
+JAM 891 ref=fix/891-tcp-reset-data-after-close head=85b13077 rc=0 wall=6s failed=0
+9f8f07290791ce47b3654d8d207fdda6aff5b9dc549c84190f00b1533334bfad  891/tcp
+JAM 886 ref=fix/886-sendmsg-zero-length-iovec head=5e114860 rc=0 wall=8s failed=0
+680ed701bae5330c6ea46efaf3e334eed2eef2b89bd26127a5343b912fefafb3  886/kernel_arm64
+ headers/private/kernel/util/iovec_support.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+JAM 886-on-canonical ref=t886-on-canonical head=560b6808 rc=0 wall=7s failed=0
+62ff3bc328401549f9eed3c410679d296eeeab23837899586137ca6ff653b419  886-on-canonical/kernel_arm64
+JAM base-again ref=a9d5585b19 head=a9d5585b rc=0 wall=9s failed=0
+4080a74316e517617a0776f643fb60cc13e7f909c794bdb50d13cc9bc7931f65  base-again/unix
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  base-again/udp
+09f4fdbc06f628da7bd2030fa214b6a6e6101e534433284912945ec432098fba  base-again/ipv6
+9f8f07290791ce47b3654d8d207fdda6aff5b9dc549c84190f00b1533334bfad  base-again/tcp
+153a50fbf28f016b7fc201bebb5987c503f1d4c002c1f9129aa6d7f1e8a60969  base-again/kernel_arm64
+23
+Linux ip-10-128-15-116 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+=== linux unix885 (sha256 ae314def3f6a9f76)
+stream connect, regular file                 PASS  r=-1 errno=111 (Connection refused)
+dgram connect, regular file                  PASS  r=-1 errno=111 (Connection refused)
+dgram sendto, regular file                   PASS  r=-1 errno=111 (Connection refused)
+stream connect, no such path (control)       PASS  r=-1 errno=2 (No such file or directory)
+dgram connect, no such path (control)        PASS  r=-1 errno=2 (No such file or directory)
+dgram sendto, no such path (control)         PASS  r=-1 errno=2 (No such file or directory)
+stream connect, stale socket file (control)  PASS  r=-1 errno=111 (Connection refused)
+dgram connect, stale socket file (control)   PASS  r=-1 errno=111 (Connection refused)
+dgram sendto, stale socket file (control)    PASS  r=-1 errno=111 (Connection refused)
+unix885: 0 failed
+exit=0
+=== linux unix890 (sha256 2467d88185858d85)
+socketpair sv[0], sv[1] closed, write                PASS  r=-1 errno=32 (Broken pipe) sigpipe=1
+socketpair sv[1], sv[0] closed, write                PASS  r=-1 errno=32 (Broken pipe) sigpipe=1
+accepted end, peer closed, write                     PASS  r=-1 errno=32 (Broken pipe) sigpipe=1
+connecting end, peer closed, write                   PASS  r=-1 errno=32 (Broken pipe) sigpipe=1
+socketpair sv[0], sv[1] closed, send(MSG_NOSIGNAL)   PASS  r=-1 errno=32 (Broken pipe) sigpipe=0
+socketpair sv[1], sv[0] closed, send(MSG_NOSIGNAL)   PASS  r=-1 errno=32 (Broken pipe) sigpipe=0
+accepted end, peer closed, send(MSG_NOSIGNAL)        PASS  r=-1 errno=32 (Broken pipe) sigpipe=0
+connecting end, peer closed, send(MSG_NOSIGNAL)      PASS  r=-1 errno=32 (Broken pipe) sigpipe=0
+unix890: 0 failed
+exit=0
+=== linux iov886 (sha256 1ada5e7aa9cd0d32)
+sendto(NULL, 0) (control)                          PASS  r=0  received=0
+sendmsg iov{NULL,0}                                PASS  r=0  received=0
+connected sendmsg iov{NULL,0}                      PASS  r=0  received=0
+sendmsg iov{&byte,0} (control)                     PASS  r=0  received=0
+sendmsg iov{NULL,4} must fault                     PASS  r=-1 errno=14 (Bad address)  received=-1
+sendmsg iov{(void*)1,4} must fault                 PASS  r=-1 errno=14 (Bad address)  received=-1
+recvmsg iov{NULL,0} of a 0-byte datagram           PASS  r=0
+recvmsg iov{NULL,4} must fault                     PASS  r=-1 errno=14 (Bad address)
+iov886: 0 failed
+exit=0
+=== linux udp887 (sha256 882830b2e10c0439)
+udp4 sendto(wildcard address)                   PASS  r=2  received=1 from=127.0.0.1
+udp4 sendto(loopback) (control)                 PASS  r=2  received=1 from=127.0.0.1
+udp4 connect(wildcard) + send (control)         PASS  r=2  received=1 from=127.0.0.1
+udp4 unconnected send, no address (control)     PASS  r=-1 errno=89 (Destination address required)  received=0 from=-
+udp6 sendto(wildcard address)                   PASS  r=2  received=1 from=::1
+udp6 sendto(loopback) (control)                 PASS  r=2  received=1 from=::1
+udp6 connect(wildcard) + send (control)         PASS  r=2  received=1 from=::1
+udp6 unconnected send, no address (control)     PASS  r=-1 errno=89 (Destination address required)  received=0 from=-
+udp887: 0 failed
+exit=0
+=== linux ipv6_888 (sha256 baff5e23a5bca7ec)
+set/get index 0 (default)                    PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=2
+set/get index 1 (lo)                         PASS  set r=0  get r=0 value=1
+    info: sendto(ff02::1%1) r=-1 errno=101 (Network is unreachable)
+set/get index 2 (ens5)                       PASS  set r=0  get r=0 value=2
+    info: sendto(ff02::1%2) r=2
+set/get index 0 (default again)              PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=2
+set index 1002 (no such interface)           PASS  r=-1 errno=19 (No such device)
+info: set in6_addr :: (16-byte form)         r=0
+ipv6_888: 0 failed
+exit=0
+=== linux ipv6_889 (sha256 d2e5e1553a1bcda8)
+udp6 bind 111::1                     PASS  r=-1 errno=99 (Cannot assign requested address)
+udp6 bind 2001:db8::1                PASS  r=-1 errno=99 (Cannot assign requested address)
+udp4 bind 1.1.1.1                    PASS  r=-1 errno=99 (Cannot assign requested address)
+udp6 bind ::1 (control)              PASS  r=0
+udp6 bind :: (control)               PASS  r=0
+tcp6 bind 111::1                     PASS  r=-1 errno=99 (Cannot assign requested address)
+tcp6 bind 2001:db8::1                PASS  r=-1 errno=99 (Cannot assign requested address)
+tcp4 bind 1.1.1.1                    PASS  r=-1 errno=99 (Cannot assign requested address)
+tcp6 bind ::1 (control)              PASS  r=0
+tcp6 bind :: (control)               PASS  r=0
+ipv6_889: 0 failed (EADDRNOTAVAIL=99)
+exit=0
+=== linux tcp891 (sha256 d3de1c3466250272)
+ipv4 closed     PASS  read=0  write #2 failed after 10.1 ms: errno=32 (Broken pipe)
+ipv4 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+ipv6 closed     PASS  read=0  write #2 failed after 10.1 ms: errno=32 (Broken pipe)
+ipv6 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+tcp891: 0 failed
+exit=0
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tnet
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ set +x
+ssm-run: Success
