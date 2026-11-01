@@ -1,0 +1,143 @@
+# evidence: bedrock-tui-session
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T003220Z   end: 20261101T003413Z   rc: 0
+# script sha256: 0f8f5107c82128520eb06b9a0c39a66e9b8999ca21cc6b59e1b94fb1dfa14a4c
+# ---- script ----
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5
+# | H=/tmp/tui-home; rm -rf $H; mkdir -p $H/.claude
+# | W=/boot/system/cache/tmp/cc-tui; rm -rf $W; mkdir -p $W; printf 'line one\nline two\n' > $W/notes.txt
+# | cat > $H/.claude/settings.json <<J
+# | {"prefersReducedMotion":true,"theme":"dark","permissions":{"allow":["Edit","Write","Bash(echo:*)","Bash(sleep:*)","Bash(uname:*)"]}}
+# | J
+# | cat > $H/.claude.json <<J
+# | {"hasCompletedOnboarding":true,"theme":"dark","projects":{"$W":{"hasTrustDialogAccepted":true}}}
+# | J
+# | S=t; tmux -L $S kill-server 2>/dev/null
+# | tmux -L $S new-session -d -s $S -x 110 -y 34 "cd $W && env CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude 2>/tmp/tui.err; echo CLAUDE-EXITED rc=\$?; sleep 60"
+# | snap() { sleep "$1"; echo "----- [$2]"; tmux -L $S capture-pane -t $S -p | sed 's/[[:space:]]*$//' | grep -v '^$' | tail -${3:-14}; }
+# | waitfor() { for i in $(seq 1 $2); do tmux -L $S capture-pane -t $S -p | grep -q -- "$1" && return 0; sleep 2; done; echo "(timeout waiting for: $1)"; return 1; }
+# | snap 15 "startup"
+# | tmux -L $S send-keys -t $S -l 'Edit notes.txt: replace "line two" with "line two (edited on Haiku)". Then run: echo bash-ok-$(uname -s)'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "bash-ok-Haiku" 60; snap 4 "after edit + bash" 18
+# | echo "----- notes.txt on disk:"; cat $W/notes.txt
+# | tmux -L $S send-keys -t $S -l 'Run the bash command: sleep 120'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | sleep 15; snap 0 "during sleep 120" 8
+# | tmux -L $S send-keys -t $S Escape; snap 5 "after Esc (interrupt)" 8
+# | echo "----- sleep processes left: $(ps | grep -c '[/]bin/sleep 120')"
+# | tmux -L $S resize-window -t $S -x 70 -y 24; snap 3 "resized to 70x24" 10
+# | tmux -L $S resize-window -t $S -x 130 -y 40; snap 3 "resized to 130x40" 6
+# | tmux -L $S send-keys -t $S -l '/compact'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "ompact" 90; sleep 20; snap 0 "after /compact" 12
+# | tmux -L $S send-keys -t $S -l 'What word did I put in parentheses in notes.txt? Answer in one line.'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "Haiku)" 60; snap 5 "post-compact recall" 8
+# | tmux -L $S send-keys -t $S C-c; sleep 1; tmux -L $S send-keys -t $S C-c; sleep 4; snap 0 "after Ctrl-C Ctrl-C" 6
+# | echo "----- node teams left: $(ps | grep -c '[b]in/node --zero-fill-buffers /boot/system/lib/clau')"
+# | echo "----- stderr (filtered):"; grep -v "Cannot open directory /boot/system/non-packaged" /tmp/tui.err | head -5
+# | tmux -L $S kill-server
+# ---- raw output ----
+----- [startup]
+▝▜██████▀  Sonnet 5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/cc-tui
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is
+  world-writable without the sticky bit (owner 0:0, mode 0777) — chmod o-w /boot/system/cache/tmp (or chmod
+  +t), or pass --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+▎ Auto mode is now Claude Code's default permission mode.
+▎ Auto mode lets Claude handle permission prompts automatically. Claude checks each tool call for risky
+▎ actions and prompt injection before executing, runs the ones it assesses as lower-risk, and blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+                                                                                            ● high · /effort
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+----- [after edit + bash]
+▎ Auto mode is now Claude Code's default permission mode.
+▎ Auto mode lets Claude handle permission prompts automatically. Claude checks each tool call for risky
+▎ actions and prompt injection before executing, runs the ones it assesses as lower-risk, and blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+❯ Edit notes.txt: replace "line two" with "line two (edited on Haiku)". Then run: echo bash-ok-$(uname -s)
+  Searched for 1 pattern, read 1 file, listed 1 directory, ran 1 shell command
+● Update(notes.txt)
+  ⎿  Added 1 line, removed 1 line
+      1  line one
+      2 -line two
+      2 +line two (edited on Haiku)
+  Ran 1 shell command
+● Done — notes.txt now has "line two (edited on Haiku)", and the command printed bash-ok-Haiku.
+✻ Brewed for 17s · done 12:33 AM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- notes.txt on disk:
+line one
+line two (edited on Haiku)
+----- [during sleep 120]
+❯ Run the bash command: sleep 120
+  Ran 2 shell commands
+● Started the 120-second sleep in the background (task b9da6vhms) — I'll let you know when it finishes.
+✻ Worked for 7s · done 12:33 AM · 1 shell still running
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · ↓ to manage
+----- [after Esc (interrupt)]
+❯ Run the bash command: sleep 120
+  Ran 2 shell commands
+● Started the 120-second sleep in the background (task b9da6vhms) — I'll let you know when it finishes.
+✻ Worked for 7s · done 12:33 AM · 1 shell still running
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · ↓ to manage
+----- sleep processes left: 1
+----- [resized to 70x24]
+✻ Brewed for 17s · done 12:33 AM · 1 shell still running
+❯ Run the bash command: sleep 120
+  Ran 2 shell commands
+● Started the 120-second sleep in the background (task b9da6vhms) —
+  I'll let you know when it finishes.
+✻ Worked for 7s · done 12:33 AM · 1 shell still running
+──────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · ↓ to manage
+----- [resized to 130x40]
+● Started the 120-second sleep in the background (task b9da6vhms) — I'll let you know when it finishes.
+✻ Worked for 7s · done 12:33 AM · 1 shell still running
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · ↓ to manage
+----- [after /compact]
+✻ Brewed for 17s · done 12:33 AM · 1 shell still running
+❯ Run the bash command: sleep 120
+  Ran 2 shell commands
+● Started the 120-second sleep in the background (task b9da6vhms) — I'll let you know when it finishes.
+✻ Worked for 7s · done 12:33 AM · 1 shell still running
+❯ /compact
+● Compacting conversation… (1s · ↓ 3 tokens)
+  ⎿  Tip: Use Plan Mode to prepare for a complex request before making changes. Press shift+tab twice to enable.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · esc to interrupt · ↓ to manage
+----- [post-compact recall]
+❯ What word did I put in parentheses in notes.txt? Answer in one line.
+  ctrl+x ctrl+s to send now
+● Compacting conversation… (1s · ↓ 3 tokens)
+  ⎿  Tip: Use Plan Mode to prepare for a complex request before making changes. Press shift+tab twice to enable.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Press up to edit queued messages
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell · esc to interrupt · ↓ to manage
+----- [after Ctrl-C Ctrl-C]
+❯ /compact
+  ⎿  Compaction canceled.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ What word did I put in parentheses in notes.txt? Answer in one line.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 1 shell
+----- node teams left: 1
+----- stderr (filtered):

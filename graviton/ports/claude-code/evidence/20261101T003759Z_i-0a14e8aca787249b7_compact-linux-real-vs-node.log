@@ -1,0 +1,44 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: compact-linux-real-vs-node
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 06ef0706-5bd9-4aa4-9677-c32fa607726d (agent status: Success)
+# start: 20261101T003759Z   end: 20261101T004430Z   rc: 0   log bytes: 2458
+# script sha256: b8267f8c4141c5286949330f2cebfc84348cb73aa2f55394914d654449e0939d
+# ---- script ----
+# | set -u
+# | echo '9d210848b8e3b877fa74a9c469adb60e0e03eabed935ab5b753eb4172f68982a  /opt/cc/w-ct.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-ct && mkdir -p /opt/cc/w-ct && tar xzf /opt/cc/w-ct.stage/p.tgz -C /opt/cc/w-ct 2>/dev/null
+# | cd /opt/cc/w-ct
+# | set -u
+# | W=/opt/cc/w-ct; N=/opt/node24/bin/node; BIN=/opt/cc/v2.1.314/package/claude
+# | for i in $(seq 1 30); do curl -s -m 2 http://169.254.169.254/latest/meta-data/iam/security-credentials/ | grep -q ssm && break; sleep 5; done; echo "imds role: $(curl -s -m 2 http://169.254.169.254/latest/meta-data/iam/security-credentials/)"
+# | bash tools/fetch-deps.sh $W/deps > /dev/null && rm -rf $W/tree && bash tools/build-tree.sh $BIN $W/tree $W/tree $N $W/deps | tail -1
+# | bash tools/compact-test.sh real $BIN; echo "real rc=$?"
+# | bash tools/compact-test.sh nodecompat $N --zero-fill-buffers $W/tree/claude.mjs; echo "nodecompat rc=$?"
+# ---- raw output ----
+imds role: 
+build-tree: /opt/cc/w-ct/tree ready (prefix /opt/cc/w-ct/tree)
+[real] no OK
+  eManagementRole/i-0a14e8aca787249b7 is not authorized to perform:
+  bedrock:InvokeModelWithResponseStream on resource:
+  arn:aws:bedrock:us-west-2:<ACCOUNT_ID>:inference-profile/us.anthropic.claude-sonnet-5 because no
+  identity-based policy allows the bedrock:InvokeModelWithResponseStream action"}
+✻ Crunched for 0s · done 12:41 AM
+                                                                      ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+real rc=1
+[nodecompat] no OK
+  eManagementRole/i-0a14e8aca787249b7 is not authorized to perform:
+  bedrock:InvokeModelWithResponseStream on resource:
+  arn:aws:bedrock:us-west-2:<ACCOUNT_ID>:inference-profile/us.anthropic.claude-sonnet-5 because no
+  identity-based policy allows the bedrock:InvokeModelWithResponseStream action"}
+✻ Cogitated for 1s · done 12:42 AM
+                                                                       ✔ Update installed · Restart to apply
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+nodecompat rc=1

@@ -1,0 +1,26 @@
+# evidence: compact-haiku
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T003730Z   end: 20261101T003804Z   rc: 0
+# script sha256: 4b3d20c74f2c124074fe1b1bc1ed627fb2a092f0a378a0b82b0ebc38390d2742
+# ---- script ----
+# | set -u
+# | mkdir -p /tmp/ctt/tools && printf '%s' 'IyEvYmluL2Jhc2gKIyBjb21wYWN0LXRlc3Quc2ggPGxhYmVsPiA8Y2xhdWRlIGNvbW1hbmQuLi4+OiBpbnRlcmFjdGl2ZSBUVUkgdW5kZXIgdG11eCB2aWEgQW1hem9uIEJlZHJvY2sKIyAoaW5zdGFuY2UtcHJvZmlsZSBjcmVkZW50aWFscyk6IHNldCBhIHRva2VuLCAvY29tcGFjdCwgdGhlbiBhc2sgZm9yIHRoZSB0b2tlbiBiYWNrLgojIFByaW50cyB0aW1lc3RhbXBlZCBzY3JlZW4gc25hcHNob3RzOyBleGl0cyAwIG9ubHkgaWYgY29tcGFjdGlvbiBjb21wbGV0ZXMgYW5kIHRoZQojIHRva2VuIGlzIHJlY2FsbGVkLiBVc2VkIHRvIGNvbXBhcmUgdGhlIHJlYWwgYmluYXJ5LCBub2RlK2NvbXBhdCwgYW5kIHRoZSBIYWlrdSBwYWNrYWdlLgpzZXQgLXUKbGFiZWw9JDE7IHNoaWZ0OyBDTUQ9IiQqIgpleHBvcnQgQ0xBVURFX0NPREVfVVNFX0JFRFJPQ0s9MSBBV1NfUkVHSU9OPXVzLXdlc3QtMiBBTlRIUk9QSUNfTU9ERUw9JHtBTlRIUk9QSUNfTU9ERUw6LXVzLmFudGhyb3BpYy5jbGF1ZGUtc29ubmV0LTV9Ckg9L3RtcC9jb21wYWN0LWhvbWUtJGxhYmVsOyBybSAtcmYgJEg7IG1rZGlyIC1wICRILy5jbGF1ZGUKVz0kKGNkIC90bXAgJiYgcHdkIC1QKS9jb21wYWN0LSRsYWJlbDsgcm0gLXJmICRXOyBta2RpciAtcCAkVwplY2hvICd7InByZWZlcnNSZWR1Y2VkTW90aW9uIjp0cnVlLCJ0aGVtZSI6ImRhcmsifScgPiAkSC8uY2xhdWRlL3NldHRpbmdzLmpzb24KZWNobyAie1wiaGFzQ29tcGxldGVkT25ib2FyZGluZ1wiOnRydWUsXCJ0aGVtZVwiOlwiZGFya1wiLFwicHJvamVjdHNcIjp7XCIkV1wiOntcImhhc1RydXN0RGlhbG9nQWNjZXB0ZWRcIjp0cnVlfX19IiA+ICRILy5jbGF1ZGUuanNvbgpTPWN0LSRsYWJlbDsgdG11eCAtTCAkUyBraWxsLXNlcnZlciAyPi9kZXYvbnVsbAp0bXV4IC1MICRTIG5ldy1zZXNzaW9uIC1kIC1zICRTIC14IDExMCAteSAzNCAiY2QgJFcgJiYgZW52IENMQVVERV9DT0RFX1VTRV9CRURST0NLPTEgQVdTX1JFR0lPTj0kQVdTX1JFR0lPTiBBTlRIUk9QSUNfTU9ERUw9JEFOVEhST1BJQ19NT0RFTCBIT01FPSRIIFRFUk09eHRlcm0tMjU2Y29sb3IgJENNRCAyPi90bXAvY29tcGFjdC0kbGFiZWwuZXJyIgp0cmFwICd0bXV4IC1MICRTIGtpbGwtc2VydmVyIDI+L2Rldi9udWxsJyBFWElUCmNhcCgpIHsgdG11eCAtTCAkUyBjYXB0dXJlLXBhbmUgLXQgJFMgLXAgfCBzZWQgJ3MvW1s6c3BhY2U6XV0qJC8vJyB8IGdyZXAgLXYgJ14kJzsgfQp3YWl0Zm9yKCkgeyBsb2NhbCBpOyBmb3IgaSBpbiAkKHNlcSAxICQyKTsgZG8gY2FwIHwgZ3JlcCAtcSAtLSAiJDEiICYmIHJldHVybiAwOyBzbGVlcCAxOyBkb25lOyByZXR1cm4gMTsgfQp0eXBlXygpIHsgdG11eCAtTCAkUyBzZW5kLWtleXMgLXQgJFMgLWwgIiQxIjsgc2xlZXAgMTsgdG11eCAtTCAkUyBzZW5kLWtleXMgLXQgJFMgRW50ZXI7IH0Kd2FpdGZvciAi4p2vIiA2MCB8fCB7IGVjaG8gIlskbGFiZWxdIG5vIHByb21wdCI7IGNhcCB8IHRhaWwgLTEwOyBleGl0IDE7IH0KdHlwZV8gJ1JlbWVtYmVyIHRoaXMgdG9rZW4gZm9yIGxhdGVyOiBaRUJSQS00Mi4gUmVwbHkgb25seSBPSy4nCndhaXRmb3IgIuKXjyBPSyIgOTAgfHwgeyBlY2hvICJbJGxhYmVsXSBubyBPSyI7IGNhcCB8IHRhaWwgLTEwOyBleGl0IDE7IH0KdHlwZV8gJy9jb21wYWN0Jwp0MD0kKGRhdGUgKyVzKTsgc2Vlbj0wOyBkb25lXz0wCmZvciBpIGluICQoc2VxIDEgMTgwKTsgZG8KCWM9JChjYXApCgllY2hvICIkYyIgfCBncmVwIC1xICJDb21wYWN0aW5nIGNvbnZlcnNhdGlvbiIgJiYgeyBzZWVuPTE7IFsgJCgoaSAlIDE1KSkgPSAwIF0gJiYgZWNobyAiWyRsYWJlbF0gdD0kKCggJChkYXRlICslcykgLSB0MCApKXMgJChlY2hvICIkYyIgfCBncmVwIC1tMSAnQ29tcGFjdGluZyBjb252ZXJzYXRpb24nKSI7IH0KCWlmIFsgJHNlZW4gPSAxIF0gJiYgISBlY2hvICIkYyIgfCBncmVwIC1xICJDb21wYWN0aW5nIGNvbnZlcnNhdGlvbiI7IHRoZW4gZG9uZV89MTsgYnJlYWs7IGZpCglzbGVlcCAxCmRvbmUKZWNobyAiWyRsYWJlbF0gY29tcGFjdGlvbjogc2Vlbj0kc2VlbiBmaW5pc2hlZD0kZG9uZV8gYWZ0ZXIgJCgoICQoZGF0ZSArJXMpIC0gdDAgKSlzIgpjYXAgfCB0YWlsIC04IHwgc2VkICJzL14vWyRsYWJlbF0gLyIKdHlwZV8gJ1doYXQgdG9rZW4gZGlkIEkgYXNrIHlvdSB0byByZW1lbWJlcj8gQW5zd2VyIHdpdGggdGhlIHRva2VuIG9ubHkuJwppZiB3YWl0Zm9yICJaRUJSQS00MiIgMTIwICYmIFsgIiQoY2FwIHwgZ3JlcCAtYyBaRUJSQS00MikiIC1nZSAyIF07IHRoZW4gZWNobyAiWyRsYWJlbF0gcmVjYWxsOiBPSyI7IGVsc2UgZWNobyAiWyRsYWJlbF0gcmVjYWxsOiBGQUlMRUQiOyBmaQpjYXAgfCB0YWlsIC01IHwgc2VkICJzL14vWyRsYWJlbF0gLyIKZWNobyAiWyRsYWJlbF0gc3RkZXJyOiAkKGdyZXAgLXYgJ0Nhbm5vdCBvcGVuIGRpcmVjdG9yeSAvYm9vdC9zeXN0ZW0vbm9uLXBhY2thZ2VkJyAvdG1wL2NvbXBhY3QtJGxhYmVsLmVyciB8IGhlYWQgLTMpIgpbICRkb25lXyA9IDEgXQo=' | base64 -d > /tmp/ctt/tools/compact-test.sh && cd /tmp/ctt
+# | bash tools/compact-test.sh haiku claude; echo "haiku rc=$?"
+# ---- raw output ----
+[haiku] compaction: seen=1 finished=1 after 11s
+[haiku] ✻ Sautéed for 2s · done 12:37 AM
+[haiku] ❯ /compact
+[haiku]   ⎿  Compacted (ctrl+o to see full summary)
+[haiku]            tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux.conf for wheel scroll
+[haiku] ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku] ❯ 
+[haiku] ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ⏵⏵ auto mode on (shift+tab to cycle)
+[haiku] recall: FAILED
+[haiku]            tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux.conf for wheel scroll
+[haiku] ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku] ❯ 
+[haiku] ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt
+[haiku] stderr: 
+haiku rc=0
