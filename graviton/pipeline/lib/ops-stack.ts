@@ -335,6 +335,10 @@ export class OpsStack extends cdk.Stack {
     });
     eiceSg.addEgressRule(builderSg, ec2.Port.tcp(22), 'EICE to builders SSH');
     builderSg.addIngressRule(eiceSg, ec2.Port.tcp(22), 'SSH via Instance Connect Endpoint');
+    // Builder to builder: lets two instances in this group talk to each other
+    // over the ENA (cross-instance kernel/network tests, e.g. a fixed tcp module
+    // against a canonical peer). Scoped to members of the group, not to a CIDR.
+    builderSg.addIngressRule(builderSg, ec2.Port.allTraffic(), 'builder to builder (cross-instance tests)');
 
     // On-prem reach over the Site-to-Site VPN (gated on the VPN being
     // configured): SSH, the remote-desktop ports (app_server :10900 + the

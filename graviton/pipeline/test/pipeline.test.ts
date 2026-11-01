@@ -2514,13 +2514,33 @@ function synthOpsCtx(context: Record<string, unknown>): Template {
   return Template.fromStack(stack);
 }
 
+// The builder-to-builder rule: BuilderSg's ingress whose source is BuilderSg itself.
+function isBuilderSelfRule(r: any): boolean {
+  const p = r.Properties;
+  const id = (x: any) => JSON.stringify(x);
+  return p.SourceSecurityGroupId !== undefined && id(p.SourceSecurityGroupId) === id(p.GroupId);
+}
+
+test('builder SG: instances in it may reach each other, and only each other', () => {
+  const t = synthOps();
+  const self = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress')).filter(isBuilderSelfRule);
+  expect(self.length).toBe(1);
+  const p = (self[0] as any).Properties;
+  // All protocols/ports, scoped to group membership: no CIDR, no other group.
+  expect(p.IpProtocol).toBe('-1');
+  expect(p.CidrIp).toBeUndefined();
+  expect(JSON.stringify(p.GroupId)).toMatch(/BuilderSg/);
+});
+
 test('#611: no endpoint without the allowlist context -- nothing internet-facing by default', () => {
   const t = synthOps();
   t.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 0);
   t.resourceCountIs('AWS::ElasticLoadBalancingV2::TargetGroup', 0);
   t.resourceCountIs('AWS::ElasticLoadBalancingV2::Listener', 0);
-  // And the builder SG's only SG-sourced ingress is still the EICE's :22.
-  const ingress = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress'));
+  // And the builder SG's only ingress sourced from ANOTHER group is still the
+  // EICE's :22 (the builder-to-builder self rule is pinned by its own test).
+  const ingress = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress'))
+    .filter((r: any) => !isBuilderSelfRule(r));
   expect(ingress.length).toBe(1);
   expect((ingress[0] as any).Properties.FromPort).toBe(22);
   // An empty string is "not set", not "set to nothing".
