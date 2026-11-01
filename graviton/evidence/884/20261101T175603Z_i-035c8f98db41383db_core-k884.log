@@ -1,0 +1,360 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: core-k884
+# instance: i-035c8f98db41383db   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T175603Z   end: 20261101T175642Z   rc: 0
+# script sha256: 6aed4ec4104244d228e28be3cd5d15f545a801c06fe6de59f4cfb0ff38dd8dc5
+# ---- script ----
+# | ARM=k884
+# | R_append892_c='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/repro/append892.c?<PRESIGNED>'
+# | R_atime879_c='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/repro/atime879.c?<PRESIGNED>'
+# | R_devfd883_c='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/repro/devfd883.c?<PRESIGNED>'
+# | R_fchmod884_c='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/repro/fchmod884.c?<PRESIGNED>'
+# | R_link882_c='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/repro/link882.c?<PRESIGNED>'
+# | R_setfl870_c='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/repro/setfl870.c?<PRESIGNED>'
+# | R_append892_mjs='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/repro/append892.mjs?<PRESIGNED>'
+# | # prepended: ARM, and R_<name>=<presigned url> for each repro file
+# | set +e
+# | echo "== identity ($ARM)"
+# | uname -v
+# | sha256sum /boot/system/kernel_arm64
+# | ls -la /boot/home/config/non-packaged/add-ons/kernel/boot /boot/home/config/non-packaged/add-ons/kernel/drivers/bin 2>&1 | grep -v "^total"
+# | sha256sum /boot/home/config/non-packaged/add-ons/kernel/boot/bfs /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null 2>/dev/null
+# | listimage 1 | grep -E " bfs$| kernel_arm64$|drivers/(dev|bin)/null" | sed 's/  */ /g'
+# | ls /dev | tr '\n' ' '; echo
+# | echo "== repros"
+# | pkgman install -y binutils 2>&1 | tail -2
+# | mkdir -p /boot/home/rep && cd /boot/home/rep
+# | for v in $(set | sed -n 's/^R_\([a-z0-9_]*\)=.*/\1/p'); do
+# | 	eval u=\$R_$v
+# | 	f=$(echo $v | sed 's/_c$/.c/; s/_mjs$/.mjs/')
+# | 	python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$u" "$f"
+# | done
+# | sha256sum *.c *.mjs
+# | for f in *.c; do gcc -O2 -Wall -o ${f%.c} $f -lnetwork 2>&1 | grep -v "warning: ignoring return\|^\s*[0-9]* |\|In function\|^\s*|\s*\^" ; done
+# | sha256sum setfl870 fchmod884 link882 devfd883 append892 atime879
+# | for t in setfl870 fchmod884 "link882 /tmp /boot/home/rep" devfd883 "append892 /tmp 2000 2" "atime879 /tmp"; do
+# | 	echo "=== $t"; ./$t; echo "rc=$?"
+# | done
+# | echo "=== node append892.mjs"; node append892.mjs 200 /tmp
+# | echo "== F_SETFL on a /dev/null stdin (what tools/test.py does after every test)"
+# | python3 -I -c 'import fcntl,os
+# | for fd in 0,1,2:
+# |     try:
+# |         fcntl.fcntl(fd, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(fd, fcntl.F_GETFL)); print("fd", fd, "F_SETFL ok")
+# |     except OSError as e:
+# |         print("fd", fd, "F_SETFL", type(e).__name__, e)' < /dev/null
+# | echo "== node named tests"
+# | cd /boot/home/t/node-v24.21.0
+# | TESTS="parallel/test-fs-link parallel/test-fs-error-messages parallel/test-permission-fs-symlink-target-write parallel/test-trace-events-fs-sync parallel/test-trace-events-fs-async parallel/test-fs-promises parallel/test-util-promisify parallel/test-cluster-listen-pipe-readable-writable parallel/test-net-server-listen-path parallel/test-tls-enable-keylog-cli parallel/test-runner-worker-id parallel/test-fs-readfile-eof parallel/test-fs-readfile-pipe parallel/test-fs-readfile-pipe-large parallel/test-fs-readfilesync-pipe-large parallel/test-fs-realpath-pipe"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap $TESTS > /tmp/named.tap 2>&1
+# | echo "named rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -E "^(ok|not ok) " /tmp/named.tap
+# | echo "--- failure details"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/named.tap | grep -vE "^\s*$" | head -150
+# | echo "== tools/test.py with stdin /dev/null (the false 'All tests passed' of issue 870)"
+# | s=$(date +%s)
+# | python3 tools/test.py --shell=/boot/system/bin/node -j 2 -t 120 -p tap parallel/test-fs-stat parallel/test-fs-access parallel/test-fs-exists < /dev/null > /tmp/devnull.tap 2>&1
+# | echo "devnull rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -cE "^(ok|not ok) " /tmp/devnull.tap | sed 's/^/tap result lines: /'
+# | tail -8 /tmp/devnull.tap
+# | echo "== kernel log"
+# | grep -iE "panic|assert|fdescfs|could not mount" /var/log/syslog | tail -10
+# | echo CORE_DONE
+# ---- raw output ----
+== identity (k884)
+hrev59996 Oct 31 2026 20:53:20
+154872848984ca6d01434c46ac7394e9a9bc8b2b9b5ba9090cd54b45b304cf20  /boot/system/kernel_arm64
+ls: cannot access '/boot/home/config/non-packaged/add-ons/kernel/boot': No such file or directory
+/boot/home/config/non-packaged/add-ons/kernel/drivers/bin:
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 .
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 ..
+ 1 0xffff000000000000 0xffff0000001da000 0 0 kernel_arm64
+ 47 0xffff00000215d000 0xffff000002190000 0 0 bfs
+ 97 0xffff000002155000 0xffff000002156000 0 0 /boot/system/add-ons/kernel/drivers/dev/null
+acpi bus disk dprintf dvb full graphics input misc net null ports power pt ptmx random tt tty urandom zero 
+== repros
+[system] Cleaning up ...
+[system] Done.
+f42dd402f44a2e95a357e88ca66456e72e8d99ea5b39dcc9a4e88b4f60ec1a26  append892.c
+514f370a62ba5ba3fc99241dc7a62850247b7ff7e242a9af4034ae8122a44e5d  atime879.c
+65c77a16e3308ac577eb63a7c2ea1de2a42394c2d4e315589ef836bf0073d7de  devfd883.c
+a55ec44f73b3381afec0b64942e1b6539d97db1eed9176efe82588baaf1e9850  fchmod884.c
+65810c8d7f200240fdc39c409285a305f966c487f5499dbf1374cac0308e2c8a  link882.c
+a418bd59113b0690f8949e684bafcb5f067e4fcb237e47b8ca6e7e9eb099ade0  setfl870.c
+8a4b0b64b727f86571380ab7e9724cd4ad56a9be8fded667df1c05619b918e5c  append892.mjs
+2aabf81c66bd3258734d56015150e5d4cb5484becc18f05748b910d713f8d5f5  setfl870
+6a29791e50a24e844a53c8cfa880054ea3498c2772946d1a612665fdf9382bbe  fchmod884
+dec476d29dad14f7623e1d50038fb75fd427218a0be64195c188e7f057de941c  link882
+8e88d9f9885d1f74ebe6673038d22d28aa4e07cbf27a0cf093599cb6891c75bf  devfd883
+8ff30ce1bbb709c876bb56f3d87abd29603c9b08bfb8e03a9079ee0b04f4bf1b  append892
+c4cac5f89ace7ba9da503bacb854c71722c6a33baf0050f36ae94e3aac89d17c  atime879
+=== setfl870
+FAIL  /dev/null (rdonly)         getfl=0x0 clear-NB=Operation not allowed set-NB=Operation not allowed set-APPEND=Operation not allowed restore=Operation not allowed
+FAIL  /dev/null (rdwr)           getfl=0x2 clear-NB=Operation not allowed set-NB=Operation not allowed set-APPEND=Operation not allowed restore=Operation not allowed
+FAIL  /dev/null (wronly)         getfl=0x1 clear-NB=Operation not allowed set-NB=Operation not allowed set-APPEND=Operation not allowed restore=Operation not allowed
+FAIL  /dev/zero (rdonly)         getfl=0x0 clear-NB=Operation not allowed set-NB=Operation not allowed set-APPEND=Operation not allowed restore=Operation not allowed
+FAIL  /dev/zero (rdwr)           getfl=0x2 clear-NB=Operation not allowed set-NB=Operation not allowed set-APPEND=Operation not allowed restore=Operation not allowed
+FAIL  /dev/full (rdwr)           getfl=0x2 clear-NB=Operation not allowed set-NB=Operation not allowed set-APPEND=Operation not allowed restore=Operation not allowed
+PASS  pipe read end (control)    getfl=0x0 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  regular file (control)     getfl=0x302 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+INFO  /dev/random (rdonly)       getfl=0x0 clear-NB=General system error set-NB=General system error set-APPEND=General system error restore=General system error
+INFO  /dev/urandom (rdonly)      getfl=0x0 clear-NB=General system error set-NB=General system error set-APPEND=General system error restore=General system error
+setfl870: 6 failed
+rc=6
+=== fchmod884
+EINVAL=-2147483643 EOPNOTSUPP=-2147454933
+PASS fchmod(listening AF_UNIX socket, 0777)     r=-1 errno=-2147483643 (Invalid Argument) [EINVAL]
+PASS fchown(listening AF_UNIX socket, uid, gid) r=-1 errno=-2147483643 (Invalid Argument) [EINVAL]
+PASS futimens(listening AF_UNIX socket, NULL)   r=-1 errno=-2147483643 (Invalid Argument) [EINVAL]
+PASS chmod(socket path, 0777) (control)         r=0 errno=0 (ok)
+     socket path mode after chmod: 777
+PASS fchmod(unbound AF_INET socket, 0777)       r=-1 errno=-2147483643 (Invalid Argument) [EINVAL]
+PASS fchown(unbound AF_INET socket, uid, gid)   r=-1 errno=-2147483643 (Invalid Argument) [EINVAL]
+PASS futimens(unbound AF_INET socket, NULL)     r=-1 errno=-2147483643 (Invalid Argument) [EINVAL]
+PASS fchmod(regular file, 0640) (control)       r=0 errno=0 (ok)
+fchmod884: 0 failed
+rc=0
+=== link882 /tmp /boot/home/rep
+FAIL /tmp       link(file, existing file)                    r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /tmp       link(file, itself)                           r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /tmp       link(file, existing dir/)                    r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /tmp       link(file, dangling symlink)                 r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /tmp       linkat(file, existing file)                  r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /tmp       link(file, /dev/null) (other volume)         r=-1 errno=-2147459061 (Cross-device link) [want EEXIST]
+PASS /tmp       link(missing, existing file)                 r=-1 errno=-2147459069 (No such file or directory)
+PASS /tmp       link(file, new name on other volume)         r=-1 errno=-2147459061 (Cross-device link)
+INFO /tmp       link(file, new name)                         r=-1 errno=-2147483633 (Operation not allowed)
+FAIL /boot/home/rep link(file, existing file)                    r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /boot/home/rep link(file, itself)                           r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /boot/home/rep link(file, existing dir/)                    r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /boot/home/rep link(file, dangling symlink)                 r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /boot/home/rep linkat(file, existing file)                  r=-1 errno=-2147483633 (Operation not allowed) [want EEXIST]
+FAIL /boot/home/rep link(file, /dev/null) (other volume)         r=-1 errno=-2147459061 (Cross-device link) [want EEXIST]
+PASS /boot/home/rep link(missing, existing file)                 r=-1 errno=-2147459069 (No such file or directory)
+PASS /boot/home/rep link(file, new name on other volume)         r=-1 errno=-2147459061 (Cross-device link)
+INFO /boot/home/rep link(file, new name)                         r=-1 errno=-2147483633 (Operation not allowed)
+link882: 12 failed
+rc=12
+=== devfd883
+FAIL stat(/dev/fd) is a directory                 No such file or directory
+FAIL /dev/stdin                                   lstat=No such file or directory link=-
+FAIL /dev/stdout                                  lstat=No such file or directory link=-
+FAIL /dev/stderr                                  lstat=No such file or directory link=-
+FAIL realpath(/dev/stdin)                         No such file or directory
+FAIL readdir(/dev/fd) lists 0 and a new fd        entries=0 has0=0 has3=0
+FAIL stat(/dev/fd/<open /dev/null>)               No such file or directory mode=00
+PASS stat(/dev/fd/<closed fd>)                    No such file or directory
+PASS open(/dev/fd/9999)                           No such file or directory
+FAIL pipe write end via /dev/fd                   open(/dev/fd/4): No such file or directory
+FAIL pipe read end via /dev/fd                    open(/dev/fd/3): No such file or directory
+FAIL pipe via /dev/fd, O_CREAT|O_TRUNC            open(/dev/fd/4): No such file or directory
+FAIL /dev/stdin with stdin a pipe                 open(/dev/stdin): No such file or directory
+FAIL socket via /dev/fd                           open(/dev/fd/5): No such file or directory
+FAIL file via /dev/fd shares the offset           fd=-1 read='-' original offset=0
+FAIL O_RDWR of an O_RDONLY fd via /dev/fd         No such file or directory
+FAIL O_CLOEXEC applies to the new fd              fd=-1 F_GETFD=-1
+FAIL no O_CLOEXEC, no FD_CLOEXEC                  fd=-1 F_GETFD=-1
+devfd883: 16 failed
+rc=16
+=== append892 /tmp 2000 2
+FAIL pre-created rounds 2000 threads 2 records/thread 1: rounds with a lost append 1995, records lost 1995
+FAIL created     rounds 2000 threads 2 records/thread 1: rounds with a lost append 7, records lost 7
+FAIL burst       rounds 101 threads 8 records/thread 200: rounds with a lost append 101, records lost 141301
+append892: 3 failed
+rc=3
+=== atime879 /tmp
+FAIL stable across two stat()s                      atime 1793555782.256446 then 1793555782.456469
+PASS unset atime is not 'now'                       atime 1793555782.456469 mtime 1793555782.256377 now 1793555782
+FAIL utimes(atime=1e9, mtime=1e9+5)                 atime 1793555782.457456 mtime 1000000005.000000
+FAIL utimensat(atime only, mtime UTIME_OMIT)        r=0 atime 1793555782.457467000 mtime 1000000005.000000
+FAIL futimens(atime=1.5e9)                          r=0 atime 1793555782.457478 mtime 1500000001.000000
+FAIL write keeps the explicit atime                 atime 1793555783.458560 mtime 1793555783.457441
+INFO read leaves it unchanged                       atime 1793555783.458576
+INFO utimensat(atime UTIME_NOW)                     r=0 atime 1793555783.458609 now 1793555783
+atime879: 5 failed
+rc=5
+=== node append892.mjs
+PASS node appendFile x2: rounds 200, rounds with a lost append 0
+== F_SETFL on a /dev/null stdin (what tools/test.py does after every test)
+fd 0 F_SETFL PermissionError [Errno -2147483633] Operation not allowed
+fd 1 F_SETFL ok
+fd 2 F_SETFL ok
+== node named tests
+named rc=1 wall=6s
+not ok 1 parallel/test-fs-link
+not ok 2 parallel/test-fs-error-messages
+not ok 3 parallel/test-permission-fs-symlink-target-write
+not ok 4 parallel/test-util-promisify
+not ok 5 parallel/test-fs-promises
+ok 6 parallel/test-net-server-listen-path
+ok 7 parallel/test-cluster-listen-pipe-readable-writable
+not ok 8 parallel/test-trace-events-fs-sync
+ok 9 parallel/test-tls-enable-keylog-cli
+not ok 10 parallel/test-trace-events-fs-async
+not ok 11 parallel/test-fs-readfile-pipe
+not ok 12 parallel/test-fs-readfile-pipe-large
+not ok 13 parallel/test-fs-readfilesync-pipe-large
+not ok 14 parallel/test-fs-readfile-eof
+not ok 15 parallel/test-fs-realpath-pipe
+ok 16 parallel/test-runner-worker-id
+--- failure details
+not ok 1 parallel/test-fs-link
+  ---
+  duration_ms: 365.78400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: EPERM: operation not permitted, link '/boot/home/t/node-v24.21.0/test/.tmp.0/hardlink-target.txt' -> '/boot/home/t/node-v24.21.0/test/.tmp.0/link1.js'
+        at callback (/boot/home/t/node-v24.21.0/test/parallel/test-fs-link.js:15:10)
+        at callback (/boot/home/t/node-v24.21.0/test/common/index.js:481:15)
+        at FSReqCallback.oncomplete (node:fs:187:23) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: [Error: EPERM: operation not permitted, link '/boot/home/t/node-v24.21.0/test/.tmp.0/hardlink-target.txt' -> '/boot/home/t/node-v24.21.0/test/.tmp.0/link1.js'] {
+        errno: -2147483633,
+        code: 'EPERM',
+        syscall: 'link',
+        path: '/boot/home/t/node-v24.21.0/test/.tmp.0/hardlink-target.txt',
+        dest: '/boot/home/t/node-v24.21.0/test/.tmp.0/link1.js'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    Node.js v24.21.0
+  ...
+not ok 2 parallel/test-fs-error-messages
+  ---
+  duration_ms: 372.57600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    + "EPERM: operation not permitted, link '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile.js' -> '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile2.js'"
+    - "EEXIST: file already exists, link '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile.js' -> '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile2.js'"
+        at Object.<anonymous> (/boot/home/t/node-v24.21.0/test/parallel/test-fs-error-messages.js:221:12)
+        at Object.<anonymous> (/boot/home/t/node-v24.21.0/test/common/index.js:481:15)
+        at expectedException (node:assert:578:17)
+        at expectsError (node:assert:703:21)
+        at ok.throws (node:assert:759:3)
+        at Object.<anonymous> (/boot/home/t/node-v24.21.0/test/parallel/test-fs-error-messages.js:233:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: "EPERM: operation not permitted, link '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile.js' -> '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile2.js'",
+      expected: "EEXIST: file already exists, link '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile.js' -> '/boot/home/t/node-v24.21.0/test/.tmp.1/existingFile2.js'",
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    Node.js v24.21.0
+  ...
+not ok 3 parallel/test-permission-fs-symlink-target-write
+  ---
+  duration_ms: 547.09500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    AssertionError [ERR_ASSERTION]: node:assert:849
+        throw newErr;
+        ^
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: EPERM: operation not permitted, link '/boot/home/t/node-v24.21.0/test/.tmp.2/read-write/file' -> '/boot/home/t/node-v24.21.0/test/.tmp.2/write-only/link-to-read-write2'
+        at /boot/home/t/node-v24.21.0/test/fixtures/permission/fs-symlink-target-write.js:40:12
+        at FSReqCallback.oncomplete (node:fs:187:23) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: [Error: EPERM: operation not permitted, link '/boot/home/t/node-v24.21.0/test/.tmp.2/read-write/file' -> '/boot/home/t/node-v24.21.0/test/.tmp.2/write-only/link-to-read-write2'] {
+        errno: -2147483633,
+        code: 'EPERM',
+        syscall: 'link',
+        path: '/boot/home/t/node-v24.21.0/test/.tmp.2/read-write/file',
+        dest: '/boot/home/t/node-v24.21.0/test/.tmp.2/write-only/link-to-read-write2'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    Node.js v24.21.0
+    1 !== 0
+        at Object.<anonymous> (/boot/home/t/node-v24.21.0/test/parallel/test-permission-fs-symlink-target-write.js:58:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    Node.js v24.21.0
+  ...
+not ok 4 parallel/test-util-promisify
+  ---
+  duration_ms: 165.75700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    (node:9448) [DEP0174] DeprecationWarning: Calling promisify on a function that returns a Promise is likely a mistake.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+    (node:9448) [DEP0174] DeprecationWarning: Calling promisify on a function that returns a Promise is likely a mistake.
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+    + actual - expected
+      Stats {
+    +   atimeMs: 1793555788621.59,
+    -   atimeMs: 1793555788631.351,
+        birthtimeMs: 1793555133646.447,
+        blksize: 65536,
+        blocks: 16,
+        ctimeMs: 1793555133646.447,
+        dev: 3,
+        at /boot/home/t/node-v24.21.0/test/parallel/test-util-promisify.js:39:12
+        at /boot/home/t/node-v24.21.0/test/common/index.js:481:15 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: Stats {
+        dev: 3,
+        mode: 33188,
+        nlink: 1,
+        uid: 0,
+        gid: 0,
+        rdev: 18446744073709552000,
+        blksize: 65536,
+        ino: 3150508,
+        size: 5384,
+        blocks: 16,
+        atimeMs: 1793555788621.59,
+        mtimeMs: 1788826204000,
+        ctimeMs: 1793555133646.447,
+        birthtimeMs: 1793555133646.447
+      },
+      expected: Stats {
+== tools/test.py with stdin /dev/null (the false 'All tests passed' of issue 870)
+devnull rc=0 wall=0s
+tap result lines: 0
+TAP version 13
+1..3
+
+All tests passed.
+== kernel log
+CORE_DONE
