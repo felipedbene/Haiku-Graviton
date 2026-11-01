@@ -1,0 +1,22 @@
+# evidence: nodejs24r2-regression-diff
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T114801Z   end: 20261101T114822Z   rc: 0
+# script sha256: d24c4d1da02349e8145e55b22cdffa15503788b21a2792cd8ee33fdd27f3dd24
+# ---- script ----
+# | for s in parallel sequential; do a=/boot/home/node-$s.tap b=/boot/home/node-$s-r2.tap
+# | grep '^not ok ' $a | awk '{print $4}' | sort > /tmp/r1f; grep '^not ok ' $b | awk '{print $4}' | sort > /tmp/r2f
+# | echo "== $s: r1 not ok $(wc -l < /tmp/r1f), r2 not ok $(wc -l < /tmp/r2f)"
+# | echo "-- fixed in r2 ($(comm -23 /tmp/r1f /tmp/r2f | wc -l)):"; comm -23 /tmp/r1f /tmp/r2f | tr '\n' ' '; echo
+# | echo "-- NEWLY FAILING in r2 ($(comm -13 /tmp/r1f /tmp/r2f | wc -l)):"; comm -13 /tmp/r1f /tmp/r2f | tr '\n' ' '; echo
+# | done
+# ---- raw output ----
+== parallel: r1 not ok 397, r2 not ok 335
+-- fixed in r2 (62):
+parallel/test-cli-node-print-help parallel/test-debugger-profile parallel/test-debugger-profile-command parallel/test-fs-options-immutable parallel/test-fs-promises-watch parallel/test-fs-promises-watch-ignore-function parallel/test-fs-promises-watch-ignore-glob parallel/test-fs-promises-watch-ignore-mixed parallel/test-fs-promises-watch-ignore-regexp parallel/test-fs-promises-watch-iterator parallel/test-fs-watch-abort-signal parallel/test-fs-watch-close-when-destroyed parallel/test-fs-watch-encoding parallel/test-fs-watch-enoent parallel/test-fs-watch-ignore-function parallel/test-fs-watch-ignore-glob parallel/test-fs-watch-ignore-mixed parallel/test-fs-watch-ignore-recursive-glob parallel/test-fs-watch-ignore-recursive-glob-subdirectories parallel/test-fs-watch-ignore-recursive-mixed parallel/test-fs-watch-ignore-recursive-regexp parallel/test-fs-watch-ignore-regexp parallel/test-fs-watch-recursive-add-file parallel/test-fs-watch-recursive-add-file-to-existing-subfolder parallel/test-fs-watch-recursive-add-file-to-new-folder parallel/test-fs-watch-recursive-add-file-with-url parallel/test-fs-watch-recursive-add-folder parallel/test-fs-watch-recursive-assert-leaks parallel/test-fs-watch-recursive-delete parallel/test-fs-watch-recursive-delete-race parallel/test-fs-watch-recursive-promise parallel/test-fs-watch-recursive-symlink parallel/test-fs-watch-recursive-sync-write parallel/test-fs-watch-recursive-update-file parallel/test-fs-watch-recursive-watch-file parallel/test-fs-watch-ref-unref parallel/test-http2-compat-expect-handling parallel/test-http2-multi-content-length parallel/test-inspector-contexts parallel/test-inspector-has-idle parallel/test-inspector-promises parallel/test-inspector-stop-profile-after-done parallel/test-process-external-stdio-close parallel/test-process-external-stdio-close-spawn parallel/test-process-threadCpuUsage-main-thread parallel/test-process-threadCpuUsage-worker-threads parallel/test-process-title-cli parallel/test-runner-complex-dependencies parallel/test-runner-global-setup-watch-mode parallel/test-runner-watch-mode-complex parallel/test-runner-worker-id parallel/test-stdout-close-catch parallel/test-tick-processor-arguments parallel/test-trace-events-metadata parallel/test-v8-cpu-profile parallel/test-watch-file-shared-dependency parallel/test-watch-mode-files_watcher parallel/test-watch-mode-files_watcher-clear parallel/test-watch-mode-kill-signal-default parallel/test-watch-mode-kill-signal-override parallel/test-worker-cpu-usage parallel/test-worker-node-options 
+-- NEWLY FAILING in r2 (0):
+
+== sequential: r1 not ok 26, r2 not ok 11
+-- fixed in r2 (16):
+sequential/test-cpu-prof-default sequential/test-cpu-prof-dir-absolute sequential/test-cpu-prof-dir-and-name sequential/test-cpu-prof-dir-relative sequential/test-cpu-prof-drained sequential/test-cpu-prof-exit sequential/test-cpu-prof-kill sequential/test-cpu-prof-name sequential/test-cpu-prof-worker-argv sequential/test-diagnostic-dir-cpu-prof sequential/test-process-title sequential/test-watch-mode sequential/test-watch-mode-inspect sequential/test-watch-mode-restart-esm-loading-error sequential/test-watch-mode-worker sequential/test-worker-prof 
+-- NEWLY FAILING in r2 (1):
+sequential/test-net-connect-econnrefused 

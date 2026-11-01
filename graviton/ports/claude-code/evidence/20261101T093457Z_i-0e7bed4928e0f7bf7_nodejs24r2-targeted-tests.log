@@ -1,0 +1,33 @@
+# evidence: nodejs24r2-targeted-tests
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T093457Z   end: 20261101T093545Z   rc: 0
+# script sha256: db56868eed32d9ee6f9f2a1473c64bc781fff92fe6175d7cbdea7f698290c511
+# ---- script ----
+# | set -u
+# | HP=/boot/home/haikuports
+# | { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; } | pkgman install $HP/packages/nodejs24-24.21.0-2-arm64.hpkg $HP/packages/nodejs24_devel-24.21.0-2-arm64.hpkg 2>&1 | tail -2
+# | ls /boot/system/packages | grep -E '^(nodejs24|libuv)'
+# | node --version; node -e 'console.log("title", process.title); process.title="cc-title-probe"; console.log("set", process.title); console.log("threadCpuUsage", JSON.stringify(process.threadCpuUsage()))'
+# | cd $HP/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | T="sequential/test-cpu-prof-default sequential/test-cpu-prof-dir-absolute sequential/test-cpu-prof-dir-and-name sequential/test-cpu-prof-dir-relative sequential/test-cpu-prof-dir-worker sequential/test-cpu-prof-drained sequential/test-cpu-prof-exit sequential/test-cpu-prof-kill sequential/test-cpu-prof-name sequential/test-cpu-prof-worker-argv sequential/test-diagnostic-dir-cpu-prof sequential/test-worker-prof parallel/test-v8-cpu-profile parallel/test-inspector-has-idle parallel/test-inspector-promises parallel/test-inspector-stop-profile-after-done parallel/test-tick-processor-arguments parallel/test-debugger-profile parallel/test-debugger-profile-command"
+# | S="parallel/test-process-external-stdio-close parallel/test-process-external-stdio-close-spawn parallel/test-stdout-close-catch parallel/test-child-process-exec-env"
+# | P="parallel/test-process-title-cli parallel/test-setproctitle parallel/test-os parallel/test-process-threadCpuUsage-main-thread parallel/test-process-threadCpuUsage-worker-threads parallel/test-worker-cpu-usage"
+# | for g in T S P; do eval L=\$$g; : | python3 tools/test.py --shell=/boot/system/bin/node -j 8 -p tap $L > /tmp/tgt-$g.tap 2>&1
+# | 	echo "== group $g: $(grep -c '^ok ' /tmp/tgt-$g.tap) ok / $(grep -c '^not ok ' /tmp/tgt-$g.tap) not ok (of $(echo $L | wc -w))"; grep '^not ok ' /tmp/tgt-$g.tap; done
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+libuv-1.52.1-4-arm64.hpkg
+libuv_devel-1.52.1-4-arm64.hpkg
+nodejs24-24.21.0-2-arm64.hpkg
+nodejs24_devel-24.21.0-2-arm64.hpkg
+v24.21.0
+title node
+set cc-title-probe
+threadCpuUsage {"user":36785,"system":61853}
+== group T: 19 ok / 0 not ok (of 19)
+== group S: 3 ok / 1 not ok (of 4)
+not ok 1 parallel/test-child-process-exec-env
+== group P: 4 ok / 2 not ok (of 6)
+not ok 1 parallel/test-os
+not ok 3 parallel/test-setproctitle

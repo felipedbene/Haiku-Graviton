@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: rev2-upload
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T115036Z   end: 20261101T115058Z   rc: 0
+# script sha256: 5cf1acc0695363f4b39f0b9a0886b2830fa8b40724a28b6243857bb49252ba31
+# ---- script ----
+# | cd /boot/home/haikuports/packages && sha256sum nodejs24*-2-arm64.hpkg libuv*1.52.1-4-arm64.hpkg
+# | package list -i libuv-1.52.1-4-arm64.hpkg | grep provides
+# | 
+# | /boot/system/bin/curl -sSf -X PUT --upload-file nodejs24-24.21.0-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/nodejs24-24.21.0-2-arm64.hpkg?<PRESIGNED>' && echo up-nodejs24-24.21.0-2-arm64.hpkg
+# | /boot/system/bin/curl -sSf -X PUT --upload-file nodejs24_devel-24.21.0-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/nodejs24_devel-24.21.0-2-arm64.hpkg?<PRESIGNED>' && echo up-nodejs24_devel-24.21.0-2-arm64.hpkg
+# | /boot/system/bin/curl -sSf -X PUT --upload-file libuv-1.52.1-4-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv-1.52.1-4-arm64.hpkg?<PRESIGNED>' && echo up-libuv-1.52.1-4-arm64.hpkg
+# | /boot/system/bin/curl -sSf -X PUT --upload-file libuv_devel-1.52.1-4-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv_devel-1.52.1-4-arm64.hpkg?<PRESIGNED>' && echo up-libuv_devel-1.52.1-4-arm64.hpkg
+# | /boot/system/bin/curl -sSf -X PUT --upload-file libuv_debuginfo-1.52.1-4-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv_debuginfo-1.52.1-4-arm64.hpkg?<PRESIGNED>' && echo up-libuv_debuginfo-1.52.1-4-arm64.hpkg
+# ---- raw output ----
+47be861495db22aa09dc9a271e4808b9d6193ee126e4eb89ae3d49692f684129  nodejs24-24.21.0-2-arm64.hpkg
+eca04e821bd6a6857fb4bd825f8883831bc45b2cbc7c1652185e2b676490a869  nodejs24_devel-24.21.0-2-arm64.hpkg
+482e162a90778a8b152130ccc4a47d2e7a780d37115f8b7a56639ace5c9a0b98  libuv-1.52.1-4-arm64.hpkg
+f32b427e6a23a08b53d2bcf98ae564526c187ebdad45d6ff45b439198907fd94  libuv_debuginfo-1.52.1-4-arm64.hpkg
+415f9a973dd17b1855cf33d3588a6fcaaa42d9ab03a987d2489faa5dc783a661  libuv_devel-1.52.1-4-arm64.hpkg
+	provides: libuv = 1.52.1
+	provides: lib:libuv = 1.0.0 (compatible >= 1)
+	provides: libuv_fs_event = 1.52.1
+up-nodejs24-24.21.0-2-arm64.hpkg
+up-nodejs24_devel-24.21.0-2-arm64.hpkg
+up-libuv-1.52.1-4-arm64.hpkg
+up-libuv_devel-1.52.1-4-arm64.hpkg
+up-libuv_debuginfo-1.52.1-4-arm64.hpkg

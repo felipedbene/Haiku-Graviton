@@ -59,6 +59,18 @@ substitution**: `cat <(…)` fails on a nonexistent `/dev/fd` (#868).
 
 ## Node test suites
 
+**Current (nodejs24 24.21.0-2 + libuv 1.52.1-4, published 2026-11-01):** parallel 4172 ok
+(323 skip) / 335 not ok; sequential 109 ok / 11 not ok (`20261101T093714Z_i-0e7bed4928e0f7bf7_nodejs24r2-full-suites.log`). Against the first run, 78
+tests went from failing to passing (62 parallel, 16 sequential: CPU profiler, inspector,
+SIGPIPE/stdio-close, process title, thread CPU usage, and fs.watch through libuv) and 0 new
+failures, apart from `sequential/test-net-connect-econnrefused`. That one timed out once under the
+16-way run and passed 10/10 alone (`20261101T114801Z_i-0e7bed4928e0f7bf7_nodejs24r2-regression-diff.log`, `20261101T114914Z_i-0e7bed4928e0f7bf7_nodejs24r2-econnrefused-x10.log`); rev 2 doesn't touch the connect path, so
+it is counted as load-dependent, not a regression. Targeted rerun of the patched paths:
+`20261101T093457Z_i-0e7bed4928e0f7bf7_nodejs24r2-targeted-tests.log`. Repo-installed stack verified: `--cpu-prof` writes a profile, process title and
+`threadCpuUsage` work, Claude Code `--version`/`doctor`/`-p` pass (`20261101T120352Z_i-0e90d4b253c8134b3_enduser-rev2-install.log`).
+
+First run (24.21.0-1) and its full triage follow.
+
 `tools/test.py -j 16 -p tap parallel sequential` on the builder, stdin a pipe. Under
 `/dev/null` stdin every test raised in test.py's per-test `F_SETFL` and was dropped
 silently, printing a false "All tests passed" with zero results (#870); the numbers
@@ -216,7 +228,9 @@ packages were not touched.
    SSM+Bedrock profile (`cc-bedrock-ssm`) is pending the owner.
 2. `fs.watch` on Haiku: libuv backend (system library change) or polling (compat).
 3. **Current published revisions:** claude_code 2.1.314-2 (requires `libuv_fs_event`; R5 drops
-   the Linux ELF addons) and libuv 1.52.1-3 (+_devel, _debuginfo), provides `libuv_fs_event`.
+   the Linux ELF addons); nodejs24 24.21.0-2 (+_devel; DeBeOS patchset: V8 sampler on Haiku
+   arm64, SIGPIPE/SIGKILLTHR); libuv 1.52.1-4 (+_devel, _debuginfo; fs-event backend, process
+   title, per-thread rusage; provides `libuv_fs_event`).
    **First publish on 2026-11-01 (owner's approval):** nodejs24 24.21.0-1 + _devel,
    claude_code 2.1.314-1, libuv 1.52.1-2 + _devel (the Haiku fs-event backend). Green went
    3289 → 3292 objects (libuv 1.52.1-1 replaced); `pkgman search` on a Haiku box resolves all

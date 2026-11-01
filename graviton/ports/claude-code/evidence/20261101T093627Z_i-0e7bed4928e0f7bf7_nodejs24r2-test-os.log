@@ -1,0 +1,44 @@
+# evidence: nodejs24r2-test-os
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T093627Z   end: 20261101T093648Z   rc: 0
+# script sha256: e4eb2081ac61a2d980ad6660cf962e508f1de56bf63dfda41889ac48c5f444dc
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 && : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap -v parallel/test-os 2>&1 | grep -v "^# " | head -40
+# ---- raw output ----
+TAP version 13
+1..1
+not ok 1 parallel/test-os
+  ---
+  duration_ms: 97.61600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    9 !== 10
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os.js:92:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 9,
+      expected: 10,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os.js

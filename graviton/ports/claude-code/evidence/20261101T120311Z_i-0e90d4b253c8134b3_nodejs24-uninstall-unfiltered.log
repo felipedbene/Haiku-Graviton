@@ -1,0 +1,30 @@
+# evidence: nodejs24-uninstall-unfiltered
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T120311Z   end: 20261101T120333Z   rc: 0
+# script sha256: 3b2533bdc0168ef58a3df14e9c1e112a8037d9533bdaaa067a62cf7872d928bd
+# ---- script ----
+# | { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; } | pkgman uninstall nodejs24 2>&1 | tail -20
+# | ls /boot/system/packages | grep -E "^(nodejs24|claude_code|libuv)"
+# ---- raw output ----
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+The following changes will be made:
+  in system:
+    uninstall package claude_code-2.1.314-2
+    uninstall package nodejs24-24.21.0-1
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : [system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-01_11:58:27"
+[system] Cleaning up ...
+[system] Done.
+libuv-1.52.1-4-arm64.hpkg
+libuv_devel-1.52.1-4-arm64.hpkg

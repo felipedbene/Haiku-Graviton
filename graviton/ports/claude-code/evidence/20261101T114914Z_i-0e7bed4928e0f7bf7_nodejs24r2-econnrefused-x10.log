@@ -1,0 +1,35 @@
+# evidence: nodejs24r2-econnrefused-x10
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T114914Z   end: 20261101T114934Z   rc: 0
+# script sha256: 6ef4b436a558f1a05c90b76fd203fde6f64a39079be48f87b86583aa75511502
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | grep -A12 'test-net-connect-econnrefused' /boot/home/node-sequential-r2.tap | head -16
+# | for i in 1 2 3 4 5 6 7 8 9 10; do r=$(: | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap sequential/test-net-connect-econnrefused 2>&1 | grep -E "^(ok|not ok)"); echo "run $i: $r"; done
+# ---- raw output ----
+not ok 75 sequential/test-net-connect-econnrefused
+  ---
+  duration_ms: 360057.71100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    pending 50 rounds 1
+    pending 49 rounds 1
+    pending 48 rounds 1
+    pending 47 rounds 1
+    pending 46 rounds 1
+    pending 45 rounds 1
+--
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-connect-econnrefused.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-connect-local-error.js
+run 1: ok 1 sequential/test-net-connect-econnrefused
+run 2: ok 1 sequential/test-net-connect-econnrefused
+run 3: ok 1 sequential/test-net-connect-econnrefused
+run 4: ok 1 sequential/test-net-connect-econnrefused
+run 5: ok 1 sequential/test-net-connect-econnrefused
+run 6: ok 1 sequential/test-net-connect-econnrefused
+run 7: ok 1 sequential/test-net-connect-econnrefused
+run 8: ok 1 sequential/test-net-connect-econnrefused
+run 9: ok 1 sequential/test-net-connect-econnrefused
+run 10: ok 1 sequential/test-net-connect-econnrefused

@@ -1,0 +1,67 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: rev-build-libuv4-nodejs24r2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T073757Z   end: 20261101T093402Z   rc: 0
+# script sha256: 45bd168143281a52b5a8e5c84c07aa21abcc51ce6469eb12809344b9c468b736
+# ---- script ----
+# | set -u
+# | C=/boot/system/bin/curl; HP=/boot/home/haikuports
+# | echo "== cleanup of the triage leftovers"
+# | pkill -f "tools/test.py" 2>/dev/null; for t in $(ps | awk '/node-v24.21.0\/test\// {print $(NF-3)}'); do kill -9 $t 2>/dev/null; done
+# | echo "hung test teams left: $(ps | grep -c '[n]ode-v24.21.0/test/')"
+# | rm -rf /boot/home/f2-node /tmp/f1-sampler.cc.orig /tmp/f1-node.orig; [ -L /sources ] && rm /sources; ls -ld /sources 2>&1 | head -1
+# | rm -rf $HP/net-libs/nodejs/work-24.21.0 $HP/dev-libs/libuv/work-1.52.1
+# | echo "== stage recipes"
+# | cd /tmp && $C -sSfo stage.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/rev-stage.tgz?<PRESIGNED>' && echo '614e992b67830a40c39e2deb7e029e95800078901939ae03438972451f4460cb  stage.tgz' | sha256sum -c - || exit 1
+# | rm -rf /tmp/stage && mkdir /tmp/stage && tar xzf stage.tgz -C /tmp/stage
+# | cp /tmp/stage/n/nodejs24-24.21.0.recipe $HP/net-libs/nodejs/ && cp /tmp/stage/n/nodejs-24.21.0-debeos.patchset $HP/net-libs/nodejs/patches/
+# | cp /tmp/stage/u/libuv-1.52.1.recipe $HP/dev-libs/libuv/ && cp /tmp/stage/u/libuv-1.52.1.patchset /tmp/stage/u/libuv-1.52.1-haiku-*.patch $HP/dev-libs/libuv/patches/
+# | grep -n "REVISION" $HP/net-libs/nodejs/nodejs24-24.21.0.recipe $HP/dev-libs/libuv/libuv-1.52.1.recipe; ls $HP/net-libs/nodejs/patches $HP/dev-libs/libuv/patches
+# | echo "== build libuv rev 4"
+# | : | sh /boot/home/haiku-nativebuild libuv > /boot/home/uv4-nb.log 2>&1; grep -E "BUILD_OK|FAILED" /boot/home/uv4-nb.log | tail -1
+# | ls $HP/packages/libuv*1.52.1-4*.hpkg || exit 1
+# | { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; } | pkgman install $HP/packages/libuv-1.52.1-4-arm64.hpkg $HP/packages/libuv_devel-1.52.1-4-arm64.hpkg 2>&1 | tail -2
+# | echo "== build nodejs24 rev 2"
+# | : | sh /boot/home/haiku-nativebuild nodejs24 > /boot/home/n24r2-nb.log 2>&1; grep -E "BUILD_OK|FAILED" /boot/home/n24r2-nb.log | tail -1
+# | grep -n -i "patch.*debeos\|Applying patch" /boot/home/nb-nodejs24.log | head -5
+# | cd $HP/packages && ls -l nodejs24*-2-arm64.hpkg libuv*1.52.1-4*.hpkg && sha256sum nodejs24*-2-arm64.hpkg libuv*1.52.1-4*.hpkg
+# ---- raw output ----
+== cleanup of the triage leftovers
+hung test teams left: 0
+ls: cannot access '/sources': No such file or directory
+== stage recipes
+stage.tgz: OK
+/boot/home/haikuports/net-libs/nodejs/nodejs24-24.21.0.recipe:10:REVISION="2"
+/boot/home/haikuports/dev-libs/libuv/libuv-1.52.1.recipe:11:REVISION="4"
+/boot/home/haikuports/dev-libs/libuv/patches:
+libuv-1.52.1-haiku-getrusage-thread.patch
+libuv-1.52.1-haiku-proctitle.patch
+libuv-1.52.1.patchset
+
+/boot/home/haikuports/net-libs/nodejs/patches:
+nodejs-20.15.1.patchset
+nodejs-22.23.3.patchset
+nodejs-24.21.0-debeos.patchset
+nodejs-24.21.0.patchset
+nodejs_x86-20.15.1.patchset
+== build libuv rev 4
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  libuv =====
+/boot/home/haikuports/packages/libuv-1.52.1-4-arm64.hpkg
+/boot/home/haikuports/packages/libuv_debuginfo-1.52.1-4-arm64.hpkg
+/boot/home/haikuports/packages/libuv_devel-1.52.1-4-arm64.hpkg
+[system] Cleaning up ...
+[system] Done.
+== build nodejs24 rev 2
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  nodejs24 =====
+5:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0.patchset" ...
+12:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0-debeos.patchset" ...
+-rw-r--r-- 1 baron root    74146 Nov  1 07:40 libuv-1.52.1-4-arm64.hpkg
+-rw-r--r-- 1 baron root   212788 Nov  1 07:40 libuv_debuginfo-1.52.1-4-arm64.hpkg
+-rw-r--r-- 1 baron root    21813 Nov  1 07:40 libuv_devel-1.52.1-4-arm64.hpkg
+-rw-r--r-- 1 baron root 18304613 Nov  1 09:33 nodejs24-24.21.0-2-arm64.hpkg
+-rw-r--r-- 1 baron root   264361 Nov  1 09:33 nodejs24_devel-24.21.0-2-arm64.hpkg
+47be861495db22aa09dc9a271e4808b9d6193ee126e4eb89ae3d49692f684129  nodejs24-24.21.0-2-arm64.hpkg
+eca04e821bd6a6857fb4bd825f8883831bc45b2cbc7c1652185e2b676490a869  nodejs24_devel-24.21.0-2-arm64.hpkg
+482e162a90778a8b152130ccc4a47d2e7a780d37115f8b7a56639ace5c9a0b98  libuv-1.52.1-4-arm64.hpkg
+f32b427e6a23a08b53d2bcf98ae564526c187ebdad45d6ff45b439198907fd94  libuv_debuginfo-1.52.1-4-arm64.hpkg
+415f9a973dd17b1855cf33d3588a6fcaaa42d9ab03a987d2489faa5dc783a661  libuv_devel-1.52.1-4-arm64.hpkg

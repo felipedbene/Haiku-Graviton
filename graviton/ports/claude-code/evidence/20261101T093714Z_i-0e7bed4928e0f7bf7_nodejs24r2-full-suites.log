@@ -1,0 +1,32 @@
+# evidence: nodejs24r2-full-suites
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T093714Z   end: 20261101T114702Z   rc: 0
+# script sha256: 420beabb9ee03e36a8667ba1adfba7d599ff233ff3b6995d1871e60fa5107de5
+# ---- script ----
+# | set -u
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "node $(node --version); $(ls /boot/system/packages | grep -E '^(nodejs24|libuv)-' | tr '\n' ' ')"
+# | for s in parallel sequential; do
+# | 	start=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap "$s" > /boot/home/node-$s-r2.tap 2>&1; rc=$?
+# | 	f=/boot/home/node-$s-r2.tap
+# | 	echo "== $s (r2): rc=$rc, $(( $(date +%s) - start ))s, plan $(grep -m1 '^1\.\.' $f), $(grep -c '^ok ' $f) ok ($(grep -c '^ok .*# skip' $f) skip), $(grep -c '^not ok ' $f) not ok"
+# | 	echo "-- newly passing vs r1:"; comm -13 <(grep '^ok ' /boot/home/node-$s.tap | awk '{print $3}' | sort) <(grep '^ok ' $f | awk '{print $3}' | sort) | tr '\n' ' '; echo
+# | 	echo "-- newly failing vs r1:"; comm -13 <(grep '^not ok ' /boot/home/node-$s.tap | awk '{print $4}' | sort) <(grep '^not ok ' $f | awk '{print $4}' | sort) | tr '\n' ' '; echo
+# | done
+# ---- raw output ----
+node v24.21.0; libuv-1.52.1-4-arm64.hpkg nodejs24-24.21.0-2-arm64.hpkg 
+== parallel (r2): rc=1, 6193s, plan 1..4507, 4172 ok (323 skip), 335 not ok
+-- newly passing vs r1:
+comm: /dev/fd/63: No such file or directory
+
+-- newly failing vs r1:
+comm: /dev/fd/63: No such file or directory
+
+== sequential (r2): rc=1, 1582s, plan 1..120, 109 ok (0 skip), 11 not ok
+-- newly passing vs r1:
+comm: /dev/fd/63: No such file or directory
+
+-- newly failing vs r1:
+comm: /dev/fd/63: No such file or directory
+
