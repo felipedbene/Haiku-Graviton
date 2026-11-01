@@ -3128,7 +3128,7 @@ function filterToQueued(
     opts: { fail?: boolean; unprocessed?: number } = {}) {
   const py = [
     'import json,sys,types',
-    'import importlib.util',
+    'import importlib.util, importlib.machinery',
     `rows=json.loads(${JSON.stringify(JSON.stringify(rows))})`,
     `fail=${opts.fail ? 'True' : 'False'}`,
     `unprocessed=${opts.unprocessed ?? 0}`,
