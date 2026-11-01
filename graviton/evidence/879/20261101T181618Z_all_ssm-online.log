@@ -1,0 +1,18 @@
+# evidence: SSM agent status of every A/B test instance (fresh launches, never rebooted)
+# captured: 20261101T181618Z via aws ssm describe-instance-information
+# arm: testbase i-060c31c742445aacd
+# arm: test-b879 i-01abb90d20ee9c95e
+# arm: test-b892 i-0445072c02337cecd
+# arm: test-k882 i-0ca9beb9c209dbe27
+# arm: test-ctl i-04d3c0c71b28647a5
+# arm: test-k884 i-035c8f98db41383db
+# arm: test-n870 i-06334e1da58ae207a
+# arm: test-k883b i-0218cd7c60202a9a4
+i-060c31c742445aacd	Online	Haiku	3.3.0.0	2026-11-01T12:12:39.414000-06:00
+i-0445072c02337cecd	Online	Haiku	3.3.0.0	2026-11-01T12:11:39.663000-06:00
+i-04d3c0c71b28647a5	Online	Haiku	3.3.0.0	2026-11-01T12:11:39.249000-06:00
+i-01abb90d20ee9c95e	Online	Haiku	3.3.0.0	2026-11-01T12:12:41.854000-06:00
+i-035c8f98db41383db	Online	Haiku	3.3.0.0	2026-11-01T12:12:46.445000-06:00
+i-06334e1da58ae207a	Online	Haiku	3.3.0.0	2026-11-01T12:12:26.519000-06:00
+i-0218cd7c60202a9a4	Online	Haiku	3.3.0.0	2026-11-01T12:13:27.537000-06:00
+i-0ca9beb9c209dbe27	Online	Haiku	3.3.0.0	2026-11-01T12:11:33.002000-06:00

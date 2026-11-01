@@ -1,0 +1,86 @@
+# evidence: bfswork-b879
+# instance: i-01abb90d20ee9c95e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T182252Z   end: 20261101T182502Z   rc: 0
+# script sha256: ad8530f7928f05d95705588d79e8d9c426be0f18e3654408295d334265248a02
+# ---- script ----
+# | ARM=b879
+# | set +e
+# | echo "== identity ($ARM)"; uname -v; sha256sum /boot/home/config/non-packaged/add-ons/kernel/boot/bfs 2>/dev/null
+# | pkgman install -y git tar 2>&1 | tail -2
+# | git --version; tar --version | head -1
+# | echo "== tar round trip of the node test tree"
+# | cd /boot/home/t
+# | rm -rf rt && mkdir rt
+# | s=$(date +%s)
+# | tar cf rt/t.tar node-v24.21.0/test && (cd rt && tar xf t.tar)
+# | echo "tar rc=$? wall=$(( $(date +%s) - s ))s size=$(ls -l rt/t.tar | awk '{print $5}')"
+# | a=$(cd node-v24.21.0 && find test -type f | sort | xargs sha256sum | sha256sum)
+# | b=$(cd rt/node-v24.21.0 && find test -type f | sort | xargs sha256sum | sha256sum)
+# | n=$(cd rt/node-v24.21.0 && find test -type f | wc -l)
+# | echo "files=$n tree-digest original=${a%% *} copy=${b%% *} $([ "$a" = "$b" ] && echo MATCH || echo MISMATCH)"
+# | rm -rf rt
+# | echo "== cp -R round trip"
+# | s=$(date +%s); cp -R node-v24.21.0/test /boot/home/cpcopy; echo "cp rc=$? wall=$(( $(date +%s) - s ))s"
+# | c=$(cd /boot/home/cpcopy && find . -type f | sort | xargs sha256sum | sha256sum); d=$(cd node-v24.21.0/test && find . -type f | sort | xargs sha256sum | sha256sum)
+# | echo "cp digest $([ "$c" = "$d" ] && echo MATCH || echo MISMATCH)"; rm -rf /boot/home/cpcopy
+# | echo "== git clone + fsck"
+# | rm -rf /boot/home/gc; s=$(date +%s)
+# | git clone -q https://github.com/libuv/libuv.git /boot/home/gc; r=$?
+# | git -C /boot/home/gc fsck --full 2>&1 | tail -2; f=$?
+# | echo "git clone rc=$r fsck rc=$f wall=$(( $(date +%s) - s ))s files=$(git -C /boot/home/gc ls-files | wc -l) head=$(git -C /boot/home/gc rev-parse --short HEAD)"
+# | git -C /boot/home/gc status --porcelain | wc -l | sed 's/^/dirty files after clone: /'
+# | rm -rf /boot/home/gc
+# | echo "== test-fs-stat-bigint --repeat 20 (two stats of one file must agree on atime within 3 ms)"
+# | cd /boot/home/t/node-v24.21.0
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 --repeat 20 -t 120 -p tap parallel/test-fs-stat-bigint > /tmp/bigint.tap 2>&1
+# | echo "stat-bigint ok=$(grep -c '^ok ' /tmp/bigint.tap) notok=$(grep -c '^not ok ' /tmp/bigint.tap)"
+# | grep -m2 "Allowable delta" /tmp/bigint.tap
+# | echo "== checkfs"
+# | sync; checkfs -c /boot 2>&1 | tr '\r' '\n' | grep -vE "nodes processed" | tail -12
+# | grep -iE "panic|assert|bfs:.*(error|corrupt)" /var/log/syslog | tail -5
+# | echo BFSWORK_DONE
+# ---- raw output ----
+== identity (b879)
+hrev59996 Oct 19 2026 21:09:42
+a929bf0a66bf6bad8d2d20b3d0bb2a2f6fbcee18cab2df512a0a71164afdd0a9  /boot/home/config/non-packaged/add-ons/kernel/boot/bfs
+[system] Cleaning up ...
+[system] Done.
+git version 2.54.0
+tar (GNU tar) 1.35
+== tar round trip of the node test tree
+tar rc=0 wall=25s size=67901440
+xargs: unmatched single quote; by default quotes are special to xargs unless you use the -0 option
+sha256sum: test/fixtures/es-modules/folder%25with: No such file or directory
+sha256sum: percentage#/index.js: No such file or directory
+xargs: unmatched single quote; by default quotes are special to xargs unless you use the -0 option
+sha256sum: test/fixtures/es-modules/folder%25with: No such file or directory
+sha256sum: percentage#/index.js: No such file or directory
+files=10939 tree-digest original=f7db850299b5d77d5e8c7530189e1df8affba714cef415aa8f9dfa8674bd1f9c copy=f7db850299b5d77d5e8c7530189e1df8affba714cef415aa8f9dfa8674bd1f9c MATCH
+== cp -R round trip
+cp rc=0 wall=16s
+xargs: unmatched single quote; by default quotes are special to xargs unless you use the -0 option
+sha256sum: ./fixtures/es-modules/folder%25with: No such file or directory
+sha256sum: percentage#/index.js: No such file or directory
+xargs: unmatched single quote; by default quotes are special to xargs unless you use the -0 option
+sha256sum: ./fixtures/es-modules/folder%25with: No such file or directory
+sha256sum: percentage#/index.js: No such file or directory
+cp digest MATCH
+== git clone + fsck
+git clone rc=0 fsck rc=0 wall=7s files=496 head=7228e05f
+dirty files after clone: 0
+== test-fs-stat-bigint --repeat 20 (two stats of one file must agree on atime within 3 ms)
+stat-bigint ok=20 notok=0
+== checkfs
+	0 blocks already set,
+	1 blocks could be freed
+
+	files		11553
+	directories	1136
+	attributes	75
+	attr. dirs	39
+	indices		46
+
+	direct block runs		12824 ( GiB)
+	indirect block runs		154 (in 5 array blocks,  GiB)
+	double indirect block runs	0 (in 0 array blocks, )
+BFSWORK_DONE

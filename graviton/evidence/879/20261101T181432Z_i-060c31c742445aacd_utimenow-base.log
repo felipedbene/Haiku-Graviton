@@ -1,0 +1,34 @@
+# evidence: utimenow-base
+# instance: i-060c31c742445aacd   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T181432Z   end: 20261101T181454Z   rc: 0
+# script sha256: f2db8ec7c2f129b9e8054ab314d04b32b7bd07bef48c0b2922b2e1f70f919081
+# ---- script ----
+# | cat > /tmp/utimenow.c <<'C'
+# | #include <fcntl.h>
+# | #include <stdio.h>
+# | #include <sys/stat.h>
+# | #include <time.h>
+# | #include <unistd.h>
+# | int main(void) {
+# | 	const char* p = "/tmp/utimenow.f";
+# | 	close(open(p, O_CREAT | O_WRONLY, 0644));
+# | 	struct timespec t[2] = { { 0, UTIME_OMIT }, { 0, UTIME_NOW } };
+# | 	int r = utimensat(AT_FDCWD, p, t, 0);
+# | 	struct stat st; stat(p, &st);
+# | 	printf("utimensat(mtime UTIME_NOW, tv_sec 0): r=%d mtime=%ld.%09ld now=%ld\n", r,
+# | 		(long)st.st_mtim.tv_sec, (long)st.st_mtim.tv_nsec, (long)time(NULL));
+# | 	struct timespec u[2] = { { 0, UTIME_OMIT }, { 12345, UTIME_NOW } };
+# | 	r = utimensat(AT_FDCWD, p, u, 0);
+# | 	stat(p, &st);
+# | 	printf("utimensat(mtime UTIME_NOW, tv_sec 12345): r=%d mtime=%ld.%09ld now=%ld\n", r,
+# | 		(long)st.st_mtim.tv_sec, (long)st.st_mtim.tv_nsec, (long)time(NULL));
+# | 	unlink(p);
+# | 	return 0;
+# | }
+# | C
+# | gcc -O2 -o /tmp/utimenow /tmp/utimenow.c && /tmp/utimenow
+# | uname -v
+# ---- raw output ----
+utimensat(mtime UTIME_NOW, tv_sec 0): r=0 mtime=0.999817216 now=1793556880
+utimensat(mtime UTIME_NOW, tv_sec 12345): r=0 mtime=12345.999817216 now=1793556880
+hrev59996 Oct 19 2026 21:09:42

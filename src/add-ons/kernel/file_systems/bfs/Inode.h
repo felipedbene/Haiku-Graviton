@@ -95,6 +95,8 @@ public:
 			off_t				AllocatedSize() const;
 			off_t				LastModified() const
 									{ return fNode.LastModifiedTime(); }
+			const timespec*		AccessTime() const;
+			void				SetAccessTime(const timespec& time);
 
 			const block_run&	BlockRun() const
 									{ return fNode.inode_num; }
@@ -277,9 +279,33 @@ private:
 				// we need those values to ensure we will remove
 				// the correct keys from the indices
 
+			timespec			fAccessTime;
+			bool				fHasAccessTime;
+				// the access time last set explicitly. The bfs_inode has no
+				// field for it, so it lasts only as long as the node stays in
+				// memory (see fill_stat_time()).
+
 			mutable recursive_lock fSmallDataLock;
 			SinglyLinkedList<AttributeIterator> fIterators;
 };
+
+
+/*!	Returns the access time last set explicitly, or \c NULL if there is
+	none.
+*/
+inline const timespec*
+Inode::AccessTime() const
+{
+	return fHasAccessTime ? &fAccessTime : NULL;
+}
+
+
+inline void
+Inode::SetAccessTime(const timespec& time)
+{
+	fAccessTime = time;
+	fHasAccessTime = true;
+}
 
 
 /*!	Checks whether or not this node should be part of the name index */

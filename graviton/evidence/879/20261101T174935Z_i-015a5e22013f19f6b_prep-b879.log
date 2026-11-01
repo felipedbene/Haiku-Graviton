@@ -1,0 +1,90 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: prep-b879
+# instance: i-015a5e22013f19f6b   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T174935Z   end: 20261101T175015Z   rc: 0
+# script sha256: ad1553670188438f70f70d15657f3400ae9c968b4bc2c3e5877e008d27beccef
+# ---- script ----
+# | MODE=bfs
+# | URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f879/bfs?<PRESIGNED>'
+# | SHA=a929bf0a66bf6bad8d2d20b3d0bb2a2f6fbcee18cab2df512a0a71164afdd0a9
+# | # prepended: MODE (kernel|bfs|null), URL, SHA
+# | set -x
+# | mkdir -p /boot/home/prep && cd /boot/home/prep
+# | curl -sSfL -o bin "$URL" || python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "bin")' "$URL"
+# | sha256sum bin
+# | echo "$SHA  bin" | sha256sum -c || exit 5
+# | case $MODE in
+# | kernel)
+# | 	P=$(ls /boot/system/packages/haiku-*.hpkg); echo "system package: $P"
+# | 	sha256sum $P /boot/system/kernel_arm64
+# | 	cp $P h.hpkg
+# | 	mkdir -p st && cp bin st/kernel_arm64 && chmod 755 st/kernel_arm64
+# | 	package add -f -C st h.hpkg kernel_arm64 || exit 6
+# | 	rm -rf x && mkdir x && package extract -C x h.hpkg kernel_arm64 && sha256sum x/kernel_arm64
+# | 	echo "$SHA  x/kernel_arm64" | sha256sum -c || exit 7
+# | 	package list -p $P | sort > before.lst; package list -p h.hpkg | sort > after.lst
+# | 	wc -l before.lst after.lst; diff before.lst after.lst && echo "entry list identical"
+# | 	package info h.hpkg | head -5
+# | 	mv h.hpkg $P && sha256sum $P
+# | 	;;
+# | bfs)
+# | 	D=/boot/home/config/non-packaged/add-ons/kernel/boot
+# | 	mkdir -p $D && cp bin $D/bfs.new && chmod 755 $D/bfs.new && mv $D/bfs.new $D/bfs
+# | 	ls -la $D; sha256sum $D/bfs
+# | 	;;
+# | null)
+# | 	D=/boot/home/config/non-packaged/add-ons/kernel/drivers
+# | 	mkdir -p $D/bin $D/dev && cp bin $D/bin/null.new && chmod 755 $D/bin/null.new && mv $D/bin/null.new $D/bin/null
+# | 	ln -sf ../bin/null $D/dev/null
+# | 	ls -la $D/bin $D/dev; sha256sum $D/bin/null
+# | 	;;
+# | esac
+# | sync; sleep 15; sync
+# | grep -i "package" /var/log/syslog | tail -15
+# | echo PREP_DONE
+# ---- raw output ----
++ mkdir -p /boot/home/prep
++ cd /boot/home/prep
++ curl -sSfL -o bin 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f879/bfs?<PRESIGNED>'
+/tmp/ccrun/cc-20261101T174935Z-82335.sh: line 7: curl: command not found
++ python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "bin")' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f879/bfs?<PRESIGNED>'
++ sha256sum bin
+a929bf0a66bf6bad8d2d20b3d0bb2a2f6fbcee18cab2df512a0a71164afdd0a9  bin
++ echo 'a929bf0a66bf6bad8d2d20b3d0bb2a2f6fbcee18cab2df512a0a71164afdd0a9  bin'
++ sha256sum -c
+bin: OK
++ case $MODE in
++ D=/boot/home/config/non-packaged/add-ons/kernel/boot
++ mkdir -p /boot/home/config/non-packaged/add-ons/kernel/boot
++ cp bin /boot/home/config/non-packaged/add-ons/kernel/boot/bfs.new
++ chmod 755 /boot/home/config/non-packaged/add-ons/kernel/boot/bfs.new
++ mv /boot/home/config/non-packaged/add-ons/kernel/boot/bfs.new /boot/home/config/non-packaged/add-ons/kernel/boot/bfs
++ ls -la /boot/home/config/non-packaged/add-ons/kernel/boot
+total 282
+drwxr-xr-x 1 baron root   2048 Nov  1 17:49 .
+drwxr-xr-x 1 baron root   2048 Nov  1 17:49 ..
+-rwxr-xr-x 1 baron root 274715 Nov  1 17:49 bfs
++ sha256sum /boot/home/config/non-packaged/add-ons/kernel/boot/bfs
+a929bf0a66bf6bad8d2d20b3d0bb2a2f6fbcee18cab2df512a0a71164afdd0a9  /boot/home/config/non-packaged/add-ons/kernel/boot/bfs
++ sync
++ sleep 15
++ sync
++ grep -i package /var/log/syslog
++ tail -15
+KERN: unknown: [2352632:    17] Adding packages from "/boot/system/packages"
+KERN: unknown: [4288460:    17] Adding packages from "/boot/home/config/packages"
+KERN: unknown: [4290008:    17] Failed to open packages activation file: No such file or directory
+KERN: unknown: [4290940:    17] Loading packages from activation file failed. Loading all packages in packages directory.
+KERN: package_daemon: [5851269:    44] root at "/boot" (device: 3, node: 524288) registered
+KERN: package_daemon: [5852572:    44] volume at "/boot/system" registered
+KERN: package_daemon: [5853295:    44] slab memory manager: created area 0xffff00001a001000 (3933)
+KERN: package_daemon: [6083280:    67] The latest volume state is also the currently active one
+KERN: package_daemon: [6084269:    67] Volume::InitialVerify((nil), (nil))
+KERN: package_daemon: [6103630:    67] Volume::InitialVerify(): volume at "/boot/system" is consistent
+KERN: package_daemon: [6104902:    67] Failed to open packages activation file /boot/home/config/packages/administrative/activated-packages: No such file or directory
+KERN: package_daemon: [6106687:    67] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+KERN: package_daemon: [6108725:    67] The latest volume state is also the currently active one
+KERN: package_daemon: [6109694:    67] Volume::InitialVerify(0x7440a5a200, (nil))
+KERN: package_daemon: [6112537:    67] Volume::InitialVerify(): volume at "/boot/home/config" is consistent
++ echo PREP_DONE
+PREP_DONE
