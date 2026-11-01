@@ -199,7 +199,8 @@ struct ipv6_protocol : net_protocol {
 	uint8		multicast_time_to_live;
 	uint8		receive_hoplimit;
 	uint8		receive_pktinfo;
-	struct sockaddr* multicast_address; // for IPV6_MULTICAST_IF
+	uint32		multicast_interface;
+		// IPV6_MULTICAST_IF interface index, 0 for the default selection
 
 	IPv6MulticastFilter multicast_filter;
 };
@@ -981,7 +982,7 @@ ipv6_init_protocol(net_socket* socket)
 	protocol->multicast_time_to_live = kDefaultMulticastTTL;
 	protocol->receive_hoplimit = 0;
 	protocol->receive_pktinfo = 0;
-	protocol->multicast_address = NULL;
+	protocol->multicast_interface = 0;
 	return protocol;
 }
 
@@ -1100,6 +1101,10 @@ ipv6_getsockopt(net_protocol* _protocol, int level, int option, void* value,
 			return get_int_option(value, *_length,
 				protocol->multicast_time_to_live);
 		}
+		if (option == IPV6_MULTICAST_IF) {
+			return get_int_option(value, *_length,
+				protocol->multicast_interface);
+		}
 		if (option == IPV6_MULTICAST_LOOP)
 			return EOPNOTSUPP;
 		if (option == IPV6_UNICAST_HOPS)
@@ -1135,39 +1140,25 @@ ipv6_setsockopt(net_protocol* _protocol, int level, int option,
 		// TODO: support more of these options
 
 		if (option == IPV6_MULTICAST_IF) {
-			if (length != sizeof(struct in6_addr))
+			// RFC 3493 section 5.2 and POSIX define the argument as an
+			// interface index, with 0 for the default selection. It used to be
+			// taken as an in6_addr, which no portable caller passes: libuv
+			// hands in sin6_scope_id, and so got EINVAL every time.
+			unsigned int index;
+			if (length != sizeof(index))
 				return B_BAD_VALUE;
-
-			struct sockaddr_in6* address = new (std::nothrow) sockaddr_in6;
-			if (address == NULL)
-				return B_NO_MEMORY;
-
-			if (user_memcpy(&address->sin6_addr, value, sizeof(in6_addr))
-					!= B_OK) {
-				delete address;
+			if (user_memcpy(&index, value, sizeof(index)) != B_OK)
 				return B_BAD_ADDRESS;
+
+			if (index != 0) {
+				net_interface* interface
+					= sDatalinkModule->get_interface(sDomain, index);
+				if (interface == NULL)
+					return EADDRNOTAVAIL;
+				sDatalinkModule->put_interface(interface);
 			}
 
-			// Using the unspecifed address to remove the previous setting.
-			if (IN6_IS_ADDR_UNSPECIFIED(&address->sin6_addr)) {
-				delete address;
-				delete protocol->multicast_address;
-				protocol->multicast_address = NULL;
-				return B_OK;
-			}
-
-			struct net_interface* interface
-				= sDatalinkModule->get_interface_with_address(
-					(sockaddr*)address);
-			if (interface == NULL) {
-				delete address;
-				return EADDRNOTAVAIL;
-			}
-
-			delete protocol->multicast_address;
-			protocol->multicast_address = (struct sockaddr*)address;
-
-			sDatalinkModule->put_interface(interface);
+			protocol->multicast_interface = index;
 			return B_OK;
 		}
 		if (option == IPV6_MULTICAST_HOPS) {
@@ -1387,13 +1378,24 @@ ipv6_send_data(net_protocol* _protocol, net_buffer* buffer)
 
 	// handle IPV6_MULTICAST_IF
 	if (IN6_IS_ADDR_MULTICAST(&destination->sin6_addr)
-		&& protocol->multicast_address != NULL) {
-		net_interface_address* address = sDatalinkModule->get_interface_address(
-			protocol->multicast_address);
-		if (address == NULL || (address->interface->flags & IFF_UP) == 0) {
-			sDatalinkModule->put_interface_address(address);
+		&& protocol->multicast_interface != 0) {
+		net_interface* interface = sDatalinkModule->get_interface(sDomain,
+			protocol->multicast_interface);
+		if (interface == NULL || (interface->flags & IFF_UP) == 0) {
+			sDatalinkModule->put_interface(interface);
 			return EADDRNOTAVAIL;
 		}
+
+		// send from the interface's first IPv6 address
+		net_interface_address* address = NULL;
+		while (sDatalinkModule->get_next_interface_address(interface,
+				&address)) {
+			if (address->domain == sDomain && address->local != NULL)
+				break;
+		}
+		sDatalinkModule->put_interface(interface);
+		if (address == NULL)
+			return EADDRNOTAVAIL;
 
 		sDatalinkModule->put_interface_address(buffer->interface_address);
 		buffer->interface_address = address;
