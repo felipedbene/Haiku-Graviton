@@ -1,0 +1,18 @@
+# evidence: working-soak-files
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T013405Z   end: 20261101T013427Z   rc: 0
+# script sha256: 99163036be73169bf1e7f485189a5df8f20733b3cff87c480805e9d9ea284907
+# ---- script ----
+# | W=$(cd /tmp && pwd -P)/soak-work; ls -la $W; for f in $W/soak-*.txt; do echo "$(basename $f): $(cat $f)"; done
+# ---- raw output ----
+total 28
+drwxr-xr-x 1 baron root 2048 Nov  1 01:27 .
+drwxrwxrwx 1 baron root 4096 Nov  1 01:27 ..
+-rw-r--r-- 1 baron root   18 Nov  1 01:09 soak-1.txt
+-rw-r--r-- 1 baron root   18 Nov  1 01:15 soak-3.txt
+-rw-r--r-- 1 baron root   18 Nov  1 01:21 soak-5.txt
+-rw-r--r-- 1 baron root   18 Nov  1 01:27 soak-7.txt
+soak-1.txt: soak-1-1793495359
+soak-3.txt: soak-3-1793495721
+soak-5.txt: soak-5-1793496083
+soak-7.txt: soak-7-1793496445

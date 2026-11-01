@@ -1,0 +1,143 @@
+# evidence: working-soak-30min
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T010251Z   end: 20261101T013327Z   rc: 0
+# script sha256: 1ea15a611548cafeb4a1630badfae987f3b524499f5357e24ff01d26b0f7f85b
+# ---- script ----
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | #!/bin/bash
+# | # haiku-soak.sh [minutes] [interval-s] [prompt-every-n-samples]: run Claude Code's TUI in tmux on Haiku
+# | # and sample the node team's resident memory (sum of listarea's alloc. = area ram_size)
+# | # and thread count every interval, then print min/max/first/last and the growth.
+# | # Runs on the Haiku target (via tools/ssh-run). Exits 1 if the process dies.
+# | set -u
+# | MIN=30 IV=30 EVERY=6
+# | # EVERY>0: a working soak. Every EVERY samples a small tool-using task is typed into the
+# | # session (model via Amazon Bedrock with instance-profile credentials when
+# | # CLAUDE_CODE_USE_BEDROCK=1 is exported), and its completion marker is checked.
+# | S=soak; H=/tmp/soak-home; rm -rf $H; mkdir -p $H/.claude
+# | W=$(cd /tmp && pwd -P)/soak-work; rm -rf $W; mkdir -p $W
+# | echo '{"prefersReducedMotion":true,"theme":"dark","permissions":{"allow":["Bash(echo:*)","Bash(date:*)","Read","Write"]}}' > $H/.claude/settings.json
+# | echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$W\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | tmux -L $S kill-server 2>/dev/null
+# | trap 'tmux -L $S kill-server 2>/dev/null' EXIT
+# | before=$(ps | awk '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ { print $(NF-3) }' | sort -n | tail -1)
+# | tmux -L $S new-session -d -s $S -x 120 -y 40 "cd $W && env ${CLAUDE_CODE_USE_BEDROCK:+CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=$AWS_REGION ANTHROPIC_MODEL=$ANTHROPIC_MODEL} HOME=$H TERM=xterm-256color claude"
+# | sleep 15
+# | # Haiku ps: the team's args (truncated to 63 chars), then Id, #Threads, Gid, Uid. The
+# | # newest matching team that did not exist before the launch is ours.
+# | team=$(ps | awk -v b="${before:-0}" '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ && $(NF-3) > b { print $(NF-3) }' | sort -n | tail -1)
+# | echo "node team: ${team:-NOT FOUND}"; [ -n "$team" ] || { tmux -L $S capture-pane -t $S -p | head -20; exit 1; }
+# | rss() { listarea "$team" | awk 'NF >= 10 && $(NF-5) ~ /^[0-9a-f]+$/ { s += strtonum("0x" $(NF-5)) } END { printf "%d", s / 1024 }'; }
+# | threads() { ps | awk -v t="$team" '$(NF-3) == t { print $(NF-2); exit }'; }
+# | n=$(( MIN * 60 / IV )); echo "sampling $n x ${IV}s"
+# | first="" min="" max="" last="" tasks=0 ok=0
+# | for i in $(seq 0 $n); do
+# | 	r=$(rss); t=$(threads)
+# | 	[ -n "$r" ] && [ "$r" -gt 0 ] || { echo "sample $i: process gone"; tmux -L $S capture-pane -t $S -p | tail -15; exit 1; }
+# | 	echo "t=$((i * IV))s rss=${r}KB threads=${t:-?}"
+# | 	if [ "$EVERY" -gt 0 ] && [ $i -gt 0 ] && [ $((i % EVERY)) = 0 ]; then
+# | 		k=$((i / EVERY)); tmux -L $S send-keys -t $S -l "Run: echo soak-$k-\$(date +%s) and write its output to soak-$k.txt, then reply with only the word done-$k"; sleep 1; tmux -L $S send-keys -t $S Enter
+# | 		tasks=$((tasks + 1))
+# | 	fi
+# | 	if [ "$EVERY" -gt 0 ] && [ $i -gt 0 ] && [ $(((i - 2) % EVERY)) = 0 ] && [ $i -ge 2 ]; then
+# | 		k=$(((i - 2) / EVERY)); [ $k -ge 1 ] && { tmux -L $S capture-pane -t $S -p | grep -q "done-$k" && [ -s $W/soak-$k.txt ] && ok=$((ok + 1)) && echo "  task $k: ok ($(cat $W/soak-$k.txt))" || echo "  task $k: NOT COMPLETED within $((2 * IV))s"; }
+# | 	fi
+# | 	first=${first:-$r}; last=$r
+# | 	[ -z "$min" ] || [ "$r" -lt "$min" ] && min=$r
+# | 	[ -z "$max" ] || [ "$r" -gt "$max" ] && max=$r
+# | 	[ $i -lt $n ] && sleep "$IV"
+# | done
+# | [ "$EVERY" -gt 0 ] && echo "soak tasks: $ok/$tasks completed"
+# | echo "soak: first=${first}KB last=${last}KB min=${min}KB max=${max}KB growth=$(( last - first ))KB over ${MIN}min"
+# | echo "--- final screen"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | head -15
+# ---- raw output ----
+node team: 21980
+sampling 60 x 30s
+t=0s rss=430100KB threads=11
+t=30s rss=430228KB threads=11
+t=60s rss=430240KB threads=11
+t=90s rss=430240KB threads=11
+t=120s rss=261956KB threads=11
+t=150s rss=261956KB threads=11
+t=180s rss=261956KB threads=11
+t=210s rss=296408KB threads=11
+t=240s rss=296408KB threads=11
+  task 1: NOT COMPLETED within 60s
+t=270s rss=296408KB threads=11
+t=300s rss=276880KB threads=11
+t=330s rss=276880KB threads=11
+t=360s rss=381564KB threads=11
+t=390s rss=458380KB threads=11
+t=420s rss=458400KB threads=11
+  task 2: NOT COMPLETED within 60s
+t=450s rss=458452KB threads=11
+t=480s rss=289452KB threads=11
+t=510s rss=289452KB threads=11
+t=540s rss=289452KB threads=11
+t=570s rss=313172KB threads=11
+t=600s rss=313176KB threads=11
+  task 3: NOT COMPLETED within 60s
+t=630s rss=313176KB threads=11
+t=660s rss=280368KB threads=11
+t=690s rss=280368KB threads=11
+t=720s rss=280368KB threads=11
+t=750s rss=337300KB threads=11
+t=780s rss=337300KB threads=11
+  task 4: NOT COMPLETED within 60s
+t=810s rss=337564KB threads=11
+t=840s rss=337580KB threads=11
+t=870s rss=337580KB threads=11
+t=900s rss=337580KB threads=11
+t=930s rss=332004KB threads=11
+t=960s rss=332004KB threads=11
+  task 5: NOT COMPLETED within 60s
+t=990s rss=332004KB threads=11
+t=1020s rss=332004KB threads=11
+t=1050s rss=332004KB threads=11
+t=1080s rss=332004KB threads=11
+t=1110s rss=355896KB threads=11
+t=1140s rss=355912KB threads=11
+  task 6: NOT COMPLETED within 60s
+t=1170s rss=355960KB threads=11
+t=1200s rss=298188KB threads=11
+t=1230s rss=298188KB threads=11
+t=1260s rss=298188KB threads=11
+t=1290s rss=316804KB threads=11
+t=1320s rss=316804KB threads=11
+  task 7: NOT COMPLETED within 60s
+t=1350s rss=316804KB threads=11
+t=1380s rss=291584KB threads=11
+t=1410s rss=291584KB threads=11
+t=1440s rss=291584KB threads=11
+t=1470s rss=352332KB threads=11
+t=1500s rss=352332KB threads=11
+  task 8: NOT COMPLETED within 60s
+t=1530s rss=352336KB threads=11
+t=1560s rss=352336KB threads=11
+t=1590s rss=352336KB threads=11
+t=1620s rss=352340KB threads=11
+t=1650s rss=345992KB threads=11
+t=1680s rss=345992KB threads=11
+  task 9: NOT COMPLETED within 60s
+t=1710s rss=345992KB threads=11
+t=1740s rss=296756KB threads=11
+t=1770s rss=296756KB threads=11
+t=1800s rss=296768KB threads=11
+soak tasks: 0/10 completed
+soak: first=430100KB last=296768KB min=261956KB max=458452KB growth=-133332KB over 30min
+--- final screen
+● Write(soak-5.txt)
+  ⎿  Wrote 1 line to soak-5.txt
+      1 soak-5-1793496083
+● done-5
+✻ Crunched for 3s · done 1:21 AM
+❯ Run: echo soak-7-$(date +%s) and write its output to soak-7.txt, then reply with only the word done-7
+  Thought for 1s, ran 1 shell command
+● Write(soak-7.txt)
+  ⎿  Wrote 1 line to soak-7.txt
+      1 soak-7-1793496445
+● done-7
+✻ Worked for 3s · done 1:27 AM
+❯ Run: echo soak-9-$(date +%s) and write its output to soak-9.txt, then reply with only the word done-9
+● Generating soak-9 with current timestamp
+  ⎿  $ echo soak-9-$(date +%s)

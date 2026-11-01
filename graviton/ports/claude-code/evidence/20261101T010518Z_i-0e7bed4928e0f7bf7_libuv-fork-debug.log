@@ -1,0 +1,26 @@
+# evidence: libuv-fork-debug
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T010518Z   end: 20261101T010538Z   rc: 0
+# script sha256: 751b140d1e2529ddee9cbfbfa2fb0975ab0cd1014af4d4cf03a2088dd86e0e5c
+# ---- script ----
+# | cd /boot/home/uvw/dev/after
+# | echo 'I2luY2x1ZGUgPHV2Lmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RkbGliLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KI2luY2x1ZGUgPGZjbnRsLmg+CiNpbmNsdWRlIDxzeXMvd2FpdC5oPgpzdGF0aWMgaW50IGNhbGxlZDsKc3RhdGljIHZvaWQgY2IodXZfZnNfZXZlbnRfdCogaCwgY29uc3QgY2hhciogZiwgaW50IGV2LCBpbnQgc3QpIHsKICBwcmludGYoIlslZF0gY2IgZmlsZT0lcyBldj0lZCBzdD0lZFxuIiwgZ2V0cGlkKCksIGYgPyBmIDogIihudWxsKSIsIGV2LCBzdCk7IGZmbHVzaChzdGRvdXQpOwogIGNhbGxlZCsrOyB1dl9jbG9zZSgodXZfaGFuZGxlX3QqKWgsIE5VTEwpOwp9CnN0YXRpYyB2b2lkIHRvdWNoKHV2X3RpbWVyX3QqIHQpIHsKICBpbnQgZmQgPSBvcGVuKCJ3YXRjaF9maWxlIiwgT19SRFdSKTsgd3JpdGUoZmQsICJmb28iLCA0KTsgY2xvc2UoZmQpOwogIHByaW50ZigiWyVkXSB0b3VjaGVkXG4iLCBnZXRwaWQoKSk7IGZmbHVzaChzdGRvdXQpOwogIHV2X2Nsb3NlKCh1dl9oYW5kbGVfdCopdCwgTlVMTCk7Cn0Kc3RhdGljIHZvaWQgYmFpbCh1dl90aW1lcl90KiB0KSB7IHByaW50ZigiWyVkXSBUSU1FT1VUIGNhbGxlZD0lZFxuIiwgZ2V0cGlkKCksIGNhbGxlZCk7IGZmbHVzaChzdGRvdXQpOyBleGl0KDMpOyB9CmludCBtYWluKHZvaWQpIHsKICB1dl9sb29wX3QqIGxvb3AgPSB1dl9kZWZhdWx0X2xvb3AoKTsKICB1dl9mc19ldmVudF90IGZlOyB1dl90aW1lcl90IHQsIHRvOyBwaWRfdCBwaWQ7IGludCBzdDsKICBjbG9zZShvcGVuKCJ3YXRjaF9maWxlIiwgT19XUk9OTFkgfCBPX0NSRUFULCAwNjQ0KSk7CiAgcHJpbnRmKCJzdGFydD0lZFxuIiwgdXZfZnNfZXZlbnRfc3RhcnQoKHV2X2ZzX2V2ZW50X2luaXQobG9vcCwgJmZlKSwgJmZlKSwgY2IsICJ3YXRjaF9maWxlIiwgMCkpOwogIHV2X3RpbWVyX2luaXQobG9vcCwgJnQpOwogIHBpZCA9IGZvcmsoKTsKICBpZiAocGlkKSB7IHdhaXRwaWQocGlkLCAmc3QsIDApOyBwcmludGYoImNoaWxkIHN0YXR1cyAlZFxuIiwgc3QpOyByZXR1cm4gMDsgfQogIHByaW50ZigiWyVkXSBsb29wX2Zvcms9JWRcbiIsIGdldHBpZCgpLCB1dl9sb29wX2ZvcmsobG9vcCkpOyBmZmx1c2goc3Rkb3V0KTsKICB1dl90aW1lcl9zdGFydCgmdCwgdG91Y2gsIDEwMCwgMCk7CiAgdXZfdGltZXJfaW5pdChsb29wLCAmdG8pOyB1dl90aW1lcl9zdGFydCgmdG8sIGJhaWwsIDMwMDAsIDApOyB1dl91bnJlZigodXZfaGFuZGxlX3QqKSZ0byk7CiAgdXZfcnVuKGxvb3AsIFVWX1JVTl9ERUZBVUxUKTsKICBwcmludGYoIlslZF0gZG9uZSBjYWxsZWQ9JWRcbiIsIGdldHBpZCgpLCBjYWxsZWQpOwogIHJldHVybiAwOwp9Cg==' | base64 -d > /tmp/forkdbg.c
+# | # debug copy of the backend with traces
+# | cp src/unix/haiku-fsevents.c /tmp/hfe.orig.c
+# | sed -i 's|^    s = _kern_start_watching(w->device, w->node, uv__haiku_watch_flags(w),|    fprintf(stderr, "[%d] rearm token=%u port=%d\\n", getpid(), w->token, (int)fe->port);\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^  if (woken == 0)|  fprintf(stderr, "[%d] read woken=%d\\n", getpid(), woken);\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^#include <OS.h>|#include <stdio.h>\n&|' src/unix/haiku-fsevents.c
+# | grep -n "fprintf" src/unix/haiku-fsevents.c
+# | make -j4 > /tmp/dbgbuild.log 2>&1 || tail -20 /tmp/dbgbuild.log
+# | cd /tmp && gcc -o forkdbg forkdbg.c -I/boot/home/uvw/dev/after/include /boot/home/uvw/dev/after/.libs/libuv.so -lnetwork && LIBRARY_PATH=/boot/home/uvw/dev/after/.libs:$LIBRARY_PATH ./forkdbg
+# | cp /tmp/hfe.orig.c /boot/home/uvw/dev/after/src/unix/haiku-fsevents.c
+# ---- raw output ----
+574:  fprintf(stderr, "[%d] read woken=%d\n", getpid(), woken);
+744:    fprintf(stderr, "[%d] rearm token=%u port=%d\n", getpid(), w->token, (int)fe->port);
+[142153] rearm token=1 port=14449
+start=0
+[142153] loop_fork=0
+[142153] touched
+[142153] TIMEOUT called=0
+start=0
+child status 3

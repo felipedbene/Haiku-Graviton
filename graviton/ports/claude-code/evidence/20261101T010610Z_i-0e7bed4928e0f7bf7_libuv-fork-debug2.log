@@ -1,0 +1,42 @@
+# evidence: libuv-fork-debug2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T010610Z   end: 20261101T010631Z   rc: 0
+# script sha256: abd2eb15341438d568b5bde42936803bfe87b8f924d900f46b9bbac87b9f2205
+# ---- script ----
+# | cd /boot/home/uvw/dev/after
+# | echo 'I2luY2x1ZGUgPHV2Lmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RkbGliLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KI2luY2x1ZGUgPGZjbnRsLmg+CiNpbmNsdWRlIDxzeXMvd2FpdC5oPgpzdGF0aWMgaW50IGNhbGxlZDsKc3RhdGljIHZvaWQgY2IodXZfZnNfZXZlbnRfdCogaCwgY29uc3QgY2hhciogZiwgaW50IGV2LCBpbnQgc3QpIHsKICBwcmludGYoIlslZF0gY2IgZmlsZT0lcyBldj0lZCBzdD0lZFxuIiwgZ2V0cGlkKCksIGYgPyBmIDogIihudWxsKSIsIGV2LCBzdCk7IGZmbHVzaChzdGRvdXQpOwogIGNhbGxlZCsrOyB1dl9jbG9zZSgodXZfaGFuZGxlX3QqKWgsIE5VTEwpOwp9CnN0YXRpYyB2b2lkIHRvdWNoKHV2X3RpbWVyX3QqIHQpIHsKICBpbnQgZmQgPSBvcGVuKCJ3YXRjaF9maWxlIiwgT19SRFdSKTsgd3JpdGUoZmQsICJmb28iLCA0KTsgY2xvc2UoZmQpOwogIHByaW50ZigiWyVkXSB0b3VjaGVkXG4iLCBnZXRwaWQoKSk7IGZmbHVzaChzdGRvdXQpOwogIHV2X2Nsb3NlKCh1dl9oYW5kbGVfdCopdCwgTlVMTCk7Cn0KI2luY2x1ZGUgPE9TLmg+CnN0YXRpYyB2b2lkIGJhaWwodXZfdGltZXJfdCogdCkgeyBjaGFyIGNbMTI4XTsgcHJpbnRmKCJbJWRdIFRJTUVPVVQgY2FsbGVkPSVkCiIsIGdldHBpZCgpLCBjYWxsZWQpOyBmZmx1c2goc3Rkb3V0KTsgc25wcmludGYoYywgc2l6ZW9mIGMsICJsaXN0cG9ydCAlZDsgcHMgLWEgJWQiLCBnZXRwaWQoKSwgZ2V0cGlkKCkpOyBzeXN0ZW0oYyk7IGZmbHVzaChzdGRvdXQpOyBleGl0KDMpOyB9CmludCBtYWluKHZvaWQpIHsKICB1dl9sb29wX3QqIGxvb3AgPSB1dl9kZWZhdWx0X2xvb3AoKTsKICB1dl9mc19ldmVudF90IGZlOyB1dl90aW1lcl90IHQsIHRvOyBwaWRfdCBwaWQ7IGludCBzdDsKICBjbG9zZShvcGVuKCJ3YXRjaF9maWxlIiwgT19XUk9OTFkgfCBPX0NSRUFULCAwNjQ0KSk7CiAgcHJpbnRmKCJzdGFydD0lZFxuIiwgdXZfZnNfZXZlbnRfc3RhcnQoKHV2X2ZzX2V2ZW50X2luaXQobG9vcCwgJmZlKSwgJmZlKSwgY2IsICJ3YXRjaF9maWxlIiwgMCkpOwogIHV2X3RpbWVyX2luaXQobG9vcCwgJnQpOwogIHBpZCA9IGZvcmsoKTsKICBpZiAocGlkKSB7IHdhaXRwaWQocGlkLCAmc3QsIDApOyBwcmludGYoImNoaWxkIHN0YXR1cyAlZFxuIiwgc3QpOyByZXR1cm4gMDsgfQogIHByaW50ZigiWyVkXSBsb29wX2Zvcms9JWRcbiIsIGdldHBpZCgpLCB1dl9sb29wX2ZvcmsobG9vcCkpOyBmZmx1c2goc3Rkb3V0KTsKICB1dl90aW1lcl9zdGFydCgmdCwgdG91Y2gsIDEwMCwgMCk7CiAgdXZfdGltZXJfaW5pdChsb29wLCAmdG8pOyB1dl90aW1lcl9zdGFydCgmdG8sIGJhaWwsIDMwMDAsIDApOyB1dl91bnJlZigodXZfaGFuZGxlX3QqKSZ0byk7CiAgdXZfcnVuKGxvb3AsIFVWX1JVTl9ERUZBVUxUKTsKICBwcmludGYoIlslZF0gZG9uZSBjYWxsZWQ9JWRcbiIsIGdldHBpZCgpLCBjYWxsZWQpOwogIHJldHVybiAwOwp9Cg==' | base64 -d > /tmp/forkdbg.c
+# | # debug copy of the backend with traces
+# | cp src/unix/haiku-fsevents.c /tmp/hfe.orig.c
+# | sed -i 's|^    s = _kern_start_watching(w->device, w->node, uv__haiku_watch_flags(w),|    fprintf(stderr, "[%d] rearm token=%u port=%d\\n", getpid(), w->token, (int)fe->port);\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^  if (woken == 0)|  fprintf(stderr, "[%d] read woken=%d\\n", getpid(), woken);\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^#include <OS.h>|#include <stdio.h>\n&|' src/unix/haiku-fsevents.c
+# | grep -n "fprintf" src/unix/haiku-fsevents.c
+# | make -j4 > /tmp/dbgbuild.log 2>&1 || tail -20 /tmp/dbgbuild.log
+# | cd /tmp && gcc -o forkdbg forkdbg.c -I/boot/home/uvw/dev/after/include /boot/home/uvw/dev/after/.libs/libuv.so -lnetwork && LIBRARY_PATH=/boot/home/uvw/dev/after/.libs:$LIBRARY_PATH ./forkdbg
+# | cp /tmp/hfe.orig.c /boot/home/uvw/dev/after/src/unix/haiku-fsevents.c
+# ---- raw output ----
+574:  fprintf(stderr, "[%d] read woken=%d\n", getpid(), woken);
+744:    fprintf(stderr, "[%d] rearm token=%u port=%d\n", getpid(), w->token, (int)fe->port);
+forkdbg.c: In function 'bail':
+forkdbg.c:18:55: warning: missing terminating " character
+   18 | static void bail(uv_timer_t* t) { char c[128]; printf("[%d] TIMEOUT called=%d
+      |                                                       ^
+forkdbg.c:18:55: error: missing terminating " character
+   18 | static void bail(uv_timer_t* t) { char c[128]; printf("[%d] TIMEOUT called=%d
+      |                                                       ^~~~~~~~~~~~~~~~~~~~~~~
+forkdbg.c:19:62: error: expected ')' before 'listport'
+   19 | ", getpid(), called); fflush(stdout); snprintf(c, sizeof c, "listport %d; ps -a %d", getpid(), getpid()); system(c); fflush(stdout); exit(3); }
+      |                                                              ^~~~~~~~
+      |                                                              )
+forkdbg.c:18:54: note: to match this '('
+   18 | static void bail(uv_timer_t* t) { char c[128]; printf("[%d] TIMEOUT called=%d
+      |                                                      ^
+forkdbg.c:19:83: warning: missing terminating " character
+   19 | ", getpid(), called); fflush(stdout); snprintf(c, sizeof c, "listport %d; ps -a %d", getpid(), getpid()); system(c); fflush(stdout); exit(3); }
+      |                                                                                   ^
+forkdbg.c:19:83: error: missing terminating " character
+   19 | ", getpid(), called); fflush(stdout); snprintf(c, sizeof c, "listport %d; ps -a %d", getpid(), getpid()); system(c); fflush(stdout); exit(3); }
+      |                                                                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+forkdbg.c:34:1: error: expected declaration or statement at end of input
+   34 | }
+      | ^

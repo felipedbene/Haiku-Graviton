@@ -1,0 +1,15 @@
+# evidence: peek
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T012004Z   end: 20261101T012025Z   rc: 0
+# script sha256: 1670863d889b7f344325b9c4d7578ab550da839e45013190a465718fe9d37cf7
+# ---- script ----
+# | f=$(ls -t /tmp/ccrun/*.log | sed -n 2p); echo $f; tail -5 $f; ls -la /tmp/node-dev.tap 2>&1; grep -c "^ok\|^not ok" /tmp/node-dev.tap 2>/dev/null
+# ---- raw output ----
+/tmp/ccrun/cc-20261101T011350Z-94454.log
+ok 34 parallel/test-fs-watch-recursive-symlink
+ok 35 parallel/test-fs-watch-recursive-assert-leaks
+ok 36 parallel/test-fs-watch-recursive-delete
+ok 37 parallel/test-fs-watch-recursive-promise
+ok 38 parallel/test-fs-watch-recursive-prefix-sibling
+-rw-r--r-- 1 baron root 4253 Nov  1 01:20 /tmp/node-dev.tap
+38

@@ -1,0 +1,28 @@
+# evidence: kill-stale-suite
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T012410Z   end: 20261101T012431Z   rc: 0
+# script sha256: 92bd0ae7ab367d14f2043d490369422f8090d658ddfe00a5a6ad2cd484179f7f
+# ---- script ----
+# | f=$(grep -l "W=/boot/home/uvw/suite" /tmp/ccrun/*.sh | tail -1); echo "$f"
+# | for p in $(ps | grep -E "run-tests|$(basename $f)" | grep -v grep | awk '{print $2}'); do kill -9 $p 2>/dev/null; done
+# | sleep 1; ps | grep -E "run-tests|cc-" | grep -v grep
+# | tail -3 ${f%.sh}.log
+# ---- raw output ----
+/tmp/ccrun/cc-20261101T012410Z-99898.sh
+/boot/home/uvw/dev/after/test/.libs/lt-run-tests fork_fs_events 141633        2    0    0 
+/boot/home/uvw/dev/after/test/.libs/lt-run-tests fork_fs_events 142907        2    0    0 
+/boot/home/uvw/dev/after/test/.libs/lt-run-tests fork_fs_events 142930        2    0    0 
+/boot/home/uvw/dev/after/test/.libs/lt-run-tests fork_fs_events 142956        2    0    0 
+/boot/home/uvw/dev/after/test/.libs/lt-run-tests fork_fs_events 142977        2    0    0 
+/boot/home/uvw/dev/after/test/.libs/lt-run-tests fork_fs_events 143006        2    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T012234Z-9860 151207        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T012234Z-98607.sh 151208        1    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T012410Z-9989 163754        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T012410Z-99898.sh 163755        1    0    0 
+/boot/home/uvw/suite/after/test/.libs/lt-run-tests 163774        2    0    0 
+/boot/home/uvw/suite/after/test/.libs/lt-run-tests condvar_5 co 163843        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T012410Z-99898.sh 163846        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T012410Z-99898.sh 163847        1    0    0 
+/boot/home/uvw/suite/after/test/.libs/lt-run-tests condvar_5 co 163843        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T012410Z-99898.sh 163846        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T012410Z-99898.sh 163847        1    0    0 

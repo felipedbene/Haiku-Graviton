@@ -1,0 +1,36 @@
+# evidence: libuv-fork-debug4
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T010752Z   end: 20261101T010813Z   rc: 0
+# script sha256: 259b1654e3e24de361b0e02fd96812d11eb4fb18cbbfc4dd20b98bb3e85b50d1
+# ---- script ----
+# | cd /boot/home/uvw/dev/after
+# | echo 'I2luY2x1ZGUgPHV2Lmg+CiNpbmNsdWRlIDxPUy5oPgojaW5jbHVkZSA8c3RkaW8uaD4KI2luY2x1ZGUgPHN0ZGxpYi5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CiNpbmNsdWRlIDxmY250bC5oPgojaW5jbHVkZSA8c3lzL3dhaXQuaD4Kc3RhdGljIGludCBjYWxsZWQ7CnN0YXRpYyB2b2lkIGNiKHV2X2ZzX2V2ZW50X3QqIGgsIGNvbnN0IGNoYXIqIGYsIGludCBldiwgaW50IHN0KSB7CiAgcHJpbnRmKCJbJWRdIGNiIGZpbGU9JXMgZXY9JWQgc3Q9JWRcbiIsIGdldHBpZCgpLCBmID8gZiA6ICIobnVsbCkiLCBldiwgc3QpOyBmZmx1c2goc3Rkb3V0KTsKICBjYWxsZWQrKzsgdXZfY2xvc2UoKHV2X2hhbmRsZV90KiloLCBOVUxMKTsKfQpzdGF0aWMgdm9pZCB0b3VjaCh1dl90aW1lcl90KiB0KSB7CiAgaW50IGZkID0gb3Blbigid2F0Y2hfZmlsZSIsIE9fUkRXUik7IHdyaXRlKGZkLCAiZm9vIiwgNCk7IGNsb3NlKGZkKTsKICBwcmludGYoIlslZF0gdG91Y2hlZFxuIiwgZ2V0cGlkKCkpOyBmZmx1c2goc3Rkb3V0KTsKICB1dl9jbG9zZSgodXZfaGFuZGxlX3QqKXQsIE5VTEwpOwp9CnN0YXRpYyB2b2lkIGJhaWwodXZfdGltZXJfdCogdCkgewogIGNoYXIgY1sxMjhdOwogIHByaW50ZigiWyVkXSBUSU1FT1VUIGNhbGxlZD0lZFxuIiwgZ2V0cGlkKCksIGNhbGxlZCk7IGZmbHVzaChzdGRvdXQpOwogIHNucHJpbnRmKGMsIHNpemVvZiBjLCAibGlzdHBvcnQgJWQ7IHBzIC1hICVkIiwgZ2V0cGlkKCksIGdldHBpZCgpKTsKICBzeXN0ZW0oYyk7IGZmbHVzaChzdGRvdXQpOyBleGl0KDMpOwp9CmludCBtYWluKHZvaWQpIHsKICB1dl9sb29wX3QqIGxvb3AgPSB1dl9kZWZhdWx0X2xvb3AoKTsKICB1dl9mc19ldmVudF90IGZlOyB1dl90aW1lcl90IHQsIHRvOyBwaWRfdCBwaWQ7IGludCBzdDsKICBjbG9zZShvcGVuKCJ3YXRjaF9maWxlIiwgT19XUk9OTFkgfCBPX0NSRUFULCAwNjQ0KSk7CiAgdXZfZnNfZXZlbnRfaW5pdChsb29wLCAmZmUpOwogIHByaW50Zigic3RhcnQ9JWRcbiIsIHV2X2ZzX2V2ZW50X3N0YXJ0KCZmZSwgY2IsICJ3YXRjaF9maWxlIiwgMCkpOwogIHV2X3RpbWVyX2luaXQobG9vcCwgJnQpOwogIHBpZCA9IGZvcmsoKTsKICBpZiAocGlkKSB7IHdhaXRwaWQocGlkLCAmc3QsIDApOyBwcmludGYoImNoaWxkIHN0YXR1cyAlZFxuIiwgc3QpOyByZXR1cm4gMDsgfQogIHByaW50ZigiWyVkXSBsb29wX2Zvcms9JWRcbiIsIGdldHBpZCgpLCB1dl9sb29wX2ZvcmsobG9vcCkpOyBmZmx1c2goc3Rkb3V0KTsKICB1dl90aW1lcl9zdGFydCgmdCwgdG91Y2gsIDEwMCwgMCk7CiAgdXZfdGltZXJfaW5pdChsb29wLCAmdG8pOyB1dl90aW1lcl9zdGFydCgmdG8sIGJhaWwsIDMwMDAsIDApOyB1dl91bnJlZigodXZfaGFuZGxlX3QqKSZ0byk7CiAgdXZfcnVuKGxvb3AsIFVWX1JVTl9ERUZBVUxUKTsKICBwcmludGYoIlslZF0gZG9uZSBjYWxsZWQ9JWRcbiIsIGdldHBpZCgpLCBjYWxsZWQpOwogIHJldHVybiAwOwp9Cg==' | base64 -d > /tmp/forkdbg.c
+# | # debug copy of the backend with traces
+# | cp src/unix/haiku-fsevents.c /tmp/hfe.orig.c
+# | sed -i 's|^    s = _kern_start_watching(w->device, w->node, uv__haiku_watch_flags(w),|    fprintf(stderr, "[%d] rearm token=%u port=%d\\n", getpid(), w->token, (int)fe->port);\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^  if (woken == 0)|  fprintf(stderr, "[%d] read woken=%d\\n", getpid(), woken);\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^#include <OS.h>|#include <stdio.h>\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^    if (n != 1)$|    fprintf(stderr, "[%d] helper woke size=%d wrote=%d fd=%d\\n", getpid(), (int)size, (int)n, fe->pipefd[1]);\n&|' src/unix/haiku-fsevents.c
+# | sed -i 's|^  uv__io_start(loop, \&fe->io, POLLIN);|  fprintf(stderr, "[%d] start io fd=%d/%d port=%d\\n", getpid(), fe->pipefd[0], fe->pipefd[1], (int)fe->port);\n&|' src/unix/haiku-fsevents.c
+# | grep -n "fprintf" src/unix/haiku-fsevents.c
+# | make -j4 > /tmp/dbgbuild.log 2>&1 || tail -20 /tmp/dbgbuild.log
+# | cd /tmp && gcc -o forkdbg forkdbg.c -I/boot/home/uvw/dev/after/include /boot/home/uvw/dev/after/.libs/libuv.so -lnetwork && LIBRARY_PATH=/boot/home/uvw/dev/after/.libs:$LIBRARY_PATH ./forkdbg
+# | cp /tmp/hfe.orig.c /boot/home/uvw/dev/after/src/unix/haiku-fsevents.c
+# ---- raw output ----
+237:    fprintf(stderr, "[%d] helper woke size=%d wrote=%d fd=%d\n", getpid(), (int)size, (int)n, fe->pipefd[1]);
+575:  fprintf(stderr, "[%d] read woken=%d\n", getpid(), woken);
+637:  fprintf(stderr, "[%d] start io fd=%d/%d port=%d\n", getpid(), fe->pipefd[0], fe->pipefd[1], (int)fe->port);
+746:    fprintf(stderr, "[%d] rearm token=%u port=%d\n", getpid(), w->token, (int)fe->port);
+[142673] start io fd=9/10 port=14707
+[142675] start io fd=9/10 port=14708
+[142675] rearm token=1 port=14708
+start=0
+[142675] loop_fork=0
+[142675] touched
+[142675] helper woke size=156 wrote=1 fd=10
+[142675] read woken=1
+[142675] cb file=watch_file ev=2 st=0
+[142675] done called=1
+[142673] helper woke size=156 wrote=1 fd=10
+start=0
+child status 0

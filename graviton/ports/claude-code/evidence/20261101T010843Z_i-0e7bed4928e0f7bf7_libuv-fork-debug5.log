@@ -1,0 +1,97 @@
+# evidence: libuv-fork-debug5
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T010843Z   end: 20261101T010944Z   rc: 0
+# script sha256: 47c5d655f73f99bfb7d5fa5e129c3606b6e8c41c9addf773b88c57106a955b36
+# ---- script ----
+# | cd /boot/home/uvw/dev/after
+# | cp /tmp/hfe.orig.c src/unix/haiku-fsevents.c 2>/dev/null; make -j4 > /tmp/dbgbuild.log 2>&1 || tail -20 /tmp/dbgbuild.log
+# | grep -c fprintf src/unix/haiku-fsevents.c
+# | echo 'I2luY2x1ZGUgPHV2Lmg+CiNpbmNsdWRlIDxPUy5oPgojaW5jbHVkZSA8c3RkaW8uaD4KI2luY2x1ZGUgPHN0ZGxpYi5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CiNpbmNsdWRlIDxmY250bC5oPgojaW5jbHVkZSA8c3lzL3dhaXQuaD4Kc3RhdGljIGludCBjYWxsZWQ7CnN0YXRpYyB2b2lkIGNiKHV2X2ZzX2V2ZW50X3QqIGgsIGNvbnN0IGNoYXIqIGYsIGludCBldiwgaW50IHN0KSB7CiAgcHJpbnRmKCJbJWRdIGNiIGZpbGU9JXMgZXY9JWQgc3Q9JWRcbiIsIGdldHBpZCgpLCBmID8gZiA6ICIobnVsbCkiLCBldiwgc3QpOyBmZmx1c2goc3Rkb3V0KTsKICBjYWxsZWQrKzsgdXZfY2xvc2UoKHV2X2hhbmRsZV90KiloLCBOVUxMKTsKfQpzdGF0aWMgdm9pZCB0b3VjaCh1dl90aW1lcl90KiB0KSB7CiAgaW50IGZkID0gb3Blbigid2F0Y2hfZmlsZSIsIE9fUkRXUik7IHdyaXRlKGZkLCAiZm9vIiwgNCk7IGNsb3NlKGZkKTsKICBwcmludGYoIlslZF0gdG91Y2hlZFxuIiwgZ2V0cGlkKCkpOyBmZmx1c2goc3Rkb3V0KTsKICB1dl9jbG9zZSgodXZfaGFuZGxlX3QqKXQsIE5VTEwpOwp9CnN0YXRpYyB2b2lkIGJhaWwodXZfdGltZXJfdCogdCkgewogIGNoYXIgY1sxMjhdOwogIHByaW50ZigiWyVkXSBUSU1FT1VUIGNhbGxlZD0lZFxuIiwgZ2V0cGlkKCksIGNhbGxlZCk7IGZmbHVzaChzdGRvdXQpOwogIHsgdGhyZWFkX2luZm8gdGk7IGludDMyIGNvb2tpZSA9IDA7CiAgICB3aGlsZSAoZ2V0X25leHRfdGhyZWFkX2luZm8oMCwgJmNvb2tpZSwgJnRpKSA9PSBCX09LKQogICAgICBwcmludGYoIiAgdGhyZWFkICVkICclcycgc3RhdGU9JWQgc2VtPSVkXG4iLCAoaW50KXRpLnRocmVhZCwgdGkubmFtZSwgKGludCl0aS5zdGF0ZSwgKGludCl0aS5zZW0pOwogIH0KICBzbnByaW50ZihjLCBzaXplb2YgYywgImxpc3Rwb3J0ICVkIiwgZ2V0cGlkKCkpOwogIHN5c3RlbShjKTsgZmZsdXNoKHN0ZG91dCk7IGV4aXQoMyk7Cn0KaW50IG1haW4odm9pZCkgewogIHV2X2xvb3BfdCogbG9vcCA9IHV2X2RlZmF1bHRfbG9vcCgpOwogIHV2X2ZzX2V2ZW50X3QgZmU7IHV2X3RpbWVyX3QgdCwgdG87IHBpZF90IHBpZDsgaW50IHN0OwogIGNsb3NlKG9wZW4oIndhdGNoX2ZpbGUiLCBPX1dST05MWSB8IE9fQ1JFQVQsIDA2NDQpKTsKICB1dl9mc19ldmVudF9pbml0KGxvb3AsICZmZSk7CiAgcHJpbnRmKCJzdGFydD0lZFxuIiwgdXZfZnNfZXZlbnRfc3RhcnQoJmZlLCBjYiwgIndhdGNoX2ZpbGUiLCAwKSk7CiAgdXZfdGltZXJfaW5pdChsb29wLCAmdCk7CiAgcGlkID0gZm9yaygpOwogIGlmIChwaWQpIHsgd2FpdHBpZChwaWQsICZzdCwgMCk7IHByaW50ZigiY2hpbGQgc3RhdHVzICVkXG4iLCBzdCk7IHJldHVybiAwOyB9CiAgcHJpbnRmKCJbJWRdIGxvb3BfZm9yaz0lZFxuIiwgZ2V0cGlkKCksIHV2X2xvb3BfZm9yayhsb29wKSk7IGZmbHVzaChzdGRvdXQpOwogIHV2X3RpbWVyX3N0YXJ0KCZ0LCB0b3VjaCwgMTAwLCAwKTsKICB1dl90aW1lcl9pbml0KGxvb3AsICZ0byk7IHV2X3RpbWVyX3N0YXJ0KCZ0bywgYmFpbCwgMzAwMCwgMCk7IHV2X3VucmVmKCh1dl9oYW5kbGVfdCopJnRvKTsKICB1dl9ydW4obG9vcCwgVVZfUlVOX0RFRkFVTFQpOwogIHByaW50ZigiWyVkXSBkb25lIGNhbGxlZD0lZFxuIiwgZ2V0cGlkKCksIGNhbGxlZCk7CiAgcmV0dXJuIDA7Cn0K' | base64 -d > /tmp/forkdbg.c
+# | cd /tmp && gcc -o forkdbg forkdbg.c -I/boot/home/uvw/dev/after/include /boot/home/uvw/dev/after/.libs/libuv.so -lnetwork || exit 1
+# | for i in 1 2 3 4 5 6; do echo "--- run $i"; LIBRARY_PATH=/boot/home/uvw/dev/after/.libs:$LIBRARY_PATH ./forkdbg 2>&1 | grep -v "^start=0"; done
+# | cd /boot/home/uvw/dev/after; for i in 1 2 3 4 5; do : | ./test/run-tests fork_fs_events_file_parent_child 2>&1 | head -1; done
+# ---- raw output ----
+0
+--- run 1
+[142844] loop_fork=0
+[142844] touched
+[142844] TIMEOUT called=0
+port: total:  4096, used:   161, left:  3935
+
+TEAM 142844 (./forkdbg):
+   ID                         name  capacity  queued
+----------------------------------------------------
+14795               libuv fs event       256       1
+  thread 142844 'forkdbg' state=1 sem=-1
+  thread 142845 'libuv.so.1 pthread' state=6 sem=49186121
+child status 3
+--- run 2
+[142850] loop_fork=0
+[142850] touched
+[142850] TIMEOUT called=0
+port: total:  4096, used:   161, left:  3935
+
+TEAM 142850 (./forkdbg):
+   ID                         name  capacity  queued
+----------------------------------------------------
+14797               libuv fs event       256       1
+  thread 142850 'forkdbg' state=1 sem=-1
+  thread 142851 'libuv.so.1 pthread' state=6 sem=49009284
+child status 3
+--- run 3
+[142856] loop_fork=0
+[142856] touched
+[142856] TIMEOUT called=0
+port: total:  4096, used:   161, left:  3935
+
+TEAM 142856 (./forkdbg):
+   ID                         name  capacity  queued
+----------------------------------------------------
+14799               libuv fs event       256       1
+  thread 142856 'forkdbg' state=1 sem=-1
+  thread 142857 'libuv.so.1 pthread' state=6 sem=45533641
+child status 3
+--- run 4
+[142866] loop_fork=0
+[142866] touched
+[142866] TIMEOUT called=0
+port: total:  4096, used:   161, left:  3935
+
+TEAM 142866 (./forkdbg):
+   ID                         name  capacity  queued
+----------------------------------------------------
+14801               libuv fs event       256       1
+  thread 142866 'forkdbg' state=1 sem=-1
+  thread 142867 'libuv.so.1 pthread' state=6 sem=49178828
+child status 3
+--- run 5
+[142876] loop_fork=0
+[142876] touched
+[142876] TIMEOUT called=0
+port: total:  4096, used:   161, left:  3935
+
+TEAM 142876 (./forkdbg):
+   ID                         name  capacity  queued
+----------------------------------------------------
+14813               libuv fs event       256       1
+  thread 142876 'forkdbg' state=1 sem=-1
+  thread 142877 'libuv.so.1 pthread' state=6 sem=49192127
+child status 3
+--- run 6
+[142885] loop_fork=0
+[142885] touched
+[142885] TIMEOUT called=0
+port: total:  4096, used:   161, left:  3935
+
+TEAM 142885 (./forkdbg):
+   ID                         name  capacity  queued
+----------------------------------------------------
+14821               libuv fs event       256       1
+  thread 142885 'forkdbg' state=1 sem=-1
+  thread 142886 'libuv.so.1 pthread' state=6 sem=48944384
+child status 3
+not ok 1 - fork_fs_events_file_parent_child
+not ok 1 - fork_fs_events_file_parent_child
+not ok 1 - fork_fs_events_file_parent_child
+not ok 1 - fork_fs_events_file_parent_child
+not ok 1 - fork_fs_events_file_parent_child

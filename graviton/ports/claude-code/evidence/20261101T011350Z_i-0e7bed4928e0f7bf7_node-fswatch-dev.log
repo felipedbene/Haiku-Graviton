@@ -1,0 +1,97 @@
+# evidence: node-fswatch-dev
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T011350Z   end: 20261101T012005Z   rc: 0
+# script sha256: f1a64788b8c7446c8436d0778bcaa05aca0baddcf1552cc4296258f046666104
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N
+# | T="$(ls test/parallel/test-fs-watch*.js test/sequential/test-fs-watch*.js | tr '\n' ' ')"
+# | echo "== stock libuv: $(ls -l /boot/system/lib/libuv.so.1.0.0)"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap $T 2>&1 | grep -E "^(ok|not ok)|^# |^1\.\." 
+# | echo "== dev libuv via LIBRARY_PATH"
+# | export LIBRARY_PATH=/boot/home/uvw/dev/after/.libs:$LIBRARY_PATH
+# | node -e "const fs=require('fs');const w=fs.watch('.');console.log('fs.watch ok');w.close()"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap $T > /tmp/node-dev.tap 2>&1
+# | grep -E "^(ok|not ok)|^1\.\." /tmp/node-dev.tap
+# ---- raw output ----
+== stock libuv: -r-xr-xr-x 1 baron root 248344 Aug 29 05:05 /boot/system/lib/libuv.so.1.0.0
+1..38
+not ok 1 parallel/test-fs-watch-encoding
+not ok 2 parallel/test-fs-watch-close-when-destroyed
+not ok 3 parallel/test-fs-watch-abort-signal
+not ok 4 parallel/test-fs-watch-enoent
+not ok 5 parallel/test-fs-watch-ignore-glob
+ok 6 parallel/test-fs-watch-ignore-invalid
+not ok 7 parallel/test-fs-watch-ignore-function
+not ok 8 parallel/test-fs-watch-ignore-mixed
+ok 9 parallel/test-fs-watch-file-enoent-after-deletion
+not ok 10 parallel/test-fs-watch-ignore-regexp
+not ok 11 parallel/test-fs-watch-ignore-recursive-mixed
+not ok 12 parallel/test-fs-watch-ignore-recursive-regexp
+not ok 13 parallel/test-fs-watch-ignore-recursive-glob
+not ok 14 parallel/test-fs-watch-ignore-recursive-glob-subdirectories
+not ok 15 parallel/test-fs-watch-recursive-delete-race
+ok 16 parallel/test-fs-watch-recursive-linux-parallel-remove # skip This test can run only on Linux
+not ok 17 parallel/test-fs-watch-recursive-add-folder
+not ok 18 parallel/test-fs-watch-recursive-add-file-to-existing-subfolder
+not ok 19 parallel/test-fs-watch-recursive-add-file-with-url
+not ok 20 parallel/test-fs-watch-recursive-add-file-to-new-folder
+not ok 21 parallel/test-fs-watch-recursive-add-file
+not ok 22 parallel/test-fs-watch-ref-unref
+ok 23 parallel/test-fs-watch-stop-async
+ok 24 parallel/test-fs-watch-recursive-validate
+not ok 25 parallel/test-fs-watch-recursive-assert-leaks
+ok 26 parallel/test-fs-watch
+ok 27 parallel/test-fs-watchfile
+ok 28 parallel/test-fs-watchfile-bigint
+ok 29 parallel/test-fs-watch-stop-sync
+not ok 30 parallel/test-fs-watch-recursive-symlink
+ok 31 parallel/test-fs-watchfile-ref-unref
+not ok 32 parallel/test-fs-watch-recursive-update-file
+not ok 33 sequential/test-fs-watch
+not ok 34 parallel/test-fs-watch-recursive-delete
+ok 35 parallel/test-fs-watch-recursive-prefix-sibling
+not ok 36 parallel/test-fs-watch-recursive-sync-write
+not ok 37 parallel/test-fs-watch-recursive-watch-file
+not ok 38 parallel/test-fs-watch-recursive-promise
+== dev libuv via LIBRARY_PATH
+fs.watch ok
+1..38
+ok 1 parallel/test-fs-watch-abort-signal
+ok 2 parallel/test-fs-watch-enoent
+ok 3 parallel/test-fs-watch-ignore-glob
+ok 4 parallel/test-fs-watch-ignore-function
+ok 5 parallel/test-fs-watch-close-when-destroyed
+ok 6 parallel/test-fs-watch-encoding
+ok 7 parallel/test-fs-watch-ignore-invalid
+ok 8 parallel/test-fs-watch-ignore-recursive-glob
+ok 9 parallel/test-fs-watch-ignore-mixed
+ok 10 parallel/test-fs-watch-ignore-recursive-mixed
+ok 11 parallel/test-fs-watch-file-enoent-after-deletion
+ok 12 parallel/test-fs-watch-ignore-regexp
+ok 13 parallel/test-fs-watch-ignore-recursive-glob-subdirectories
+ok 14 parallel/test-fs-watch-ignore-recursive-regexp
+ok 15 parallel/test-fs-watch-recursive-linux-parallel-remove # skip This test can run only on Linux
+ok 16 parallel/test-fs-watch-recursive-delete-race
+ok 17 parallel/test-fs-watch-recursive-validate
+ok 18 parallel/test-fs-watch-recursive-add-file-with-url
+ok 19 parallel/test-fs-watch-recursive-add-folder
+ok 20 parallel/test-fs-watch-recursive-add-file-to-existing-subfolder
+ok 21 parallel/test-fs-watch-recursive-add-file-to-new-folder
+ok 22 parallel/test-fs-watch-stop-async
+ok 23 parallel/test-fs-watch-stop-sync
+ok 24 parallel/test-fs-watch-recursive-watch-file
+ok 25 parallel/test-fs-watch-recursive-add-file
+ok 26 parallel/test-fs-watch
+ok 27 parallel/test-fs-watch-ref-unref
+ok 28 parallel/test-fs-watchfile-bigint
+ok 29 parallel/test-fs-watchfile
+ok 30 parallel/test-fs-watch-recursive-sync-write
+not ok 31 sequential/test-fs-watch
+ok 32 parallel/test-fs-watchfile-ref-unref
+ok 33 parallel/test-fs-watch-recursive-update-file
+ok 34 parallel/test-fs-watch-recursive-symlink
+ok 35 parallel/test-fs-watch-recursive-assert-leaks
+ok 36 parallel/test-fs-watch-recursive-delete
+ok 37 parallel/test-fs-watch-recursive-promise
+ok 38 parallel/test-fs-watch-recursive-prefix-sibling

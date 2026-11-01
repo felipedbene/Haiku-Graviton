@@ -1,0 +1,38 @@
+# evidence: peek2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T012045Z   end: 20261101T012105Z   rc: 0
+# script sha256: 5bfa5aacb9984544e3eb16156de8e749ca1eb204d67172218c835b0fec683f51
+# ---- script ----
+# | sed -n '/^not ok 31/,/^ok 32/p' /tmp/node-dev.tap | head -60
+# ---- raw output ----
+not ok 31 sequential/test-fs-watch
+  ---
+  duration_ms: 113.37300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'newfile.txt'
+    - null
+    
+        at FSWatcher.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-fs-watch.js:108:18)
+        at FSWatcher.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at FSWatcher.emit (node:events:514:28)
+        at FSWatcher._handle.onchange (node:internal/fs/watchers:281:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 'newfile.txt',
+      expected: null,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+ok 32 parallel/test-fs-watchfile-ref-unref

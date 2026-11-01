@@ -1,0 +1,24 @@
+# evidence: ps-probe2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T013139Z   end: 20261101T013200Z   rc: 0
+# script sha256: 554cc759aad6eab324f381be518e0a7dc0841bb76a43825fa2224f697314ff88
+# ---- script ----
+# | ps $$; echo ---; ps -o $$ 2>&1 | head; echo ---; ps bash | head -5
+# ---- raw output ----
+---
+
+
+
+
+
+
+
+
+
+
+---
+Team                                                  Id #Threads  Gid  Uid 
+/boot/system/bin/bash                              184708        1    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+bash                                  184708     wait   10        1        2 
