@@ -1,0 +1,58 @@
+# evidence: base-setup
+# instance: i-028beda1c1453ec4b   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T174501Z   end: 20261101T174550Z   rc: 0
+# script sha256: 7bbb687533367f31f8accbde9e680e1d16eb180690a2b2af7980654535190bda
+# ---- script ----
+# | set -x
+# | pkgman install -y nodejs24 python3.14 gcc haiku_devel 2>&1 | tail -8
+# | node --version; python3 --version; gcc --version | head -1
+# | mkdir -p /boot/home/t && cd /boot/home/t
+# | python3 -I - <<'PY'
+# | import hashlib, tarfile, urllib.request
+# | u = "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
+# | urllib.request.urlretrieve(u, "node-v24.21.0.tar.gz")
+# | h = hashlib.sha256(open("node-v24.21.0.tar.gz", "rb").read()).hexdigest()
+# | assert h == "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777", h
+# | with tarfile.open("node-v24.21.0.tar.gz") as t:
+# |     m = [x for x in t.getmembers() if x.name.split("/")[1:2] in (["test"], ["tools"])]
+# |     t.extractall(".", members=m, filter="data")
+# | print("node tarball sha256 OK, extracted", len(m))
+# | PY
+# | rm -f node-v24.21.0.tar.gz
+# | ls /boot/home/t/node-v24.21.0 | head
+# | pkgman search -i -D 2>/dev/null | grep -E "nodejs24|python3.14|^.*gcc " | head
+# | df -k /boot | tail -1
+# | sync
+# ---- raw output ----
++ pkgman install -y nodejs24 python3.14 gcc haiku_devel
++ tail -8
+       sqlite-3.50.4.0-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/sqlite-3.50.4.0-1-arm64.hpkg...done.
+       python3.14-3.14.7-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/python3.14-3.14.7-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-01_17:45:18"
+[system] Cleaning up ...
+[system] Done.
++ node --version
+v24.21.0
++ python3 --version
+Python 3.14.7
++ gcc --version
++ head -1
+gcc (2026_03_29) 13.3.0
++ mkdir -p /boot/home/t
++ cd /boot/home/t
++ python3 -I -
+node tarball sha256 OK, extracted 12111
++ rm -f node-v24.21.0.tar.gz
++ ls /boot/home/t/node-v24.21.0
++ head
+test
+tools
++ pkgman search -i -D
++ head
++ df -k /boot
++ tail -1
+   Root Inode: 524288
++ sync

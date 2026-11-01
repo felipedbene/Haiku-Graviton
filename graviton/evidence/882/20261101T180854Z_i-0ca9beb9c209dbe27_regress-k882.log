@@ -1,0 +1,103 @@
+# evidence: regress-k882
+# instance: i-0ca9beb9c209dbe27   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T180854Z   end: 20261101T181714Z   rc: 0
+# script sha256: 7e340ae7a5c484328f968b95be09ebcd2858b7aa1cc1bbf31eadd6b6aa32c0bf
+# ---- script ----
+# | ARM=k882
+# | # prepended: ARM
+# | set +e
+# | echo "== identity ($ARM)"; uname -v; sha256sum /boot/system/kernel_arm64 /boot/home/config/non-packaged/add-ons/kernel/boot/bfs /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null 2>/dev/null
+# | cd /boot/home/t/node-v24.21.0
+# | SLICE=$(cd test && ls parallel/test-fs-*.js parallel/test-fs-*.mjs parallel/test-net-server-*.js parallel/test-cluster-listen-*.js 2>/dev/null | sed 's/\.m\?js$//' | sort -u)
+# | echo "slice: $(echo $SLICE | wc -w) tests"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap $SLICE > /tmp/slice.tap 2>&1
+# | echo "slice rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/slice.tap) notok=$(grep -c '^not ok ' /tmp/slice.tap)"
+# | grep '^not ok ' /tmp/slice.tap | sed 's/^not ok [0-9]* //' | sort | sed 's/^/NOTOK /'
+# | echo "== 892 load: test-runner-worker-id -j 16 --repeat 32, test-tls-enable-keylog-cli --repeat 10"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 --repeat 32 -t 120 -p tap parallel/test-runner-worker-id > /tmp/wid.tap 2>&1
+# | echo "worker-id ok=$(grep -c '^ok ' /tmp/wid.tap) notok=$(grep -c '^not ok ' /tmp/wid.tap)"
+# | grep -m3 "should be used" /tmp/wid.tap
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 --repeat 10 -t 120 -p tap parallel/test-tls-enable-keylog-cli > /tmp/keylog.tap 2>&1
+# | echo "keylog ok=$(grep -c '^ok ' /tmp/keylog.tap) notok=$(grep -c '^not ok ' /tmp/keylog.tap)"
+# | grep -m3 "!==" /tmp/keylog.tap
+# | echo "== BFS: tar round trip of the node test tree"
+# | cd /boot/home/t
+# | rm -rf rt && mkdir rt
+# | s=$(date +%s)
+# | tar cf rt/t.tar node-v24.21.0/test && (cd rt && tar xf t.tar)
+# | echo "tar rc=$? wall=$(( $(date +%s) - s ))s size=$(ls -l rt/t.tar | awk '{print $5}')"
+# | a=$(cd node-v24.21.0 && find test -type f | sort | xargs sha256sum | sha256sum)
+# | b=$(cd rt/node-v24.21.0 && find test -type f | sort | xargs sha256sum | sha256sum)
+# | n=$(cd rt/node-v24.21.0 && find test -type f | wc -l)
+# | echo "files=$n tree-digest original=${a%% *} copy=${b%% *} $([ "$a" = "$b" ] && echo MATCH || echo MISMATCH)"
+# | rm -rf rt
+# | echo "== git clone (if git is installed)"
+# | if command -v git > /dev/null; then
+# | 	rm -rf /boot/home/gc; s=$(date +%s)
+# | 	git clone -q https://github.com/libuv/libuv.git /boot/home/gc && git -C /boot/home/gc fsck --full 2>&1 | tail -2
+# | 	echo "git clone rc=$? wall=$(( $(date +%s) - s ))s files=$(git -C /boot/home/gc ls-files | wc -l) head=$(git -C /boot/home/gc rev-parse --short HEAD)"
+# | 	rm -rf /boot/home/gc
+# | else
+# | 	echo "git not installed"
+# | fi
+# | echo "== checkfs"
+# | sync
+# | checkfs -c /boot 2>&1 | tail -15
+# | echo "== kernel log"
+# | grep -iE "panic|assert|bfs:.*(error|corrupt)|fdescfs|could not mount" /var/log/syslog | tail -10
+# | echo REGRESS_DONE
+# ---- raw output ----
+== identity (k882)
+hrev59996 Oct 31 2026 20:53:20
+58baae05c2ce0820059319703b0bb9eda9d15aad5328169ad3d1a748da7a00cc  /boot/system/kernel_arm64
+slice: 381 tests
+slice rc=1 wall=430s ok=369 notok=12
+NOTOK parallel/test-cluster-listen-pipe-readable-writable
+NOTOK parallel/test-fs-link
+NOTOK parallel/test-fs-promises
+NOTOK parallel/test-fs-readfile-eof
+NOTOK parallel/test-fs-readfile-pipe
+NOTOK parallel/test-fs-readfile-pipe-large
+NOTOK parallel/test-fs-readfilesync-pipe-large
+NOTOK parallel/test-fs-realpath-pipe
+NOTOK parallel/test-fs-write-sigxfsz
+NOTOK parallel/test-net-server-listen-path
+NOTOK parallel/test-net-server-max-connections
+NOTOK parallel/test-net-server-pause-on-connect
+== 892 load: test-runner-worker-id -j 16 --repeat 32, test-tls-enable-keylog-cli --repeat 10
+worker-id ok=32 notok=0
+keylog ok=6 notok=4
+    1 !== 2
+    1 !== 2
+    1 !== 2
+== BFS: tar round trip of the node test tree
+/tmp/ccrun/cc-20261101T180854Z-98270.sh: line 23: tar: command not found
+ls: cannot access 'rt/t.tar': No such file or directory
+tar rc=127 wall=0s size=
+xargs: unmatched single quote; by default quotes are special to xargs unless you use the -0 option
+sha256sum: test/fixtures/es-modules/folder%25with: No such file or directory
+sha256sum: percentage#/index.js: No such file or directory
+/tmp/ccrun/cc-20261101T180854Z-98270.sh: line 26: cd: rt/node-v24.21.0: No such file or directory
+/tmp/ccrun/cc-20261101T180854Z-98270.sh: line 27: cd: rt/node-v24.21.0: No such file or directory
+files= tree-digest original=f7db850299b5d77d5e8c7530189e1df8affba714cef415aa8f9dfa8674bd1f9c copy= MISMATCH
+== git clone (if git is installed)
+git not installed
+== checkfs
+    12800 nodes processed[1A
+        12836 nodes checked,
+	0 blocks not allocated,
+	0 blocks already set,
+	10083 blocks could be freed
+
+	files		11540
+	directories	1136
+	attributes	75
+	attr. dirs	39
+	indices		46
+
+	direct block runs		12801 ( GiB)
+	indirect block runs		133 (in 2 array blocks,  GiB)
+	double indirect block runs	0 (in 0 array blocks, )
+== kernel log
+REGRESS_DONE
