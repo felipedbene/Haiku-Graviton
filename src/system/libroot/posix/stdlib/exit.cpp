@@ -288,14 +288,36 @@ abort()
 {
 	fprintf(stderr, "Abort\n");
 
-	// If there's no handler installed for SIGABRT, call debugger().
+	sigset_t abortSignal;
+	sigemptyset(&abortSignal);
+	sigaddset(&abortSignal, SIGABRT);
+
 	struct sigaction signalAction;
 	if (sigaction(SIGABRT, NULL, &signalAction) == 0
 			&& signalAction.sa_handler == SIG_DFL) {
+		// There's no handler installed for SIGABRT, so call debugger(). The
+		// SIGABRT is raised first, but kept blocked until the debugger is
+		// done: the kernel takes the pending signal for what the team dies
+		// of, should the debugger kill it -- debug_server does whenever it
+		// cannot start a debugger -- so that the parent sees SIGABRT. It is
+		// delivered when it is unblocked below.
+		sigprocmask(SIG_BLOCK, &abortSignal, NULL);
+		raise(SIGABRT);
 		debugger("abort() called");
+	} else {
+		sigprocmask(SIG_UNBLOCK, &abortSignal, NULL);
+		raise(SIGABRT);
 	}
 
+	// Even if a handler returned or SIGABRT is ignored, abort() must end the
+	// process abnormally, as if by SIGABRT (POSIX): restore its default
+	// action and deliver it.
+	struct sigaction defaultAction = {};
+	defaultAction.sa_handler = SIG_DFL;
+	sigaction(SIGABRT, &defaultAction, NULL);
+	sigprocmask(SIG_UNBLOCK, &abortSignal, NULL);
 	raise(SIGABRT);
+
 	exit(EXIT_FAILURE);
 }
 
