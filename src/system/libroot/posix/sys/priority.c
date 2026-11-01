@@ -14,6 +14,7 @@
 
 #include <errno.h>
 #include <sys/resource.h>
+#include <unistd.h>
 
 #include <OS.h>
 #include <sys/param.h> // for MAX() and MIN() macros
@@ -97,6 +98,15 @@ prio_unix_to_be(int32 prio)
 }
 
 
+// The nice value setpriority() last set for this team, and the BeOS priority
+// it applied for it (-1 if setpriority() was never called). The conversion
+// above maps several nice values onto one BeOS priority (nice 0 to 19 onto
+// 10 to 1), so the priority alone cannot give back the value that was set.
+// The pair is process memory, so it survives fork(), as a nice value does.
+static int sNiceValue = 0;
+static int32 sNicePriority = -1;
+
+
 int
 getpriority(int which, id_t who)
 {
@@ -116,6 +126,14 @@ getpriority(int which, id_t who)
 					found = true;
 					out = thread.priority;
 				}
+			}
+
+			// Report the nice value set for this team as long as its threads
+			// still run at the priority setpriority() gave them; once that was
+			// changed by other means, fall back to converting the priority.
+			if (found && (who == 0 || who == getpid())
+				&& out == sNicePriority) {
+				return sNiceValue;
 			}
 			break;
 		}
@@ -184,11 +202,15 @@ setpriority(int which, id_t who, int value)
 	if (who != 0 && which != PRIO_PROCESS)
 		RETURN_AND_SET_ERRNO(EINVAL);
 	value = value > NMIN ? NMIN : CLIP_TO_UNIX(value + NZERO);
+	int nice = value - NZERO;
 	value = prio_unix_to_be(value);
 
 	__pthread_set_default_priority(value);
 	while (get_next_thread_info(B_CURRENT_TEAM, &th_cookie, &thread) == B_OK)
 		set_thread_priority(thread.thread, value);
+
+	sNiceValue = nice;
+	sNicePriority = value;
 
 	return 0;
 }
