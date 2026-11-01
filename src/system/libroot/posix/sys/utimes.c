@@ -70,6 +70,9 @@ utimensat(int fd, const char *path, const struct timespec times[2], int flag)
 	}
 
 	if (times != NULL) {
+		// For UTIME_NOW, the current time set above stays: tv_sec is to be
+		// ignored then, and the caller's tv_nsec is no nanosecond count.
+
 		// access time
 		if (times[0].tv_nsec != UTIME_OMIT) {
 			mask |= B_STAT_ACCESS_TIME;
@@ -77,9 +80,9 @@ utimensat(int fd, const char *path, const struct timespec times[2], int flag)
 			if (times[0].tv_nsec != UTIME_NOW) {
 				if (times[0].tv_nsec < 0 || times[0].tv_nsec > 999999999)
 					RETURN_AND_SET_ERRNO(EINVAL);
-			}
 
-			stat.st_atim = times[0];
+				stat.st_atim = times[0];
+			}
 		}
 
 		// modified time
@@ -89,9 +92,9 @@ utimensat(int fd, const char *path, const struct timespec times[2], int flag)
 			if (times[1].tv_nsec != UTIME_NOW) {
 				if (times[1].tv_nsec < 0 || times[1].tv_nsec > 999999999)
 					RETURN_AND_SET_ERRNO(EINVAL);
-			}
 
-			stat.st_mtim = times[1];
+				stat.st_mtim = times[1];
+			}
 		}
 	} else
 		mask |= B_STAT_ACCESS_TIME | B_STAT_MODIFICATION_TIME;
