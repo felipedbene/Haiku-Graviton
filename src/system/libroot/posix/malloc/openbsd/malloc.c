@@ -280,6 +280,11 @@ static inline u_int mopts_nmutexes()
 {
 	return mopts.malloc_pool[1]->malloc_mt ? mopts.malloc_mutexes : 2;
 }
+
+static inline int mopts_threaded()
+{
+	return mopts.malloc_pool[1]->malloc_mt;
+}
 #else
 char		*malloc_options;	/* compile-time options */
 #endif
