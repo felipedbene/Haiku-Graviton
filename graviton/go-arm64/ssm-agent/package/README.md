@@ -81,8 +81,8 @@ the upstream tag, this patch, the launch job and every Go toolchain
 not trunk's, and when the pool holds anything other than exactly one
 `amazon_ssm_agent-*`. `haiku-hpkg-provenance-selftest` also fails a branch that
 changes those inputs without bumping `version`. A pre-stamping build is accepted
-only through a record in `../../provenance-legacy/` (today: `-2`, with a warning
-until a stamped rebuild replaces it in the pools).
+only through a record in `../../provenance-legacy/`. There is none today: the
+`-2` record was deleted once every pool carried a stamped build (#894).
 
 **Replace, don't add, in a bake pool.** `graviton/ssh/UserBuildConfig` bakes the
 first `amazon_ssm_agent-*-arm64.hpkg` its Glob returns (readdir order, not

@@ -21,7 +21,8 @@ check-pool  (run by the bake, cross-build.yml, after the pool sync)
 
     An unstamped hpkg fails, unless its file sha256 has a record in
     graviton/go-arm64/provenance-legacy/<sha256>.manifest. Those records cover
-    packages built before stamping existed (today: amazon_ssm_agent -2). A
+    packages built before stamping existed (none today; amazon_ssm_agent -2's
+    was retired once every pool held a stamped build, #894). A
     legacy package whose recorded manifest matches trunk passes. One that
     drifted passes with a WARNING that lists the drifted inputs. That is the
     grace path so the first bake after this lands does not break. Once a
