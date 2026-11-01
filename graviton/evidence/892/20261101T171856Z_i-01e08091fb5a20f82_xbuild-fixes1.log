@@ -1,0 +1,485 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-fixes1
+# instance: i-01e08091fb5a20f82   region: us-west-2
+# ssm command: a27ed731-1c66-4f9e-8a15-68db2cc4f924 (agent status: Success)
+# start: 20261101T171856Z   end: 20261101T171948Z   rc: 0   log bytes: 31035
+# script sha256: bcd5c8e639cbb8d59535673336d16481d1f205354e233df9259f8d66ecd7e39c
+# ---- script ----
+# | ( VARIANT=f870 PATCH=870-null-zero-setfl.patch TARGETS="null"
+# | # variables prepended: VARIANT, PATCH (s3 key or empty), TARGETS
+# | set -x
+# | export HOME=/root SOURCE_DATE_EPOCH=1793480000
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
+# | cd /opt/d/hg
+# | git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 && git clean -q -fd src headers build
+# | if [ -n "$PATCH" ]; then aws s3 cp --quiet $B/$PATCH /tmp/p.patch && git apply --index /tmp/p.patch && git diff --cached --stat; fi
+# | git log -1 --format='base %H %s'
+# | cd generated
+# | s=$(date +%s); jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 $TARGETS > jam-$VARIANT.log 2>&1; rc=$?
+# | echo "JAM_RC=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$VARIANT.log)"
+# | grep -E "error:|warning:" jam-$VARIANT.log | head -30
+# | tail -3 jam-$VARIANT.log
+# | mkdir -p /opt/d/out/$VARIANT
+# | for t in $TARGETS; do
+# | 	case $t in
+# | 	kernel_arm64) F=objects/haiku/arm64/release/system/kernel/kernel_arm64 ;;
+# | 	bfs) F=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ;;
+# | 	null) F=objects/haiku/arm64/release/add-ons/kernel/drivers/common/null ;;
+# | 	*) F=$(find objects/haiku/arm64/release -type f -name $t | head -1) ;;
+# | 	esac
+# | 	ls -l $F && cp $F /opt/d/out/$VARIANT/$t
+# | done
+# | cd /opt/d/out/$VARIANT && sha256sum * | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive /opt/d/out/$VARIANT $B/out/$VARIANT/ && aws s3 ls $B/out/$VARIANT/
+# | echo VARIANT_RC=$rc
+# | )
+# | ( VARIANT=f884 PATCH=884-fchmod-socket-einval.patch TARGETS="kernel_arm64"
+# | # variables prepended: VARIANT, PATCH (s3 key or empty), TARGETS
+# | set -x
+# | export HOME=/root SOURCE_DATE_EPOCH=1793480000
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
+# | cd /opt/d/hg
+# | git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 && git clean -q -fd src headers build
+# | if [ -n "$PATCH" ]; then aws s3 cp --quiet $B/$PATCH /tmp/p.patch && git apply --index /tmp/p.patch && git diff --cached --stat; fi
+# | git log -1 --format='base %H %s'
+# | cd generated
+# | s=$(date +%s); jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 $TARGETS > jam-$VARIANT.log 2>&1; rc=$?
+# | echo "JAM_RC=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$VARIANT.log)"
+# | grep -E "error:|warning:" jam-$VARIANT.log | head -30
+# | tail -3 jam-$VARIANT.log
+# | mkdir -p /opt/d/out/$VARIANT
+# | for t in $TARGETS; do
+# | 	case $t in
+# | 	kernel_arm64) F=objects/haiku/arm64/release/system/kernel/kernel_arm64 ;;
+# | 	bfs) F=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ;;
+# | 	null) F=objects/haiku/arm64/release/add-ons/kernel/drivers/common/null ;;
+# | 	*) F=$(find objects/haiku/arm64/release -type f -name $t | head -1) ;;
+# | 	esac
+# | 	ls -l $F && cp $F /opt/d/out/$VARIANT/$t
+# | done
+# | cd /opt/d/out/$VARIANT && sha256sum * | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive /opt/d/out/$VARIANT $B/out/$VARIANT/ && aws s3 ls $B/out/$VARIANT/
+# | echo VARIANT_RC=$rc
+# | )
+# | ( VARIANT=f882 PATCH=882-link-eexist.patch TARGETS="kernel_arm64"
+# | # variables prepended: VARIANT, PATCH (s3 key or empty), TARGETS
+# | set -x
+# | export HOME=/root SOURCE_DATE_EPOCH=1793480000
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
+# | cd /opt/d/hg
+# | git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 && git clean -q -fd src headers build
+# | if [ -n "$PATCH" ]; then aws s3 cp --quiet $B/$PATCH /tmp/p.patch && git apply --index /tmp/p.patch && git diff --cached --stat; fi
+# | git log -1 --format='base %H %s'
+# | cd generated
+# | s=$(date +%s); jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 $TARGETS > jam-$VARIANT.log 2>&1; rc=$?
+# | echo "JAM_RC=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$VARIANT.log)"
+# | grep -E "error:|warning:" jam-$VARIANT.log | head -30
+# | tail -3 jam-$VARIANT.log
+# | mkdir -p /opt/d/out/$VARIANT
+# | for t in $TARGETS; do
+# | 	case $t in
+# | 	kernel_arm64) F=objects/haiku/arm64/release/system/kernel/kernel_arm64 ;;
+# | 	bfs) F=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ;;
+# | 	null) F=objects/haiku/arm64/release/add-ons/kernel/drivers/common/null ;;
+# | 	*) F=$(find objects/haiku/arm64/release -type f -name $t | head -1) ;;
+# | 	esac
+# | 	ls -l $F && cp $F /opt/d/out/$VARIANT/$t
+# | done
+# | cd /opt/d/out/$VARIANT && sha256sum * | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive /opt/d/out/$VARIANT $B/out/$VARIANT/ && aws s3 ls $B/out/$VARIANT/
+# | echo VARIANT_RC=$rc
+# | )
+# | ( VARIANT=f892 PATCH=892-bfs-atomic-append.patch TARGETS="bfs"
+# | # variables prepended: VARIANT, PATCH (s3 key or empty), TARGETS
+# | set -x
+# | export HOME=/root SOURCE_DATE_EPOCH=1793480000
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
+# | cd /opt/d/hg
+# | git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 && git clean -q -fd src headers build
+# | if [ -n "$PATCH" ]; then aws s3 cp --quiet $B/$PATCH /tmp/p.patch && git apply --index /tmp/p.patch && git diff --cached --stat; fi
+# | git log -1 --format='base %H %s'
+# | cd generated
+# | s=$(date +%s); jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 $TARGETS > jam-$VARIANT.log 2>&1; rc=$?
+# | echo "JAM_RC=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$VARIANT.log)"
+# | grep -E "error:|warning:" jam-$VARIANT.log | head -30
+# | tail -3 jam-$VARIANT.log
+# | mkdir -p /opt/d/out/$VARIANT
+# | for t in $TARGETS; do
+# | 	case $t in
+# | 	kernel_arm64) F=objects/haiku/arm64/release/system/kernel/kernel_arm64 ;;
+# | 	bfs) F=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ;;
+# | 	null) F=objects/haiku/arm64/release/add-ons/kernel/drivers/common/null ;;
+# | 	*) F=$(find objects/haiku/arm64/release -type f -name $t | head -1) ;;
+# | 	esac
+# | 	ls -l $F && cp $F /opt/d/out/$VARIANT/$t
+# | done
+# | cd /opt/d/out/$VARIANT && sha256sum * | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive /opt/d/out/$VARIANT $B/out/$VARIANT/ && aws s3 ls $B/out/$VARIANT/
+# | echo VARIANT_RC=$rc
+# | )
+# | ( VARIANT=f879 PATCH=879-bfs-atime.patch TARGETS="bfs"
+# | # variables prepended: VARIANT, PATCH (s3 key or empty), TARGETS
+# | set -x
+# | export HOME=/root SOURCE_DATE_EPOCH=1793480000
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
+# | cd /opt/d/hg
+# | git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 && git clean -q -fd src headers build
+# | if [ -n "$PATCH" ]; then aws s3 cp --quiet $B/$PATCH /tmp/p.patch && git apply --index /tmp/p.patch && git diff --cached --stat; fi
+# | git log -1 --format='base %H %s'
+# | cd generated
+# | s=$(date +%s); jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 $TARGETS > jam-$VARIANT.log 2>&1; rc=$?
+# | echo "JAM_RC=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$VARIANT.log)"
+# | grep -E "error:|warning:" jam-$VARIANT.log | head -30
+# | tail -3 jam-$VARIANT.log
+# | mkdir -p /opt/d/out/$VARIANT
+# | for t in $TARGETS; do
+# | 	case $t in
+# | 	kernel_arm64) F=objects/haiku/arm64/release/system/kernel/kernel_arm64 ;;
+# | 	bfs) F=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ;;
+# | 	null) F=objects/haiku/arm64/release/add-ons/kernel/drivers/common/null ;;
+# | 	*) F=$(find objects/haiku/arm64/release -type f -name $t | head -1) ;;
+# | 	esac
+# | 	ls -l $F && cp $F /opt/d/out/$VARIANT/$t
+# | done
+# | cd /opt/d/out/$VARIANT && sha256sum * | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive /opt/d/out/$VARIANT $B/out/$VARIANT/ && aws s3 ls $B/out/$VARIANT/
+# | echo VARIANT_RC=$rc
+# | )
+# ---- raw output ----
++ export HOME=/root SOURCE_DATE_EPOCH=1793480000
++ HOME=/root
++ SOURCE_DATE_EPOCH=1793480000
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
++ cd /opt/d/hg
++ git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664
++ git clean -q -fd src headers build
++ '[' -n 870-null-zero-setfl.patch ']'
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/870-null-zero-setfl.patch /tmp/p.patch
++ git apply --index /tmp/p.patch
++ git diff --cached --stat
+ src/add-ons/kernel/drivers/common/null.cpp | 9 +++++++++
+ 1 file changed, 9 insertions(+)
++ git log -1 '--format=base %H %s'
+base e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ cd generated
+++ date +%s
++ s=1793553538
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 null
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' jam-f870.log
++ echo 'JAM_RC=0 wall=5s failed=0'
+JAM_RC=0 wall=5s failed=0
++ grep -E 'error:|warning:' jam-f870.log
++ head -30
++ tail -3 jam-f870.log
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/drivers/common/null 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/drivers/common/null 
+...updated 2 target(s)...
++ mkdir -p /opt/d/out/f870
++ for t in $TARGETS
++ case $t in
++ F=objects/haiku/arm64/release/add-ons/kernel/drivers/common/null
++ ls -l objects/haiku/arm64/release/add-ons/kernel/drivers/common/null
+-rwxr-xr-x 1 root root 10467 Nov  1 17:19 objects/haiku/arm64/release/add-ons/kernel/drivers/common/null
++ cp objects/haiku/arm64/release/add-ons/kernel/drivers/common/null /opt/d/out/f870/null
++ cd /opt/d/out/f870
++ sha256sum null
++ tee SHA256SUMS
+58677eaec9a0c16dfcd3cf6f1227fffed8a681e1372cac345029dd3a858633c4  null
++ aws s3 cp --quiet --recursive /opt/d/out/f870 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f870/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f870/
+2026-11-01 17:19:05         71 SHA256SUMS
+2026-11-01 17:19:05      10467 null
++ echo VARIANT_RC=0
+VARIANT_RC=0
++ export HOME=/root SOURCE_DATE_EPOCH=1793480000
++ HOME=/root
++ SOURCE_DATE_EPOCH=1793480000
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
++ cd /opt/d/hg
++ git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664
++ git clean -q -fd src headers build
++ '[' -n 884-fchmod-socket-einval.patch ']'
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/884-fchmod-socket-einval.patch /tmp/p.patch
++ git apply --index /tmp/p.patch
++ git diff --cached --stat
+ src/system/kernel/fs/vfs.cpp | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
++ git log -1 '--format=base %H %s'
+base e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ cd generated
+++ date +%s
++ s=1793553545
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 kernel_arm64
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' jam-f884.log
++ echo 'JAM_RC=0 wall=8s failed=0'
+JAM_RC=0 wall=8s failed=0
++ grep -E 'error:|warning:' jam-f884.log
++ head -30
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.ifunc' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.init_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.fini_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/kernel_core.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/debug/kernel_debug.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/device_manager/kernel_device_manager.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/disk_device_manager/kernel_disk_device_manager.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/fs/kernel_fs.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/messaging/kernel_messaging.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/posix/kernel_posix.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/slab/kernel_slab.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/util/kernel_util.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/vm/kernel_vm.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/arch/arm64/kernel_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/platform/efi/kernel_platform_efi.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `_haiku_revision' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `_haiku_revision'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_os_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_lib_posix.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_lib_posix_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_misc.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(class_type_info.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(dyncast.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_handler.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opvant.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opvsa.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(si_class_type_info.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(tinfo.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(vmi_class_type_info.o)' being placed in section `.comment'
++ tail -3 jam-f884.log
+MimeSet1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+SetVersion1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+...updated 3 target(s)...
++ mkdir -p /opt/d/out/f884
++ for t in $TARGETS
++ case $t in
++ F=objects/haiku/arm64/release/system/kernel/kernel_arm64
++ ls -l objects/haiku/arm64/release/system/kernel/kernel_arm64
+-rwxr-xr-x 1 root root 2539473 Nov  1 17:19 objects/haiku/arm64/release/system/kernel/kernel_arm64
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/d/out/f884/kernel_arm64
++ cd /opt/d/out/f884
++ sha256sum kernel_arm64
++ tee SHA256SUMS
+154872848984ca6d01434c46ac7394e9a9bc8b2b9b5ba9090cd54b45b304cf20  kernel_arm64
++ aws s3 cp --quiet --recursive /opt/d/out/f884 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f884/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f884/
+2026-11-01 17:19:15         79 SHA256SUMS
+2026-11-01 17:19:15    2539473 kernel_arm64
++ echo VARIANT_RC=0
+VARIANT_RC=0
++ export HOME=/root SOURCE_DATE_EPOCH=1793480000
++ HOME=/root
++ SOURCE_DATE_EPOCH=1793480000
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
++ cd /opt/d/hg
++ git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664
++ git clean -q -fd src headers build
++ '[' -n 882-link-eexist.patch ']'
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/882-link-eexist.patch /tmp/p.patch
++ git apply --index /tmp/p.patch
++ git diff --cached --stat
+ src/system/kernel/fs/vfs.cpp | 9 +++++++++
+ 1 file changed, 9 insertions(+)
++ git log -1 '--format=base %H %s'
+base e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ cd generated
+++ date +%s
++ s=1793553555
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 kernel_arm64
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' jam-f882.log
++ echo 'JAM_RC=0 wall=8s failed=0'
+JAM_RC=0 wall=8s failed=0
++ grep -E 'error:|warning:' jam-f882.log
++ head -30
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.ifunc' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.init_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.fini_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/kernel_core.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/debug/kernel_debug.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/device_manager/kernel_device_manager.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/disk_device_manager/kernel_disk_device_manager.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/fs/kernel_fs.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/messaging/kernel_messaging.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/posix/kernel_posix.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/slab/kernel_slab.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/util/kernel_util.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/vm/kernel_vm.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/arch/arm64/kernel_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/platform/efi/kernel_platform_efi.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `_haiku_revision' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `_haiku_revision'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_os_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_lib_posix.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_lib_posix_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_misc.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(class_type_info.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(dyncast.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_handler.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opvant.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opvsa.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(si_class_type_info.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(tinfo.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(vmi_class_type_info.o)' being placed in section `.comment'
++ tail -3 jam-f882.log
+MimeSet1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+SetVersion1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+...updated 3 target(s)...
++ mkdir -p /opt/d/out/f882
++ for t in $TARGETS
++ case $t in
++ F=objects/haiku/arm64/release/system/kernel/kernel_arm64
++ ls -l objects/haiku/arm64/release/system/kernel/kernel_arm64
+-rwxr-xr-x 1 root root 2539473 Nov  1 17:19 objects/haiku/arm64/release/system/kernel/kernel_arm64
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/d/out/f882/kernel_arm64
++ cd /opt/d/out/f882
++ sha256sum kernel_arm64
++ tee SHA256SUMS
+58baae05c2ce0820059319703b0bb9eda9d15aad5328169ad3d1a748da7a00cc  kernel_arm64
++ aws s3 cp --quiet --recursive /opt/d/out/f882 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f882/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f882/
+2026-11-01 17:19:25         79 SHA256SUMS
+2026-11-01 17:19:25    2539473 kernel_arm64
++ echo VARIANT_RC=0
+VARIANT_RC=0
++ export HOME=/root SOURCE_DATE_EPOCH=1793480000
++ HOME=/root
++ SOURCE_DATE_EPOCH=1793480000
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
++ cd /opt/d/hg
++ git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664
++ git clean -q -fd src headers build
++ '[' -n 892-bfs-atomic-append.patch ']'
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/892-bfs-atomic-append.patch /tmp/p.patch
++ git apply --index /tmp/p.patch
++ git diff --cached --stat
+ src/add-ons/kernel/file_systems/bfs/Inode.cpp         | 19 ++++++++++++++++++-
+ src/add-ons/kernel/file_systems/bfs/Inode.h           |  3 ++-
+ .../kernel/file_systems/bfs/kernel_interface.cpp      |  8 ++++----
+ 3 files changed, 24 insertions(+), 6 deletions(-)
++ git log -1 '--format=base %H %s'
+base e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ cd generated
+++ date +%s
++ s=1793553565
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 bfs
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' jam-f892.log
++ echo 'JAM_RC=0 wall=8s failed=0'
+JAM_RC=0 wall=8s failed=0
++ grep -E 'error:|warning:' jam-f892.log
++ head -30
+../src/add-ons/kernel/file_systems/bfs/Inode.cpp:2278:44: warning: taking address of packed member of 'data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/bfs/Inode.cpp:2305:46: warning: taking address of packed member of 'data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/bfs/Inode.cpp:2321:36: warning: taking address of packed member of 'data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.ifunc' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.init_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.fini_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/kernel_core.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/debug/kernel_debug.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/device_manager/kernel_device_manager.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/disk_device_manager/kernel_disk_device_manager.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/fs/kernel_fs.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/messaging/kernel_messaging.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/posix/kernel_posix.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/slab/kernel_slab.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/util/kernel_util.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/vm/kernel_vm.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/arch/arm64/kernel_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/platform/efi/kernel_platform_efi.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `_haiku_revision' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `_haiku_revision'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_os_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_lib_posix.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_lib_posix_arch_arm64.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_misc.o' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(class_type_info.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(dyncast.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_handler.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opvant.o)' being placed in section `.comment'
+/opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opvsa.o)' being placed in section `.comment'
++ tail -3 jam-f892.log
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs 
+...updated 17 target(s)...
++ mkdir -p /opt/d/out/f892
++ for t in $TARGETS
++ case $t in
++ F=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
++ ls -l objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
+-rwxr-xr-x 1 root root 276787 Nov  1 17:19 objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs /opt/d/out/f892/bfs
++ cd /opt/d/out/f892
++ sha256sum bfs
++ tee SHA256SUMS
+ac0ef5735b2ff8d6b5e0a7a54859ae9a58710be7c0bdb90b863dd92d32590352  bfs
++ aws s3 cp --quiet --recursive /opt/d/out/f892 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f892/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f892/
+2026-11-01 17:19:35         70 SHA256SUMS
+2026-11-01 17:19:35     276787 bfs
++ echo VARIANT_RC=0
+VARIANT_RC=0
++ export HOME=/root SOURCE_DATE_EPOCH=1793480000
++ HOME=/root
++ SOURCE_DATE_EPOCH=1793480000
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs
++ cd /opt/d/hg
++ git checkout -q -f e7979ac2a7aab37fcd30f99a6d813fb9cbd83664
++ git clean -q -fd src headers build
++ '[' -n 879-bfs-atime.patch ']'
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/879-bfs-atime.patch /tmp/p.patch
++ git apply --index /tmp/p.patch
++ git diff --cached --stat
+ src/add-ons/kernel/file_systems/bfs/Inode.cpp      |  6 +++--
+ src/add-ons/kernel/file_systems/bfs/Inode.h        | 26 ++++++++++++++++++++++
+ .../kernel/file_systems/bfs/kernel_interface.cpp   | 23 ++++++++++++++-----
+ 3 files changed, 47 insertions(+), 8 deletions(-)
++ git log -1 '--format=base %H %s'
+base e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ cd generated
+++ date +%s
++ s=1793553576
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 bfs
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' jam-f879.log
++ echo 'JAM_RC=0 wall=5s failed=0'
+JAM_RC=0 wall=5s failed=0
++ grep -E 'error:|warning:' jam-f879.log
++ head -30
+../src/add-ons/kernel/file_systems/bfs/Inode.cpp:2263:44: warning: taking address of packed member of 'data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/bfs/Inode.cpp:2290:46: warning: taking address of packed member of 'data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/bfs/Inode.cpp:2306:36: warning: taking address of packed member of 'data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
++ tail -3 jam-f879.log
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs 
+...updated 13 target(s)...
++ mkdir -p /opt/d/out/f879
++ for t in $TARGETS
++ case $t in
++ F=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
++ ls -l objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
+-rwxr-xr-x 1 root root 274715 Nov  1 17:19 objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs /opt/d/out/f879/bfs
++ cd /opt/d/out/f879
++ sha256sum bfs
++ tee SHA256SUMS
+a929bf0a66bf6bad8d2d20b3d0bb2a2f6fbcee18cab2df512a0a71164afdd0a9  bfs
++ aws s3 cp --quiet --recursive /opt/d/out/f879 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f879/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/out/f879/
+2026-11-01 17:19:43         70 SHA256SUMS
+2026-11-01 17:19:43     274715 bfs
++ echo VARIANT_RC=0
+VARIANT_RC=0

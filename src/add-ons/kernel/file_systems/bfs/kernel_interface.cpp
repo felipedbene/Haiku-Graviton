@@ -1440,16 +1440,16 @@ bfs_write(fs_volume* _volume, fs_vnode* _node, void* _cookie, off_t pos,
 
 	file_cookie* cookie = (file_cookie*)_cookie;
 
-	if (cookie->open_mode & O_APPEND)
-		pos = inode->Size();
-
 	Transaction transaction;
 		// We are not starting the transaction here, since
 		// it might not be needed at all (the contents of
 		// regular files aren't logged)
 
+	// With O_APPEND, WriteAt() finds the end of the file itself, under the
+	// lock that also extends the file: reading Size() here, unlocked, let
+	// two concurrent appends land at the same offset.
 	status_t status = inode->WriteAt(transaction, pos, (const uint8*)buffer,
-		_length);
+		_length, (cookie->open_mode & O_APPEND) != 0);
 	if (status == B_OK)
 		status = transaction.Done();
 	if (status == B_OK) {

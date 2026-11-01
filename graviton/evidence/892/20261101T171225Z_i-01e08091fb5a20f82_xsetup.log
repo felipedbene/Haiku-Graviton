@@ -1,0 +1,71 @@
+# evidence: xsetup
+# instance: i-01e08091fb5a20f82   region: us-west-2
+# ssm command: cfbef583-3a84-490f-bc42-5edaca9f31bc (agent status: Success)
+# start: 20261101T171225Z   end: 20261101T171359Z   rc: 0   log bytes: 1782
+# script sha256: 691778a2c66e1f1e5be3be96eb8b1c29e0f804d91cf4acfabb892b6c0f7951c3
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | mkdir -p /opt/d && cd /opt/d
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg log -1 --format='%H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | nproc; df -h /opt | tail -1
+# ---- raw output ----
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo 'apt rc=0'
+apt rc=0
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ mkdir -p /opt/d
++ cd /opt/d
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg log -1 '--format=%H %s'
+e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
+buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
+/usr/local/bin/jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
+Configured successfully!
++ nproc
+32
++ df -h /opt
++ tail -1
+/dev/root        77G  5.9G   71G   8% /
