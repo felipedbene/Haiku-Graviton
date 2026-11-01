@@ -1,0 +1,85 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-886b
+# instance: i-0fe3490807c90146f   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T173155Z   end: 20261101T173304Z   rc: 0
+# script sha256: cb73af1fb6107296ee0eb9b9676d5158032bdf76dbe4eb85de9b0ad4ae7448b2
+# ---- script ----
+# | echo "--- issue 886: swap the kernel in the haiku package (canonical source + the 886 commit)"
+# | cd /boot/home/tnet
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tnet/mod3/886-on-canonical/kernel_arm64?<PRESIGNED>' kernel.fix
+# | echo "0a0ef4d21f9bf776f78bdd011614b52846f6c4cbc514062e114dbb5550f6f0f7  kernel.fix" | sha256sum -c || exit 5
+# | V1=r1~beta6_hrev59996-1
+# | V2=r1~beta6_hrev59996-2
+# | rm -rf /boot/home/hk && mkdir -p /boot/home/hk/haiku /boot/home/hk/devel && cd /boot/home/hk
+# | package extract -C haiku /boot/system/packages/haiku-$V1-arm64.hpkg || exit 6
+# | package extract -C devel /boot/system/packages/haiku_devel-$V1-arm64.hpkg || exit 6
+# | ls -la haiku | head; sha256sum haiku/kernel_arm64
+# | cmp haiku/kernel_arm64 /boot/system/kernel_arm64 && echo "extracted kernel == running canonical kernel"
+# | cp /boot/home/tnet/kernel.fix haiku/kernel_arm64 && sha256sum haiku/kernel_arm64
+# | sed -i "s/$V1/$V2/g" haiku/.PackageInfo devel/.PackageInfo
+# | grep -n "$V2" haiku/.PackageInfo devel/.PackageInfo
+# | package create -C haiku haiku-$V2-arm64.hpkg || exit 7
+# | package create -C devel haiku_devel-$V2-arm64.hpkg || exit 7
+# | ls -la *.hpkg
+# | # only the kernel and the version may differ: compare the two packages' file lists
+# | package list -p /boot/system/packages/haiku-$V1-arm64.hpkg | sort > l1; package list -p haiku-$V2-arm64.hpkg | sort > l2
+# | cmp l1 l2 && echo "haiku package: same file list ($(wc -l < l1) entries)"
+# | pkgman install -y /boot/home/hk/haiku-$V2-arm64.hpkg /boot/home/hk/haiku_devel-$V2-arm64.hpkg 2>&1 | tail -6
+# | ls /boot/system/packages | grep '^haiku'
+# | cat /boot/system/packages/administrative/activated-packages 2>/dev/null | grep '^haiku'
+# | sha256sum /boot/system/kernel_arm64
+# | sync
+# ---- raw output ----
+--- issue 886: swap the kernel in the haiku package (canonical source + the 886 commit)
+kernel.fix: OK
+total 3538
+drwxr-xr-x 1 baron root    2048 Nov  1 17:32 .
+drwxr-xr-x 1 baron root    2048 Nov  1 17:31 ..
+-rw-r--r-- 1 baron root    1119 Oct 19 21:10 .PackageInfo
+-rwxr-xr-x 1 baron root  686542 Oct 19 21:10 Deskbar
+-rwxr-xr-x 1 baron root  141260 Oct 19 21:10 Tracker
+drwxr-xr-x 1 baron root    2048 Nov  1 17:32 add-ons
+drwxr-xr-x 1 baron root    2048 Nov  1 17:32 apps
+drwxr-xr-x 1 baron root    6144 Nov  1 17:32 bin
+drwxr-xr-x 1 baron root    2048 Nov  1 17:32 boot
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  haiku/kernel_arm64
+bash: line 11: cmp: command not found
+0a0ef4d21f9bf776f78bdd011614b52846f6c4cbc514062e114dbb5550f6f0f7  haiku/kernel_arm64
+haiku/.PackageInfo:2:version	r1~beta6_hrev59996-2
+haiku/.PackageInfo:14:	haiku=r1~beta6_hrev59996-2 compat>=r1~beta1
+haiku/.PackageInfo:15:	haiku_arm64=r1~beta6_hrev59996-2 compat>=r1~beta1
+devel/.PackageInfo:2:version	r1~beta6_hrev59996-2
+devel/.PackageInfo:11:	haiku_devel=r1~beta6_hrev59996-2 compat>=r1~alpha1
+devel/.PackageInfo:14:	haiku==r1~beta6_hrev59996-2 base
+----- Package Info ----------------
+header size:                     80
+heap size:                 20478781
+TOC size:                    324054
+package attributes size:       1100
+total size:                20478861
+-----------------------------------
+----- Package Info ----------------
+header size:                     80
+heap size:                  3811881
+TOC size:                    140065
+package attributes size:        383
+total size:                 3811961
+-----------------------------------
+-rw-r--r-- 1 baron root 20478861 Nov  1 17:32 haiku-r1~beta6_hrev59996-2-arm64.hpkg
+-rw-r--r-- 1 baron root  3811961 Nov  1 17:33 haiku_devel-r1~beta6_hrev59996-2-arm64.hpkg
+bash: line 20: cmp: command not found
+Continue? [yes/no] (yes) : yes
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-01_17:30:54-1"
+[system] Cleaning up ...
+[system] Done.
+A reboot is necessary to complete the installation process.
+haiku-r1~beta6_hrev59996-2-arm64.hpkg
+haiku_datatranslators-r1~beta6_hrev59996-1-arm64.hpkg
+haiku_devel-r1~beta6_hrev59996-2-arm64.hpkg
+haiku_loader-r1~beta6_hrev59996-1-arm64.hpkg
+haiku_datatranslators-r1~beta6_hrev59996-1-arm64.hpkg
+haiku_loader-r1~beta6_hrev59996-1-arm64.hpkg
+haiku-r1~beta6_hrev59996-2-arm64.hpkg
+haiku_devel-r1~beta6_hrev59996-2-arm64.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
