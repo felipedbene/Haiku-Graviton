@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-891-syslog
+# instance: i-0c266a72094df0343   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T181722Z   end: 20261101T181727Z   rc: 0
+# script sha256: 668520a845e7bfe4072bd21da3c47d41adb2b2ae64d0205703dbf50a3f32b660
+# ---- script ----
+# | grep -iE 'panic|assert|kernel debugger|KDL' /var/log/syslog | cut -c1-160 | sort | uniq -c | sort -rn | head -8
+# | grep -ciE 'panic|assert|kernel debugger|KDL' /var/log/syslog
+# ---- raw output ----
+      2 KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+      2 KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+      2 KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+      2 KERN: kernel debugger extension "debugger/hangman/v1": loaded
+      2 KERN: Welcome to kernel debugger output!
+10

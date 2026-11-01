@@ -1,0 +1,43 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: diag-bulk
+# instance: i-08487b684d62c02cf   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T175542Z   end: 20261101T175547Z   rc: 0
+# script sha256: fc255ebed643f9ca8d0b9739a9aeae260ae312ee32c0b3c8f026ba4ab52f07e8
+# ---- script ----
+# | ps | grep 'python3 -I -' | grep -v grep
+# | timeout 60 python3 -u -I - <<'PY'
+# | import socket, threading, time
+# | N = 64 << 20
+# | l = socket.socket(); l.bind(("127.0.0.1", 0)); l.listen(1)
+# | port = l.getsockname()[1]
+# | got = [0]
+# | def server():
+# |     s, _ = l.accept()
+# |     print("accepted", flush=True)
+# |     while True:
+# |         b = s.recv(1 << 20)
+# |         if not b: break
+# |         got[0] += len(b)
+# |     s.close()
+# | t = threading.Thread(target=server); t.start()
+# | c = socket.socket(); c.connect(("127.0.0.1", port))
+# | print("connected", flush=True)
+# | buf = b"x" * (1 << 20)
+# | st = time.time()
+# | for i in range(N >> 20):
+# |     c.sendall(buf)
+# |     if i % 16 == 0: print("sent MiB", i, round(time.time() - st, 2), "server got", got[0], flush=True)
+# | c.shutdown(socket.SHUT_WR)
+# | t.join(); print("done", got[0], time.time() - st)
+# | PY
+# | echo "rc=$?"
+# ---- raw output ----
+/boot/system/bin/python3 -I -                       6558        2    0    0 
+connectedaccepted
+
+sent MiB 0 0.0 server got 785796
+sent MiB 16 0.03 server got 17615031
+sent MiB 32 0.07 server got 34313248
+sent MiB 48 0.1 server got 51076948
+done 67108864 0.13817882537841797
+rc=0
