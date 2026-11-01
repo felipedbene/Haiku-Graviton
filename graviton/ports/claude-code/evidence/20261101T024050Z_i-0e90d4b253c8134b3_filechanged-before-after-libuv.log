@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: filechanged-before-after-libuv
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T024050Z   end: 20261101T024221Z   rc: 0
+# script sha256: 111516aa0c8fe87ada26a68618eab4529c150976315768f84b7bd14e5ef50185
+# ---- script ----
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | fc_test() {	# fc_test <label>: does a FileChanged hook fire when a watched file changes externally?
+# | 	local L=$1 H=/tmp/fc-home-$1 W=$(cd /tmp && pwd -P)/fc-$1 M=/tmp/fc-$1.log
+# | 	rm -rf $H $W $M; mkdir -p $H/.claude $W; echo v1 > $W/watched.txt
+# | 	cat > $H/.claude/settings.json <<J
+# | {"prefersReducedMotion":true,"theme":"dark","hooks":{"FileChanged":[{"matcher":"watched.txt","hooks":[{"type":"command","command":"echo fired-\$(date +%s) >> $M"}]}]}}
+# | J
+# | 	echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$W\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | 	tmux -L fc kill-server 2>/dev/null
+# | 	tmux -L fc new-session -d -s fc -x 120 -y 30 "cd $W && env CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude --debug-file /tmp/fc-$L.debug"
+# | 	sleep 20; echo v2 >> $W/watched.txt; sleep 5; echo v3 >> $W/watched.txt; sleep 10
+# | 	echo "[$L] hook log: $(cat $M 2>/dev/null | tr '\n' ' ')"; echo "[$L] fired $(wc -l < $M 2>/dev/null || echo 0) time(s)"
+# | 	grep -i -E "ENOSYS|watch" /tmp/fc-$L.debug | grep -i -E "FileChanged|watch(er)?[: ]" | head -4 | cut -c1-200 | sed "s/^/[$L] debug: /"
+# | 	tmux -L fc kill-server
+# | }
+# | echo "libuv: $(ls /boot/system/packages | grep '^libuv')"
+# | fc_test before
+# | cd /tmp && /boot/system/bin/curl -sSfo libuv-1.52.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv-1.52.1-2-arm64.hpkg?<PRESIGNED>' && echo '400f176a20e0fe108c4956fa9d9ee538164609262c6bd3db3d2527205a580a86  libuv-1.52.1-2-arm64.hpkg' | sha256sum -c - || exit 1
+# | pkgman install -y /tmp/libuv-1.52.1-2-arm64.hpkg 2>&1 | tail -2
+# | echo "libuv: $(ls /boot/system/packages | grep '^libuv')"
+# | node -e 'const fs=require("fs");try{const w=fs.watch("/tmp",()=>{});w.close();console.log("fs.watch OK")}catch(e){console.log("fs.watch",e.code)}'
+# | fc_test after
+# ---- raw output ----
+libuv: libuv-1.52.1-1-arm64.hpkg
+[before] hook log: 
+/tmp/ccrun/cc-20261101T024050Z-27747.sh: line 13: /tmp/fc-before.log: No such file or directory
+[before] fired 0 time(s)
+[before] debug: 2026-11-01T02:41:05.118Z [DEBUG] FileChanged: watching 1 paths
+[before] debug: 2026-11-01T02:41:05.287Z [WARN] FileChanged: watcher error: ENOSYS: function not implemented, watch '/boot/system/cache/tmp/fc-before/watched.txt'
+[before] debug: 2026-11-01T02:41:09.058Z [DEBUG] [jobStateNameSync] watch skipped: Error: ENOSYS: function not implemented, watch '/tmp/fc-home-before/.claude/jobs/1f69b66c'
+[before] debug: 2026-11-01T02:41:09.618Z [WARN] [theme] watcher error: ENOSYS: function not implemented, watch '/tmp/fc-home-before/.claude'
+libuv-1.52.1-2-arm64.hpkg: OK
+[system] Cleaning up ...
+[system] Done.
+libuv: libuv-1.52.1-2-arm64.hpkg
+fs.watch OK
+[after] hook log: fired-1793500918 fired-1793500923 
+[after] fired 2 time(s)
+[after] debug: 2026-11-01T02:41:40.962Z [DEBUG] FileChanged: watching 1 paths
+[after] debug: 2026-11-01T02:41:44.643Z [DEBUG] [jobStateNameSync] watch skipped: Error: ENOENT: no such file or directory, watch '/tmp/fc-home-after/.claude/jobs/2ff274e3'
+[after] debug: 2026-11-01T02:41:45.521Z [DEBUG] [fs.watch probe] verdict: delivers
+[after] debug: 2026-11-01T02:41:58.682Z [DEBUG] FileChanged: change /boot/system/cache/tmp/fc-after/watched.txt

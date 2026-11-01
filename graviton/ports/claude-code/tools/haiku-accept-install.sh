@@ -12,7 +12,7 @@ aws s3 cp --quiet --region us-west-2 "$T/port.tgz" "$B/port-tools.tgz"
 {
 	echo 'set -u'
 	echo 'W=/boot/home/cc-accept; rm -rf $W; mkdir -p $W; cd $W; C=/boot/system/bin/curl'
-	for f in nodejs24-24.21.0-1-arm64.hpkg claude_code-2.1.314-1-arm64.hpkg vectors-2.1.314.tgz port-tools.tgz; do
+	for f in nodejs24-24.21.0-1-arm64.hpkg claude_code-2.1.314-2-arm64.hpkg vectors-2.1.314.tgz port-tools.tgz; do
 		echo "\$C -sSfo $f '$("$here/tools/presign" get "$B/$f" 3600)' || exit 1"
 		echo "echo '$(sha "$f")  $f' | sha256sum -c - || exit 1"
 	done
@@ -20,7 +20,7 @@ aws s3 cp --quiet --region us-west-2 "$T/port.tgz" "$B/port-tools.tgz"
 echo "== install"
 N=$W/nodejs24-24.21.0-1-arm64.hpkg; [ -e /boot/system/packages/nodejs24-24.21.0-1-arm64.hpkg ] && N=""
 pkgman uninstall -y claude_code 2>&1 | tail -1
-pkgman install -y tmux $N $W/claude_code-2.1.314-1-arm64.hpkg 2>&1 | tail -3
+pkgman install -y tmux $N $W/claude_code-2.1.314-2-arm64.hpkg 2>&1 | tail -3
 command -v node claude; node --version; ls /boot/system/lib/claude-code | head -20
 echo "== claude --version"; claude --version; echo "rc=$?"
 echo "== claude doctor (no TTY)"; HOME=$W/home-doctor timeout 120 claude doctor < /dev/null 2>&1 | head -60; echo "rc=$?"

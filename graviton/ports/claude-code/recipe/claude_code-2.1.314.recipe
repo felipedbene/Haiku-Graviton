@@ -12,7 +12,7 @@ HOMEPAGE="https://code.claude.com/"
 COPYRIGHT="Anthropic PBC (Claude Code)
 	2026 DeBeOS (port tooling and compatibility layer)"
 LICENSE="Anthropic Legal Agreements"
-REVISION="1"
+REVISION="2"
 # The official linux-arm64 npm package; only the JavaScript and asset contents of
 # its embedded module graph are used (tools/extract-bun-bundle.py), never the ELF.
 SOURCE_URI="https://registry.npmjs.org/@anthropic-ai/claude-code-linux-arm64/-/claude-code-linux-arm64-$portVersion.tgz"
@@ -43,9 +43,12 @@ PROVIDES="
 	claude_code = $portVersion
 	cmd:claude = $portVersion
 	"
+# libuv >= 1.52.1-2 carries the Haiku fs-event backend: without it fs.watch throws ENOSYS
+# and settings hot reload, the task list and FileChanged hooks stop updating.
 REQUIRES="
 	haiku
 	nodejs24 >= 24.21
+	libuv >= 1.52.1-2
 	cmd:bash
 	cmd:git
 	cmd:rg

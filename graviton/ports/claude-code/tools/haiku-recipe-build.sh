@@ -11,7 +11,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 S=$(shasum -a 256 "$T/recipe.tgz" | cut -d' ' -f1)
 aws s3 cp --quiet --region us-west-2 "$T/recipe.tgz" "$B/claude_code-recipe.tgz"
 G=$("$here/tools/presign" get "$B/claude_code-recipe.tgz" 3600)
-P=$("$here/tools/presign" put "$B/claude_code-2.1.314-1-arm64.hpkg" 7200)
+P=$("$here/tools/presign" put "$B/claude_code-2.1.314-2-arm64.hpkg" 7200)
 # /boot/system/bin/curl explicitly: on a builder, `curl` on PATH is the source-cache shim.
 cat > "$T/step.sh" <<STEP
 set -u
@@ -26,6 +26,6 @@ grep -E "BUILD_OK|FAILED" /boot/home/cc-nb.log | tail -3
 echo "== deterministic pass"
 grep -E "contents=|R4 applied|parsed [0-9]+ modules|P[0-9]+ applied|build-tree:" /boot/home/nb-claude_code.log
 cd /boot/home/haikuports/packages && ls -l claude_code-*.hpkg && sha256sum claude_code-*.hpkg || exit 1
-\$C -sSf -X PUT --upload-file claude_code-2.1.314-1-arm64.hpkg '$P' && echo upload-ok
+\$C -sSf -X PUT --upload-file claude_code-2.1.314-2-arm64.hpkg '$P' && echo upload-ok
 STEP
 "$here/tools/ssh-run" "$inst" claude_code-recipe-build "$T/step.sh" 5400
