@@ -1219,8 +1219,8 @@ ipv6_bind(net_protocol* protocol, const sockaddr* _address)
 		return B_OK;
 	}
 
-	return B_ERROR;
-		// address is unknown on this host
+	return EADDRNOTAVAIL;
+		// address is unknown on this host; ipv4_bind() answers the same
 }
 
 

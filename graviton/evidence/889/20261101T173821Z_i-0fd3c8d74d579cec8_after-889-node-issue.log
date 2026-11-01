@@ -1,0 +1,351 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-889-node-issue
+# instance: i-0fd3c8d74d579cec8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T173821Z   end: 20261101T174144Z   rc: 0
+# script sha256: 4bf0f401e4dd7c1f581fcd4671358e930ab556354f53b7482529da8def25bb7b
+# ---- script ----
+# | cd /boot/home/tnet/node-v24.21.0
+# | node --version
+# | T="parallel/test-net-pipe-connect-errors parallel/test-dgram-connect-send-empty-buffer parallel/test-dgram-send-empty-buffer parallel/test-dgram-send-empty-array parallel/test-dgram-connect-send-empty-array parallel/test-cluster-dgram-1 parallel/test-dgram-multicast-set-interface parallel/test-dgram-error-message-address parallel/test-cluster-concurrent-disconnect parallel/test-http2-max-invalid-frames"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 60 -p tap $T 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s"
+# ---- raw output ----
+v24.21.0
+TAP version 13
+1..10
+not ok 1 parallel/test-net-pipe-connect-errors
+  ---
+  duration_ms: 427.68800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: received EINVAL instead of ENOTSOCK or ECONNREFUSED
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-net-pipe-connect-errors.js:65:3)
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 2 parallel/test-dgram-connect-send-empty-buffer
+  ---
+  duration_ms: 429.08000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: send EFAULT
+        at /boot/home/tnet/node-v24.21.0/test/common/index.js:444:12
+        at /boot/home/tnet/node-v24.21.0/test/common/index.js:481:15
+        at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+        at doSend (node:dgram:881:16)
+        at defaultTriggerAsyncIdScope (node:internal/async_hooks:473:18)
+        at afterDns (node:dgram:820:5)
+        at Socket.send (node:dgram:830:5)
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js:13:12)
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.wrapper (node:events:639:12)
+        at Socket.emit (node:events:514:28)
+        at node:dgram:604:31
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: Error: send EFAULT
+          at doSend (node:dgram:881:16)
+          at defaultTriggerAsyncIdScope (node:internal/async_hooks:473:18)
+          at afterDns (node:dgram:820:5)
+          at Socket.send (node:dgram:830:5)
+          at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js:13:12)
+          at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/common/index.js:481:15)
+          at Socket.wrapper (node:events:639:12)
+          at Socket.emit (node:events:514:28)
+          at node:dgram:604:31
+          at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+        errno: -2147478783,
+        code: 'EFAULT',
+        syscall: 'send',
+        address: undefined
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 3 parallel/test-dgram-send-empty-array
+  ---
+  duration_ms: 180060.28400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 4 parallel/test-dgram-send-empty-buffer
+  ---
+  duration_ms: 180062.59600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+ok 5 parallel/test-dgram-error-message-address
+  ---
+  duration_ms: 139.97800
+  ...
+not ok 6 parallel/test-dgram-multicast-set-interface
+  ---
+  duration_ms: 171.62900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:dgram:1009
+        throw new ErrnoException(err, 'setMulticastInterface');
+        ^
+    
+    Error: setMulticastInterface EINVAL
+        at Socket.setMulticastInterface (node:dgram:1009:11)
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-multicast-set-interface.js:119:12)
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.emit (node:events:514:28)
+        at startListening (node:dgram:216:10)
+        at node:dgram:423:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'setMulticastInterface'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 7 parallel/test-cluster-dgram-1
+  ---
+  duration_ms: 180052.26400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 8 parallel/test-dgram-connect-send-empty-array
+  ---
+  duration_ms: 180059.47000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 9 parallel/test-cluster-concurrent-disconnect
+  ---
+  duration_ms: 509.16500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:66
+          throw message;
+          ^
+    
+    Error: write ENOTCONN
+        at target._send (node:internal/child_process:917:20)
+        at target.send (node:internal/child_process:792:19)
+        at Worker.send (node:internal/cluster/worker:49:10)
+        at Worker.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js:39:18)
+        at Worker.<anonymous> (/boot/home/tnet/node-v24.21.0/test/common/index.js:481:15)
+        at Worker.wrapper (node:events:639:12)
+        at Worker.emit (node:events:514:28)
+        at ChildProcess.<anonymous> (node:internal/cluster/primary:209:12)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28) {
+      errno: -2147454946,
+      code: 'ENOTCONN',
+      syscall: 'write'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: write EPIPE
+        at target._send (node:internal/child_process:917:20)
+        at target.send (node:internal/child_process:792:19)
+        at sendHelper (node:internal/cluster/utils:28:15)
+        at send (node:internal/cluster/child:251:10)
+        at checkWaitingCount (node:internal/cluster/child:269:9)
+        at Worker._disconnect (node:internal/cluster/child:284:3)
+        at Worker.disconnect (node:internal/cluster/child:291:5)
+        at process.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js:50:26)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+    Emitted 'error' event on Worker instance at:
+        at process.<anonymous> (node:internal/cluster/worker:33:12)
+        at process.emit (node:events:514:28)
+        at node:internal/child_process:921:39
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      errno: -2147459059,
+      code: 'EPIPE',
+      syscall: 'write'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: write EPIPE
+        at target._send (node:internal/child_process:917:20)
+        at target.send (node:internal/child_process:792:19)
+        at sendHelper (node:internal/cluster/utils:28:15)
+        at send (node:internal/cluster/child:251:10)
+        at checkWaitingCount (node:internal/cluster/child:269:9)
+        at Worker._disconnect (node:internal/cluster/child:284:3)
+        at Worker.disconnect (node:internal/cluster/child:291:5)
+        at process.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js:50:26)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+    Emitted 'error' event on Worker instance at:
+        at process.<anonymous> (node:internal/cluster/worker:33:12)
+        at process.emit (node:events:514:28)
+        at node:internal/child_process:921:39
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      errno: -2147459059,
+      code: 'EPIPE',
+      syscall: 'write'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: write EPIPE
+        at target._send (node:internal/child_process:917:20)
+        at target.send (node:internal/child_process:792:19)
+        at sendHelper (node:internal/cluster/utils:28:15)
+        at send (node:internal/cluster/child:251:10)
+        at checkWaitingCount (node:internal/cluster/child:269:9)
+        at Worker._disconnect (node:internal/cluster/child:284:3)
+        at Worker.disconnect (node:internal/cluster/child:291:5)
+        at process.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js:50:26)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+    Emitted 'error' event on Worker instance at:
+        at process.<anonymous> (node:internal/cluster/worker:33:12)
+        at process.emit (node:events:514:28)
+        at node:internal/child_process:921:39
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      errno: -2147459059,
+      code: 'EPIPE',
+      syscall: 'write'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: write EPIPE
+        at target._send (node:internal/child_process:917:20)
+        at target.send (node:internal/child_process:792:19)
+        at sendHelper (node:internal/cluster/utils:28:15)
+        at send (node:internal/cluster/child:251:10)
+        at checkWaitingCount (node:internal/cluster/child:269:9)
+        at Worker._disconnect (node:internal/cluster/child:284:3)
+        at Worker.disconnect (node:internal/cluster/child:291:5)
+        at process.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js:50:26)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+    Emitted 'error' event on Worker instance at:
+        at process.<anonymous> (node:internal/cluster/worker:33:12)
+        at process.emit (node:events:514:28)
+        at node:internal/child_process:921:39
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      errno: -2147459059,
+      code: 'EPIPE',
+      syscall: 'write'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: write EPIPE
+        at target._send (node:internal/child_process:917:20)
+        at target.send (node:internal/child_process:792:19)
+        at sendHelper (node:internal/cluster/utils:28:15)
+        at send (node:internal/cluster/child:251:10)
+        at checkWaitingCount (node:internal/cluster/child:269:9)
+        at Worker._disconnect (node:internal/cluster/child:284:3)
+        at Worker.disconnect (node:internal/cluster/child:291:5)
+        at process.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js:50:26)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+    Emitted 'error' event on Worker instance at:
+        at process.<anonymous> (node:internal/cluster/worker:33:12)
+        at process.emit (node:events:514:28)
+        at node:internal/child_process:921:39
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      errno: -2147459059,
+      code: 'EPIPE',
+      syscall: 'write'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 10 parallel/test-http2-max-invalid-frames
+  ---
+  duration_ms: 9912.70700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Request count (8514) must be around (±100) maxSessionInvalidFrames option (100)
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/parallel/test-http2-max-invalid-frames.js:83:12)
+        at Socket.<anonymous> (/boot/home/tnet/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.wrapper (node:events:639:12)
+        at Socket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-net-pipe-connect-errors.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-send-empty-array.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-send-empty-buffer.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-multicast-set-interface.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-dgram-1.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-array.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js
+/boot/system/bin/node /boot/home/tnet/node-v24.21.0/test/parallel/test-http2-max-invalid-frames.js
+test.py rc=1 wall=195s
