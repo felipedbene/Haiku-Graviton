@@ -17,7 +17,7 @@ tmux -L $S new-session -d -s $S -x 120 -y 40 "cd $W && env DISABLE_AUTOUPDATER=1
 sleep 15
 pid_of() {	# the claude process: newest node/claude descendant of the tmux pane
 	if [ "$(uname -s)" = Haiku ]; then ps | awk '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ { print $(NF-3) }' | sort -n | tail -1
-	else pgrep -o -f -- "^$(echo "$CMD" | awk '{print $1}') .*$(echo "$CMD" | awk '{print $NF}')"; fi; }	# the runtime process itself, not the tmux/env wrapper
+	else pgrep -o -x claude; fi; }	# Claude Code sets process.title to "claude" (Linux shows it; Haiku keeps the node args)
 rss() {
 	if [ "$(uname -s)" = Haiku ]; then listarea "$1" | awk 'NF >= 10 && $(NF-5) ~ /^[0-9a-f]+$/ { s += strtonum("0x" $(NF-5)) } END { printf "%d", s / 1024 }'
 	else awk '/VmRSS/ { print $2 }' /proc/$1/status; fi; }
