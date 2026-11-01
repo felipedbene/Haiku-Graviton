@@ -1,0 +1,20 @@
+# evidence: trunk-udp-zero-length-node-strace
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T234800Z   end: 20261101T234822Z   rc: 0
+# script sha256: 21fa722fb8460479c471c46a270a762d3cf58c117f78401b8c11ffd336e7a4d6
+# ---- script ----
+# | set -u
+# | cd /tmp
+# | echo "== Node connected zero-length send under strace (socket syscalls only)"
+# | strace -f node /tmp/zl.js > /tmp/zl.strace 2>&1; echo "node rc=$?"
+# | grep -E '_kern_(send|sendto|connect|socket|bind|recv|write)|sendmsg|send_msg|connect' /tmp/zl.strace | grep -v -E 'NOT_INITIALIZED' | tail -25
+# | grep -E 'TIMEOUT|server got|cb err' /tmp/zl.strace
+# ---- raw output ----
+== Node connected zero-length send under strace (socket syscalls only)
+node rc=0
+[ 83431] connect(0x12, 0x37894cff48, 0x20) = 0x0 No error (5 us)
+[ 83431] sendmsg(0x12, 0x37894cf960, 0x0) = 0x0 No error (12 us)
+[ 83431] sendmsg(0x12, 0x37894cf960, 0x0) = 0x0 No error (7 us)
+[ 83431] resize_area(0xsend cb err null
+send [] cb err null
+TIMEOUT: no datagram

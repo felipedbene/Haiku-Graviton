@@ -1,0 +1,36 @@
+# evidence: trunk-tui-ctrlc-and-headless
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T210229Z   end: 20261101T210317Z   rc: 0
+# script sha256: ad78eccf2741918da7952c4b53d9f1061ddf7877f863565a68a6f9df26c8e01a
+# ---- script ----
+# | set -u
+# | S=cc; H=/tmp/ctrlc-home; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | tmux -L $S kill-server 2>/dev/null
+# | tmux -L $S new-session -d -s $S -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color claude; echo CLAUDE-EXITED rc=\$?; sleep 30"
+# | sleep 15
+# | echo "== before: node teams $(ps | grep -c 'bin/node --zero-fill-buffers /boot/system/lib/clau')"
+# | tmux -L $S send-keys -t $S C-c; sleep 1; echo "--- after first Ctrl-C:"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | tail -3
+# | tmux -L $S send-keys -t $S C-c; sleep 3; echo "--- after second Ctrl-C:"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | tail -3
+# | echo "== after: node teams $(ps | grep -c 'bin/node --zero-fill-buffers /boot/system/lib/clau')"
+# | tmux -L $S kill-server
+# | echo "== headless -p without credentials"
+# | cd /tmp && HOME=$H timeout 60 claude -p "hello" < /dev/null; echo "rc=$?"
+# | HOME=$H timeout 60 claude -p --output-format json "hello" < /dev/null | head -c 400; echo; echo "rc=$?"
+# ---- raw output ----
+== before: node teams 1
+--- after first Ctrl-C:
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+--- after second Ctrl-C:
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+== after: node teams 1
+== headless -p without credentials
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+Not logged in · Please run /login
+rc=1
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+{"duration_api_ms":0,"stop_reason":"stop_sequence","session_id":"df8489c3-04e1-430f-8e3f-f24f4da062ad","total_cost_usd":0,"usage":{"output_tokens_details":{"thinking_tokens":0},"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_inp
+rc=0

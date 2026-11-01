@@ -1,0 +1,53 @@
+# evidence: trunk-node24-gyp-addon-cxx
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T204759Z   end: 20261101T204821Z   rc: 0
+# script sha256: aa07b0ce24ea29e4d691ffc439e3ee8fb17a29bb44db160e49279663e92589c3
+# ---- script ----
+# | set -u
+# | W=/boot/home/node-accept; G=$W/package/node_modules/node-gyp/bin/node-gyp.js
+# | node -p 'JSON.stringify(Object.fromEntries(Object.entries(process.config.variables).filter(([k,v])=>/(^cc$|^cxx$|ld|link|host_arch|target_arch|clang)/i.test(k))))'
+# | grep -n "aarch64-unknown-haiku" ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>/dev/null | head -5
+# | ls ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>&1
+# | grep -rn "aarch64-unknown-haiku" $W/node-accept/addon/build/*.mk $W/node-accept/addon/build/Makefile 2>/dev/null | head -5
+# | echo "== with CC=gcc CXX=g++"
+# | cd $W/node-accept/addon && rm -rf build
+# | CC=gcc CXX=g++ node $G rebuild 2>&1 | grep -E 'CC|CXX|SOLINK|ERR|error' | tail -10; echo "gyp rc=${PIPESTATUS[0]}"
+# | node -e 'const a=require("./build/Release/accept_addon.node"); console.log("addon add(2,40) =", a.add(2,40))'; echo "addon rc=$?"
+# ---- raw output ----
+{"clang":0,"host_arch":"arm64","target_arch":"arm64","napi_build_version":"10","v8_promise_internal_field_count":1}
+ls: cannot access '/boot/home/.cache/node-gyp/24.21.0/include/node/config.gypi': No such file or directory
+== with CC=gcc CXX=g++
+/boot/home/.cache/node-gyp/24.21.0/include/node/js_native_api_types.h:23:10: fatal error: stdint.h: No such file or directory
+gyp ERR! build error 
+gyp ERR! stack Error: `make` failed with exit code: 2
+gyp ERR! stack at ChildProcess.<anonymous> (/boot/home/node-accept/package/node_modules/node-gyp/lib/build.js:219:23)
+gyp ERR! System Haiku R1~beta6+development
+gyp ERR! command "/boot/system/bin/node" "/boot/home/node-accept/package/node_modules/node-gyp/bin/node-gyp.js" "rebuild"
+gyp ERR! cwd /boot/home/node-accept/node-accept/addon
+gyp ERR! node -v v24.21.0
+gyp ERR! node-gyp -v v13.0.0
+gyp ERR! not ok 
+gyp rc=1
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module './build/Release/accept_addon.node'
+Require stack:
+- /boot/home/node-accept/node-accept/addon/[eval]
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.require (node:internal/modules/cjs/loader:1674:12)
+    at require (node:internal/modules/helpers:157:16)
+    at [eval]:1:9
+    at runScriptInThisContext (node:internal/vm:219:10) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/boot/home/node-accept/node-accept/addon/[eval]' ]
+}
+
+Node.js v24.21.0
+addon rc=1

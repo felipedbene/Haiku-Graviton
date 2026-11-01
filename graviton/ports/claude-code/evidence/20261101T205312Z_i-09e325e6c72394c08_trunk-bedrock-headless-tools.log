@@ -1,0 +1,33 @@
+# evidence: trunk-bedrock-headless-tools
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T205312Z   end: 20261101T205333Z   rc: 0
+# script sha256: f987788dd341b5a5cfca45036e259fe0b59dbfb712745da7008b5b03c92ebaa0
+# ---- script ----
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5
+# | H=/tmp/bed-home; rm -rf $H; mkdir -p $H
+# | R=/tmp/cc-fixture; rm -rf $R; mkdir -p $R/src/deep && cd $R && git init -q
+# | printf 'The release codename is "aurora-7".\n' > NOTES.md
+# | printf 'export function a(){ return "NEEDLE_ALPHA"; }\n' > src/a.js
+# | printf 'export const b = "NEEDLE_BETA";\n// NEEDLE_ALPHA appears here too\n' > src/deep/b.js
+# | printf 'nothing here\n' > src/c.txt
+# | git add -A && git -c user.email=t@t -c user.name=t commit -qm init
+# | P='Do these three things using your tools, then answer in one line formatted as CODENAME|FILES|UNAME. 1) Read NOTES.md and extract the codename. 2) Use Grep to find every file containing NEEDLE_ALPHA; list their relative paths sorted, comma-separated. 3) Run the bash command `uname -s` and report its output.'
+# | cd $R && HOME=$H timeout 600 claude -p "$P" --output-format stream-json --verbose --allowedTools "Read,Grep,Bash(uname -s)" < /dev/null 2>/tmp/bed2.err > /tmp/bed2.jsonl; echo "rc=$?"
+# | node -e '
+# | const fs=require("fs"); const lines=fs.readFileSync("/tmp/bed2.jsonl","utf8").trim().split("\n").map(l=>JSON.parse(l));
+# | for (const m of lines) {
+# |   if (m.type==="assistant") for (const c of m.message.content||[]) if (c.type==="tool_use") console.log("TOOL_USE", c.name, JSON.stringify(c.input));
+# |   if (m.type==="user") for (const c of (m.message.content||[])) if (c.type==="tool_result") { const t=typeof c.content==="string"?c.content:JSON.stringify(c.content); console.log("TOOL_RESULT", c.is_error?"ERROR":"ok", t.replace(/\s+/g," ").slice(0,160)); }
+# |   if (m.type==="result") console.log("RESULT", JSON.stringify({is_error:m.is_error,subtype:m.subtype,turns:m.num_turns,result:m.result}));
+# | }'
+# | grep -v "Cannot open directory /boot/system/non-packaged" /tmp/bed2.err | head -5
+# ---- raw output ----
+rc=0
+TOOL_USE Read {"file_path":"/boot/system/cache/tmp/cc-fixture/NOTES.md"}
+TOOL_RESULT ok 1 The release codename is "aurora-7". 2 
+TOOL_USE Grep {"pattern":"NEEDLE_ALPHA","path":"/boot/system/cache/tmp/cc-fixture","output_mode":"files_with_matches"}
+TOOL_USE Bash {"command":"uname -s","description":"Print kernel name"}
+TOOL_RESULT ok Found 2 files src/a.js src/deep/b.js
+TOOL_RESULT ok Haiku
+RESULT {"is_error":false,"subtype":"success","turns":4,"result":"aurora-7|src/a.js,src/deep/b.js|Haiku"}

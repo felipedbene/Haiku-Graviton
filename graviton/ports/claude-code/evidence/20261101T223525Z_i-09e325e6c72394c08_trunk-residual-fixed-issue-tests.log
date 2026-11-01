@@ -1,0 +1,93 @@
+# evidence: trunk-residual-fixed-issue-tests
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T223525Z   end: (rc file) 20261101T231145Z   rc: 0
+# note: started by tools/ssh-run, which gave up polling at its 1800 s limit while the detached run continued; the finished log /tmp/ccrun/cc-20261101T223525Z-54496.log was fetched afterwards by hand, unmodified
+# script sha256: 6d0eed3279f488b069026b560364a653f72c8c5c243c5f842d5861984aee6f32
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0 || exit 1
+# | for t in parallel/test-dgram-connect-send-empty-array parallel/test-dgram-connect-send-empty-buffer parallel/test-fs-promises parallel/test-http-writable-true-after-close; do
+# | 	for i in 1 2 3; do : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap $t > /tmp/res.tap 2>&1; echo "$t run $i: $(grep -E '^(ok|not ok)' /tmp/res.tap)"; done
+# | 	echo "--- last run detail"; sed -n '/^  stack/,/^  \.\.\./p' /tmp/res.tap | head -25
+# | done
+# | echo "== zero-length send on a connected UDP socket, Node"
+# | cat > /tmp/zl.js <<'J'
+# | const dgram=require('dgram'); const c=dgram.createSocket('udp4'); const s=dgram.createSocket('udp4');
+# | s.on('message',(m,r)=>{console.log('server got',m.length,'bytes'); s.close(); c.close();});
+# | s.bind(0,()=>{ c.connect(s.address().port,'127.0.0.1',()=>{ c.send(Buffer.alloc(0),(e)=>console.log('send cb err',e&&e.code)); c.send([],(e)=>console.log('send [] cb err',e&&e.code)); }); });
+# | setTimeout(()=>{console.log('TIMEOUT: no datagram'); process.exit(1)},3000);
+# | J
+# | node /tmp/zl.js; echo "rc=$?"
+# | echo "== same, unconnected (sendto)"
+# | sed 's/c.connect(s.address().port,.127.0.0.1.,()=>{ c.send(Buffer.alloc(0),/{ c.send(Buffer.alloc(0),s.address().port,"127.0.0.1",/; s/c.send(\[\],/c.send([],s.address().port,"127.0.0.1",/' /tmp/zl.js > /tmp/zl2.js; node /tmp/zl2.js; echo "rc=$?"
+# ---- raw output ----
+parallel/test-dgram-connect-send-empty-array run 1: not ok 1 parallel/test-dgram-connect-send-empty-array
+parallel/test-dgram-connect-send-empty-array run 2: not ok 1 parallel/test-dgram-connect-send-empty-array
+parallel/test-dgram-connect-send-empty-array run 3: not ok 1 parallel/test-dgram-connect-send-empty-array
+--- last run detail
+  stack: |-
+    timeout
+  ...
+parallel/test-dgram-connect-send-empty-buffer run 1: not ok 1 parallel/test-dgram-connect-send-empty-buffer
+parallel/test-dgram-connect-send-empty-buffer run 2: not ok 1 parallel/test-dgram-connect-send-empty-buffer
+parallel/test-dgram-connect-send-empty-buffer run 3: not ok 1 parallel/test-dgram-connect-send-empty-buffer
+--- last run detail
+  stack: |-
+    timeout
+  ...
+parallel/test-fs-promises run 1: not ok 1 parallel/test-fs-promises
+parallel/test-fs-promises run 2: not ok 1 parallel/test-fs-promises
+parallel/test-fs-promises run 3: not ok 1 parallel/test-fs-promises
+--- last run detail
+  stack: |-
+    node:internal/fs/promises:1767
+      return await PromisePrototypeThen(
+             ^
+    
+    Error: EPERM: operation not permitted, link '/boot/home/node-src/node-v24.21.0/test/.tmp.0/baz2.js' -> '/boot/home/node-src/node-v24.21.0/test/.tmp.0/baz4.js'
+        at async link (node:internal/fs/promises:1767:10)
+        at async doTest (/boot/home/node-src/node-v24.21.0/test/parallel/test-fs-promises.js:359:7) {
+      errno: -2147483633,
+      code: 'EPERM',
+      syscall: 'link',
+      path: '/boot/home/node-src/node-v24.21.0/test/.tmp.0/baz2.js',
+      dest: '/boot/home/node-src/node-v24.21.0/test/.tmp.0/baz4.js'
+    }
+    
+    Node.js v24.21.0
+  ...
+parallel/test-http-writable-true-after-close run 1: not ok 1 parallel/test-http-writable-true-after-close
+parallel/test-http-writable-true-after-close run 2: not ok 1 parallel/test-http-writable-true-after-close
+parallel/test-http-writable-true-after-close run 3: not ok 1 parallel/test-http-writable-true-after-close
+--- last run detail
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/node-src/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/node-src/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/node-src/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...
+== zero-length send on a connected UDP socket, Node
+send cb err null
+send [] cb err null
+TIMEOUT: no datagram
+rc=1
+== same, unconnected (sendto)
+/boot/system/cache/tmp/zl2.js:3
+s.bind(0,()=>{ { c.send(Buffer.alloc(0),s.address().port,"127.0.0.1",(e)=>console.log('send cb err',e&&e.code)); c.send([],s.address().port,"127.0.0.1",(e)=>console.log('send [] cb err',e&&e.code)); }); });
+                                                                                                                                                                                                        ^
+
+SyntaxError: Unexpected token ')'
+    at wrapSafe (node:internal/modules/cjs/loader:1861:18)
+    at Module._compile (node:internal/modules/cjs/loader:1903:20)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.21.0
+rc=1

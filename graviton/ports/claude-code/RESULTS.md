@@ -31,6 +31,84 @@ Linux reference `i-0a14e8aca787249b7` (Ubuntu arm64, stock Bun 1.4.4, Node 24.22
 | Global Worker scenarios replayed on Haiku | 13/13 match the Bun recording | `20261031T151048Z_i-0e90d4b253c8134b3_compat-scenarios-on-haiku.log` |
 | Bun.spawn / Bun.serve scenarios on Haiku | spawn harness needs Haiku observers (it reads /proc); net 34/42 — being classified | same log |
 
+## 2026-11-01 — fresh trunk image 7036360701
+
+This is the acceptance and Node-suite slice above, re-run on one fresh launch of the trunk bake
+`ami-01b12b4c6e286377e` (`haiku-oven-1793564825`, `debeos-r70738-g7036360701`, hrev59996; not canonical,
+not promoted). Instance `i-09e325e6c72394c08`: c8g.4xlarge, 60 GiB, `subnet-0d4f6b196024e9b92`,
+`sg-0efc97cc673949063`, key `haiku-rdclient`, `ssm-instance-profile`, tags `Project=haiku-graviton`
+and `auto-stop=no`. It has been terminated. The packages came from the DeBeOS repo, which is
+`packages.debene.dev` -> `debeos-repo-green` (`20261101T221650Z_workstation_trunk-repo-origin-and-ami.log`).
+They were claude_code 2.1.314-2, nodejs24 24.21.0-2 and libuv 1.52.1-4, installed by `pkgman install`
+with no `-y` and the answers fed on stdin (`20261101T204555Z_i-09e325e6c72394c08_verify-trunk-install.log`).
+Each check is the script from the earlier evidence log, run unchanged unless noted. Evidence names
+below drop the `_i-09e325e6c72394c08_` part.
+
+| Check | Canonical-era result | Trunk 7036360701 | Evidence (`20261101T…`) |
+|---|---|---|---|
+| Node acceptance (Intl, zstd, execve, workers, TLS, fs.watch) | 21/23, `fs.watch` ENOSYS ×2 (libuv -1) | **23/23 ALL PASS**. fs.watch delivers `rename`/`change`, from libuv 1.52.1-4 and not from the image | `204718Z…trunk-node24-accept` |
+| node-gyp N-API addon, `CC=gcc CXX=g++` | `add(2,40) = 42` | `add(2,40) = 42`, after installing `haiku_devel` and `binutils` from the repo: the repo's bootstrap `gcc` pulls in neither (`stdint.h` missing, then `as` missing) | `204759Z…gyp-addon-cxx`, `204838Z…-devel`, `204913Z…-binutils` |
+| `claude --version`, `doctor`, `cc-teaminfo`, compat vectors | pass | pass: `Platform: haiku-arm64`, `Search: OK`, `check-vectors: ALL PASS`, 0 `.node` files | `205012Z…trunk-claude-accept` |
+| `claude -p` via Bedrock (instance profile) | `pong`, 6 s | `pong`, rc 0, 7 s; JSON `is_error:false` | `205237Z…trunk-bedrock-headless-smoke` |
+| Headless Read/Grep/Bash | `aurora-7\|src/a.js,src/deep/b.js\|Haiku` | identical answer | `205312Z…trunk-bedrock-headless-tools` |
+| Grep tool vs rg | 0.407 s vs rg 0.144 s | 0.389 s vs rg 0.142 s, same 3 files, hooks fire | `205340Z…trunk-bedrock-grep-timing` |
+| Interactive TUI: edit, bash, resize, /compact | edit on disk, `bash-ok-Haiku`, reflow; /compact hang after the queued message (upstream) | same on every point | `205420Z…trunk-bedrock-tui-session` |
+| `/compact` + recall ×5 | 5/5 | 5/5 | `205641Z…trunk-compact-haiku-x5` |
+| End-user repo install + FileChanged through `libuv_fs_event` | hook fired 2×, `fs.watch probe: delivers` | hook fired 2×, `delivers`, vectors pass | `205933Z…trunk-enduser-fresh-install-3` |
+| Ctrl-C at onboarding, `-p` with no credentials | identical to Linux | identical to the earlier Haiku run | `210229Z…trunk-tui-ctrlc-and-headless` |
+| Worker scenarios vs Bun | 13/13 | 13/13. In the same old script, the spawn/net checks now refuse the old recording (`no __platform entry`), because the current harness needs the re-recorded set | `210335Z…trunk-compat-scenarios-on-haiku`, `210428Z…trunk-compat-net-stderr` |
+| Bun.spawn / Bun.serve scenarios vs Bun (v2 harness and recordings) | spawn 188/23/2/1/4, net 35/6/1 | **identical**: spawn 188 match / 23 platform / 2 unobservable / 1 mismatch / 4 declared; net 35 / 6 / 1 | `210524Z…trunk-scen-haiku-node-v2` |
+| TUI snapshots vs real binary on Linux | 60/64 (tmux 3.4), 33/33 (tmux 3.7c) | 60/64, the same 4 keycap snapshots; 33/33 | `210645Z…trunk-tui-capture-B-haiku`, `211247Z_workstation_trunk-tui-compare-{linuxA-haikuB,tmux37c}` |
+| 30-min working soak | 123/123, 4–6 s, RSS 428 → 575 MB | **135/135**, 3–5 s (93 at 3 s), one process, RSS 429 → 482 MB | `211458Z…trunk-working-soak-v3-haiku` |
+| 30-min idle TUI soak | alive, 11 threads, 323 → 185 MB | alive, 12 threads, 323 → 185 MB, flat | `214544Z…trunk-tui-soak-30min` |
+
+**Node 24 test suites.** Same command as the 24.21.0-2 run:
+`: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap <suite>`, with stdin a pipe
+(#870). It ran in a 24.21.0 tree built from the recipe's source tarball (sha256 checked) and its two
+patchsets in recipe order (`211329Z…trunk-node-src-prepare`). Plans were 1..4507 and 1..120, so
+nothing was dropped (`221638Z…trunk-nodejs24r2-full-suites`).
+
+| Suite | 24.21.0-2 baseline (builder `i-0e7bed4928e0f7bf7`, hrev59996) | Trunk 7036360701 |
+|---|---|---|
+| parallel | 4172 ok (323 skip) / 335 not ok, 6193 s | **4451 ok (323 skip) / 56 not ok (2 timeout), 396 s** |
+| sequential | 109 ok / 11 not ok, 1582 s | **113 ok / 7 not ok (1 timeout), 497 s** |
+
+The baseline was the builder image, not canonical: that is where RESULTS.md measured the suites. The
+builder's TAP files are gone. Its per-test list was rebuilt from the logged lists: r1 not-ok, minus
+fixed in r2, plus r2's one newly failing test. That gives 335 + 11, matching the logged totals.
+Per-test diff, each moved test labelled with its row in the root-cause table:
+`235350Z_workstation_trunk-node-suites-vs-canonical`.
+
+- **284 went from fail to pass (280 parallel, 4 sequential).** By triaged cause, with the merged
+  fix that addresses it: #871 ×265, by PR 895 (accepted sockets report the peer's FIN). #883 ×5,
+  `fs-readfile-*`/`fs-realpath-pipe` (PR 908, `/dev/stdin`, `/dev/fd`). #884 ×2 (PR 904). #886 ×2,
+  `dgram-send-empty-{array,buffer}` (PR 903). #885, `net-pipe-connect-errors` (PR 901). #887,
+  `cluster-dgram-1` (PR 905). #888, `dgram-multicast-set-interface` (PR 907). #889,
+  `dgram-error-message-address` (PR 909). #890, `cluster-concurrent-disconnect` (PR 911). #892,
+  `tls-enable-keylog-cli` (PR 910). #882, `fs-error-messages` (PR 906, EEXIST). #879,
+  `util-promisify` (PR 912). Two others passed: `seq/cpu-prof-dir-worker` (patchset 1/3; failed in
+  the r2 run) and `seq/net-connect-econnrefused`, which RESULTS.md already counted as load-dependent.
+  The run was ~15× shorter, and that comes from the #871 timeouts being gone.
+- **1 went from pass to fail: `parallel/test-fs-stat-date`.** It is caused by PR 912. Before, BFS
+  read atime back as "now", so the test's own guard (`utimes(2,2)` must read back 2000 ms) made it
+  skip. Now atime round-trips, the test runs, and it fails 5/5 on BFS's ~262 µs timestamp resolution:
+  `expected -1 ± 2.2e-16, got -1.23136`. `bfs.h:226,276-294,346`: -1 ms -> fraction `0xEE20` ->
+  `0xEE20 << 14` ns. Filed as **#929** (`223226Z…trunk-fs-stat-date-repro`,
+  `223330Z…trunk-bfs-time-resolution-probe`).
+- **62 still fail.** None of them has a merged fix on trunk, except three whose triaged fix is in
+  but which still fail for a remaining cause (`223525Z…trunk-residual-fixed-issue-tests`):
+  - `dgram-connect-send-empty-{array,buffer}`: timeout 3/3. The datagram is now sent (PR 903)
+    and queued, but a `poll()` that starts after it arrived never reports it readable. That is
+    open **#899**; new evidence commented there (`235018Z…trunk-udp-zero-iovlen-probe2`,
+    `234800Z…trunk-udp-zero-length-node-strace`).
+  - `fs-promises` (was #879): it now gets past atime and fails on `link()` EPERM. That is open
+    #882 (no hard links); commented there.
+  - `http-writable-true-after-close` (was #871): same assertion 3/3. The FIN is still seen only
+    after the server writes, which PR 895 does not change. Commented on #871.
+  - The rest, by the issues that are still open: #873 ×19, #876 ×13 (PR 920 open), class (c) ×9,
+    #882 ×4, #881 ×2, #877 ×2, nghttp2 packaging ×2, and one each for #893, #878, #891 (PR 913
+    open), #880, euid/egid (uid 0), setproctitle (`ps -p`) and worker-memory.
+
 ## Phase 1 — tool sanity on the canonical image
 
 `20261031T031440Z_i-07451948888de2466_phase1-sanity-tools.log`: git 2.54.0 (status, diff,

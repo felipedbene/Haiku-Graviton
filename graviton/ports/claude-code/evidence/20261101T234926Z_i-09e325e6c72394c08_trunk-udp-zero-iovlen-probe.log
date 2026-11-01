@@ -1,0 +1,46 @@
+# evidence: trunk-udp-zero-iovlen-probe
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T234926Z   end: 20261101T234948Z   rc: 0
+# script sha256: 8763d9cdb41f61a629367cfb28dad4c9421fe62562d2a58953cb2235502b4bf9
+# ---- script ----
+# | set -u
+# | cat > /tmp/udp0d.c <<'C'
+# | #include <stdio.h>
+# | #include <string.h>
+# | #include <errno.h>
+# | #include <poll.h>
+# | #include <sys/socket.h>
+# | #include <sys/uio.h>
+# | #include <netinet/in.h>
+# | #include <arpa/inet.h>
+# | static void rx(int s, const char *what) {
+# | 	struct pollfd p = { s, POLLIN, 0 };
+# | 	if (poll(&p, 1, 1000) <= 0) { printf("%-30s: NO datagram within 1 s\n", what); return; }
+# | 	char b[8]; struct sockaddr_in f; memset(&f, 0xAA, sizeof f); struct iovec v = { b, sizeof b };
+# | 	struct msghdr m = { 0 }; m.msg_name = &f; m.msg_namelen = sizeof f; m.msg_iov = &v; m.msg_iovlen = 1;
+# | 	ssize_t r = recvmsg(s, &m, 0);
+# | 	printf("%-30s: recvmsg %zd, msg_namelen %u, family %d, from %s:%u\n", what, r, (unsigned)m.msg_namelen,
+# | 		f.sin_family, inet_ntoa(f.sin_addr), ntohs(f.sin_port));
+# | }
+# | int main(void) {
+# | 	int s = socket(AF_INET, SOCK_DGRAM, 0); struct sockaddr_in a = { 0 }; socklen_t l = sizeof a;
+# | 	a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+# | 	bind(s, (struct sockaddr *)&a, sizeof a); getsockname(s, (struct sockaddr *)&a, &l);
+# | 	int u = socket(AF_INET, SOCK_DGRAM, 0), c = socket(AF_INET, SOCK_DGRAM, 0);
+# | 	connect(c, (struct sockaddr *)&a, sizeof a);
+# | 	{ struct msghdr m = { 0 }; m.msg_name = &a; m.msg_namelen = sizeof a; ssize_t r = sendmsg(u, &m, 0); printf("unconnected sendmsg iovlen 0 -> %zd\n", r); } rx(s, "unconnected sendmsg iovlen 0");
+# | 	sendto(u, "x", 1, 0, (struct sockaddr *)&a, sizeof a); rx(s, "unconnected sendto len 1");
+# | 	{ struct msghdr m = { 0 }; ssize_t r = sendmsg(c, &m, 0); printf("connected sendmsg iovlen 0 -> %zd\n", r); } rx(s, "connected sendmsg iovlen 0");
+# | 	send(c, "x", 1, 0); rx(s, "connected send len 1");
+# | 	return 0;
+# | }
+# | C
+# | gcc -O0 -o /tmp/udp0d /tmp/udp0d.c -lnetwork && /tmp/udp0d; echo "rc=$?"
+# ---- raw output ----
+unconnected sendmsg iovlen 0 -> 0
+unconnected sendmsg iovlen 0  : NO datagram within 1 s
+unconnected sendto len 1      : recvmsg 0, msg_namelen 32, family 1, from 127.0.0.1:50102
+connected sendmsg iovlen 0 -> 0
+connected sendmsg iovlen 0    : recvmsg 1, msg_namelen 32, family 1, from 127.0.0.1:50102
+connected send len 1          : recvmsg 0, msg_namelen 32, family 1, from 127.0.0.1:50101
+rc=0

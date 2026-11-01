@@ -1,0 +1,38 @@
+# evidence: trunk-bfs-time-resolution-probe
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T223330Z   end: 20261101T223351Z   rc: 0
+# script sha256: 1d106100996cf8cddc84bffeb1c62447054af00a987100b866f9259b3ba0918e
+# ---- script ----
+# | set -u
+# | cd /tmp && rm -f tsprobe && touch tsprobe && df . | head -3
+# | echo "== utimes(2 s, 2 s) round trip (the test's skip guard; canonical skipped here, #879)"
+# | node -e 'const fs=require("fs");fs.utimesSync("tsprobe",2,2);const s=fs.statSync("tsprobe");console.log("atimeMs",s.atimeMs,"mtimeMs",s.mtimeMs)'
+# | echo "== set ms value -> read back (atimeMs / mtimeMs / ns via bigint)"
+# | node -e '
+# | const fs=require("fs");
+# | for (const ms of [-40691,-355,-1,0,1,355,500,999,40691,1713037251360]) {
+# |   fs.utimesSync("tsprobe", new Date(ms), new Date(ms));
+# |   const s=fs.statSync("tsprobe",{bigint:true});
+# |   console.log(String(ms).padStart(14), "->", String(Number(s.mtimeNs)/1e6).padStart(18), "ms  err", (Number(s.mtimeNs)/1e6-ms).toFixed(6), "ms");
+# | }'
+# | echo "== same through touch -d (coreutils) with a fractional second"
+# | touch -d '2020-01-01 00:00:00.001' tsprobe && node -e 'console.log("mtimeNs", require("fs").statSync("tsprobe",{bigint:true}).mtimeNs % 1000000000n)'
+# ---- raw output ----
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+== utimes(2 s, 2 s) round trip (the test's skip guard; canonical skipped here, #879)
+atimeMs 2000 mtimeMs 2000
+== set ms value -> read back (atimeMs / mtimeMs / ns via bigint)
+        -40691 ->      -40691.194368 ms  err -0.194368 ms
+          -355 ->         -355.12576 ms  err -0.125760 ms
+            -1 ->           -1.23136 ms  err -0.231360 ms
+             0 ->                  0 ms  err 0.000000 ms
+             1 ->           0.786432 ms  err -0.213568 ms
+           355 ->         354.942976 ms  err -0.057024 ms
+           500 ->         499.908608 ms  err -0.091392 ms
+           999 ->          998.76864 ms  err -0.231360 ms
+         40691 ->       40691.011584 ms  err 0.011584 ms
+ 1713037251360 -> 1713037251359.9238 ms  err -0.076172 ms
+== same through touch -d (coreutils) with a fractional second
+mtimeNs 786432n

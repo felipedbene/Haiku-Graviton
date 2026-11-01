@@ -1,0 +1,71 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: trunk-tui-capture-B-haiku
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T210645Z   end: 20261101T211211Z   rc: 0
+# script sha256: f182225b1e220631d8c6d8eb70434ef7d8a787c2366901084f789edb13dbcf19
+# ---- script ----
+# | set -u
+# | cd /boot/home/cc-accept/port || exit 1
+# | tmux -V; uname -a; ls /boot/system/packages | grep -E '^(claude_code|libuv-|nodejs24-)'
+# | TUI_ONLY=B OUT=/tmp/tui-B bash tools/tui-diff.sh /nonexistent /boot/system/bin/node /boot/system/lib/claude-code 2>&1 | tail -30
+# | ls /tmp/tui-B | wc -l
+# | for f in /tmp/tui-B/*.B.err; do [ -s "$f" ] && { echo "--- stderr $f"; head -5 "$f"; }; done
+# | tar -czf /tmp/tui-B.tgz -C /tmp tui-B && sha256sum /tmp/tui-B.tgz && /boot/system/bin/curl -sSf -X PUT --upload-file /tmp/tui-B.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/tui-B-haiku-trunk-7036360701.tgz?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+tmux 3.7c
+Haiku ip-10-128-12-124.us-west-2.comp R1~beta6+development hrev59996 Nov  1 2026 20:19:46 arm64 other Haiku
+claude_code-2.1.314-2-arm64.hpkg
+libuv-1.52.1-4-arm64.hpkg
+nodejs24-24.21.0-2-arm64.hpkg
+captured theme-100x30 (1 snaps, side B)
+captured theme-80x24 (1 snaps, side B)
+captured theme-40x20 (1 snaps, side B)
+captured theme-200x50 (1 snaps, side B)
+captured theme-120x40 (1 snaps, side B)
+captured theme-60x16 (1 snaps, side B)
+captured theme-arrows (11 snaps, side B)
+captured theme-resize (5 snaps, side B)
+captured theme-arrow-resize (4 snaps, side B)
+captured login-flow (3 snaps, side B)
+captured text-100x30 (8 snaps, side B)
+captured text-40x20 (8 snaps, side B)
+captured text-resize (6 snaps, side B)
+captured text-rtl (5 snaps, side B)
+captured text-rtl-vscode (6 snaps, side B)
+captured theme-vscode (2 snaps, side B)
+tui-diff: captured side B into /tmp/tui-B
+136
+--- stderr /tmp/tui-B/login-flow.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/text-100x30.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/text-40x20.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/text-resize.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/text-rtl-vscode.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/text-rtl.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-100x30.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-120x40.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-200x50.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-40x20.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-60x16.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-80x24.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-arrow-resize.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-arrows.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-resize.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+--- stderr /tmp/tui-B/theme-vscode.B.err
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+c7023eb0c6509d059a2b22a11ef2affe8021e6607821cc176b799b91d456de99  /tmp/tui-B.tgz
+upload-ok

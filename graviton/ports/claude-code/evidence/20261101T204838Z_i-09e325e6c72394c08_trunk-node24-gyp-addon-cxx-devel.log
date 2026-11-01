@@ -1,0 +1,69 @@
+# evidence: trunk-node24-gyp-addon-cxx-devel
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T204838Z   end: 20261101T204859Z   rc: 0
+# script sha256: c2868d582b54789c6825adb91d70c19bdf72d7b7451b6ffc248da11aadaa10ec
+# ---- script ----
+# | set -u
+# | echo "== why stdint.h is missing: compiler and system headers present"
+# | ls /boot/system/packages | grep -E '^(gcc|haiku_devel|haiku-|binutils)' 
+# | pkgman search -a -D gcc 2>&1 | grep -E ' gcc ' ; pkgman search -a -D haiku_devel 2>&1 | grep haiku_devel
+# | echo "== install haiku_devel from the DeBeOS repo"
+# | { for i in $(seq 60); do echo 1; done; echo yes; } | pkgman install haiku_devel 2>&1 | grep -E '^ +(install|upgrade) package|\[system\] Done|problem' ; echo "pkgman rc=${PIPESTATUS[1]}"
+# | W=/boot/home/node-accept; G=$W/package/node_modules/node-gyp/bin/node-gyp.js
+# | node -p 'JSON.stringify(Object.fromEntries(Object.entries(process.config.variables).filter(([k,v])=>/(^cc$|^cxx$|ld|link|host_arch|target_arch|clang)/i.test(k))))'
+# | grep -n "aarch64-unknown-haiku" ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>/dev/null | head -5
+# | ls ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>&1
+# | grep -rn "aarch64-unknown-haiku" $W/node-accept/addon/build/*.mk $W/node-accept/addon/build/Makefile 2>/dev/null | head -5
+# | echo "== with CC=gcc CXX=g++"
+# | cd $W/node-accept/addon && rm -rf build
+# | CC=gcc CXX=g++ node $G rebuild 2>&1 | grep -E 'CC|CXX|SOLINK|ERR|error' | tail -10; echo "gyp rc=${PIPESTATUS[0]}"
+# | node -e 'const a=require("./build/Release/accept_addon.node"); console.log("addon add(2,40) =", a.add(2,40))'; echo "addon rc=$?"
+# ---- raw output ----
+== why stdint.h is missing: compiler and system headers present
+gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+haiku-r1~beta6_hrev59996-1-arm64.hpkg
+<system>    gcc                                      13.3.0_2026_03_29_bootstrap-1  arm64 
+DeBeOS      gcc                                      13.3.0_2026_03_29_bootstrap-1  arm64 
+DeBeOS      haiku_devel                              r1~beta6_hrev59996-1           arm64 
+== install haiku_devel from the DeBeOS repo
+    install package haiku_devel-r1~beta6_hrev59996-1 from repository DeBeOS
+[system] Done.
+pkgman rc=0
+{"clang":0,"host_arch":"arm64","target_arch":"arm64","napi_build_version":"10","v8_promise_internal_field_count":1}
+/boot/home/.cache/node-gyp/24.21.0/include/node/config.gypi
+== with CC=gcc CXX=g++
+gcc: fatal error: cannot execute 'as': posix_spawnp: No such file or directory
+gyp ERR! build error 
+gyp ERR! stack Error: `make` failed with exit code: 2
+gyp ERR! stack at ChildProcess.<anonymous> (/boot/home/node-accept/package/node_modules/node-gyp/lib/build.js:219:23)
+gyp ERR! System Haiku R1~beta6+development
+gyp ERR! command "/boot/system/bin/node" "/boot/home/node-accept/package/node_modules/node-gyp/bin/node-gyp.js" "rebuild"
+gyp ERR! cwd /boot/home/node-accept/node-accept/addon
+gyp ERR! node -v v24.21.0
+gyp ERR! node-gyp -v v13.0.0
+gyp ERR! not ok 
+gyp rc=1
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module './build/Release/accept_addon.node'
+Require stack:
+- /boot/home/node-accept/node-accept/addon/[eval]
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.require (node:internal/modules/cjs/loader:1674:12)
+    at require (node:internal/modules/helpers:157:16)
+    at [eval]:1:9
+    at runScriptInThisContext (node:internal/vm:219:10) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/boot/home/node-accept/node-accept/addon/[eval]' ]
+}
+
+Node.js v24.21.0
+addon rc=1

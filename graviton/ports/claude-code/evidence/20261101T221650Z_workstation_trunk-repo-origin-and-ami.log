@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: trunk-repo-origin-and-ami
+# workstation, 20261101T221650Z: which repo the instance's DeBeOS repository resolves to, and the AMI under test
+# ---- raw output ----
+$ aws cloudfront list-distributions (alias packages.debene.dev)
+EZBGMRSQZAMKW	packages.debene.dev	haiku-graviton-hpkg-<ACCOUNT_ID>.s3.us-west-2.amazonaws.com	/debeos-repo-green
+$ aws ec2 describe-images ami-01b12b4c6e286377e ami-058776e58bd902fba
+ami-058776e58bd902fba	haiku-graviton-1792444749	2026-10-19T21:28:08.000Z	true	a9d5585b19b336ab6365349431f73513a8835ecd	debeos-r70709-ga9d5585b19	hrev59996
+ami-01b12b4c6e286377e	haiku-oven-1793564825	2026-11-01T20:36:00.000Z	None	7036360701855921702cb257c9e6d285962c8811	debeos-r70738-g7036360701	hrev59996
+$ aws ec2 describe-instances i-09e325e6c72394c08
+i-09e325e6c72394c08	c8g.4xlarge	ami-01b12b4c6e286377e	subnet-0d4f6b196024e9b92	sg-0efc97cc673949063	haiku-rdclient	arn:aws:iam::<ACCOUNT_ID>:instance-profile/ssm-instance-profile	2026-11-01T20:44:13+00:00
+Project	haiku-graviton
+ephemeral	true
+Name	cc-verify-trunk-7036360701
+auto-stop	no

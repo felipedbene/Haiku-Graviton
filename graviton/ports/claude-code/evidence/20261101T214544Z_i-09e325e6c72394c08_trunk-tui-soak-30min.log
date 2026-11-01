@@ -1,0 +1,119 @@
+# evidence: trunk-tui-soak-30min
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T214544Z   end: 20261101T221613Z   rc: 0
+# script sha256: 13871584ea4b3880d8dee447b04821462da87957e1bd107a071c7ddc3bac2d94
+# ---- script ----
+# | #!/bin/bash
+# | # haiku-soak.sh [minutes] [interval-s]: run Claude Code's interactive TUI in tmux on Haiku
+# | # and sample the node team's resident memory (sum of listarea's alloc. = area ram_size)
+# | # and thread count every interval, then print min/max/first/last and the growth.
+# | # Runs on the Haiku target (via tools/ssh-run). Exits 1 if the process dies.
+# | set -u
+# | MIN=${1:-30} IV=${2:-30}
+# | S=soak; H=/tmp/soak-home; rm -rf $H; mkdir -p $H/.claude
+# | echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | tmux -L $S kill-server 2>/dev/null
+# | trap 'tmux -L $S kill-server 2>/dev/null' EXIT
+# | before=$(ps | awk '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ { print $(NF-3) }' | sort -n | tail -1)
+# | tmux -L $S new-session -d -s $S -x 120 -y 40 "cd /tmp && HOME=$H TERM=xterm-256color claude"
+# | sleep 15
+# | # Haiku ps: the team's args (truncated to 63 chars), then Id, #Threads, Gid, Uid. The
+# | # newest matching team that did not exist before the launch is ours.
+# | team=$(ps | awk -v b="${before:-0}" '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ && $(NF-3) > b { print $(NF-3) }' | sort -n | tail -1)
+# | echo "node team: ${team:-NOT FOUND}"; [ -n "$team" ] || { tmux -L $S capture-pane -t $S -p | head -20; exit 1; }
+# | rss() { listarea "$team" | awk 'NF >= 10 && $(NF-5) ~ /^[0-9a-f]+$/ { s += strtonum("0x" $(NF-5)) } END { printf "%d", s / 1024 }'; }
+# | threads() { ps | awk -v t="$team" '$(NF-3) == t { print $(NF-2); exit }'; }
+# | n=$(( MIN * 60 / IV )); echo "sampling $n x ${IV}s"
+# | first="" min="" max="" last=""
+# | for i in $(seq 0 $n); do
+# | 	r=$(rss); t=$(threads)
+# | 	[ -n "$r" ] && [ "$r" -gt 0 ] || { echo "sample $i: process gone"; tmux -L $S capture-pane -t $S -p | tail -15; exit 1; }
+# | 	echo "t=$((i * IV))s rss=${r}KB threads=${t:-?}"
+# | 	first=${first:-$r}; last=$r
+# | 	[ -z "$min" ] || [ "$r" -lt "$min" ] && min=$r
+# | 	[ -z "$max" ] || [ "$r" -gt "$max" ] && max=$r
+# | 	[ $i -lt $n ] && sleep "$IV"
+# | done
+# | echo "soak: first=${first}KB last=${last}KB min=${min}KB max=${max}KB growth=$(( last - first ))KB over ${MIN}min"
+# | echo "--- final screen"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | head -15
+# ---- raw output ----
+node team: 13485
+sampling 60 x 30s
+t=0s rss=323036KB threads=12
+t=30s rss=323044KB threads=12
+t=60s rss=323044KB threads=12
+t=90s rss=323044KB threads=12
+t=120s rss=191068KB threads=12
+t=150s rss=191068KB threads=12
+t=180s rss=191068KB threads=12
+t=210s rss=184816KB threads=12
+t=240s rss=184820KB threads=12
+t=270s rss=184828KB threads=12
+t=300s rss=184832KB threads=12
+t=330s rss=184836KB threads=12
+t=360s rss=184844KB threads=12
+t=390s rss=184848KB threads=12
+t=420s rss=184856KB threads=12
+t=450s rss=184860KB threads=12
+t=480s rss=184864KB threads=12
+t=510s rss=184872KB threads=12
+t=540s rss=184876KB threads=12
+t=570s rss=184880KB threads=12
+t=600s rss=184888KB threads=12
+t=630s rss=184892KB threads=12
+t=660s rss=184896KB threads=12
+t=690s rss=184904KB threads=12
+t=720s rss=184908KB threads=12
+t=750s rss=184912KB threads=12
+t=780s rss=184920KB threads=12
+t=810s rss=184924KB threads=12
+t=840s rss=184928KB threads=12
+t=870s rss=184936KB threads=12
+t=900s rss=184940KB threads=12
+t=930s rss=184944KB threads=12
+t=960s rss=184952KB threads=12
+t=990s rss=184956KB threads=12
+t=1020s rss=184960KB threads=12
+t=1050s rss=184968KB threads=12
+t=1080s rss=184972KB threads=12
+t=1110s rss=184976KB threads=12
+t=1140s rss=184984KB threads=12
+t=1170s rss=184988KB threads=12
+t=1200s rss=184992KB threads=12
+t=1230s rss=185000KB threads=12
+t=1260s rss=185004KB threads=12
+t=1290s rss=185008KB threads=12
+t=1320s rss=185016KB threads=12
+t=1350s rss=185020KB threads=12
+t=1380s rss=185024KB threads=12
+t=1410s rss=185032KB threads=12
+t=1440s rss=185036KB threads=12
+t=1470s rss=185040KB threads=12
+t=1500s rss=185048KB threads=12
+t=1530s rss=185052KB threads=12
+t=1560s rss=185056KB threads=12
+t=1590s rss=185064KB threads=12
+t=1620s rss=185068KB threads=12
+t=1650s rss=185072KB threads=12
+t=1680s rss=185076KB threads=12
+t=1710s rss=185080KB threads=12
+t=1740s rss=185088KB threads=12
+t=1770s rss=185092KB threads=12
+t=1800s rss=185096KB threads=12
+soak: first=323036KB last=185096KB min=184816KB max=323044KB growth=-137940KB over 30min
+--- final screen
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+Welcome to Claude Code v2.1.314
+..........................................................
+     *                                       █████▓▓░
+                                 *         ███▓░     ░░
+            ░░░░░░                        ███▓░
+    ░░░   ░░░░░░░░░░                      ███▓░
+   ░░░░░░░░░░░░░░░░░░░    *                ██▓░░      ▓
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *

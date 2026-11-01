@@ -1,0 +1,45 @@
+# evidence: trunk-bedrock-grep-timing
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T205340Z   end: 20261101T205401Z   rc: 0
+# script sha256: 812a010f4e1e82a20265b6f5e920923d8d01f4a546967bb31b78479a0bb5380a
+# ---- script ----
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5
+# | H=/tmp/bed-home3; rm -rf $H; mkdir -p $H/.claude; L=/tmp/grep-hook.log; : > $L
+# | cat > $H/.claude/settings.json <<J
+# | {"hooks":{
+# |  "PreToolUse":[{"matcher":"Grep","hooks":[{"type":"command","command":"echo pre \$(date +%s.%N) >> $L"}]}],
+# |  "PostToolUse":[{"matcher":"Grep","hooks":[{"type":"command","command":"echo post \$(date +%s.%N) >> $L"}]}]}}
+# | J
+# | D=/boot/system/lib/claude-code; du -sh $D; echo "files: $(find $D -type f | wc -l)"
+# | echo "== direct rg -l CellSegmenter (5 runs)"
+# | for i in 1 2 3 4 5; do s=$(date +%s.%N); rg -l CellSegmenter $D > /tmp/rg.out; e=$(date +%s.%N); echo "rg run $i: $(echo "$e - $s" | bc -l 2>/dev/null || node -e "console.log(($e-$s).toFixed(3))")s, $(wc -l < /tmp/rg.out) files"; done
+# | cd /tmp && HOME=$H timeout 600 claude -p "Use the Grep tool once, with pattern CellSegmenter and path $D, output_mode files_with_matches. Then reply with only the number of files found." --output-format stream-json --verbose --allowedTools "Grep" < /dev/null 2>/dev/null > /tmp/bed3.jsonl; echo "claude rc=$?"
+# | node -e '
+# | const L=require("fs").readFileSync("/tmp/bed3.jsonl","utf8").trim().split("\n").map(JSON.parse);
+# | for (const m of L) { if (m.type==="assistant") for (const c of m.message.content||[]) if (c.type==="tool_use") console.log("TOOL_USE",c.name,JSON.stringify(c.input));
+# |  if (m.type==="user") for (const c of m.message.content||[]) if (c.type==="tool_result") console.log("TOOL_RESULT",String(typeof c.content==="string"?c.content:JSON.stringify(c.content)).split("\n")[0]);
+# |  if (m.type==="result") console.log("RESULT",m.result,m.is_error); }'
+# | echo "== hook timestamps"; cat $L
+# | awk '/^pre/{p=$2} /^post/{printf "Grep tool wall time (PreToolUse->PostToolUse): %.3fs\n", $2-p}' $L
+# | sort /tmp/rg.out | head -3
+# ---- raw output ----
+59M	/boot/system/lib/claude-code
+files: 3271
+== direct rg -l CellSegmenter (5 runs)
+rg run 1: 0.193s, 3 files
+rg run 2: 0.142s, 3 files
+rg run 3: 0.143s, 3 files
+rg run 4: 0.141s, 3 files
+rg run 5: 0.143s, 3 files
+claude rc=0
+TOOL_USE Grep {"pattern":"CellSegmenter","path":"/boot/system/lib/claude-code","output_mode":"files_with_matches"}
+TOOL_RESULT Found 3 files
+RESULT 3 false
+== hook timestamps
+pre 1793566436.228696000
+post 1793566436.617597000
+Grep tool wall time (PreToolUse->PostToolUse): 0.389s
+/boot/system/lib/claude-code/bun-compat.mjs
+/boot/system/lib/claude-code/chunk-pmgbk1rv.js
+/boot/system/lib/claude-code/lib/cellseg.mjs

@@ -1,0 +1,29 @@
+# evidence: trunk-compat-net-stderr
+# instance: i-09e325e6c72394c08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T210428Z   end: 20261101T210450Z   rc: 0
+# script sha256: 63d05e1bd7fbb71c7ba149ed4ec6efab0dc5baa0acd7f293862ae39c5689e5d2
+# ---- script ----
+# | set -u
+# | echo "== /tmp/net.err (net check stderr)"; head -30 /tmp/net.err
+# | echo "== recording keys"; for f in /boot/home/cc-accept/rec/net.cases.json /boot/home/cc-accept/rec/spawn-bun.json; do node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(process.argv[1], Array.isArray(j)?"array "+j.length:Object.keys(j).slice(0,8).join(","))' $f; done
+# | echo "== erp line source"; grep -n "erp (needed" /tmp/spawn.out | head -3; grep -c . /tmp/spawn.out
+# ---- raw output ----
+== /tmp/net.err (net check stderr)
+file:///boot/home/cc-accept/port/compat/test/platform-diff.mjs:34
+	if (!meta) throw new Error(`recording has no ${META_KEY} entry (re-record it with the current harness)`);
+	                 ^
+
+Error: recording has no __platform entry (re-record it with the current harness)
+    at splitRecording (file:///boot/home/cc-accept/port/compat/test/platform-diff.mjs:34:19)
+    at file:///boot/home/cc-accept/port/compat/test/check-net.mjs:12:13
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.21.0
+== recording keys
+/boot/home/cc-accept/rec/net.cases.json array 42
+/boot/home/cc-accept/rec/spawn-bun.json array 218
+== erp line source
+2:erp (needed by <NULL>): No such file or directory
+2
