@@ -1,0 +1,121 @@
+# evidence: node-fswatch-after-package
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T013044Z   end: 20261101T013106Z   rc: 1
+# script sha256: 85240c30d4b18bb4096b4d1a0c8db01913ad336da93a3d9ce4ece60a409211a2
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N
+# | echo "LIBRARY_PATH=${LIBRARY_PATH:-}"; pkgman search -i -D libuv | tail -n +3
+# | ls -l /boot/system/lib/libuv.so.1.0.0; node --version
+# | T="$(ls test/parallel/test-fs-watch*.js test/sequential/test-fs-watch*.js | tr '\n' ' ')"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap $T > /tmp/node-after.tap 2>&1
+# | grep -E "^(ok|not ok)|^1\.\." /tmp/node-after.tap
+# | echo "ok: $(grep -c '^ok' /tmp/node-after.tap)  not ok: $(grep -c '^not ok' /tmp/node-after.tap)"
+# | for t in $(grep '^not ok' /tmp/node-after.tap | awk '{print $4}'); do sed -n "/^not ok [0-9]* $(echo $t | sed 's|/|\\/|')$/,/^  \.\.\.$/p" /tmp/node-after.tap; done
+# | echo "===== sequential/test-fs-watch with expectFilePath also true on haiku (temporary copy, deleted after)"
+# | sed 's/^                       common.isAIX;$/                       common.isAIX || process.platform === "haiku";/' test/sequential/test-fs-watch.js > test/sequential/test-fs-watch-debeos-expectpath.js
+# | diff test/sequential/test-fs-watch.js test/sequential/test-fs-watch-debeos-expectpath.js
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap test/sequential/test-fs-watch-debeos-expectpath.js 2>&1 | grep -E "^(ok|not ok)|^1\.\."
+# | rm -f test/sequential/test-fs-watch-debeos-expectpath.js
+# | echo "===== fswatch-demo.js"
+# | mkdir -p /boot/home/uvw/demo && cd /boot/home/uvw/demo
+# | echo 'J3VzZSBzdHJpY3QnOwovLyBmcy53YXRjaCBvbiBEZUJlT1M6IGV2ZW50cyBmb3IgYSB3YXRjaGVkIGZpbGUgYW5kIGEgd2F0Y2hlZCBkaXJlY3RvcnksIHRoZW4KLy8gc3RhcnQvc3RvcCBjeWNsZXMgY2hlY2tlZCBmb3IgdGhyZWFkLCBwb3J0LCBzZW1hcGhvcmUsIGZkIGFuZCBrZXJuZWwtbGlzdGVuZXIKLy8gbGVha3MuIFJ1biB3aXRoOiBub2RlIGZzd2F0Y2gtZGVtby5qcyA8c2NyYXRjaCBkaXI+CmNvbnN0IGZzID0gcmVxdWlyZSgnZnMnKTsKY29uc3QgcGF0aCA9IHJlcXVpcmUoJ3BhdGgnKTsKY29uc3QgeyBleGVjRmlsZVN5bmMgfSA9IHJlcXVpcmUoJ2NoaWxkX3Byb2Nlc3MnKTsKY29uc3QgeyBXb3JrZXIsIGlzTWFpblRocmVhZCwgcGFyZW50UG9ydCB9ID0gcmVxdWlyZSgnd29ya2VyX3RocmVhZHMnKTsKCmNvbnN0IHNldHRsZSA9IChtcyA9IDMwMCkgPT4gbmV3IFByb21pc2UoKHIpID0+IHNldFRpbWVvdXQociwgbXMpKTsKCmlmICghaXNNYWluVGhyZWFkKSB7CiAgLy8gRWFjaCB3b3JrZXIgaGFzIGl0cyBvd24gbGlidXYgbG9vcDsgaXQgZXhpdHMgb25jZSBpdCBoYXMgY3ljbGVkLgogIGNvbnN0IHsgZGlyLCBuIH0gPSByZXF1aXJlKCd3b3JrZXJfdGhyZWFkcycpLndvcmtlckRhdGE7CiAgZm9yIChsZXQgaSA9IDA7IGkgPCBuOyBpKyspIGZzLndhdGNoKGRpcikuY2xvc2UoKTsKICBwYXJlbnRQb3J0LnBvc3RNZXNzYWdlKCdkb25lJyk7CiAgcmV0dXJuOwp9CgpmdW5jdGlvbiBjb3VudHMoKSB7CiAgY29uc3QgcGlkID0gU3RyaW5nKHByb2Nlc3MucGlkKTsKICBjb25zdCBwb3J0cyA9IGV4ZWNGaWxlU3luYygnbGlzdHBvcnQnLCBbcGlkXSkudG9TdHJpbmcoKQogICAgLnNwbGl0KCdcbicpLmZpbHRlcigobCkgPT4gL15ccypcZCtccy8udGVzdChsKSk7CiAgY29uc3Qgc2VtcyA9IGV4ZWNGaWxlU3luYygnbGlzdHNlbScsIFtwaWRdKS50b1N0cmluZygpCiAgICAuc3BsaXQoJ1xuJykuZmlsdGVyKChsKSA9PiAvXlxzKlxkK1xzLy50ZXN0KGwpKTsKICAvLyBgcHMgPHRlYW0+YCBwcmludHMgb25lIHJvdzogbmFtZSwgSWQsICNUaHJlYWRzLCBHaWQsIFVpZC4KICBjb25zdCByb3cgPSBleGVjRmlsZVN5bmMoJ3BzJywgW3BpZF0pLnRvU3RyaW5nKCkuc3BsaXQoJ1xuJykKICAgIC5maW5kKChsKSA9PiBuZXcgUmVnRXhwKGBcXHMke3BpZH1cXHNgKS50ZXN0KGwpKTsKICBjb25zdCBudGhyZWFkcyA9IE51bWJlcihyb3cudHJpbSgpLnNwbGl0KC9ccysvKS5zbGljZSgtMylbMF0pOwogIGxldCBuZmRzID0gMDsKICBmb3IgKGxldCBmZCA9IDA7IGZkIDwgNDA5NjsgZmQrKykgewogICAgdHJ5IHsgZnMuZnN0YXRTeW5jKGZkKTsgbmZkcysrOyB9IGNhdGNoIHsgLyogbm90IG9wZW4gKi8gfQogIH0KICByZXR1cm4gewogICAgdGhyZWFkczogbnRocmVhZHMsCiAgICBwb3J0czogcG9ydHMubGVuZ3RoLAogICAgZnNQb3J0czogcG9ydHMuZmlsdGVyKChsKSA9PiBsLmluY2x1ZGVzKCdsaWJ1diBmcyBldmVudCcpKS5sZW5ndGgsCiAgICBzZW1zOiBzZW1zLmxlbmd0aCwKICAgIGZkczogbmZkcywKICB9Owp9Cgphc3luYyBmdW5jdGlvbiBldmVudHMocm9vdCkgewogIGNvbnN0IGxvZyA9IFtdOwogIGNvbnN0IGZpbGUgPSBwYXRoLmpvaW4ocm9vdCwgJ2YudHh0Jyk7CiAgY29uc3QgZGlyID0gcGF0aC5qb2luKHJvb3QsICdkJyk7CiAgZnMud3JpdGVGaWxlU3luYyhmaWxlLCAnb25lXG4nKTsKICBmcy5ta2RpclN5bmMoZGlyKTsKCiAgY29uc3Qgd2YgPSBmcy53YXRjaChmaWxlLCAoZXYsIG5hbWUpID0+IGxvZy5wdXNoKGBmaWxlIHdhdGNoZXI6ICR7ZXZ9ICR7bmFtZX1gKSk7CiAgY29uc3Qgd2QgPSBmcy53YXRjaChkaXIsIChldiwgbmFtZSkgPT4gbG9nLnB1c2goYGRpciB3YXRjaGVyOiAgJHtldn0gJHtuYW1lfWApKTsKCiAgY29uc3Qgc3RlcCA9IGFzeW5jICh3aGF0LCBmbikgPT4gewogICAgbG9nLnB1c2goYC0tICR7d2hhdH1gKTsKICAgIGZuKCk7CiAgICBhd2FpdCBzZXR0bGUoKTsKICB9OwogIGF3YWl0IHN0ZXAoJ21vZGlmeSBmLnR4dCAoYXBwZW5kKScsICgpID0+IGZzLmFwcGVuZEZpbGVTeW5jKGZpbGUsICd0d29cbicpKTsKICBhd2FpdCBzdGVwKCdyZW5hbWUgZi50eHQgLT4gZy50eHQnLCAoKSA9PiBmcy5yZW5hbWVTeW5jKGZpbGUsIHBhdGguam9pbihyb290LCAnZy50eHQnKSkpOwogIGF3YWl0IHN0ZXAoJ2RlbGV0ZSBnLnR4dCcsICgpID0+IGZzLnVubGlua1N5bmMocGF0aC5qb2luKHJvb3QsICdnLnR4dCcpKSk7CiAgYXdhaXQgc3RlcCgnY3JlYXRlIGQvYScsICgpID0+IGZzLndyaXRlRmlsZVN5bmMocGF0aC5qb2luKGRpciwgJ2EnKSwgJycpKTsKICBhd2FpdCBzdGVwKCdtb2RpZnkgZC9hJywgKCkgPT4gZnMud3JpdGVGaWxlU3luYyhwYXRoLmpvaW4oZGlyLCAnYScpLCAneCcpKTsKICBhd2FpdCBzdGVwKCdyZW5hbWUgZC9hIC0+IGQvYicsICgpID0+IGZzLnJlbmFtZVN5bmMocGF0aC5qb2luKGRpciwgJ2EnKSwgcGF0aC5qb2luKGRpciwgJ2InKSkpOwogIGF3YWl0IHN0ZXAoJ2RlbGV0ZSBkL2InLCAoKSA9PiBmcy51bmxpbmtTeW5jKHBhdGguam9pbihkaXIsICdiJykpKTsKICBhd2FpdCBzdGVwKCdyZW5hbWUgZCAtPiBlJywgKCkgPT4gZnMucmVuYW1lU3luYyhkaXIsIHBhdGguam9pbihyb290LCAnZScpKSk7CiAgYXdhaXQgc3RlcCgnZGVsZXRlIGUnLCAoKSA9PiBmcy5ybWRpclN5bmMocGF0aC5qb2luKHJvb3QsICdlJykpKTsKICB3Zi5jbG9zZSgpOwogIHdkLmNsb3NlKCk7CiAgcmV0dXJuIGxvZzsKfQoKYXN5bmMgZnVuY3Rpb24gbWFpbigpIHsKICBjb25zdCByb290ID0gZnMubWtkdGVtcFN5bmMocGF0aC5qb2luKHByb2Nlc3MuYXJndlsyXSB8fCAnL3RtcCcsICdmc3dhdGNoLScpKTsKICBjb25zb2xlLmxvZyhgbm9kZSAke3Byb2Nlc3MudmVyc2lvbn0sIHBpZCAke3Byb2Nlc3MucGlkfSwgcm9vdCAke3Jvb3R9YCk7CiAgY29uc29sZS5sb2coJ2NvdW50cyBiZWZvcmUgdGhlIGZpcnN0IGZzLndhdGNoOicsIEpTT04uc3RyaW5naWZ5KGNvdW50cygpKSk7CgogIGZvciAoY29uc3QgbCBvZiBhd2FpdCBldmVudHMocm9vdCkpIGNvbnNvbGUubG9nKGwpOwoKICBjb25zdCBzY3JhdGNoID0gcGF0aC5qb2luKHJvb3QsICdjeWNsZScpOwogIGZzLm1rZGlyU3luYyhzY3JhdGNoKTsKICBmcy53cml0ZUZpbGVTeW5jKHBhdGguam9pbihzY3JhdGNoLCAnZicpLCAnJyk7CgogIGNvbnNvbGUubG9nKCdcbmNvdW50cyBhZnRlciB0aGUgZmlyc3Qgd2F0Y2hlcnMgY2xvc2VkOicsIEpTT04uc3RyaW5naWZ5KGNvdW50cygpKSk7CiAgY29uc3QgTiA9IDUwMDA7ICAvLyBhYm92ZSB0aGUgZGVmYXVsdCBwZXItdGVhbSBub2RlLW1vbml0b3IgbGltaXQgKDQwOTYpCiAgZm9yIChsZXQgaSA9IDA7IGkgPCBOOyBpKyspIHsKICAgIGZzLndhdGNoKHNjcmF0Y2gpLmNsb3NlKCk7CiAgICBmcy53YXRjaChwYXRoLmpvaW4oc2NyYXRjaCwgJ2YnKSkuY2xvc2UoKTsKICB9CiAgYXdhaXQgc2V0dGxlKDEwMCk7CiAgY29uc29sZS5sb2coYGFmdGVyICR7Tn0geCAyIHN0YXJ0L3N0b3AgY3ljbGVzOmAsIEpTT04uc3RyaW5naWZ5KGNvdW50cygpKSk7CgogIC8vIFdhdGNoZXJzIGtlcHQgb3BlbiBhdCBvbmNlLCB0aGVuIGFsbCBjbG9zZWQuCiAgY29uc3QgbWFueSA9IFtdOwogIGZvciAobGV0IGkgPSAwOyBpIDwgMTAwMDsgaSsrKSBtYW55LnB1c2goZnMud2F0Y2goc2NyYXRjaCkpOwogIGNvbnNvbGUubG9nKCd3aXRoIDEwMDAgd2F0Y2hlcnMgb3BlbjogICAnLCBKU09OLnN0cmluZ2lmeShjb3VudHMoKSkpOwogIGZvciAoY29uc3QgdyBvZiBtYW55KSB3LmNsb3NlKCk7CiAgYXdhaXQgc2V0dGxlKDEwMCk7CiAgY29uc29sZS5sb2coJ2FmdGVyIGNsb3NpbmcgYWxsIDEwMDA6ICAgICcsIEpTT04uc3RyaW5naWZ5KGNvdW50cygpKSk7CgogIC8vIExvb3BzIHRoYXQgY2xvc2U6IGV2ZXJ5IHdvcmtlciBzdGFydHMgaXRzIG93biBoZWxwZXIgYW5kIG11c3QgdGVhciBpdCBkb3duLgogIGZvciAobGV0IGkgPSAwOyBpIDwgMjA7IGkrKykgewogICAgYXdhaXQgbmV3IFByb21pc2UoKHJlc29sdmUsIHJlamVjdCkgPT4gewogICAgICBjb25zdCB3ID0gbmV3IFdvcmtlcihfX2ZpbGVuYW1lLCB7IHdvcmtlckRhdGE6IHsgZGlyOiBzY3JhdGNoLCBuOiAxMDAgfSB9KTsKICAgICAgdy5vbignZXJyb3InLCByZWplY3QpOwogICAgICB3Lm9uKCdleGl0JywgcmVzb2x2ZSk7CiAgICB9KTsKICB9CiAgYXdhaXQgc2V0dGxlKDIwMCk7CiAgY29uc29sZS5sb2coJ2FmdGVyIDIwIHdvcmtlcnMgeCAxMDAgY3ljbGVzLCBhbGwgZXhpdGVkOicsIEpTT04uc3RyaW5naWZ5KGNvdW50cygpKSk7CgogIC8vIEEgd2F0Y2hlciBzdGlsbCByZXBvcnRzIGFmdGVyIGFsbCBvZiB0aGF0LgogIGNvbnN0IGdvdCA9IGF3YWl0IG5ldyBQcm9taXNlKChyZXNvbHZlKSA9PiB7CiAgICBjb25zdCB3ID0gZnMud2F0Y2goc2NyYXRjaCwgKGV2LCBuYW1lKSA9PiB7IHcuY2xvc2UoKTsgcmVzb2x2ZShgJHtldn0gJHtuYW1lfWApOyB9KTsKICAgIGZzLndyaXRlRmlsZVN5bmMocGF0aC5qb2luKHNjcmF0Y2gsICdsYXRlJyksICcnKTsKICB9KTsKICBjb25zb2xlLmxvZygnd2F0Y2ggYWZ0ZXIgdGhlIGN5Y2xlcyBzdGlsbCByZXBvcnRzOicsIGdvdCk7CgogIGZzLnJtU3luYyhyb290LCB7IHJlY3Vyc2l2ZTogdHJ1ZSB9KTsKfQoKbWFpbigpLmNhdGNoKChlKSA9PiB7IGNvbnNvbGUuZXJyb3IoZSk7IHByb2Nlc3MuZXhpdCgxKTsgfSk7Cg==' | base64 -d > fswatch-demo.js
+# | sha256sum fswatch-demo.js
+# | : | node fswatch-demo.js /boot/home/uvw/demo
+# ---- raw output ----
+LIBRARY_PATH=
+<system>    libuv        1.52.1-2  arm64
+<system>    libuv_devel  1.52.1-2  arm64
+-r-xr-xr-x 1 baron root 249576 Nov  1 01:29 /boot/system/lib/libuv.so.1.0.0
+v24.21.0
+1..38
+ok 1 parallel/test-fs-watch-abort-signal
+ok 2 parallel/test-fs-watch-enoent
+ok 3 parallel/test-fs-watch-ignore-function
+ok 4 parallel/test-fs-watch-ignore-invalid
+ok 5 parallel/test-fs-watch-file-enoent-after-deletion
+ok 6 parallel/test-fs-watch-ignore-recursive-glob-subdirectories
+ok 7 parallel/test-fs-watch-ignore-glob
+ok 8 parallel/test-fs-watch-ignore-mixed
+ok 9 parallel/test-fs-watch-ignore-recursive-glob
+ok 10 parallel/test-fs-watch-ignore-regexp
+ok 11 parallel/test-fs-watch-ignore-recursive-regexp
+ok 12 parallel/test-fs-watch-ignore-recursive-mixed
+ok 13 parallel/test-fs-watch-encoding
+ok 14 parallel/test-fs-watch-close-when-destroyed
+ok 15 parallel/test-fs-watch-recursive-delete-race
+ok 16 parallel/test-fs-watch-recursive-linux-parallel-remove # skip This test can run only on Linux
+ok 17 parallel/test-fs-watch-recursive-add-file-to-existing-subfolder
+ok 18 parallel/test-fs-watch-recursive-validate
+ok 19 parallel/test-fs-watch-recursive-add-folder
+ok 20 parallel/test-fs-watch-recursive-watch-file
+ok 21 parallel/test-fs-watch-recursive-add-file-to-new-folder
+ok 22 parallel/test-fs-watch-stop-async
+ok 23 parallel/test-fs-watch-recursive-add-file-with-url
+ok 24 parallel/test-fs-watch-stop-sync
+ok 25 parallel/test-fs-watch
+ok 26 parallel/test-fs-watch-recursive-add-file
+ok 27 parallel/test-fs-watchfile-bigint
+ok 28 parallel/test-fs-watch-ref-unref
+ok 29 parallel/test-fs-watchfile
+ok 30 parallel/test-fs-watch-recursive-symlink
+ok 31 parallel/test-fs-watch-recursive-sync-write
+ok 32 parallel/test-fs-watch-recursive-update-file
+ok 33 parallel/test-fs-watchfile-ref-unref
+not ok 34 sequential/test-fs-watch
+ok 35 parallel/test-fs-watch-recursive-assert-leaks
+ok 36 parallel/test-fs-watch-recursive-delete
+ok 37 parallel/test-fs-watch-recursive-promise
+ok 38 parallel/test-fs-watch-recursive-prefix-sibling
+ok: 37  not ok: 1
+not ok 34 sequential/test-fs-watch
+  ---
+  duration_ms: 121.96800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'newfile.txt'
+    - null
+    
+        at FSWatcher.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-fs-watch.js:108:18)
+        at FSWatcher.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at FSWatcher.emit (node:events:514:28)
+        at FSWatcher._handle.onchange (node:internal/fs/watchers:281:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 'newfile.txt',
+      expected: null,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+===== sequential/test-fs-watch with expectFilePath also true on haiku (temporary copy, deleted after)
+41c41
+<                        common.isAIX;
+---
+>                        common.isAIX || process.platform === "haiku";
+1..1
+ok 1 sequential/test-fs-watch-debeos-expectpath
+===== fswatch-demo.js
+9edf1743b53698753d87d661cca1ea8a1f5d5dd561d73e5f9f97d51b9c1eacc2  fswatch-demo.js
+node v24.21.0, pid 184652, root /boot/home/uvw/demo/fswatch-u2ypcJ
+TypeError: Cannot read properties of undefined (reading 'trim')
+    at counts (/boot/home/uvw/demo/fswatch-demo.js:29:31)
+    at main (/boot/home/uvw/demo/fswatch-demo.js:75:67)
+    at Object.<anonymous> (/boot/home/uvw/demo/fswatch-demo.js:121:1)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47

@@ -1,0 +1,52 @@
+# evidence: libroot-fork-pthread-once-repro
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T011702Z   end: 20261101T011737Z   rc: 1
+# script sha256: 08cd037e1563209935c709871e017534fd083e485e85985b5a790b8a3eb491d6
+# ---- script ----
+# | mkdir -p /boot/home/uvw && cd /boot/home/uvw
+# | echo 'LyogZm9yaygpIHdoaWxlIHRoZSBwcm9jZXNzJ3MgZmlyc3QgcHRocmVhZCBpcyBzdGlsbCBzdGFydGluZyB1cC4gKi8KI2luY2x1ZGUgPE9TLmg+CiNpbmNsdWRlIDxwdGhyZWFkLmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RkbGliLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KI2luY2x1ZGUgPHN5cy93YWl0Lmg+CgpzdGF0aWMgdm9pZCogaWRsZSh2b2lkKiBhcmcpIHsgcGF1c2UoKTsgcmV0dXJuIE5VTEw7IH0Kc3RhdGljIHZvaWQqIG5vdGhpbmcodm9pZCogYXJnKSB7IHJldHVybiBOVUxMOyB9CgppbnQgbWFpbihpbnQgYXJnYywgY2hhcioqIGFyZ3YpIHsKICBpbnQgaXRlcnMgPSBhcmdjID4gMSA/IGF0b2koYXJndlsxXSkgOiAyMCwgaHVuZyA9IDAsIGk7CiAgZm9yIChpID0gMDsgaSA8IGl0ZXJzOyBpKyspIHsKICAgIHBpZF90IHBpZCA9IGZvcmsoKTsKICAgIGlmIChwaWQgPT0gMCkgewogICAgICAvKiBBIGZyZXNoIHNpbmdsZS10aHJlYWRlZCBwcm9jZXNzOiBjcmVhdGUgaXRzIGZpcnN0IHRocmVhZCBhbmQgZm9yayBhdCBvbmNlLiAqLwogICAgICBwdGhyZWFkX3QgdCwgdTsKICAgICAgcGlkX3QgZzsKICAgICAgcHRocmVhZF9jcmVhdGUoJnQsIE5VTEwsIGlkbGUsIE5VTEwpOwogICAgICBnID0gZm9yaygpOwogICAgICBpZiAoZyA9PSAwKSB7CiAgICAgICAgdGhyZWFkX2luZm8gdGk7IGludDMyIGNvb2tpZSA9IDA7CiAgICAgICAgcHRocmVhZF9jcmVhdGUoJnUsIE5VTEwsIG5vdGhpbmcsIE5VTEwpOwogICAgICAgIHNub296ZSg1MDAwMDApOwogICAgICAgIHdoaWxlIChnZXRfbmV4dF90aHJlYWRfaW5mbygwLCAmY29va2llLCAmdGkpID09IEJfT0spIHsKICAgICAgICAgIGlmICh0aS50aHJlYWQgIT0gZmluZF90aHJlYWQoTlVMTCkpIHsKICAgICAgICAgICAgc2VtX2luZm8gc2k7IHNpLm5hbWVbMF0gPSAwOwogICAgICAgICAgICBpZiAodGkuc3RhdGUgPT0gQl9USFJFQURfV0FJVElORyAmJiBnZXRfc2VtX2luZm8odGkuc2VtLCAmc2kpID09IEJfT0spIHsKICAgICAgICAgICAgICBwcmludGYoIiAgaXRlciAlZDogY2hpbGQgdGhyZWFkICVkIGJsb2NrZWQgb24gc2VtICclcydcbiIsIGksIChpbnQpdGkudGhyZWFkLCBzaS5uYW1lKTsKICAgICAgICAgICAgICBfZXhpdCgxKTsKICAgICAgICAgICAgfQogICAgICAgICAgfQogICAgICAgIH0KICAgICAgICBfZXhpdCgwKTsKICAgICAgfQogICAgICB7IGludCBzdDsgd2FpdHBpZChnLCAmc3QsIDApOyBfZXhpdChXRVhJVFNUQVRVUyhzdCkpOyB9CiAgICB9CiAgICB7IGludCBzdDsgd2FpdHBpZChwaWQsICZzdCwgMCk7IGlmIChXRVhJVFNUQVRVUyhzdCkpIGh1bmcrKzsgfQogIH0KICBwcmludGYoIiVkIG9mICVkIGZvcmtlZCBjaGlsZHJlbiBjb3VsZCBub3Qgc3RhcnQgYSB0aHJlYWRcbiIsIGh1bmcsIGl0ZXJzKTsKICByZXR1cm4gaHVuZyA/IDEgOiAwOwp9Cg==' | base64 -d > forkonce.c
+# | uname -a
+# | gcc -Wall -o forkonce forkonce.c && ./forkonce 40
+# ---- raw output ----
+Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+  iter 0: child thread 150283 blocked on sem 'pthread once'
+  iter 1: child thread 150287 blocked on sem 'pthread once'
+  iter 2: child thread 150291 blocked on sem 'pthread once'
+  iter 3: child thread 150295 blocked on sem 'pthread once'
+  iter 4: child thread 150301 blocked on sem 'pthread once'
+  iter 5: child thread 150305 blocked on sem 'pthread once'
+  iter 6: child thread 150309 blocked on sem 'pthread once'
+  iter 7: child thread 150315 blocked on sem 'pthread once'
+  iter 8: child thread 150319 blocked on sem 'pthread once'
+  iter 9: child thread 150326 blocked on sem 'pthread once'
+  iter 10: child thread 150330 blocked on sem 'pthread once'
+  iter 11: child thread 150334 blocked on sem 'pthread once'
+  iter 12: child thread 150338 blocked on sem 'pthread once'
+  iter 13: child thread 150342 blocked on sem 'pthread once'
+  iter 14: child thread 150346 blocked on sem 'pthread once'
+  iter 15: child thread 150350 blocked on sem 'pthread once'
+  iter 16: child thread 150354 blocked on sem 'pthread once'
+  iter 17: child thread 150358 blocked on sem 'pthread once'
+  iter 18: child thread 150362 blocked on sem 'pthread once'
+  iter 19: child thread 150366 blocked on sem 'pthread once'
+  iter 20: child thread 150370 blocked on sem 'pthread once'
+  iter 21: child thread 150376 blocked on sem 'pthread once'
+  iter 22: child thread 150380 blocked on sem 'pthread once'
+  iter 23: child thread 150384 blocked on sem 'pthread once'
+  iter 24: child thread 150388 blocked on sem 'pthread once'
+  iter 25: child thread 150394 blocked on sem 'pthread once'
+  iter 26: child thread 150401 blocked on sem 'pthread once'
+  iter 27: child thread 150405 blocked on sem 'pthread once'
+  iter 28: child thread 150409 blocked on sem 'pthread once'
+  iter 29: child thread 150413 blocked on sem 'pthread once'
+  iter 30: child thread 150419 blocked on sem 'pthread once'
+  iter 31: child thread 150423 blocked on sem 'pthread once'
+  iter 32: child thread 150427 blocked on sem 'pthread once'
+  iter 33: child thread 150433 blocked on sem 'pthread once'
+  iter 34: child thread 150437 blocked on sem 'pthread once'
+  iter 35: child thread 150444 blocked on sem 'pthread once'
+  iter 36: child thread 150452 blocked on sem 'pthread once'
+  iter 37: child thread 150456 blocked on sem 'pthread once'
+  iter 38: child thread 150460 blocked on sem 'pthread once'
+  iter 39: child thread 150464 blocked on sem 'pthread once'
+40 of 40 forked children could not start a thread

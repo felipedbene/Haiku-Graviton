@@ -404,3 +404,75 @@ gme, …) being built and published for arm64.
 
 Cross-links issue **#337**. Not merged pending human CR; STAGING-harvested, not
 published to green.
+
+## `libuv-1.52.1.recipe` (+ `.patchset`): a real `uv_fs_event_t` backend
+
+REVISION 1→2. The upstream recipe is copied unchanged from the builder's HaikuPorts
+tree (`dev-libs/libuv`, tree commit `fdb507a229`) apart from the revision and one
+DESCRIPTION paragraph. Upstream libuv builds `src/unix/no-fsevents.c` on Haiku, so
+`uv_fs_event_start()` returned `UV_ENOSYS` and Node's `fs.watch()` threw. That broke
+Claude Code's settings hot reload, task-list sync and `FileChanged` hooks. Node links
+the system `lib:libuv`, so only this package changes. This is a feature added, not a
+cut.
+
+The patchset keeps HaikuPorts' two patches and adds two DeBeOS ones:
+
+1. `unix,haiku: implement uv_fs_event_t on the node monitor`. This adds
+   `src/unix/haiku-fsevents.c`, which calls `_kern_start_watching()` directly
+   (libbe's `watch_node()` wraps the same call) and parses the flattened KMessage
+   that the registrar delivers on a port. libuv stays a C library with no
+   libbe/libstdc++ dependency. Each loop that watches anything gets one helper
+   thread: it blocks until a message is queued, wakes the loop through a pipe, and
+   waits on a semaphore while the loop thread drains the port and runs the
+   callbacks. Each handle gets its own token. The thread, port, semaphore and
+   pipe last until `uv_loop_close()`, and `uv_loop_fork()` builds new ones in the
+   child. No public struct changes, so the ABI stays the same: the per-loop state
+   hangs off the private `uv__loop_internal_fields_t`, and per-handle state is
+   reached through `handle->path`.
+2. `test: require fs event filenames on haiku`. The suite now checks filenames
+   on Haiku as strictly as on Linux, macOS and Windows, and the directory variant
+   of `fork_fs_events_child` runs on Haiku.
+
+Events map as inotify's do. Create, remove and move give `UV_RENAME`, and a stat
+change gives `UV_CHANGE`. A file watch reports the basename of the watched path. A
+directory watch reports the child's name, and a rename within the directory reports
+the old name and then the new one. `UV_FS_EVENT_RECURSIVE` is ignored, as on Linux;
+Node's JS recursive watcher covers it.
+
+**Semantics that differ from Linux, all documented in `docs/src/fs_event.rst`:**
+
+- BFS reports a write when the file is closed, or at most once a second while its
+  size changes. A same-size write to a file that stays open is reported only on
+  close.
+- A removed watched entry is reported once, then the handle goes quiet, even if
+  the file had other hard links. inotify would report `IN_ATTRIB` for that case.
+- Delivery goes through the registrar.
+
+**libroot defect found on the way (issue #874).** If `fork()` runs while the first
+pthread is still in its threaded-malloc `pthread_once`, the child cannot start
+any thread at all. That failed `fork_fs_events_file_parent_child` every time. The
+helper start now waits until the helper reaches its entry function, so libuv
+never forks inside that window. The libroot bug itself is still open.
+
+**Proof**, all native on builder `i-0e7bed4928e0f7bf7`, with logs in
+`../evidence/libuv-1.52.1/`:
+
+- `libuv-test-suite-before-after`: the 21 fs-event tests go from 19 failing / 1
+  passing (only because its test body was compiled out on Haiku) / 1 skip to 20
+  passing / 1 skip (`fs_event_watch_dir_recursive`, the same skip as on
+  Linux). The full suite goes from 55 to 36 failures. The 19 tests that stopped
+  failing are exactly the fs-event ones; the other 36 fail identically before and
+  after.
+- `libuv-package-build-install`: `haiku-nativebuild libuv` gives `BUILD_OK`, and
+  `libuv-1.52.1-2-arm64.hpkg` (+ `_devel`, `_debuginfo`) is installed with
+  `pkgman`. The harvest step fails by design (#867).
+- `node-fswatch-dev` / `node-fswatch-after-package`: Node 24.21.0's
+  `test-fs-watch*` goes from 11/38 passing to 37/38. The one remaining failure is
+  `sequential/test-fs-watch`. It asserts `filename === null` on every platform
+  outside Windows, Linux, macOS and AIX, and libuv now returns `'newfile.txt'`.
+  With Haiku added to that list (a temporary copy) the test passes.
+- `node-fswatch-demo` (`fswatch-demo.js`): create, modify, rename and delete for
+  a file and a directory. 10,000 start/stop cycles (more than the 4096
+  per-team node-monitor limit), 1000 concurrent watchers, and 20 Workers. The
+  team's threads, ports, semaphores and fds stay flat at +1/+1/+1/+2 after the
+  first watch.

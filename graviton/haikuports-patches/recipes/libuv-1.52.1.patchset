@@ -1,0 +1,1193 @@
+From 43d05c38cad943c6677f92e902454b9225887c5f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Zolt=C3=A1n=20Mizsei?= <zmizsei@extrowerk.com>
+Date: Thu, 29 Oct 2020 07:40:26 +0100
+Subject: Test will not run as root
+
+
+diff --git a/test/run-tests.c b/test/run-tests.c
+index 9c2574e..78a6941 100644
+--- a/test/run-tests.c
++++ b/test/run-tests.c
+@@ -66,7 +66,7 @@ typedef BOOL (WINAPI *sCompareObjectHandles)(_In_ HANDLE, _In_ HANDLE);
+ 
+ 
+ int main(int argc, char **argv) {
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__HAIKU__)
+   if (0 == geteuid() && NULL == getenv("UV_RUN_AS_ROOT")) {
+     fprintf(stderr, "The libuv test suite cannot be run as root.\n");
+     return EXIT_FAILURE;
+-- 
+2.54.0
+
+
+From e071608573a5a3483fcd843b16bbf828d2526201 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?J=C3=A9r=C3=B4me=20Duval?= <jerome.duval@gmail.com>
+Date: Thu, 9 Jul 2026 21:32:20 +0200
+Subject: Haiku: build tests with libbsd
+
+
+diff --git a/Makefile.am b/Makefile.am
+index cc70ffe..54b30e2 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -473,6 +473,7 @@ libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
+                     src/unix/no-proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c
++test_run_tests_LDFLAGS += -lbsd
+ endif
+ 
+ if HURD
+diff --git a/test/test-tty.c b/test/test-tty.c
+index 9ecb3ae..5569ac0 100644
+--- a/test/test-tty.c
++++ b/test/test-tty.c
+@@ -34,6 +34,8 @@
+ #  include <util.h>
+ # elif defined(__FreeBSD__) || defined(__DragonFly__)
+ #  include <libutil.h>
++# elif defined(__HAIKU__)
++#  include <pty.h>
+ # endif
+ #endif
+ 
+-- 
+2.54.0
+
+From ed0d7a4e3bde13aef5c3019890955c741448fc60 Mon Sep 17 00:00:00 2001
+From: DeBeOS <debeos@debene.dev>
+Date: Sat, 31 Oct 2026 20:23:54 -0500
+Subject: [PATCH 1/2] unix,haiku: implement uv_fs_event_t on the node monitor
+
+Haiku built src/unix/no-fsevents.c, so uv_fs_event_start() failed with
+UV_ENOSYS and Node.js's fs.watch() threw. This adds a backend on the
+kernel node monitor, which is what libbe's watch_node() wraps.
+
+The backend calls _kern_start_watching(device, node, flags, port, token)
+directly and parses the flattened KMessage that the registrar delivers on
+the port, so libuv stays a C library with no libbe or libstdc++ dependency.
+Each handle gets its own token, so a message identifies exactly one
+handle. Messages for a stopped or closed handle are dropped.
+
+A port cannot be polled, so each loop that watches anything gets one
+helper thread. The thread blocks until a message is queued, wakes the
+loop through a pipe, and waits on a semaphore while the loop thread
+drains the port and runs the callbacks. The thread, port, semaphore and
+pipe last until uv_loop_close(). uv_loop_fork() builds new ones in the
+child and registers the live handles again.
+
+Events map to the inotify backend's: entry created, removed or moved
+gives UV_RENAME, and a stat change gives UV_CHANGE. A file watch reports
+the basename of the watched path. A directory watch reports the child's
+name. Stat-change messages carry only the node, so the name comes from a
+small node-to-name cache, or a scan of the directory on a miss. A watched
+entry that is removed is reported once, then the handle goes quiet, as
+after IN_DELETE_SELF. UV_FS_EVENT_RECURSIVE is ignored, as on Linux.
+---
+ CMakeLists.txt            |   2 +-
+ Makefile.am               |   2 +-
+ docs/src/fs_event.rst     |  10 +
+ src/unix/haiku-fsevents.c | 878 ++++++++++++++++++++++++++++++++++++++
+ src/unix/internal.h       |   9 +-
+ src/unix/posix-poll.c     |  19 +
+ src/uv-common.h           |   3 +
+ 7 files changed, 920 insertions(+), 3 deletions(-)
+ create mode 100644 src/unix/haiku-fsevents.c
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9b38b55..8eda577 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -415,8 +415,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
+   list(APPEND uv_libraries bsd network)
+   list(APPEND uv_sources
+ 	  src/unix/haiku.c
++	  src/unix/haiku-fsevents.c
+ 	  src/unix/bsd-ifaddrs.c
+-	  src/unix/no-fsevents.c
+ 	  src/unix/no-proctitle.c
+ 	  src/unix/posix-hrtime.c
+ 	  src/unix/posix-poll.c)
+diff --git a/Makefile.am b/Makefile.am
+index 54b30e2..f7f52a0 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -469,7 +469,7 @@ uvinclude_HEADERS += include/uv/posix.h
+ libuv_la_CFLAGS += -D_BSD_SOURCE
+ libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
+                     src/unix/haiku.c \
+-                    src/unix/no-fsevents.c \
++                    src/unix/haiku-fsevents.c \
+                     src/unix/no-proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c
+diff --git a/docs/src/fs_event.rst b/docs/src/fs_event.rst
+index bfdecdd..f2533e3 100644
+--- a/docs/src/fs_event.rst
++++ b/docs/src/fs_event.rst
+@@ -26,6 +26,16 @@ the best backend for the job on each platform.
+     .. _documentation: https://developer.ibm.com/articles/au-aix_event_infrastructure/
+     .. _`IBM Knowledge centre`: https://www.ibm.com/support/knowledgecenter/en/SSLTBW_2.2.0/com.ibm.zos.v2r1.bpxb100/ioc.htm
+ 
++    On Haiku the node monitor is used, with one helper thread per loop that has
++    started a watch. Its limitations:
++
++        - A file system reports a write when the file is closed, or at most once
++          a second while its size keeps changing. A write that does not change
++          the size of a file that stays open is reported on close.
++        - When a watched entry is removed, the handle reports it once and then
++          stops receiving events, even if the file had other hard links.
++        - Watching needs the registrar, which delivers node monitor messages.
++
+ 
+ 
+ 
+diff --git a/src/unix/haiku-fsevents.c b/src/unix/haiku-fsevents.c
+new file mode 100644
+index 0000000..cf84f8d
+--- /dev/null
++++ b/src/unix/haiku-fsevents.c
+@@ -0,0 +1,878 @@
++/* Copyright libuv project contributors. All rights reserved.
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to
++ * deal in the Software without restriction, including without limitation the
++ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
++ * sell copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ * IN THE SOFTWARE.
++ */
++
++/* uv_fs_event_t for Haiku, built on the kernel node monitor.
++ *
++ * The node monitor is what libbe's watch_node() wraps: a listener is a
++ * (port, token) pair registered against a (device, node) pair with
++ * _kern_start_watching(), and every event arrives on the port as a flattened
++ * KMessage (delivered by the registrar, message code 'pjpp'). Using the
++ * syscall directly keeps libuv a C library with no libbe/libstdc++
++ * dependency; it is exactly the call libbe makes on the caller's behalf.
++ *
++ * A port cannot be put in a poll() set, so each loop that watches anything
++ * gets one helper thread. It blocks until the port has a message, then wakes
++ * the loop through a pipe and waits on a semaphore while the loop thread
++ * drains the port and runs the callbacks. All handle state is touched on the
++ * loop thread only; the helper never reads a message itself.
++ *
++ * Every handle gets its own token, so a message identifies exactly one
++ * handle. A message whose token no longer has a handle (it was stopped or
++ * closed while the message was in flight) is dropped.
++ */
++
++#include "uv.h"
++#include "internal.h"
++
++#include <assert.h>
++#include <dirent.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <pthread.h>
++#include <signal.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++#include <OS.h>
++
++/* Private libroot syscalls; see headers/private/system/syscalls.h. */
++extern status_t _kern_start_watching(dev_t device, ino_t node, uint32 flags,
++                                     port_id port, uint32 token);
++extern status_t _kern_stop_watching(dev_t device, ino_t node, port_id port,
++                                    uint32 token);
++extern int _kern_open_dir_entry_ref(dev_t device, ino_t inode,
++                                    const char* name);
++
++/* From <NodeMonitor.h>, which is C++ only. */
++#define UV__B_WATCH_NAME          0x0001
++#define UV__B_WATCH_STAT          0x0002
++#define UV__B_WATCH_DIRECTORY     0x0008
++#define UV__B_WATCH_INTERIM_STAT  0x0020
++#define UV__B_WATCH_CHILDREN      0x0040
++
++#define UV__B_ENTRY_CREATED  1
++#define UV__B_ENTRY_REMOVED  2
++#define UV__B_ENTRY_MOVED    3
++#define UV__B_STAT_CHANGED   4
++
++#define UV__B_NODE_MONITOR   0x4e444d4e  /* 'NDMN', <AppDefs.h> */
++#define UV__PORT_MSG_CODE    0x706a7070  /* 'pjpp', <MessagePrivate.h> */
++#define UV__KMSG_MAGIC       0x6b4d7347  /* 'kMsG', KMessage.cpp */
++#define UV__KMSG_INT32       0x4c4f4e47  /* 'LONG', B_INT32_TYPE */
++#define UV__KMSG_INT64       0x4c4c4e47  /* 'LLNG', B_INT64_TYPE */
++#define UV__KMSG_STRING      0x43535452  /* 'CSTR', B_STRING_TYPE */
++
++/* Wire layout of a flattened KMessage (headers/private/kernel/util/
++ * KMessage.h): a header, then fields, each 4-byte aligned. Fixed-size
++ * values follow the field header back to back; variable-size values (the
++ * strings) are each prefixed by an int32 size.
++ */
++struct uv__kmsg_header {
++  uint32_t magic;
++  int32_t size;
++  uint32_t what;
++  int32_t sender;
++  int32_t target_token;
++  int32_t reply_port;
++  int32_t reply_token;
++};
++
++struct uv__kmsg_field {
++  uint32_t type;
++  int32_t element_size;  /* < 0: variable size */
++  int32_t element_count;
++  int32_t field_size;
++  int16_t header_size;
++  char name[1];
++};
++
++#define UV__KMSG_ALIGN(n) (((n) + 3) & ~(size_t) 3)
++
++/* How many child (node, name) pairs a directory watch remembers. A child
++ * stat change carries only the node, so its name is found here or, on a
++ * miss, by scanning the directory.
++ */
++#define UV__CHILD_CACHE_SIZE 64
++
++/* Messages the port buffers before the registrar has to hold them back. */
++#define UV__PORT_CAPACITY 256
++
++struct uv__haiku_child {
++  ino_t node;
++  char* name;
++};
++
++struct uv__haiku_watcher {
++  RB_ENTRY(uv__haiku_watcher) entry;
++  uv_fs_event_t* handle;
++  uint32_t token;
++  dev_t device;
++  ino_t node;
++  int is_dir;
++  int watching;  /* kernel listener installed */
++  unsigned int nchildren;
++  unsigned int next_child;
++  struct uv__haiku_child children[UV__CHILD_CACHE_SIZE];
++  char path[1];  /* handle->path points here */
++};
++
++RB_HEAD(uv__haiku_watchers, uv__haiku_watcher);
++
++struct uv__haiku_fsevents {
++  port_id port;
++  sem_id drained;
++  uv_thread_t thread;
++  int pipefd[2];
++  uv__io_t io;
++  uint32_t next_token;
++  struct uv__haiku_watchers watchers;
++  char* buf;
++  size_t buflen;
++};
++
++struct uv__haiku_event {
++  int32_t opcode;
++  int32_t device;
++  int32_t node_device;
++  int64_t node;
++  int64_t directory;
++  int64_t from_directory;
++  int64_t to_directory;
++  const char* name;
++  const char* from_name;
++};
++
++
++static int uv__haiku_watcher_cmp(const struct uv__haiku_watcher* a,
++                                 const struct uv__haiku_watcher* b) {
++  if (a->token < b->token)
++    return -1;
++  if (a->token > b->token)
++    return 1;
++  return 0;
++}
++
++
++RB_GENERATE_STATIC(uv__haiku_watchers, uv__haiku_watcher, entry,
++                   uv__haiku_watcher_cmp)
++
++
++static struct uv__haiku_fsevents* uv__haiku_fsevents_get(uv_loop_t* loop) {
++  return uv__get_internal_fields(loop)->haiku_fsevents;
++}
++
++
++static struct uv__haiku_watcher* uv__haiku_find(struct uv__haiku_fsevents* fe,
++                                                uint32_t token) {
++  struct uv__haiku_watcher key;
++  key.token = token;
++  return RB_FIND(uv__haiku_watchers, &fe->watchers, &key);
++}
++
++
++static struct uv__haiku_watcher* uv__haiku_watcher_of(uv_fs_event_t* handle) {
++  return container_of(handle->path, struct uv__haiku_watcher, path);
++}
++
++
++static uint32 uv__haiku_watch_flags(const struct uv__haiku_watcher* w) {
++  uint32 flags;
++
++  flags = UV__B_WATCH_NAME | UV__B_WATCH_STAT | UV__B_WATCH_INTERIM_STAT;
++  if (w->is_dir)
++    flags |= UV__B_WATCH_DIRECTORY | UV__B_WATCH_CHILDREN;
++
++  return flags;
++}
++
++
++static void uv__haiku_fsevents_thread(void* arg) {
++  struct uv__haiku_fsevents* fe;
++  sigset_t set;
++  ssize_t size;
++  status_t s;
++  ssize_t n;
++
++  fe = arg;
++
++  /* Leave signal delivery to the application's threads. */
++  sigfillset(&set);
++  pthread_sigmask(SIG_SETMASK, &set, NULL);
++
++  /* Tell uv__haiku_fsevents_start() that this thread is running. */
++  release_sem(fe->drained);
++
++  for (;;) {
++    /* Blocks until a message is queued; does not consume it. Fails once
++     * the port is deleted, which is how the loop shuts this thread down.
++     */
++    size = port_buffer_size_etc(fe->port, 0, 0);
++    if (size == B_INTERRUPTED)
++      continue;
++    if (size < 0)
++      break;
++
++    do
++      n = write(fe->pipefd[1], "", 1);
++    while (n == -1 && errno == EINTR);
++    if (n != 1)
++      break;
++
++    /* Wait for the loop to drain the port before looking again. */
++    do
++      s = acquire_sem(fe->drained);
++    while (s == B_INTERRUPTED);
++    if (s != B_OK)
++      break;
++  }
++}
++
++
++static void uv__haiku_parse(const char* buf,
++                            size_t len,
++                            struct uv__haiku_event* ev) {
++  const struct uv__kmsg_header* h;
++  const struct uv__kmsg_field* f;
++  const char* data;
++  size_t name_len;
++  size_t off;
++  int32_t vsize;
++
++  memset(ev, 0, sizeof(*ev));
++  ev->device = -1;
++  ev->node_device = -1;
++  ev->node = -1;
++  ev->directory = -1;
++  ev->from_directory = -1;
++  ev->to_directory = -1;
++
++  h = (const struct uv__kmsg_header*) buf;
++  off = UV__KMSG_ALIGN(sizeof(*h));
++
++  while (off + offsetof(struct uv__kmsg_field, name) < len) {
++    f = (const struct uv__kmsg_field*) (buf + off);
++    if (f->field_size <= 0 || (size_t) f->field_size > len - off)
++      break;
++    if (f->header_size <= (int16_t) offsetof(struct uv__kmsg_field, name) ||
++        f->header_size > f->field_size)
++      break;
++
++    name_len = f->header_size - offsetof(struct uv__kmsg_field, name);
++    if (memchr(f->name, '\0', name_len) == NULL)
++      break;
++
++    data = (const char*) f + f->header_size;
++
++    if (f->type == UV__KMSG_INT32 && f->element_size == 4 &&
++        f->element_count > 0 && f->field_size - f->header_size >= 4) {
++      int32_t v;
++      memcpy(&v, data, sizeof(v));
++      if (strcmp(f->name, "opcode") == 0)
++        ev->opcode = v;
++      else if (strcmp(f->name, "device") == 0)
++        ev->device = v;
++      else if (strcmp(f->name, "node device") == 0)
++        ev->node_device = v;
++    } else if (f->type == UV__KMSG_INT64 && f->element_size == 8 &&
++               f->element_count > 0 && f->field_size - f->header_size >= 8) {
++      int64_t v;
++      memcpy(&v, data, sizeof(v));
++      if (strcmp(f->name, "node") == 0)
++        ev->node = v;
++      else if (strcmp(f->name, "directory") == 0)
++        ev->directory = v;
++      else if (strcmp(f->name, "from directory") == 0)
++        ev->from_directory = v;
++      else if (strcmp(f->name, "to directory") == 0)
++        ev->to_directory = v;
++    } else if (f->type == UV__KMSG_STRING && f->element_size < 0 &&
++               f->element_count > 0 &&
++               f->field_size - f->header_size > (int32_t) sizeof(vsize)) {
++      memcpy(&vsize, data, sizeof(vsize));
++      data += sizeof(vsize);
++      if (vsize > 0 &&
++          vsize <= f->field_size - f->header_size - (int32_t) sizeof(vsize) &&
++          data[vsize - 1] == '\0') {
++        if (strcmp(f->name, "name") == 0)
++          ev->name = data;
++        else if (strcmp(f->name, "from name") == 0)
++          ev->from_name = data;
++      }
++    }
++
++    off = UV__KMSG_ALIGN(off + f->field_size);
++  }
++
++  if (ev->node_device == -1)
++    ev->node_device = ev->device;
++}
++
++
++static void uv__haiku_child_forget(struct uv__haiku_watcher* w,
++                                   ino_t node,
++                                   const char* name) {
++  unsigned int i;
++
++  i = 0;
++  while (i < w->nchildren) {
++    if (w->children[i].node != node ||
++        (name != NULL && strcmp(w->children[i].name, name) != 0)) {
++      i++;
++      continue;
++    }
++    uv__free(w->children[i].name);
++    w->children[i] = w->children[--w->nchildren];
++    if (w->next_child >= w->nchildren)
++      w->next_child = 0;
++  }
++}
++
++
++static const char* uv__haiku_child_remember(struct uv__haiku_watcher* w,
++                                            ino_t node,
++                                            const char* name) {
++  struct uv__haiku_child* c;
++  char* copy;
++
++  copy = uv__strdup(name);
++  if (copy == NULL)
++    return NULL;
++
++  uv__haiku_child_forget(w, node, NULL);
++
++  if (w->nchildren < UV__CHILD_CACHE_SIZE) {
++    c = &w->children[w->nchildren++];
++  } else {
++    /* Full: replace entries round robin. */
++    c = &w->children[w->next_child];
++    w->next_child = (w->next_child + 1) % UV__CHILD_CACHE_SIZE;
++    uv__free(c->name);
++  }
++
++  c->node = node;
++  c->name = copy;
++  return copy;
++}
++
++
++static const char* uv__haiku_child_lookup(struct uv__haiku_watcher* w,
++                                          ino_t node) {
++  const char* name;
++  struct dirent* d;
++  unsigned int i;
++  DIR* dir;
++  int fd;
++
++  for (i = 0; i < w->nchildren; i++)
++    if (w->children[i].node == node)
++      return w->children[i].name;
++
++  /* Open the watched directory by node, not by path: the path may be
++   * relative to a working directory that has since changed, or the
++   * directory may have been renamed.
++   */
++  fd = _kern_open_dir_entry_ref(w->device, w->node, NULL);
++  if (fd < 0)
++    return NULL;
++  uv__cloexec(fd, 1);
++
++  dir = fdopendir(fd);
++  if (dir == NULL) {
++    uv__close(fd);
++    return NULL;
++  }
++
++  name = NULL;
++  while ((d = readdir(dir)) != NULL) {
++    if (d->d_ino != node)
++      continue;
++    if (strcmp(d->d_name, ".") == 0 || strcmp(d->d_name, "..") == 0)
++      continue;
++    name = uv__haiku_child_remember(w, node, d->d_name);
++    break;
++  }
++
++  closedir(dir);
++  return name;
++}
++
++
++static void uv__haiku_stop_watching(struct uv__haiku_fsevents* fe,
++                                    struct uv__haiku_watcher* w) {
++  if (!w->watching)
++    return;
++
++  _kern_stop_watching(w->device, w->node, fe->port, w->token);
++  w->watching = 0;
++}
++
++
++/* Translates one message into at most two callbacks. The callback may stop
++ * or close the handle, so the watcher is looked up again by token before a
++ * second callback and nothing touches it after the last one.
++ */
++static void uv__haiku_dispatch(struct uv__haiku_fsevents* fe,
++                               const char* buf,
++                               size_t len) {
++  const struct uv__kmsg_header* h;
++  struct uv__haiku_watcher* w;
++  struct uv__haiku_event ev;
++  const char* second;
++  const char* first;
++  uv_fs_event_t* handle;
++  uint32_t token;
++  int self;
++  int events;
++
++  if (len < sizeof(*h))
++    return;
++
++  h = (const struct uv__kmsg_header*) buf;
++  if (h->magic != UV__KMSG_MAGIC || h->what != UV__B_NODE_MONITOR)
++    return;
++  if (h->size < (int32_t) sizeof(*h) || (size_t) h->size > len)
++    return;
++
++  token = (uint32_t) h->target_token;
++  w = uv__haiku_find(fe, token);
++  if (w == NULL || !w->watching)
++    return;  /* Stale: the handle was stopped while this was in flight. */
++
++  uv__haiku_parse(buf, h->size, &ev);
++
++  self = ev.node == w->node && ev.node_device == w->device;
++  first = NULL;
++  second = NULL;
++  events = 0;
++
++  switch (ev.opcode) {
++    case UV__B_ENTRY_CREATED:
++      if (!w->is_dir || ev.device != w->device ||
++          ev.directory != w->node || ev.name == NULL)
++        return;
++      events = UV_RENAME;
++      first = ev.name;
++      uv__haiku_child_remember(w, ev.node, ev.name);
++      break;
++
++    case UV__B_ENTRY_REMOVED:
++      if (self) {
++        /* The watched entry is gone. Like inotify after IN_DELETE_SELF,
++         * the handle stays active but reports nothing more; the node may
++         * be reused for an unrelated file, so stop listening to it now.
++         */
++        events = UV_RENAME;
++        first = uv__basename_r(w->path);
++        uv__haiku_stop_watching(fe, w);
++      } else if (w->is_dir && ev.device == w->device &&
++                 ev.directory == w->node && ev.name != NULL) {
++        events = UV_RENAME;
++        first = ev.name;
++        uv__haiku_child_forget(w, ev.node, ev.name);
++      } else {
++        return;
++      }
++      break;
++
++    case UV__B_ENTRY_MOVED:
++      if (self) {
++        /* Like IN_MOVE_SELF: report it and keep watching the node. */
++        events = UV_RENAME;
++        first = uv__basename_r(w->path);
++        break;
++      }
++      if (!w->is_dir || ev.device != w->device)
++        return;
++      events = UV_RENAME;
++      /* Out of, into, or within the directory: the old name and/or the new
++       * one, in that order, as inotify's IN_MOVED_FROM/IN_MOVED_TO pair.
++       */
++      if (ev.from_directory == w->node && ev.from_name != NULL) {
++        first = ev.from_name;
++        uv__haiku_child_forget(w, ev.node, ev.from_name);
++      }
++      if (ev.to_directory == w->node && ev.name != NULL) {
++        if (first == NULL)
++          first = ev.name;
++        else
++          second = ev.name;
++        uv__haiku_child_remember(w, ev.node, ev.name);
++      }
++      if (first == NULL)
++        return;
++      break;
++
++    case UV__B_STAT_CHANGED:
++      events = UV_CHANGE;
++      if (self)
++        first = uv__basename_r(w->path);
++      else if (w->is_dir && ev.device == w->device)
++        first = uv__haiku_child_lookup(w, ev.node);  /* NULL if unknown */
++      else
++        return;
++      break;
++
++    default:
++      return;
++  }
++
++  handle = w->handle;
++  handle->cb(handle, first, events, 0);
++
++  if (second == NULL)
++    return;
++
++  w = uv__haiku_find(fe, token);
++  if (w == NULL || w->handle != handle || !w->watching)
++    return;
++
++  handle->cb(handle, second, events, 0);
++}
++
++
++/* The UV__FS_EVENT_READ io callback: drains the port. */
++void uv__fs_event_read(uv_loop_t* loop, uv__io_t* io, unsigned int revents) {
++  struct uv__haiku_fsevents* fe;
++  char wake[32];
++  ssize_t size;
++  ssize_t n;
++  int32 count;
++  int32 code;
++  char* buf;
++  int woken;
++
++  fe = container_of(io, struct uv__haiku_fsevents, io);
++
++  woken = 0;
++  for (;;) {
++    n = read(fe->pipefd[0], wake, sizeof(wake));
++    if (n > 0) {
++      woken += n;
++      continue;
++    }
++    if (n == -1 && errno == EINTR)
++      continue;
++    break;
++  }
++
++  if (woken == 0)
++    return;
++
++  /* Only what is queued now, so a steady stream of events cannot keep the
++   * loop here. Anything newer makes the helper wake the loop again.
++   */
++  count = port_count(fe->port);
++
++  while (count-- > 0) {
++    size = port_buffer_size_etc(fe->port, B_RELATIVE_TIMEOUT, 0);
++    if (size < 0)
++      break;  /* B_WOULD_BLOCK: drained. */
++
++    if ((size_t) size > fe->buflen || fe->buf == NULL) {
++      buf = uv__realloc(fe->buf, size > 0 ? size : 1);
++      if (buf == NULL)
++        break;  /* Retried on the next wakeup. */
++      fe->buf = buf;
++      fe->buflen = size > 0 ? size : 1;
++    }
++
++    n = read_port_etc(fe->port, &code, fe->buf, fe->buflen,
++                      B_RELATIVE_TIMEOUT, 0);
++    if (n < 0)
++      break;
++
++    if (code == UV__PORT_MSG_CODE)
++      uv__haiku_dispatch(fe, fe->buf, n);
++  }
++
++  /* One release per wakeup byte: the helper wrote one before each wait. */
++  while (woken-- > 0)
++    release_sem(fe->drained);
++}
++
++
++static int uv__haiku_fsevents_start(uv_loop_t* loop,
++                                    struct uv__haiku_fsevents* fe) {
++  status_t s;
++  int err;
++
++  fe->port = -1;
++  fe->drained = -1;
++  fe->pipefd[0] = -1;
++  fe->pipefd[1] = -1;
++
++  fe->port = create_port(UV__PORT_CAPACITY, "libuv fs event");
++  if (fe->port < 0) {
++    err = UV__ERR(fe->port);
++    goto fail;
++  }
++
++  fe->drained = create_sem(0, "libuv fs event drained");
++  if (fe->drained < 0) {
++    err = UV__ERR(fe->drained);
++    goto fail;
++  }
++
++  err = uv__make_pipe(fe->pipefd, UV_NONBLOCK_PIPE);
++  if (err)
++    goto fail;
++
++  err = uv_thread_create(&fe->thread, uv__haiku_fsevents_thread, fe);
++  if (err)
++    goto fail;
++
++  /* Do not return before the helper is running. libroot runs a one-time
++   * initialisation (the threaded malloc setup, a pthread_once) on the first
++   * thread a process starts. If fork() lands while that is in progress the
++   * child inherits it half done, and every thread the child creates then
++   * blocks on it forever, including the helper uv_loop_fork() starts.
++   * Waiting here keeps the window inside this call.
++   */
++  do
++    s = acquire_sem(fe->drained);
++  while (s == B_INTERRUPTED);
++  if (s != B_OK) {
++    err = UV__ERR(s);
++    delete_port(fe->port);
++    fe->port = -1;
++    uv_thread_join(&fe->thread);
++    goto fail;
++  }
++
++  uv__io_init(&fe->io, UV__FS_EVENT_READ, fe->pipefd[0]);
++  uv__io_start(loop, &fe->io, POLLIN);
++  return 0;
++
++fail:
++  if (fe->pipefd[0] != -1)
++    uv__close(fe->pipefd[0]);
++  if (fe->pipefd[1] != -1)
++    uv__close(fe->pipefd[1]);
++  if (fe->drained >= 0)
++    delete_sem(fe->drained);
++  if (fe->port >= 0)
++    delete_port(fe->port);
++  fe->port = -1;
++  fe->drained = -1;
++  fe->pipefd[0] = -1;
++  fe->pipefd[1] = -1;
++  return err;
++}
++
++
++static int uv__haiku_fsevents_init(uv_loop_t* loop,
++                                   struct uv__haiku_fsevents** out) {
++  uv__loop_internal_fields_t* lfields;
++  struct uv__haiku_fsevents* fe;
++  int err;
++
++  lfields = uv__get_internal_fields(loop);
++  if (lfields->haiku_fsevents != NULL) {
++    *out = lfields->haiku_fsevents;
++    return 0;
++  }
++
++  fe = uv__calloc(1, sizeof(*fe));
++  if (fe == NULL)
++    return UV_ENOMEM;
++
++  RB_INIT(&fe->watchers);
++  fe->next_token = 1;
++
++  err = uv__haiku_fsevents_start(loop, fe);
++  if (err) {
++    uv__free(fe);
++    return err;
++  }
++
++  lfields->haiku_fsevents = fe;
++  *out = fe;
++  return 0;
++}
++
++
++/* Tears down the helper thread, the port, the semaphore and the pipe. Called
++ * from uv_loop_close(), after every handle has been closed.
++ */
++void uv__haiku_fsevents_loop_delete(uv_loop_t* loop) {
++  uv__loop_internal_fields_t* lfields;
++  struct uv__haiku_fsevents* fe;
++  struct uv__haiku_watcher* w;
++
++  lfields = uv__get_internal_fields(loop);
++  fe = lfields->haiku_fsevents;
++  if (fe == NULL)
++    return;
++
++  RB_FOREACH(w, uv__haiku_watchers, &fe->watchers)
++    uv__haiku_stop_watching(fe, w);
++
++  /* Either call makes the helper's blocking wait fail, so it returns. */
++  delete_port(fe->port);
++  delete_sem(fe->drained);
++  uv_thread_join(&fe->thread);
++
++  uv__io_close(loop, &fe->io);
++  uv__close(fe->pipefd[0]);
++  uv__close(fe->pipefd[1]);
++
++  uv__free(fe->buf);
++  uv__free(fe);
++  lfields->haiku_fsevents = NULL;
++}
++
++
++/* In a forked child the helper thread does not exist, and the port, the
++ * semaphore and the kernel listeners all belong to the parent team: the
++ * child must not delete them. Build fresh ones and re-register every handle
++ * that was still listening.
++ */
++int uv__haiku_fsevents_fork(uv_loop_t* loop) {
++  struct uv__haiku_fsevents* fe;
++  struct uv__haiku_watcher* w;
++  status_t s;
++  int err;
++
++  fe = uv__haiku_fsevents_get(loop);
++  if (fe == NULL)
++    return 0;
++
++  uv__io_close(loop, &fe->io);
++  uv__close(fe->pipefd[0]);
++  uv__close(fe->pipefd[1]);
++
++  err = uv__haiku_fsevents_start(loop, fe);
++  if (err)
++    return err;
++
++  RB_FOREACH(w, uv__haiku_watchers, &fe->watchers) {
++    if (!w->watching)
++      continue;
++    s = _kern_start_watching(w->device, w->node, uv__haiku_watch_flags(w),
++                             fe->port, w->token);
++    if (s != B_OK) {
++      w->watching = 0;
++      return UV__ERR(s);
++    }
++  }
++
++  return 0;
++}
++
++
++int uv_fs_event_init(uv_loop_t* loop, uv_fs_event_t* handle) {
++  uv__handle_init(loop, (uv_handle_t*)handle, UV_FS_EVENT);
++  return 0;
++}
++
++
++int uv_fs_event_start(uv_fs_event_t* handle,
++                      uv_fs_event_cb cb,
++                      const char* path,
++                      unsigned int flags) {
++  struct uv__haiku_fsevents* fe;
++  struct uv__haiku_watcher* w;
++  struct stat st;
++  size_t len;
++  status_t s;
++  int err;
++
++  if (uv__is_active(handle))
++    return UV_EINVAL;
++
++  /* UV_FS_EVENT_RECURSIVE is ignored, as on Linux: only the path itself and,
++   * for a directory, its direct children are watched.
++   */
++  if (stat(path, &st))
++    return UV__ERR(errno);
++
++  err = uv__haiku_fsevents_init(handle->loop, &fe);
++  if (err)
++    return err;
++
++  len = strlen(path);
++  w = uv__malloc(sizeof(*w) + len);
++  if (w == NULL)
++    return UV_ENOMEM;
++
++  memcpy(w->path, path, len + 1);
++  w->handle = handle;
++  w->device = st.st_dev;
++  w->node = st.st_ino;
++  w->is_dir = S_ISDIR(st.st_mode);
++  w->nchildren = 0;
++  w->next_child = 0;
++
++  /* Never hand out a token that is still in use, or 0. */
++  do
++    w->token = fe->next_token++;
++  while (w->token == 0 || uv__haiku_find(fe, w->token) != NULL);
++
++  s = _kern_start_watching(w->device, w->node, uv__haiku_watch_flags(w),
++                           fe->port, w->token);
++  if (s != B_OK) {
++    uv__free(w);
++    return UV__ERR(s);
++  }
++  w->watching = 1;
++
++  RB_INSERT(uv__haiku_watchers, &fe->watchers, w);
++
++  handle->path = w->path;
++  handle->cb = cb;
++  uv__handle_start(handle);
++
++  return 0;
++}
++
++
++int uv_fs_event_stop(uv_fs_event_t* handle) {
++  struct uv__haiku_fsevents* fe;
++  struct uv__haiku_watcher* w;
++
++  if (!uv__is_active(handle))
++    return 0;
++
++  fe = uv__haiku_fsevents_get(handle->loop);
++  w = uv__haiku_watcher_of(handle);
++  assert(fe != NULL);
++  assert(w->handle == handle);
++
++  uv__haiku_stop_watching(fe, w);
++  RB_REMOVE(uv__haiku_watchers, &fe->watchers, w);
++
++  while (w->nchildren > 0)
++    uv__free(w->children[--w->nchildren].name);
++  uv__free(w);
++
++  handle->path = NULL;
++  uv__handle_stop(handle);
++
++  return 0;
++}
++
++
++void uv__fs_event_close(uv_fs_event_t* handle) {
++  uv_fs_event_stop(handle);
++}
+diff --git a/src/unix/internal.h b/src/unix/internal.h
+index 80fe41f..887c143 100644
+--- a/src/unix/internal.h
++++ b/src/unix/internal.h
+@@ -309,7 +309,7 @@ void uv__udp_io(uv_loop_t* loop, uv__io_t* w, unsigned int events);
+ #define uv__inotify_read(loop, w, events) UNREACHABLE()
+ #endif
+ 
+-#ifndef __sun__
++#if !defined(__sun__) && !defined(__HAIKU__)
+ #define uv__fs_event_read(loop, w, events) UNREACHABLE()
+ #endif
+ 
+@@ -464,6 +464,13 @@ void uv__fsevents_loop_delete(uv_loop_t* loop);
+ 
+ #endif /* defined(__APPLE__) */
+ 
++#if defined(__HAIKU__)
++
++void uv__haiku_fsevents_loop_delete(uv_loop_t* loop);
++int uv__haiku_fsevents_fork(uv_loop_t* loop);
++
++#endif /* defined(__HAIKU__) */
++
+ UV_UNUSED(static void uv__update_time(uv_loop_t* loop)) {
+   /* Use a fast time source if available.  We only need millisecond precision.
+    */
+diff --git a/src/unix/posix-poll.c b/src/unix/posix-poll.c
+index 5b7d75c..17e93ed 100644
+--- a/src/unix/posix-poll.c
++++ b/src/unix/posix-poll.c
+@@ -42,13 +42,32 @@ int uv__platform_loop_init(uv_loop_t* loop) {
+ }
+ 
+ void uv__platform_loop_delete(uv_loop_t* loop) {
++#if defined(__HAIKU__)
++  uv__haiku_fsevents_loop_delete(loop);
++#endif
+   uv__free(loop->poll_fds);
+   loop->poll_fds = NULL;
+ }
+ 
+ int uv__io_fork(uv_loop_t* loop) {
++#if defined(__HAIKU__)
++  int err;
++
++  /* Not uv__platform_loop_delete(): the fs event port and thread belong to
++   * the parent and must not be torn down from the child.
++   */
++  uv__free(loop->poll_fds);
++  loop->poll_fds = NULL;
++
++  err = uv__platform_loop_init(loop);
++  if (err)
++    return err;
++
++  return uv__haiku_fsevents_fork(loop);
++#else
+   uv__platform_loop_delete(loop);
+   return uv__platform_loop_init(loop);
++#endif
+ }
+ 
+ /* Allocate or dynamically resize our poll fds array.  */
+diff --git a/src/uv-common.h b/src/uv-common.h
+index 5452a54..c858250 100644
+--- a/src/uv-common.h
++++ b/src/uv-common.h
+@@ -436,6 +436,9 @@ struct uv__loop_internal_fields_s {
+   struct uv__iou iou;
+   void* inv;  /* used by uv__platform_invalidate_fd() */
+ #endif  /* __linux__ */
++#ifdef __HAIKU__
++  struct uv__haiku_fsevents* haiku_fsevents;
++#endif  /* __HAIKU__ */
+ };
+ 
+ #if defined(_WIN32)
+-- 
+2.54.0 (Apple Git-157)
+
+From d533d3150d35c42fb9fb66d6d9aa87bead0c0c11 Mon Sep 17 00:00:00 2001
+From: DeBeOS <debeos@debene.dev>
+Date: Sat, 31 Oct 2026 20:23:54 -0500
+Subject: [PATCH 2/2] test: require fs event filenames on haiku
+
+Haiku now reports the file name for every event, so check it as strictly
+as on Linux, macOS and Windows instead of accepting NULL. Also run the
+directory variant of fork_fs_events_child, which until now only ran on
+macOS and Linux.
+---
+ test/test-fork.c     |  4 ++--
+ test/test-fs-event.c | 12 ++++++++----
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/test/test-fork.c b/test/test-fork.c
+index fe42f03..613a3fc 100644
+--- a/test/test-fork.c
++++ b/test/test-fork.c
+@@ -472,7 +472,7 @@ static void fs_event_cb_file_current_dir(uv_fs_event_t* handle,
+   ASSERT_OK(fs_event_cb_called);
+   ++fs_event_cb_called;
+   ASSERT_OK(status);
+-#if defined(__APPLE__) || defined(__linux__)
++#if defined(__APPLE__) || defined(__linux__) || defined(__HAIKU__)
+   ASSERT_OK(strcmp(filename, "watch_file"));
+ #else
+   ASSERT(filename == NULL || strcmp(filename, "watch_file") == 0);
+@@ -592,7 +592,7 @@ TEST_IMPL(fork_fs_events_child_dir) {
+ #if defined(NO_FS_EVENTS)
+   RETURN_SKIP(NO_FS_EVENTS);
+ #endif
+-#if defined(__APPLE__) || defined (__linux__)
++#if defined(__APPLE__) || defined (__linux__) || defined(__HAIKU__)
+   return _do_fork_fs_events_child(FS_TEST_DIR);
+ #else
+   /* You can't spin up a cfrunloop thread on an apple platform
+diff --git a/test/test-fs-event.c b/test/test-fs-event.c
+index f224181..62a16e4 100644
+--- a/test/test-fs-event.c
++++ b/test/test-fs-event.c
+@@ -136,7 +136,8 @@ static void fs_event_cb_dir(uv_fs_event_t* handle, const char* filename,
+   ASSERT_PTR_EQ(handle, &fs_event);
+   ASSERT_OK(status);
+   ASSERT_EQ(events, UV_CHANGE);
+-  #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
++  #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__) || \
++      defined(__HAIKU__)
+   ASSERT_OK(strcmp(filename, "file1"));
+   #else
+   ASSERT(filename == NULL || strcmp(filename, "file1") == 0);
+@@ -232,7 +233,8 @@ static void fs_event_cb_dir_multi_file(uv_fs_event_t* handle,
+   ASSERT_PTR_EQ(handle, &fs_event);
+   ASSERT_OK(status);
+   ASSERT(events == UV_CHANGE || events == UV_RENAME);
+-#if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
++#if defined(__APPLE__) || defined(_WIN32) || defined(__linux__) || \
++    defined(__HAIKU__)
+   ASSERT_NOT_NULL(filename);
+   ASSERT_MEM_EQ(filename, file_prefix, sizeof(file_prefix) - 1);
+ #else
+@@ -359,7 +361,8 @@ static void fs_event_cb_file(uv_fs_event_t* handle, const char* filename,
+   ASSERT_PTR_EQ(handle, &fs_event);
+   ASSERT_OK(status);
+   ASSERT_EQ(events, UV_CHANGE);
+-  #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
++  #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__) || \
++      defined(__HAIKU__)
+   ASSERT_OK(strcmp(filename, "file2"));
+   #else
+   ASSERT(filename == NULL || strcmp(filename, "file2") == 0);
+@@ -375,7 +378,8 @@ static void fs_event_cb_file_current_dir(uv_fs_event_t* handle,
+   ASSERT_PTR_EQ(handle, &fs_event);
+   ASSERT_OK(status);
+   ASSERT_EQ(events, UV_CHANGE);
+-  #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
++  #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__) || \
++      defined(__HAIKU__)
+   ASSERT_OK(strcmp(filename, "watch_file"));
+   #else
+   ASSERT(filename == NULL || strcmp(filename, "watch_file") == 0);
+-- 
+2.54.0 (Apple Git-157)
+
