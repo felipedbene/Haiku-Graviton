@@ -44,6 +44,15 @@ null_freecookie(void *cookie)
 static status_t
 null_ioctl(void *cookie, uint32 op, void *buffer, size_t length)
 {
+	switch (op) {
+		case B_SET_BLOCKING_IO:
+		case B_SET_NONBLOCKING_IO:
+			// devfs forwards every fcntl(F_SETFL) here and fails it with
+			// whatever we return. None of these devices ever blocks, so
+			// either mode is already in effect.
+			return B_OK;
+	}
+
 	return EPERM;
 }
 
