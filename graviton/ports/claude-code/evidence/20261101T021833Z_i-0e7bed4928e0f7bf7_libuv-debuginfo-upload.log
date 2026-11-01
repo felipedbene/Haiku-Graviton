@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: libuv-debuginfo-upload
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T021833Z   end: 20261101T021856Z   rc: 0
+# script sha256: 8255fbb4aac0a8201da92449ab0ca1adc81bebad2283533b3941396072c26e5e
+# ---- script ----
+# | cd /boot/home/haikuports/packages && ls -l libuv_debuginfo-1.52.1-2-arm64.hpkg && sha256sum libuv_debuginfo-1.52.1-2-arm64.hpkg
+# | package list -i libuv_debuginfo-1.52.1-2-arm64.hpkg 2>/dev/null | grep -E "name:|version:|provides:|requires:"
+# | /boot/system/bin/curl -sSf -X PUT --upload-file libuv_debuginfo-1.52.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv_debuginfo-1.52.1-2-arm64.hpkg?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+-rw-r--r-- 1 baron root 210972 Nov  1 01:29 libuv_debuginfo-1.52.1-2-arm64.hpkg
+b30046d46dfb9a656f00f808037ece4dd57a2348945970997b4e1e8ed630b546  libuv_debuginfo-1.52.1-2-arm64.hpkg
+	name: libuv_debuginfo
+	version: 1.52.1-2
+	provides: libuv_debuginfo = 1.52.1
+	provides: debuginfo:libuv.so.1.0.0(libuv) = 1.52.1
+	requires: libuv==1.52.1
+upload-ok

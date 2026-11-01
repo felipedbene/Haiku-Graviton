@@ -97,8 +97,9 @@ Triage of the remaining failures (`20261101T004721Z_i-0e7bed4928e0f7bf7_node-fai
 3. **Published to green on 2026-11-01 (owner's approval):** nodejs24 24.21.0-1 + _devel,
    claude_code 2.1.314-1, libuv 1.52.1-2 + _devel (the Haiku fs-event backend). Green went
    3289 → 3292 objects (libuv 1.52.1-1 replaced); `pkgman search` on a Haiku box resolves all
-   five from the DeBeOS repo; prod and beta indexes invalidated. libuv_debuginfo remains
-   1.52.1-1 (not republished). Earlier note, kept for the record: publishing was held until approval. claude_code redistributes
+   five from the DeBeOS repo; prod and beta indexes invalidated. libuv_debuginfo 1.52.1-2
+   followed in a second publish (3292 objects, 1.52.1-1 replaced); a Haiku box resolves
+   libuv, libuv_devel and libuv_debuginfo all at 1.52.1-2 from the DeBeOS repo. Earlier note, kept for the record: publishing was held until approval. claude_code redistributes
    Anthropic's proprietary bundle under its own terms (`LICENSE`: Anthropic Legal
    Agreements) — whether DeBeOS may publish it is a licensing decision for the owner.
 4. Defects filed during this work: #867 (wave builder S3 client), #868 (bash /dev/fd),

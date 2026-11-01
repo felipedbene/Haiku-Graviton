@@ -1,0 +1,14 @@
+# evidence: green-resolve-libuv
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T022456Z   end: 20261101T022520Z   rc: 0
+# script sha256: 454214acd5cc8ac4eec64416b1cc1ddfbffa82d78c3a29727f663788626d7eba
+# ---- script ----
+# | pkgman refresh 2>&1 | tail -1
+# | pkgman search -a -D libuv 2>&1 | grep -E " libuv(_devel|_debuginfo)? "
+# ---- raw output ----
+Activating repository cache for DeBeOS ...
+<system>    libuv                                    1.52.1-2                       arm64 
+DeBeOS      libuv                                    1.52.1-2                       arm64 
+DeBeOS      libuv_debuginfo                          1.52.1-2                       arm64 
+<system>    libuv_devel                              1.52.1-2                       arm64 
+DeBeOS      libuv_devel                              1.52.1-2                       arm64 
