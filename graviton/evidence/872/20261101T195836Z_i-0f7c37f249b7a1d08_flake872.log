@@ -1,0 +1,24 @@
+# evidence: flake872
+# instance: i-0f7c37f249b7a1d08   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T195836Z   end: 20261101T195917Z   rc: 0
+# script sha256: 1752f97dee76d4d6de0a49131956bfa7bd992c155424c760eee866cd6171fbef
+# ---- script ----
+# | cd /boot/home/td/node-v24.21.0
+# | for L in "" /boot/home/td/lib-872; do
+# | 	pass=0; fail=0
+# | 	for i in $(seq 20); do
+# | 		if LIBRARY_PATH=$L node --expose-internals test/parallel/test-child-process-exec-kill-throws.js > /dev/null 2>&1; then pass=$((pass+1)); else fail=$((fail+1)); fi
+# | 	done
+# | 	echo "test-child-process-exec-kill-throws LIBRARY_PATH=${L:-<system>}: pass=$pass fail=$fail of 20"
+# | done
+# | echo "--- os.cpus() with system libroot and libroot 881"
+# | node -e 'console.log("cpus:", require("os").cpus().length)'
+# | LIBRARY_PATH=/boot/home/td/lib-881 node -e 'console.log("cpus:", require("os").cpus().length)'
+# | LIBRARY_PATH=/boot/home/td/lib-881 node test/parallel/test-os-process-priority.js && echo "test-os-process-priority with 881: ok"
+# ---- raw output ----
+test-child-process-exec-kill-throws LIBRARY_PATH=<system>: pass=20 fail=0 of 20
+test-child-process-exec-kill-throws LIBRARY_PATH=/boot/home/td/lib-872: pass=20 fail=0 of 20
+--- os.cpus() with system libroot and libroot 881
+cpus: 0
+cpus: 0
+test-os-process-priority with 881: ok
