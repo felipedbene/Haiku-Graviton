@@ -1,0 +1,49 @@
+# evidence: xnic-server-fixed
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T161452Z   end: 20261101T161554Z   rc: 0
+# script sha256: 7437b0bdebc4dbc45ab0696d02511f2f86284193d85b72ea3ea3b81d453e5664
+# ---- script ----
+# | cd /boot/home/t871 && echo 'Ly8gYnVsay5tanMgLS0gYSBzaG9ydCBpcGVyZi1zdHlsZSB0cmFuc2ZlciB0aHJvdWdoIGFuIGFjY2VwdGVkIHNvY2tldC4KLy8gICBub2RlIGJ1bGsubWpzIHNlcnZlciA8cG9ydD4gW2NvdW50XSAgICAgICAgICAgc2luayAob3Igc291cmNlLCBpZiB0aGUgY2xpZW50IGFza3MpIG9uIGFjY2VwdDsKLy8gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZXhpdHMgYWZ0ZXIgPGNvdW50PiBjb25uZWN0aW9ucyBjbG9zZWQKLy8gICBub2RlIGJ1bGsubWpzIGNsaWVudCA8aG9zdD4gPHBvcnQ+IDxNaUI+IDx1cHxkb3duPgovLyBQcmludHMgTWlCLCBzZWNvbmRzIGFuZCBNaUIvcyBmcm9tIHRoZSBjbGllbnQncyBzaWRlOyB0aGUgc2VydmVyIHNpZGUgbG9ncyBpdHMgb3duIGJ5dGUgY291bnQuCmltcG9ydCBuZXQgZnJvbSAibm9kZTpuZXQiOwpjb25zdCBbbW9kZSwgYSwgYiwgYywgZF0gPSBwcm9jZXNzLmFyZ3Yuc2xpY2UoMik7CmNvbnN0IGNodW5rID0gQnVmZmVyLmFsbG9jKDEgPDwgMjAsIDB4NWEpOwppZiAobW9kZSA9PT0gInNlcnZlciIpIHsKCWNvbnN0IGNvdW50ID0gKyhiID8/IDApOyBsZXQgY2xvc2VkID0gMDsKCXNldFRpbWVvdXQoKCkgPT4geyBjb25zb2xlLmxvZygic2VydmVyOiBnYXZlIHVwIHdhaXRpbmciKTsgcHJvY2Vzcy5leGl0KDEpOyB9LCA2MDAwMDApLnVucmVmKCk7CgluZXQuY3JlYXRlU2VydmVyKChzKSA9PiB7CgkJbGV0IGdvdCA9IDAsIGRpciA9IG51bGwsIHdhbnQgPSAwOwoJCXMub25jZSgiZGF0YSIsIChoKSA9PiB7CgkJCVtkaXIsIHdhbnRdID0gaC5zdWJhcnJheSgwLCA2NCkudG9TdHJpbmcoKS5zcGxpdCgiICIpOyB3YW50ID0gK3dhbnQ7IGdvdCA9IGgubGVuZ3RoIC0gNjQ7CgkJCWlmIChkaXIgPT09ICJkb3duIikgeyBsZXQgbGVmdCA9IHdhbnQ7IGNvbnN0IHB1bXAgPSAoKSA9PiB7IHdoaWxlIChsZWZ0ID4gMCkgeyBsZWZ0LS07IGlmICghcy53cml0ZShjaHVuaykpIHJldHVybiBzLm9uY2UoImRyYWluIiwgcHVtcCk7IH0gcy5lbmQoKTsgfTsgcHVtcCgpOyB9CgkJCWVsc2Ugcy5vbigiZGF0YSIsICh4KSA9PiB7IGdvdCArPSB4Lmxlbmd0aDsgfSk7CgkJfSk7CgkJcy5vbigiZW5kIiwgKCkgPT4geyBpZiAoZGlyID09PSAidXAiKSB7IGNvbnNvbGUubG9nKGBzZXJ2ZXI6IHJlY2VpdmVkICR7Z290fSBieXRlc2ApOyBzLmVuZCgib2siKTsgfSB9KTsKCQlzLm9uKCJjbG9zZSIsICgpID0+IHsgY29uc29sZS5sb2coYHNlcnZlcjogJHtkaXJ9IGNvbm5lY3Rpb24gY2xvc2VkYCk7IGlmIChjb3VudCAmJiArK2Nsb3NlZCA9PT0gY291bnQpIHByb2Nlc3MuZXhpdCgwKTsgfSk7CgkJcy5vbigiZXJyb3IiLCAoZSkgPT4gY29uc29sZS5sb2coInNlcnZlciBlcnJvciAiICsgZS5jb2RlKSk7Cgl9KS5saXN0ZW4oK2EsICIwLjAuMC4wIiwgKCkgPT4gY29uc29sZS5sb2coImxpc3RlbmluZyAiICsgYSkpOwp9IGVsc2UgewoJY29uc3QgbWliID0gK2MsIGRpciA9IGQsIHQwID0gcHJvY2Vzcy5ocnRpbWUuYmlnaW50KCk7IGxldCBnb3QgPSAwOwoJY29uc3QgayA9IG5ldC5jb25uZWN0KHsgaG9zdDogYSwgcG9ydDogK2IgfSwgKCkgPT4gewoJCWsud3JpdGUoYCR7ZGlyfSAke21pYn0gYC5wYWRFbmQoNjQpKTsKCQlpZiAoZGlyID09PSAidXAiKSB7IGxldCBsZWZ0ID0gbWliOyBjb25zdCBwdW1wID0gKCkgPT4geyB3aGlsZSAobGVmdCA+IDApIHsgbGVmdC0tOyBpZiAoIWsud3JpdGUoY2h1bmspKSByZXR1cm4gay5vbmNlKCJkcmFpbiIsIHB1bXApOyB9IGsuZW5kKCk7IH07IHB1bXAoKTsgfQoJfSk7CglrLm9uKCJkYXRhIiwgKHgpID0+IHsgZ290ICs9IHgubGVuZ3RoOyB9KTsKCWsub24oImNsb3NlIiwgKCkgPT4geyBjb25zdCBzID0gTnVtYmVyKHByb2Nlc3MuaHJ0aW1lLmJpZ2ludCgpIC0gdDApIC8gMWU5OyBjb25zb2xlLmxvZyhKU09OLnN0cmluZ2lmeSh7IGRpciwgbWliLCBzZWNvbmRzOiArcy50b0ZpeGVkKDMpLCBtaWJwczogKyhtaWIgLyBzKS50b0ZpeGVkKDEpLCBkb3duQnl0ZXM6IGdvdCB9KSk7IH0pOwoJay5vbigiZXJyb3IiLCAoZSkgPT4gY29uc29sZS5sb2coImNsaWVudCBlcnJvciAiICsgZS5jb2RlKSk7Cn0K' | base64 -d > bulk.mjs && echo 'Ly8gY3Jvc3MubWpzIC0tIHRoZSBoYWxmLWNsb3NlLm1qcyBzY2VuYXJpbyBhY3Jvc3MgdGhlIHJlYWwgTklDIChFTkEpLCBub3QgbG9vcGJhY2suCi8vICAgbm9kZSBjcm9zcy5tanMgc2VydmVyIDxwb3J0PiA8Y291bnQ+ICAgYWNjZXB0IDxjb3VudD4gY29ubmVjdGlvbnM7IGVhY2ggYW5zd2VycyBlbmQoImhpIikKLy8gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBhbmQgbG9ncyBtcyBmcm9tIGFjY2VwdCB0byB0aGUgc2VydmVyLXNpZGUgJ2VuZCcvJ2Nsb3NlJwovLyAgIG5vZGUgY3Jvc3MubWpzIGNsaWVudCA8aG9zdD4gPHBvcnQ+IDxjb3VudD4KLy8gVGhlIHNlcnZlciBleGl0cyBvbmNlIGV2ZXJ5IGNvbm5lY3Rpb24gY2xvc2VkLCBvciA4IHMgYWZ0ZXIgdGhlIGZpcnN0IGFjY2VwdCB3aXRoCi8vIHRoZSBvbmVzIHN0aWxsIG9wZW4gKDE4MCBzIGlmIG5vIGNsaWVudCBldmVyIGNvbWVzKS4KaW1wb3J0IG5ldCBmcm9tICJub2RlOm5ldCI7CmNvbnN0IFttb2RlLCBhLCBiLCBjXSA9IHByb2Nlc3MuYXJndi5zbGljZSgyKTsKaWYgKG1vZGUgPT09ICJzZXJ2ZXIiKSB7Cgljb25zdCBwb3J0ID0gK2EsIGNvdW50ID0gK2I7IGxldCBkb25lID0gMDsgY29uc3QgcmVzID0gW107CglsZXQgYXJtZWQgPSBmYWxzZTsKCWNvbnN0IHMgPSBuZXQuY3JlYXRlU2VydmVyKChzb2NrKSA9PiB7CgkJaWYgKCFhcm1lZCkgeyBhcm1lZCA9IHRydWU7IHNldFRpbWVvdXQoZmluLCA4MDAwICsgY291bnQgKiA1MCkudW5yZWYoKTsgfQoJCWNvbnN0IHQwID0gRGF0ZS5ub3coKTsgbGV0IGVuZCA9IC0xOwoJCXNvY2sub24oImVuZCIsICgpID0+IHsgZW5kID0gRGF0ZS5ub3coKSAtIHQwOyB9KTsKCQlzb2NrLm9uKCJjbG9zZSIsICgpID0+IHsgcmVzLnB1c2goYGVuZD0ke2VuZH1tcyBjbG9zZT0ke0RhdGUubm93KCkgLSB0MH1tc2ApOyBpZiAoKytkb25lID09PSBjb3VudCkgZmluKCk7IH0pOwoJCXNvY2sub24oImVycm9yIiwgKGUpID0+IHJlcy5wdXNoKCJlcnJvciAiICsgZS5jb2RlKSk7CgkJc29jay5lbmQoImhpIik7Cgl9KTsKCWNvbnN0IGZpbiA9ICgpID0+IHsgY29uc29sZS5sb2coSlNPTi5zdHJpbmdpZnkoeyBjbG9zZWQ6IGRvbmUsIG9mOiBjb3VudCwgcmVzIH0pKTsgcHJvY2Vzcy5leGl0KGRvbmUgPT09IGNvdW50ID8gMCA6IDEpOyB9OwoJcy5saXN0ZW4ocG9ydCwgIjAuMC4wLjAiLCAoKSA9PiBjb25zb2xlLmxvZygibGlzdGVuaW5nICIgKyBwb3J0KSk7CglzZXRUaW1lb3V0KGZpbiwgMTgwMDAwKS51bnJlZigpOwp9IGVsc2UgewoJY29uc3QgaG9zdCA9IGEsIHBvcnQgPSArYiwgY291bnQgPSArYzsgbGV0IG4gPSAwOwoJY29uc3Qgb25lID0gKCkgPT4geyBjb25zdCBrID0gbmV0LmNvbm5lY3QoeyBob3N0LCBwb3J0IH0pOyBrLm9uKCJkYXRhIiwgKCkgPT4ge30pOyBrLm9uKCJjbG9zZSIsICgpID0+IHsgaWYgKCsrbiA8IGNvdW50KSBvbmUoKTsgfSk7IGsub24oImVycm9yIiwgKGUpID0+IGNvbnNvbGUubG9nKCJjbGllbnQgZXJyb3IgIiArIGUuY29kZSkpOyB9OwoJb25lKCk7Cn0K' | base64 -d > cross.mjs
+# | uname -v; listimage 1 | grep 'protocols/tcp'; ifconfig 2>/dev/null | grep -m1 'inet addr'
+# | node cross.mjs server 19600 20 & A=$!; node bulk.mjs server 19601 6 & B=$!; wait $A; echo "cross server rc=$?"; wait $B; echo "bulk server rc=$?"; netstat -n | grep -E ":1960[01] " | head -30
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+ 2160 0xffff00000239c000 0xffff0000023ad000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+	inet addr: 127.0.0.1, Mask: 255.0.0.0
+listening 19600
+listening 19601
+{"closed":20,"of":20,"res":["end=2ms close=3ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=0ms close=0ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=1ms close=1ms","end=0ms close=0ms","end=1ms close=1ms","end=0ms close=0ms","end=1ms close=1ms"]}
+cross server rc=0
+server: received 1073741824 bytes
+server: up connection closed
+server: down connection closed
+server: received 1073741824 bytes
+server: up connection closed
+server: down connection closed
+server: received 1073741824 bytes
+server: up connection closed
+server: down connection closed
+bulk server rc=0
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64190  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64216  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64219  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64221  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64252  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64276  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64285  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64306  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64318  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64327  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64343  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64362  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64368  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64371  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64375  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64392  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64410  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64415  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64422  time-wait    6324
+tcp         0      0 [10.128.7.140]:19600  [10.128.10.60]:64438  time-wait    6324
+tcp         0      0 [10.128.7.140]:19601  [10.128.10.60]:64455  time-wait    6325
+tcp         0      0 [10.128.7.140]:19601  [10.128.10.60]:64535  time-wait    6325
+tcp         0      0 [10.128.7.140]:19601  [10.128.10.60]:64569  time-wait    6325

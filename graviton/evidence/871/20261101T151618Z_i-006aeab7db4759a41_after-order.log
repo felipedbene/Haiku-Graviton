@@ -1,0 +1,28 @@
+# evidence: after-order
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T151618Z   end: 20261101T151641Z   rc: 0
+# script sha256: 1b46b7aa5f0f1b2ff158b2ef9d8537369715f4069fdcb4c2bb629fd11027f1aa
+# ---- script ----
+# | cd /boot/home/t871 && echo 'Lyogb3JkZXIuYyAtLSB0aGUgdGVzdC1odHRwLXdyaXRhYmxlLXRydWUtYWZ0ZXItY2xvc2Ugb3JkZXJpbmcsIGluIEMuCiAqIHMxIGlzIGFuIGFjY2VwdGVkIHNvY2tldCB3aG9zZSBwZWVyIChjMSkgY2xvc2VzOyBhdCB0aGUgc2FtZSBtb21lbnQgYW4KICogdW5yZWxhdGVkIHNlcnZlciB3cml0ZXMgdG8gYzIuIFRoZW4gcG9sbCgpIGJvdGggczEgYW5kIGMyIGFuZCByZWNvcmQgd2hpY2gKICogYmVjb21lcyByZWFkYWJsZSBmaXJzdCwgYW5kIGhvdyBmYXIgYXBhcnQuICovCiNpbmNsdWRlIDxhcnBhL2luZXQuaD4KI2luY2x1ZGUgPG5ldGluZXQvaW4uaD4KI2luY2x1ZGUgPHBvbGwuaD4KI2luY2x1ZGUgPHN0ZGlvLmg+CiNpbmNsdWRlIDxzdHJpbmcuaD4KI2luY2x1ZGUgPHN5cy9zb2NrZXQuaD4KI2luY2x1ZGUgPHRpbWUuaD4KI2luY2x1ZGUgPHN0ZGxpYi5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CgpzdGF0aWMgZG91YmxlIG5vdyh2b2lkKSB7IHN0cnVjdCB0aW1lc3BlYyB0OyBjbG9ja19nZXR0aW1lKENMT0NLX01PTk9UT05JQywgJnQpOyByZXR1cm4gdC50dl9zZWMgKiAxZTMgKyB0LnR2X25zZWMgLyAxZTY7IH0KCnN0YXRpYyB2b2lkIHBhaXIoaW50KiBzcnYsIGludCogY2xpKQp7CglzdHJ1Y3Qgc29ja2FkZHJfaW4gYTsgc29ja2xlbl90IGwgPSBzaXplb2YoYSk7CgltZW1zZXQoJmEsIDAsIHNpemVvZihhKSk7IGEuc2luX2ZhbWlseSA9IEFGX0lORVQ7IGEuc2luX2FkZHIuc19hZGRyID0gaHRvbmwoSU5BRERSX0xPT1BCQUNLKTsKCWludCBMID0gc29ja2V0KEFGX0lORVQsIFNPQ0tfU1RSRUFNLCAwKTsKCWJpbmQoTCwgKHN0cnVjdCBzb2NrYWRkciopJmEsIGwpOyBsaXN0ZW4oTCwgMSk7IGdldHNvY2tuYW1lKEwsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhLCAmbCk7CgkqY2xpID0gc29ja2V0KEFGX0lORVQsIFNPQ0tfU1RSRUFNLCAwKTsKCWNvbm5lY3QoKmNsaSwgKHN0cnVjdCBzb2NrYWRkciopJmEsIGwpOwoJKnNydiA9IGFjY2VwdChMLCBOVUxMLCBOVUxMKTsgY2xvc2UoTCk7Cn0KCmludCBtYWluKGludCBhcmdjLCBjaGFyKiogYXJndikKewoJaW50IHJvdW5kcyA9IGFyZ2MgPiAxID8gYXRvaShhcmd2WzFdKSA6IDIwLCBmaW5GaXJzdCA9IDAsIGRhdGFGaXJzdCA9IDAsIHRvZ2V0aGVyID0gMDsKCWZvciAoaW50IHIgPSAwOyByIDwgcm91bmRzOyByKyspIHsKCQlpbnQgczEsIGMxLCBzMiwgYzI7CgkJcGFpcigmczEsICZjMSk7IHBhaXIoJnMyLCAmYzIpOwoJCWRvdWJsZSB0MCA9IG5vdygpOwoJCWNsb3NlKGMxKTsJCQkvKiBleHRlcm5hbC5hYm9ydCgpICovCgkJd3JpdGUoczIsICJ4IiwgMSk7CS8qIHJlcy5lbmQoJ0hlbGxvIFdvcmxkJykgb24gdGhlIGludGVybmFsIHNlcnZlciAqLwoJCWRvdWJsZSB0RmluID0gLTEsIHREYXRhID0gLTE7CgkJd2hpbGUgKHRGaW4gPCAwIHx8IHREYXRhIDwgMCkgewoJCQlzdHJ1Y3QgcG9sbGZkIHBbMl0gPSB7IHsgczEsIFBPTExJTiwgMCB9LCB7IGMyLCBQT0xMSU4sIDAgfSB9OwoJCQlpZiAocG9sbChwLCAyLCAyMDAwKSA8PSAwKSBicmVhazsKCQkJZG91YmxlIHQgPSBub3coKSAtIHQwOwoJCQlpZiAodEZpbiA8IDAgJiYgcFswXS5yZXZlbnRzKSB0RmluID0gdDsKCQkJaWYgKHREYXRhIDwgMCAmJiBwWzFdLnJldmVudHMpIHREYXRhID0gdDsKCQkJaWYgKHREYXRhID49IDApIHsgY2hhciBiWzhdOyByZWFkKGMyLCBiLCBzaXplb2YoYikpOyBwWzFdLmV2ZW50cyA9IDA7IH0KCQkJaWYgKHREYXRhID49IDAgJiYgdEZpbiA8IDApIHsgLyoga2VlcCB3YWl0aW5nIG9uIHMxIG9ubHkgKi8KCQkJCXN0cnVjdCBwb2xsZmQgcSA9IHsgczEsIFBPTExJTiwgMCB9OwoJCQkJaWYgKHBvbGwoJnEsIDEsIDIwMDApID4gMCkgdEZpbiA9IG5vdygpIC0gdDA7CgkJCQlicmVhazsKCQkJfQoJCX0KCQlpZiAodEZpbiA9PSB0RGF0YSkgdG9nZXRoZXIrKzsgZWxzZSBpZiAodEZpbiA8IHREYXRhKSBmaW5GaXJzdCsrOyBlbHNlIGRhdGFGaXJzdCsrOwoJCXByaW50Zigicm91bmQgJTJkOiBzMSBFT0YgcmVhZGFibGUgYXQgJS4zZiBtcywgYzIgZGF0YSByZWFkYWJsZSBhdCAlLjNmIG1zXG4iLCByLCB0RmluLCB0RGF0YSk7CgkJY2xvc2UoczEpOyBjbG9zZShzMik7IGNsb3NlKGMyKTsKCX0KCXByaW50ZigiZmluLWZpcnN0PSVkIGRhdGEtZmlyc3Q9JWQgc2FtZS1wb2xsPSVkXG4iLCBmaW5GaXJzdCwgZGF0YUZpcnN0LCB0b2dldGhlcik7CglyZXR1cm4gMDsKfQo=' | base64 -d > order.c && gcc -O2 -w -o order order.c -lnetwork && ./order 20
+# ---- raw output ----
+round  0: s1 EOF readable at 0.062 ms, c2 data readable at 0.062 ms
+round  1: s1 EOF readable at 0.028 ms, c2 data readable at 0.028 ms
+round  2: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round  3: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round  4: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round  5: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round  6: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round  7: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round  8: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+round  9: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round 10: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+round 11: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round 12: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round 13: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+round 14: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+round 15: s1 EOF readable at 0.026 ms, c2 data readable at 0.026 ms
+round 16: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+round 17: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+round 18: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+round 19: s1 EOF readable at 0.025 ms, c2 data readable at 0.025 ms
+fin-first=0 data-first=0 same-poll=20

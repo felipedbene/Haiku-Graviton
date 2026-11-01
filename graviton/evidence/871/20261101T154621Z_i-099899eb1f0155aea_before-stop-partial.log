@@ -1,0 +1,11 @@
+# evidence: before-stop-partial
+# instance: i-099899eb1f0155aea   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T154621Z   end: 20261101T154644Z   rc: 0
+# script sha256: 85e1994994a38cd31593c9a758a8a51ca99990002868b8cb9959651ce3bc6ec3
+# ---- script ----
+# | for id in $(ps | grep "tools/test.py" | grep -v grep | awk '{print $(NF-3)}'); do kill $id; done
+# | sleep 3
+# | for id in $(ps | grep "/boot/system/bin/node /boot/home/t871/node-v24.21.0/test" | grep -v grep | awk '{print $(NF-3)}'); do kill -9 $id; done
+# | sleep 1; ps | grep -cE "test.py|bin/node"
+# ---- raw output ----
+1

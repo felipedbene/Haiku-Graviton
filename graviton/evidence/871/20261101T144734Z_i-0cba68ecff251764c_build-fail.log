@@ -1,0 +1,127 @@
+# evidence: build-fail
+# instance: i-0cba68ecff251764c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T144734Z   end: 20261101T144757Z   rc: 0
+# script sha256: 08b18a9cdb31882f1fa3098cd0e33f757b6aca3f47694b8331f9f7e00923f7da
+# ---- script ----
+# | cd /boot/home/hg/generated; grep -B30 "\.\.\.failed" jam-tcp.log | head -120
+# ---- raw output ----
+C++ objects/haiku_host/release/build/libroot/errors.o 
+C++ objects/haiku_host/release/build/libroot/find_directory.o 
+C++ objects/haiku_host/release/build/libroot/fs.o 
+C++ objects/haiku_host/release/build/libpackage/ActivationTransaction.o 
+C++ objects/haiku_host/release/build/libshared/Keymap.o 
+MkDir1 objects/haiku_host/release/build/libbe/app 
+C++ objects/haiku_host/release/tools/package/command_add.o 
+C++ objects/haiku_host/release/tools/resattr/resattr.o 
+C++ objects/haiku_host/release/tools/rc/rc.o 
+MkDir1 objects/haiku_host/release/tools/gensyscalls/arm64 
+Yacc1 objects/haiku_host/common/tools/rc/parser.cpp objects/haiku_host/common/tools/rc/parser.hpp 
+C++ objects/haiku_host/release/tools/rc/decompile.o 
+C++ objects/haiku_host/release/tools/rc/rdef.o 
+C++ objects/haiku_host/release/tools/package/command_checksum.o 
+C++ objects/haiku_host/release/tools/package/command_create.o 
+C++ objects/haiku_host/release/tools/package/command_dump.o 
+C++ objects/haiku_host/release/tools/package/command_extract.o 
+C++ objects/haiku_host/release/tools/package/command_info.o 
+C++ objects/haiku_host/release/tools/package/command_list.o 
+MkDir1 objects/haiku/arm64/release/system/kernel/cache 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network 
+MkDir1 objects/haiku/arm64/release/system/kernel/debug 
+MkDir1 objects/haiku/arm64/release/system/kernel/device_manager 
+MkDir1 objects/haiku/arm64/release/system/kernel/disk_device_manager 
+DownloadLocatedFile1 download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg 
+C++ objects/haiku_host/release/build/libbe/app/Application.o 
+
+bison -d -o objects/haiku_host/common/tools/rc/parser.cpp ../src/bin/rc/parser.y
+[ -f objects/haiku_host/common/tools/rc/parser.cpp.h ] && mv objects/haiku_host/common/tools/rc/parser.cpp.h objects/haiku_host/common/tools/rc/parser.hpp || true
+
+...failed Yacc1 objects/haiku_host/common/tools/rc/parser.cpp objects/haiku_host/common/tools/rc/parser.hpp ...
+--
+C++ objects/haiku_host/release/build/libbe/interface/Gradient.o 
+C++ objects/haiku_host/release/build/libbe/interface/GradientLinear.o 
+C++ objects/haiku_host/release/build/libbe/interface/GradientRadial.o 
+C++ objects/haiku_host/release/build/libbe/interface/GradientRadialFocus.o 
+C++ objects/haiku_host/release/build/libbe/interface/GradientDiamond.o 
+C++ objects/haiku_host/release/build/libbe/interface/GradientConic.o 
+C++ objects/haiku_host/release/build/libbe/interface/GraphicsDefs.o 
+C++ objects/haiku_host/release/build/libbe/interface/Point.o 
+C++ objects/haiku_host/release/build/libbe/interface/Rect.o 
+C++ objects/haiku_host/release/build/libbe/interface/Region.o 
+C++ objects/haiku_host/release/build/libbe/interface/RegionSupport.o 
+C++ objects/haiku_host/release/build/libbe/interface/SystemPalette.o 
+MkDir1 objects/haiku_host/release/build/libbe/storage 
+C++ objects/haiku_host/release/build/libbe/storage/AppFileInfo.o 
+C++ objects/haiku_host/release/build/libbe/storage/Directory.o 
+C++ objects/haiku_host/release/build/libbe/storage/DriverSettings.o 
+C++ objects/haiku_host/release/build/libbe/storage/Entry.o 
+Link objects/haiku_host/release/tools/gensyscalls/gensyscallinfos_arm64 
+C++ objects/haiku_host/release/build/libbe/storage/EntryList.o 
+C++ objects/haiku_host/release/build/libbe/storage/FdIO.o 
+C++ objects/haiku_host/release/build/libbe/storage/File.o 
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: cannot find -lz: No such file or directory
+C++ objects/haiku_host/release/build/libbe/storage/FileIO.o 
+C++ objects/haiku_host/release/build/libbe/storage/FindDirectory.o 
+collect2: error: ld returned 1 exit status
+
+gcc -Wl,--no-as-needed -Wl,-rpath,/boot/home/hg/generated/objects/haiku_host/lib -lbsd -lz -o "objects/haiku_host/release/tools/gensyscalls/gensyscallinfos_arm64"   "objects/haiku_host/release/tools/gensyscalls/arm64/gensyscallinfos.o" \
+ -lstdc++ -lsupc++  \
+
+
+...failed Link objects/haiku_host/release/tools/gensyscalls/gensyscallinfos_arm64 ...
+--
+C++ objects/haiku_host/release/build/libbe/support/Referenceable.o 
+C++ objects/haiku_host/release/build/libbe/support/String.o 
+C++ objects/haiku_host/release/build/libbe/support/StringList.o 
+C++ objects/haiku_host/release/build/libbe/support/Url.o 
+C++ objects/haiku_host/release/build/libbe/support/ZlibCompressionAlgorithm.o 
+C++ objects/haiku_host/release/build/libbe/support/ZstdCompressionAlgorithm.o 
+C++ objects/haiku_host/release/build/libshared/NaturalCompare.o 
+C++ objects/haiku_host/release/build/libshared/RegExp.o 
+C++ objects/haiku_host/release/build/libshared/StringForSize.o 
+C++ objects/haiku_host/release/build/libpackage/Attributes.o 
+C++ objects/haiku_host/release/build/libpackage/ChecksumAccessors.o 
+C++ objects/haiku_host/release/build/libpackage/CommitTransactionResult.o 
+C++ objects/haiku_host/release/build/libpackage/Context.o 
+C++ objects/haiku_host/release/build/libpackage/DownloadFileRequest.o 
+C++ objects/haiku_host/release/build/libpackage/FetchFileJob.o 
+C++ objects/haiku_host/release/build/libpackage/Job.o 
+C++ objects/haiku_host/release/build/libpackage/PackageInfo.o 
+C++ objects/haiku_host/release/build/libpackage/PackageInfoContentHandler.o 
+C++ objects/haiku_host/release/build/libpackage/PackageInfoParser.o 
+C++ objects/haiku_host/release/build/libpackage/PackageInfoSet.o 
+C++ objects/haiku_host/release/build/libpackage/PackageResolvable.o 
+C++ objects/haiku_host/release/build/libpackage/PackageResolvableExpression.o 
+C++ objects/haiku_host/release/build/libpackage/PackageRoster.o 
+../src/kits/support/ZlibCompressionAlgorithm.cpp:15:10: fatal error: zlib.h: No such file or directory
+   15 | #include <zlib.h>
+      |          ^~~~~~~~
+compilation terminated.
+
+gcc -c "../src/kits/support/ZlibCompressionAlgorithm.cpp" -O2 -Wall -Wno-trigraphs -Wno-ctor-dtor-privacy -Woverloaded-virtual -Wpointer-arith -Wcast-align -Wsign-compare -Wno-multichar -include ../headers/build/HaikuBuildCompatibility.h -DZSTD_ENABLED -fPIC -include ../headers/build/BeOSBuildCompatibility.h -D_NO_INLINE_ASM -D__NO_INLINE__ -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DHAIKU_HOST_USE_XATTR -DHAIKU_HOST_PLATFORM_HAIKU -DHAIKU_HOST_PLATFORM_64_BIT -DHAIKU_PACKAGING_ARCH=\"arm64\" -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/build/libbe/support -iquote objects/common/build/libbe/support -iquote objects/haiku_host/common/build/libbe/support -iquote objects/haiku/arm64/common/build/libbe/support -iquote ../src/kits/support -I ../headers/build/private/app -I ../headers/build/private/interface -I ../headers/build/private/shared -I ../headers/build/private/support -I ../headers/build/host/haiku_host -I ../headers/build -I ../headers/build/os -I ../headers/build/os/add-ons/registrar -I ../headers/build/os/app -I ../headers/build/os/bluetooth -I ../headers/build/os/drivers -I ../headers/build/os/kernel -I ../headers/build/os/interface -I ../headers/build/os/locale -I ../headers/build/os/storage -I ../headers/build/os/support -I ../headers/build/private -o "objects/haiku_host/release/build/libbe/support/ZlibCompressionAlgorithm.o"
+
+...failed C++ objects/haiku_host/release/build/libbe/support/ZlibCompressionAlgorithm.o ...
+C++ objects/haiku_host/release/build/libpackage/PackageVersion.o 
+C++ objects/haiku_host/release/build/libpackage/RepositoryCache.o 
+C++ objects/haiku_host/release/build/libpackage/RepositoryConfig.o 
+../src/kits/support/ZstdCompressionAlgorithm.cpp:17:12: fatal error: zstd.h: No such file or directory
+   17 |   #include <zstd.h>
+      |            ^~~~~~~~
+C++ objects/haiku_host/release/build/libpackage/RepositoryInfo.o 
+C++ objects/haiku_host/release/build/libpackage/Request.o 
+C++ objects/haiku_host/release/build/libpackage/TempfileManager.o 
+
+gcc -c "../src/kits/support/ZstdCompressionAlgorithm.cpp" -O2 -Wall -Wno-trigraphs -Wno-ctor-dtor-privacy -Woverloaded-virtual -Wpointer-arith -Wcast-align -Wsign-compare -Wno-multichar -include ../headers/build/HaikuBuildCompatibility.h -DZSTD_ENABLED -fPIC -include ../headers/build/BeOSBuildCompatibility.h -D_NO_INLINE_ASM -D__NO_INLINE__ -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DHAIKU_HOST_USE_XATTR -DHAIKU_HOST_PLATFORM_HAIKU -DHAIKU_HOST_PLATFORM_64_BIT -DHAIKU_PACKAGING_ARCH=\"arm64\" -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/build/libbe/support -iquote objects/common/build/libbe/support -iquote objects/haiku_host/common/build/libbe/support -iquote objects/haiku/arm64/common/build/libbe/support -iquote ../src/kits/support -I ../headers/build/private/app -I ../headers/build/private/interface -I ../headers/build/private/shared -I ../headers/build/private/support -I ../headers/build/host/haiku_host -I ../headers/build -I ../headers/build/os -I ../headers/build/os/add-ons/registrar -I ../headers/build/os/app -I ../headers/build/os/bluetooth -I ../headers/build/os/drivers -I ../headers/build/os/kernel -I ../headers/build/os/interface -I ../headers/build/os/locale -I ../headers/build/os/storage -I ../headers/build/os/support -I ../headers/build/private -o "objects/haiku_host/release/build/libbe/support/ZstdCompressionAlgorithm.o"
+
+...failed C++ objects/haiku_host/release/build/libbe/support/ZstdCompressionAlgorithm.o ...
+--
+C++ objects/haiku_host/release/build/libpackage/PackageEntryV1.o 
+C++ objects/haiku_host/release/build/libpackage/PackageInfoContentHandlerV1.o 
+C++ objects/haiku_host/release/build/libpackage/PackageReaderImplV1.o 
+C++ objects/haiku_host/release/build/libpackage/PackageReaderV1.o 
+C++ objects/haiku_host/release/build/libpackage/ReaderImplBaseV1.o 
+C++ objects/haiku_host/release/build/libpackage/NoErrorOutput.o 
+C++ objects/haiku_host/release/build/libpackage/StandardErrorOutput.o 
+C++ objects/haiku_host/release/build/libpackage/Exceptions.o 
+C++ objects/haiku_host/release/build/libpackage/RepositoryBuilder.o 
+C++ objects/haiku_host/release/build/libpackage/Solver.o 
+C++ objects/haiku_host/release/build/libpackage/SolverPackage.o 

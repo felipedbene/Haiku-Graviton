@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+ssm-run: command a576f2e5-ec82-43b2-86ba-ec0f3f8f55d7 on i-021b962b0cd766a2e (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-49837-cbd1d4)
+Linux 7.0.0-1014-aws
+7f93c45d5f61d5e7ce9c06a99b301fc320fbfc17e571c01bf98fdba86ff5ae52  tcp871.c
+ipv4 srvfin     PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-  pollout=1 revents=0x14
+ipv4 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv4 peerfin    PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x1  read=0 errno=-
+ipv4 simul      PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv4 reset      PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+ipv4 srvfin-rst PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+ipv6 srvfin     PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-  pollout=1 revents=0x14
+ipv6 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv6 peerfin    PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x1  read=0 errno=-
+ipv6 simul      PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv6 reset      PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+ipv6 srvfin-rst PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+tcp871: 0 failed
+rc=0
+tcp871.c: In function ‘run_case’:
+tcp871.c:194:17: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  194 |                 write(server, "hi", 2);
+      |                 ^~~~~~~~~~~~~~~~~~~~~~
+ssm-run: Success

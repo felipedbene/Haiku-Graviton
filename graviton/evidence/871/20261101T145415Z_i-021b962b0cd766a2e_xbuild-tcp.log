@@ -1,0 +1,119 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+ssm-run: command c26a9a0e-3c1d-4037-897b-0f27cb6e7745 on i-021b962b0cd766a2e (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-46340-be4aa6)
+apt rc=0
+You can now run: /usr/local/bin/aws --version
+Tip: run 'aws configure agent-toolkit' to set up AWS skills and the AWS MCP server for your AI coding agent(s).
+f79fa4b3418c6424b3388b44a855107a3a93219c tcp: report the end of an accepted connection to poll() and select()
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+JAM_TCP_RC=0 wall=13s failed=0
+MimeSet1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp 
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp 
+...updated 865 target(s)...
+module=objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
+-rwxr-xr-x 1 root root 96179 Nov  1 14:55 objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
+56f0a5b9df64ad08ca00398635f987457561948c7cfc6cd9455209880b064221  objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
+ src/add-ons/kernel/network/protocols/tcp/TCPEndpoint.cpp | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+diff --git a/src/add-ons/kernel/network/protocols/tcp/TCPEndpoint.cpp b/src/add-ons/kernel/network/protocols/tcp/TCPEndpoint.cpp
+index 8e236488..aa45ba44 100644
+--- a/src/add-ons/kernel/network/protocols/tcp/TCPEndpoint.cpp
++++ b/src/add-ons/kernel/network/protocols/tcp/TCPEndpoint.cpp
+@@ -2477,6 +2477,19 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
+ 	fOptions = parent->fOptions;
+ 	fAcceptSemaphore = parent->fAcceptSemaphore;
+ 
++	// An accepted connection must report its end the way the ones Connect()
++	// and Listen() set up do. Without the flag, _AvailableData() answers 0,
++	// not an error, in the states past the peer's FIN other than
++	// FINISH_RECEIVED and WAIT_FOR_FINISH_ACKNOWLEDGE -- TIME_WAIT, CLOSING
++	// and CLOSED -- and socket_notify() drops a 0 as being below the
++	// low-water mark. So a server that sent its FIN first (the peer's FIN
++	// takes it from FINISH_ACKNOWLEDGED to TIME_WAIT), or closed at the same
++	// time as the peer, never saw the socket become readable: a poll()-driven
++	// server never learnt of the EOF a read() would have returned at once.
++	// SendAvailable() likewise stayed at 0 instead of EPIPE once the
++	// connection was over.
++	fFlags |= FLAG_CAN_NOTIFY;
++
+ 	_PrepareReceivePath(segment);
+ 
+ 	// ECN (RFC 3168) stage A: if the peer's SYN is an ECN-setup SYN (ECE and
+JAM_TCP_CONTROL_RC=0 failed=0
+56f0a5b9df64ad08ca00398635f987457561948c7cfc6cd9455209880b064221  /opt/t871/tcp.fix
+a275262053d51bd688c6315ccb3e1f22e08f6d473094a7ad21bc18fd0c59ce38  /opt/t871/tcp.control
+2026-11-01 14:55:58      96179 tcp.control
+2026-11-01 14:55:57      96179 tcp.fix
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/t871
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ mkdir -p /opt/t871
++ cd /opt/t871
++ rm -rf hg buildtools
++ git clone -q --depth 1 --branch fix/871-tcp-fin-accepted-socket https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg log -1 '--format=%H %s'
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t871/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
+++ date +%s
++ s=1793544936
+++ nproc
++ jam -q -j32 tcp
+++ date +%s
+++ grep -cE '\.\.\.failed' jam-tcp.log
++ echo 'JAM_TCP_RC=0 wall=13s failed=0'
++ tail -4 jam-tcp.log
+++ find objects/haiku -type f -name tcp -path '*protocols/tcp/*'
+++ head -1
++ F=objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
++ echo module=objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
++ ls -l objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
++ sha256sum objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp /opt/t871/tcp.fix
++ git -C .. fetch -q --depth 1 origin graviton
++ git -C .. diff --stat FETCH_HEAD HEAD -- src/add-ons/kernel/network
++ git -C .. diff FETCH_HEAD HEAD -- src/add-ons/kernel/network
++ head -40
++ git -C .. show FETCH_HEAD:src/add-ons/kernel/network/protocols/tcp/TCPEndpoint.cpp
+++ nproc
++ jam -q -j32 tcp
+++ grep -cE '\.\.\.failed' jam-tcp-control.log
++ echo 'JAM_TCP_CONTROL_RC=0 failed=0'
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp /opt/t871/tcp.control
++ git -C .. checkout -- src/add-ons/kernel/network/protocols/tcp/TCPEndpoint.cpp
++ git -C .. status --short
++ head
++ sha256sum /opt/t871/tcp.fix /opt/t871/tcp.control
++ aws s3 cp --quiet /opt/t871/tcp.fix s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/t871/tcp.fix
++ aws s3 cp --quiet /opt/t871/tcp.control s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/t871/tcp.control
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/t871/
+ssm-run: Success

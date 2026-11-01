@@ -1,0 +1,59 @@
+# evidence: build-tcp-fix3
+# instance: i-0cba68ecff251764c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T144820Z   end: 20261101T144842Z   rc: 0
+# script sha256: d3ff4004a6a58ae52dbafec699104f2559cebf5a156531163926859e31daef7f
+# ---- script ----
+# | set -x
+# | pkgman install -y nasm zlib_devel zstd_devel m4; command -v m4; bison --version | head -1 2>&1 | tail -1
+# | cd /boot/home/hg/generated
+# | true
+# | s=$(date +%s); jam -q -j32 tcp > jam-tcp.log 2>&1; echo "JAM_TCP_RC=$? wall=$(( $(date +%s) - s ))s"
+# | grep -cE '\.\.\.failed' jam-tcp.log
+# | tail -20 jam-tcp.log
+# | find objects -name tcp -type f -path '*protocols/tcp*' -exec ls -l {} \; -exec sha256sum {} \;
+# ---- raw output ----
+runtime_loader: /boot/system/bin/bison: Unhandled pheader type in parse 0x6474e553
+ng checksum for DeBeOS...done.
+Encountered problems:
+problem 1: package zstd_devel-1.5.7-1 requires zstd==1.5.7, but none of the providers can be installed
+  solution 1:
+    - allow vendor change from "Haiku Project" (zstd-1.5.6-2) to "DeBeOS" (zstd-1.5.7-1)
+  solution 2:
+    - do not install "providing zstd_devel"
++ command -v m4
+/boot/system/bin/m4
++ bison --version
++ head -1
++ tail -1
++ cd /boot/home/hg/generated
++ true
+++ date +%s
++ s=1793544507
++ jam -q -j32 tcp
+++ date +%s
++ echo 'JAM_TCP_RC=1 wall=3s'
+JAM_TCP_RC=1 wall=3s
++ grep -cE '\.\.\.failed' jam-tcp.log
+5
++ tail -20 jam-tcp.log
+...failed Yacc1 objects/haiku_host/common/tools/rc/parser.cpp objects/haiku_host/common/tools/rc/parser.hpp ...
+
+gcc -Wl,--no-as-needed -Wl,-rpath,/boot/home/hg/generated/objects/haiku_host/lib -lbsd -lz -o "objects/haiku_host/release/tools/gensyscalls/gensyscallinfos_arm64"   "objects/haiku_host/release/tools/gensyscalls/arm64/gensyscallinfos.o" \
+ -lstdc++ -lsupc++  \
+
+
+...failed Link objects/haiku_host/release/tools/gensyscalls/gensyscallinfos_arm64 ...
+
+gcc -c "../src/kits/support/ZstdCompressionAlgorithm.cpp" -O2 -Wall -Wno-trigraphs -Wno-ctor-dtor-privacy -Woverloaded-virtual -Wpointer-arith -Wcast-align -Wsign-compare -Wno-multichar -include ../headers/build/HaikuBuildCompatibility.h -DZSTD_ENABLED -fPIC -include ../headers/build/BeOSBuildCompatibility.h -D_NO_INLINE_ASM -D__NO_INLINE__ -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DHAIKU_HOST_USE_XATTR -DHAIKU_HOST_PLATFORM_HAIKU -DHAIKU_HOST_PLATFORM_64_BIT -DHAIKU_PACKAGING_ARCH=\"arm64\" -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/build/libbe/support -iquote objects/common/build/libbe/support -iquote objects/haiku_host/common/build/libbe/support -iquote objects/haiku/arm64/common/build/libbe/support -iquote ../src/kits/support -I ../headers/build/private/app -I ../headers/build/private/interface -I ../headers/build/private/shared -I ../headers/build/private/support -I ../headers/build/host/haiku_host -I ../headers/build -I ../headers/build/os -I ../headers/build/os/add-ons/registrar -I ../headers/build/os/app -I ../headers/build/os/bluetooth -I ../headers/build/os/drivers -I ../headers/build/os/kernel -I ../headers/build/os/interface -I ../headers/build/os/locale -I ../headers/build/os/storage -I ../headers/build/os/support -I ../headers/build/private -o "objects/haiku_host/release/build/libbe/support/ZstdCompressionAlgorithm.o"
+
+...failed C++ objects/haiku_host/release/build/libbe/support/ZstdCompressionAlgorithm.o ...
+
+gcc -c "../src/kits/support/ZlibCompressionAlgorithm.cpp" -O2 -Wall -Wno-trigraphs -Wno-ctor-dtor-privacy -Woverloaded-virtual -Wpointer-arith -Wcast-align -Wsign-compare -Wno-multichar -include ../headers/build/HaikuBuildCompatibility.h -DZSTD_ENABLED -fPIC -include ../headers/build/BeOSBuildCompatibility.h -D_NO_INLINE_ASM -D__NO_INLINE__ -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DHAIKU_HOST_USE_XATTR -DHAIKU_HOST_PLATFORM_HAIKU -DHAIKU_HOST_PLATFORM_64_BIT -DHAIKU_PACKAGING_ARCH=\"arm64\" -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/build/libbe/support -iquote objects/common/build/libbe/support -iquote objects/haiku_host/common/build/libbe/support -iquote objects/haiku/arm64/common/build/libbe/support -iquote ../src/kits/support -I ../headers/build/private/app -I ../headers/build/private/interface -I ../headers/build/private/shared -I ../headers/build/private/support -I ../headers/build/host/haiku_host -I ../headers/build -I ../headers/build/os -I ../headers/build/os/add-ons/registrar -I ../headers/build/os/app -I ../headers/build/os/bluetooth -I ../headers/build/os/drivers -I ../headers/build/os/kernel -I ../headers/build/os/interface -I ../headers/build/os/locale -I ../headers/build/os/storage -I ../headers/build/os/support -I ../headers/build/private -o "objects/haiku_host/release/build/libbe/support/ZlibCompressionAlgorithm.o"
+
+...failed C++ objects/haiku_host/release/build/libbe/support/ZlibCompressionAlgorithm.o ...
+
+BUILD FAILURE:
+...failed updating 4 target(s)...
+...skipped 514 target(s)...
+...updated 1 target(s)...
++ find objects -name tcp -type f -path '*protocols/tcp*' -exec ls -l '{}' ';' -exec sha256sum '{}' ';'

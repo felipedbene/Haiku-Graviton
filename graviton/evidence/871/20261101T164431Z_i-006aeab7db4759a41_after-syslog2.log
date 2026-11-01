@@ -1,0 +1,17 @@
+# evidence: after-syslog2
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T164431Z   end: 20261101T164452Z   rc: 0
+# script sha256: 2bff2a9559d9f6692eb7fc5cace582252e806e30ce6a01e56f2c18dffc1c7be9
+# ---- script ----
+# | grep -iE "panic|assert|kernel debugger" /var/log/syslog | cut -c1-160
+# ---- raw output ----
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded

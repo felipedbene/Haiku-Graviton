@@ -1,0 +1,1060 @@
+# evidence: after-node256
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T150311Z   end: 20261101T150651Z   rc: 0
+# script sha256: dfbc5f8360d41a77eed5053d753589d772f777d99ba0744d1981a5ccbf057142
+# ---- script ----
+# | cd /boot/home/t871/node-v24.21.0
+# | T='parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer parallel/test-diagnostics-channel-http2-client-stream-body-single-string parallel/test-diagnostics-channel-http2-client-stream-close parallel/test-diagnostics-channel-http2-client-stream-created parallel/test-diagnostics-channel-http2-client-stream-finish parallel/test-diagnostics-channel-http2-client-stream-start parallel/test-diagnostics-channel-http2-server-stream-close parallel/test-diagnostics-channel-http2-server-stream-close-error parallel/test-diagnostics-channel-http2-server-stream-created parallel/test-diagnostics-channel-http2-server-stream-created-start-timing parallel/test-diagnostics-channel-http2-server-stream-error parallel/test-diagnostics-channel-http2-server-stream-finish parallel/test-diagnostics-channel-http2-server-stream-start parallel/test-h2-large-header-cause-client-to-hangup parallel/test-http-client-parse-error parallel/test-http-extra-response parallel/test-http-max-http-headers parallel/test-http-multi-line-headers parallel/test-http-no-content-length parallel/test-http-response-no-headers parallel/test-http-response-status-message parallel/test-http-should-keep-alive parallel/test-http-socket-encoding-error parallel/test-http-upgrade-advertise parallel/test-http-upgrade-server parallel/test-http2-altsvc parallel/test-http2-async-local-storage parallel/test-http2-autoselect-protocol parallel/test-http2-buffersize parallel/test-http2-byteswritten-server parallel/test-http2-capture-rejection parallel/test-http2-clean-output parallel/test-http2-client-data-end parallel/test-http2-client-destroy parallel/test-http2-client-onconnect-errors parallel/test-http2-client-priority-before-connect parallel/test-http2-client-promisify-connect parallel/test-http2-client-proxy-over-http2 parallel/test-http2-client-request-listeners-warning parallel/test-http2-client-request-options-errors parallel/test-http2-client-rststream-before-connect parallel/test-http2-client-set-priority parallel/test-http2-client-setLocalWindowSize parallel/test-http2-client-setNextStreamID-errors parallel/test-http2-client-settings-before-connect parallel/test-http2-client-stream-destroy-before-connect parallel/test-http2-client-unescaped-path parallel/test-http2-client-upload parallel/test-http2-client-upload-reject parallel/test-http2-client-write-before-connect parallel/test-http2-client-write-empty-string parallel/test-http2-compat-client-upload-reject parallel/test-http2-compat-errors parallel/test-http2-compat-expect-continue parallel/test-http2-compat-expect-continue-check parallel/test-http2-compat-expect-handling parallel/test-http2-compat-method-connect parallel/test-http2-compat-serverrequest parallel/test-http2-compat-serverrequest-end parallel/test-http2-compat-serverrequest-headers parallel/test-http2-compat-serverrequest-host parallel/test-http2-compat-serverrequest-pause parallel/test-http2-compat-serverrequest-pipe parallel/test-http2-compat-serverrequest-settimeout parallel/test-http2-compat-serverrequest-trailers parallel/test-http2-compat-serverresponse parallel/test-http2-compat-serverresponse-createpushresponse parallel/test-http2-compat-serverresponse-destroy parallel/test-http2-compat-serverresponse-drain parallel/test-http2-compat-serverresponse-end parallel/test-http2-compat-serverresponse-end-after-statuses-without-body parallel/test-http2-compat-serverresponse-finished parallel/test-http2-compat-serverresponse-flushheaders parallel/test-http2-compat-serverresponse-headers parallel/test-http2-compat-serverresponse-headers-after-destroy parallel/test-http2-compat-serverresponse-headers-send-date parallel/test-http2-compat-serverresponse-settimeout parallel/test-http2-compat-serverresponse-statuscode parallel/test-http2-compat-serverresponse-statusmessage parallel/test-http2-compat-serverresponse-statusmessage-property parallel/test-http2-compat-serverresponse-statusmessage-property-set parallel/test-http2-compat-serverresponse-trailers parallel/test-http2-compat-serverresponse-write parallel/test-http2-compat-serverresponse-writehead parallel/test-http2-compat-serverresponse-writehead-array parallel/test-http2-compat-short-stream-client-server parallel/test-http2-compat-socket parallel/test-http2-compat-socket-destroy-delayed parallel/test-http2-compat-socket-set parallel/test-http2-compat-write-early-hints parallel/test-http2-compat-write-early-hints-invalid-header parallel/test-http2-compat-write-head-after-close parallel/test-http2-compat-write-head-destroyed parallel/test-http2-compat-write-information parallel/test-http2-connect-method parallel/test-http2-connect-method-extended parallel/test-http2-connect-method-extended-cant-turn-off parallel/test-http2-cookies parallel/test-http2-create-client-secure-session parallel/test-http2-create-client-session parallel/test-http2-createwritereq parallel/test-http2-date-header parallel/test-http2-debug parallel/test-http2-destroy-after-write parallel/test-http2-dont-override parallel/test-http2-empty-frame-without-eof parallel/test-http2-endafterheaders parallel/test-http2-exceeds-server-trailer-size parallel/test-http2-forget-closed-streams parallel/test-http2-goaway-opaquedata parallel/test-http2-graceful-close parallel/test-http2-head-request parallel/test-http2-info-headers parallel/test-http2-info-headers-errors parallel/test-http2-invalidargtypes-errors parallel/test-http2-invalidheaderfield parallel/test-http2-invalidheaderfields-client parallel/test-http2-large-write-multiple-requests parallel/test-http2-max-concurrent-streams parallel/test-http2-max-session-memory-leak parallel/test-http2-max-session-memory-stalled-headers parallel/test-http2-methods parallel/test-http2-misused-pseudoheaders parallel/test-http2-multi-content-length parallel/test-http2-multiheaders parallel/test-http2-multiheaders-raw parallel/test-http2-multiplex parallel/test-http2-no-more-streams parallel/test-http2-no-wanttrailers-listener parallel/test-http2-onping parallel/test-http2-options-max-headers-block-length parallel/test-http2-options-max-reserved-streams parallel/test-http2-options-server-request parallel/test-http2-options-server-response parallel/test-http2-origin parallel/test-http2-pack-end-stream-flag parallel/test-http2-perf_hooks parallel/test-http2-ping parallel/test-http2-pipe parallel/test-http2-priority-cycle- parallel/test-http2-priority-event parallel/test-http2-raw-headers parallel/test-http2-raw-headers-defaults parallel/test-http2-removed-header-stays-removed parallel/test-http2-request-remove-connect-listener parallel/test-http2-res-corked parallel/test-http2-res-writable-properties parallel/test-http2-respond-errors parallel/test-http2-respond-file parallel/test-http2-respond-file-204 parallel/test-http2-respond-file-304 parallel/test-http2-respond-file-404 parallel/test-http2-respond-file-compat parallel/test-http2-respond-file-error-dir parallel/test-http2-respond-file-error-pipe-offset parallel/test-http2-respond-file-errors parallel/test-http2-respond-file-fd parallel/test-http2-respond-file-fd-errors parallel/test-http2-respond-file-fd-invalid parallel/test-http2-respond-file-fd-leak parallel/test-http2-respond-file-fd-range parallel/test-http2-respond-file-filehandle parallel/test-http2-respond-file-push parallel/test-http2-respond-file-range parallel/test-http2-respond-file-with-pipe parallel/test-http2-respond-nghttperrors parallel/test-http2-respond-no-data parallel/test-http2-respond-with-fd-errors parallel/test-http2-response-splitting parallel/test-http2-sent-headers parallel/test-http2-server-close-callback parallel/test-http2-server-close-idle-connection parallel/test-http2-server-errors parallel/test-http2-server-push-disabled parallel/test-http2-server-push-stream parallel/test-http2-server-push-stream-errors parallel/test-http2-server-push-stream-errors-args parallel/test-http2-server-push-stream-head parallel/test-http2-server-rst-before-respond parallel/test-http2-server-rst-stream parallel/test-http2-server-session-destroy parallel/test-http2-server-set-header parallel/test-http2-server-setLocalWindowSize parallel/test-http2-server-shutdown-before-respond parallel/test-http2-server-startup parallel/test-http2-server-timeout parallel/test-http2-session-graceful-close parallel/test-http2-session-reuse-different-authority parallel/test-http2-session-settings parallel/test-http2-session-stream-state parallel/test-http2-session-timeout parallel/test-http2-settings-unsolicited-ack parallel/test-http2-short-stream-client-server parallel/test-http2-single-headers-validation-disabled parallel/test-http2-socket-proxy-destroy parallel/test-http2-status-code parallel/test-http2-status-code-invalid parallel/test-http2-stream-client parallel/test-http2-stream-destroy-event-order parallel/test-http2-timeouts parallel/test-http2-too-large-headers parallel/test-http2-too-many-headers parallel/test-http2-too-many-streams parallel/test-http2-trailers parallel/test-http2-trailers-after-session-close parallel/test-http2-unbound-socket-proxy parallel/test-http2-window-size parallel/test-http2-write-callbacks parallel/test-http2-write-empty-string parallel/test-http2-zero-length-write parallel/test-https-eof-for-eom parallel/test-net-after-close parallel/test-net-allow-half-open parallel/test-net-autoselectfamily-default parallel/test-net-bytes-written-large parallel/test-net-connect-options-allowhalfopen parallel/test-net-connect-options-port parallel/test-net-dns-lookup parallel/test-net-keepalive parallel/test-net-listen-after-destroying-stdin parallel/test-net-normalize-args parallel/test-net-onread-static-buffer parallel/test-net-pause-resume-connecting parallel/test-net-persistent-keepalive parallel/test-net-persistent-nodelay parallel/test-net-persistent-ref-unref parallel/test-net-server-max-connections parallel/test-net-server-pause-on-connect parallel/test-net-socket-byteswritten parallel/test-net-socket-close-after-end parallel/test-net-socket-connect-without-cb parallel/test-net-socket-connecting parallel/test-net-socket-local-address parallel/test-net-socket-ready-without-cb parallel/test-net-socket-tos parallel/test-net-throttle parallel/test-net-writable parallel/test-net-write-after-end-nt parallel/test-net-write-slow parallel/test-tls-client-cert-resumption parallel/test-tls-client-mindhsize parallel/test-tls-env-extra-ca parallel/test-tls-env-extra-ca-with-options parallel/test-tls-inception parallel/test-tls-max-send-fragment parallel/test-tls-on-empty-socket parallel/test-tls-session-reuse-different-servername parallel/test-tls-wrap-econnreset parallel/test-tls-wrap-econnreset-localaddress parallel/test-tls-wrap-econnreset-socket sequential/test-http2-large-file sequential/test-net-localport sequential/test-tls-psk-client '
+# | uname -v; listimage 1 | grep 'protocols/tcp'
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 60 -p tap $T > /boot/home/t871/tap-after.txt 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -cE '^ok ' /boot/home/t871/tap-after.txt; grep -cE '^not ok ' /boot/home/t871/tap-after.txt
+# | echo "== timeouts"; grep -B0 -A3 '^not ok' /boot/home/t871/tap-after.txt | grep -ciE 'timeout'
+# | echo "== not ok"; grep '^not ok' /boot/home/t871/tap-after.txt
+# | echo "== full tap"; cat /boot/home/t871/tap-after.txt
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+ 2160 0xffff00000239c000 0xffff0000023ad000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+test.py rc=1 wall=205s
+255
+1
+== timeouts
+0
+== not ok
+not ok 256 sequential/test-tls-psk-client
+== full tap
+TAP version 13
+1..256
+ok 1 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers
+  ---
+  duration_ms: 377.26400
+  ...
+ok 2 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings
+  ---
+  duration_ms: 417.07000
+  ...
+ok 3 parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks
+  ---
+  duration_ms: 422.05300
+  ...
+ok 4 parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer
+  ---
+  duration_ms: 454.35700
+  ...
+ok 5 parallel/test-diagnostics-channel-http2-client-stream-close
+  ---
+  duration_ms: 316.69200
+  ...
+ok 6 parallel/test-diagnostics-channel-http2-client-stream-body-single-string
+  ---
+  duration_ms: 372.01100
+  ...
+ok 7 parallel/test-diagnostics-channel-http2-client-stream-created
+  ---
+  duration_ms: 331.18700
+  ...
+ok 8 parallel/test-diagnostics-channel-http2-client-stream-finish
+  ---
+  duration_ms: 310.82600
+  ...
+ok 9 parallel/test-diagnostics-channel-http2-client-stream-start
+  ---
+  duration_ms: 184.38900
+  ...
+ok 10 parallel/test-diagnostics-channel-http2-server-stream-close-error
+  ---
+  duration_ms: 218.22700
+  ...
+ok 11 parallel/test-diagnostics-channel-http2-server-stream-close
+  ---
+  duration_ms: 237.48100
+  ...
+ok 12 parallel/test-diagnostics-channel-http2-server-stream-created
+  ---
+  duration_ms: 261.96500
+  ...
+ok 13 parallel/test-diagnostics-channel-http2-server-stream-created-start-timing
+  ---
+  duration_ms: 214.85800
+  ...
+ok 14 parallel/test-diagnostics-channel-http2-server-stream-error
+  ---
+  duration_ms: 209.38800
+  ...
+ok 15 parallel/test-diagnostics-channel-http2-server-stream-finish
+  ---
+  duration_ms: 242.81400
+  ...
+ok 16 parallel/test-diagnostics-channel-http2-server-stream-start
+  ---
+  duration_ms: 216.12300
+  ...
+ok 17 parallel/test-http-client-parse-error
+  ---
+  duration_ms: 140.75400
+  ...
+ok 18 parallel/test-h2-large-header-cause-client-to-hangup
+  ---
+  duration_ms: 220.76700
+  ...
+ok 19 parallel/test-http-extra-response
+  ---
+  duration_ms: 202.73700
+  ...
+ok 20 parallel/test-http-multi-line-headers
+  ---
+  duration_ms: 138.92300
+  ...
+ok 21 parallel/test-http-no-content-length
+  ---
+  duration_ms: 139.36200
+  ...
+ok 22 parallel/test-http-max-http-headers
+  ---
+  duration_ms: 259.35400
+  ...
+ok 23 parallel/test-http-response-no-headers
+  ---
+  duration_ms: 142.17300
+  ...
+ok 24 parallel/test-http-should-keep-alive
+  ---
+  duration_ms: 150.45900
+  ...
+ok 25 parallel/test-http-socket-encoding-error
+  ---
+  duration_ms: 148.21500
+  ...
+ok 26 parallel/test-http-response-status-message
+  ---
+  duration_ms: 224.29000
+  ...
+ok 27 parallel/test-http-upgrade-advertise
+  ---
+  duration_ms: 178.83900
+  ...
+ok 28 parallel/test-http-upgrade-server
+  ---
+  duration_ms: 176.64300
+  ...
+ok 29 parallel/test-http2-altsvc
+  ---
+  duration_ms: 217.49600
+  ...
+ok 30 parallel/test-http2-async-local-storage
+  ---
+  duration_ms: 206.44600
+  ...
+ok 31 parallel/test-http2-buffersize
+  ---
+  duration_ms: 175.88300
+  ...
+ok 32 parallel/test-http2-byteswritten-server
+  ---
+  duration_ms: 235.06400
+  ...
+ok 33 parallel/test-http2-capture-rejection
+  ---
+  duration_ms: 218.67800
+  ...
+ok 34 parallel/test-http2-clean-output
+  ---
+  duration_ms: 269.25300
+  ...
+ok 35 parallel/test-http2-client-data-end
+  ---
+  duration_ms: 176.98900
+  ...
+ok 36 parallel/test-http2-client-destroy
+  ---
+  duration_ms: 213.49800
+  ...
+ok 37 parallel/test-http2-client-priority-before-connect
+  ---
+  duration_ms: 175.98100
+  ...
+ok 38 parallel/test-http2-client-onconnect-errors
+  ---
+  duration_ms: 197.21900
+  ...
+ok 39 parallel/test-http2-client-promisify-connect
+  ---
+  duration_ms: 171.84000
+  ...
+ok 40 parallel/test-http2-client-proxy-over-http2
+  ---
+  duration_ms: 180.34700
+  ...
+ok 41 parallel/test-http2-client-request-options-errors
+  ---
+  duration_ms: 141.98300
+  ...
+ok 42 parallel/test-http2-client-request-listeners-warning
+  ---
+  duration_ms: 219.57400
+  ...
+ok 43 parallel/test-http2-client-rststream-before-connect
+  ---
+  duration_ms: 148.33100
+  ...
+ok 44 parallel/test-http2-client-set-priority
+  ---
+  duration_ms: 181.15000
+  ...
+ok 45 parallel/test-http2-client-setLocalWindowSize
+  ---
+  duration_ms: 223.39600
+  ...
+ok 46 parallel/test-http2-client-setNextStreamID-errors
+  ---
+  duration_ms: 140.17800
+  ...
+ok 47 parallel/test-http2-client-settings-before-connect
+  ---
+  duration_ms: 173.87900
+  ...
+ok 48 parallel/test-http2-client-stream-destroy-before-connect
+  ---
+  duration_ms: 142.69100
+  ...
+ok 49 parallel/test-http2-client-unescaped-path
+  ---
+  duration_ms: 216.73900
+  ...
+ok 50 parallel/test-http2-client-upload-reject
+  ---
+  duration_ms: 205.64200
+  ...
+ok 51 parallel/test-http2-client-upload
+  ---
+  duration_ms: 270.21000
+  ...
+ok 52 parallel/test-http2-client-write-before-connect
+  ---
+  duration_ms: 171.43700
+  ...
+ok 53 parallel/test-http2-client-write-empty-string
+  ---
+  duration_ms: 177.40000
+  ...
+ok 54 parallel/test-http2-compat-client-upload-reject
+  ---
+  duration_ms: 176.73600
+  ...
+ok 55 parallel/test-http2-compat-errors
+  ---
+  duration_ms: 172.29500
+  ...
+ok 56 parallel/test-http2-compat-expect-continue
+  ---
+  duration_ms: 178.62600
+  ...
+ok 57 parallel/test-http2-compat-expect-continue-check
+  ---
+  duration_ms: 178.37100
+  ...
+ok 58 parallel/test-http2-compat-expect-handling
+  ---
+  duration_ms: 172.23300
+  ...
+ok 59 parallel/test-http2-compat-method-connect
+  ---
+  duration_ms: 179.51500
+  ...
+ok 60 parallel/test-http2-compat-serverrequest
+  ---
+  duration_ms: 172.77500
+  ...
+ok 61 parallel/test-http2-compat-serverrequest-end
+  ---
+  duration_ms: 173.78400
+  ...
+ok 62 parallel/test-http2-compat-serverrequest-headers
+  ---
+  duration_ms: 172.41200
+  ...
+ok 63 parallel/test-http2-compat-serverrequest-host
+  ---
+  duration_ms: 211.29800
+  ...
+ok 64 parallel/test-http2-compat-serverrequest-pipe
+  ---
+  duration_ms: 171.41300
+  ...
+ok 65 parallel/test-http2-compat-serverrequest-pause
+  ---
+  duration_ms: 333.60700
+  ...
+ok 66 parallel/test-http2-compat-serverrequest-settimeout
+  ---
+  duration_ms: 171.56600
+  ...
+ok 67 parallel/test-http2-compat-serverrequest-trailers
+  ---
+  duration_ms: 177.27700
+  ...
+ok 68 parallel/test-http2-compat-serverresponse
+  ---
+  duration_ms: 176.98200
+  ...
+ok 69 parallel/test-http2-compat-serverresponse-createpushresponse
+  ---
+  duration_ms: 172.58100
+  ...
+ok 70 parallel/test-http2-compat-serverresponse-destroy
+  ---
+  duration_ms: 183.51600
+  ...
+ok 71 parallel/test-http2-compat-serverresponse-drain
+  ---
+  duration_ms: 185.31700
+  ...
+ok 72 parallel/test-http2-compat-serverresponse-end
+  ---
+  duration_ms: 223.39400
+  ...
+ok 73 parallel/test-http2-compat-serverresponse-end-after-statuses-without-body
+  ---
+  duration_ms: 182.21200
+  ...
+ok 74 parallel/test-http2-compat-serverresponse-finished
+  ---
+  duration_ms: 172.57100
+  ...
+ok 75 parallel/test-http2-compat-serverresponse-flushheaders
+  ---
+  duration_ms: 173.34000
+  ...
+ok 76 parallel/test-http2-compat-serverresponse-headers
+  ---
+  duration_ms: 140.02500
+  ...
+ok 77 parallel/test-http2-compat-serverresponse-headers-after-destroy
+  ---
+  duration_ms: 139.00100
+  ...
+ok 78 parallel/test-http2-compat-serverresponse-headers-send-date
+  ---
+  duration_ms: 140.46700
+  ...
+ok 79 parallel/test-http2-compat-serverresponse-settimeout
+  ---
+  duration_ms: 176.13600
+  ...
+ok 80 parallel/test-http2-compat-serverresponse-statuscode
+  ---
+  duration_ms: 175.55200
+  ...
+ok 81 parallel/test-http2-compat-serverresponse-statusmessage
+  ---
+  duration_ms: 176.40300
+  ...
+ok 82 parallel/test-http2-compat-serverresponse-statusmessage-property
+  ---
+  duration_ms: 172.06700
+  ...
+ok 83 parallel/test-http2-compat-serverresponse-statusmessage-property-set
+  ---
+  duration_ms: 229.28400
+  ...
+ok 84 parallel/test-http2-compat-serverresponse-trailers
+  ---
+  duration_ms: 231.04800
+  ...
+ok 85 parallel/test-http2-compat-serverresponse-write
+  ---
+  duration_ms: 214.60300
+  ...
+ok 86 parallel/test-http2-compat-serverresponse-writehead
+  ---
+  duration_ms: 176.49800
+  ...
+ok 87 parallel/test-http2-compat-serverresponse-writehead-array
+  ---
+  duration_ms: 177.77400
+  ...
+ok 88 parallel/test-http2-compat-socket
+  ---
+  duration_ms: 142.87100
+  ...
+ok 89 parallel/test-http2-compat-socket-destroy-delayed
+  ---
+  duration_ms: 172.08300
+  ...
+ok 90 parallel/test-http2-compat-short-stream-client-server
+  ---
+  duration_ms: 268.40900
+  ...
+ok 91 parallel/test-http2-compat-socket-set
+  ---
+  duration_ms: 139.02900
+  ...
+ok 92 parallel/test-http2-compat-write-early-hints-invalid-header
+  ---
+  duration_ms: 173.11200
+  ...
+ok 93 parallel/test-http2-compat-write-early-hints
+  ---
+  duration_ms: 181.30700
+  ...
+ok 94 parallel/test-http2-compat-write-head-after-close
+  ---
+  duration_ms: 139.62600
+  ...
+ok 95 parallel/test-http2-compat-write-head-destroyed
+  ---
+  duration_ms: 146.13400
+  ...
+ok 96 parallel/test-http2-compat-write-information
+  ---
+  duration_ms: 186.67900
+  ...
+ok 97 parallel/test-http2-connect-method
+  ---
+  duration_ms: 172.65500
+  ...
+ok 98 parallel/test-http2-autoselect-protocol
+  ---
+  duration_ms: 4356.49000
+  ...
+ok 99 parallel/test-http2-connect-method-extended
+  ---
+  duration_ms: 176.24600
+  ...
+ok 100 parallel/test-http2-connect-method-extended-cant-turn-off
+  ---
+  duration_ms: 146.22600
+  ...
+ok 101 parallel/test-http2-cookies
+  ---
+  duration_ms: 172.69400
+  ...
+ok 102 parallel/test-http2-create-client-session
+  ---
+  duration_ms: 216.95500
+  ...
+ok 103 parallel/test-http2-date-header
+  ---
+  duration_ms: 180.57700
+  ...
+ok 104 parallel/test-http2-create-client-secure-session
+  ---
+  duration_ms: 279.05200
+  ...
+ok 105 parallel/test-http2-createwritereq
+  ---
+  duration_ms: 334.92200
+  ...
+ok 106 parallel/test-http2-destroy-after-write
+  ---
+  duration_ms: 177.59000
+  ...
+ok 107 parallel/test-http2-dont-override
+  ---
+  duration_ms: 177.95300
+  ...
+ok 108 parallel/test-http2-empty-frame-without-eof
+  ---
+  duration_ms: 146.01200
+  ...
+ok 109 parallel/test-http2-debug
+  ---
+  duration_ms: 350.56400
+  ...
+ok 110 parallel/test-http2-endafterheaders
+  ---
+  duration_ms: 179.62300
+  ...
+ok 111 parallel/test-http2-exceeds-server-trailer-size
+  ---
+  duration_ms: 176.82400
+  ...
+ok 112 parallel/test-http2-goaway-opaquedata
+  ---
+  duration_ms: 179.76400
+  ...
+ok 113 parallel/test-http2-graceful-close
+  ---
+  duration_ms: 178.55600
+  ...
+ok 114 parallel/test-http2-head-request
+  ---
+  duration_ms: 172.29500
+  ...
+ok 115 parallel/test-http2-info-headers
+  ---
+  duration_ms: 181.71900
+  ...
+ok 116 parallel/test-http2-info-headers-errors
+  ---
+  duration_ms: 179.88500
+  ...
+ok 117 parallel/test-http2-invalidargtypes-errors
+  ---
+  duration_ms: 180.18700
+  ...
+ok 118 parallel/test-http2-invalidheaderfields-client
+  ---
+  duration_ms: 179.53100
+  ...
+ok 119 parallel/test-http2-invalidheaderfield
+  ---
+  duration_ms: 220.19600
+  ...
+ok 120 parallel/test-http2-max-concurrent-streams
+  ---
+  duration_ms: 216.98700
+  ...
+ok 121 parallel/test-http2-large-write-multiple-requests
+  ---
+  duration_ms: 415.76200
+  ...
+ok 122 parallel/test-http2-methods
+  ---
+  duration_ms: 176.99100
+  ...
+ok 123 parallel/test-http2-max-session-memory-stalled-headers
+  ---
+  duration_ms: 333.19700
+  ...
+ok 124 parallel/test-http2-misused-pseudoheaders
+  ---
+  duration_ms: 176.87300
+  ...
+ok 125 parallel/test-http2-max-session-memory-leak
+  ---
+  duration_ms: 613.18400
+  ...
+ok 126 parallel/test-http2-multi-content-length
+  ---
+  duration_ms: 180.74500
+  ...
+ok 127 parallel/test-http2-multiheaders
+  ---
+  duration_ms: 214.32200
+  ...
+ok 128 parallel/test-http2-multiheaders-raw
+  ---
+  duration_ms: 178.11900
+  ...
+ok 129 parallel/test-http2-no-more-streams
+  ---
+  duration_ms: 178.03500
+  ...
+ok 130 parallel/test-http2-no-wanttrailers-listener
+  ---
+  duration_ms: 173.52500
+  ...
+ok 131 parallel/test-http2-options-max-headers-block-length
+  ---
+  duration_ms: 140.37900
+  ...
+ok 132 parallel/test-http2-multiplex
+  ---
+  duration_ms: 415.54800
+  ...
+ok 133 parallel/test-http2-onping
+  ---
+  duration_ms: 179.98500
+  ...
+ok 134 parallel/test-http2-options-server-request
+  ---
+  duration_ms: 174.05900
+  ...
+ok 135 parallel/test-http2-options-server-response
+  ---
+  duration_ms: 173.68500
+  ...
+ok 136 parallel/test-http2-options-max-reserved-streams
+  ---
+  duration_ms: 217.79000
+  ...
+ok 137 parallel/test-http2-pack-end-stream-flag
+  ---
+  duration_ms: 181.33900
+  ...
+ok 138 parallel/test-http2-perf_hooks
+  ---
+  duration_ms: 180.08900
+  ...
+ok 139 parallel/test-http2-origin
+  ---
+  duration_ms: 271.45300
+  ...
+ok 140 parallel/test-http2-ping
+  ---
+  duration_ms: 188.98900
+  ...
+ok 141 parallel/test-http2-pipe
+  ---
+  duration_ms: 220.86100
+  ...
+ok 142 parallel/test-http2-priority-cycle-
+  ---
+  duration_ms: 219.65400
+  ...
+ok 143 parallel/test-http2-priority-event
+  ---
+  duration_ms: 172.54300
+  ...
+ok 144 parallel/test-http2-raw-headers
+  ---
+  duration_ms: 171.87000
+  ...
+ok 145 parallel/test-http2-raw-headers-defaults
+  ---
+  duration_ms: 180.01900
+  ...
+ok 146 parallel/test-http2-removed-header-stays-removed
+  ---
+  duration_ms: 177.43200
+  ...
+ok 147 parallel/test-http2-request-remove-connect-listener
+  ---
+  duration_ms: 177.40300
+  ...
+ok 148 parallel/test-http2-res-corked
+  ---
+  duration_ms: 177.32300
+  ...
+ok 149 parallel/test-http2-res-writable-properties
+  ---
+  duration_ms: 175.73600
+  ...
+ok 150 parallel/test-http2-respond-errors
+  ---
+  duration_ms: 173.54900
+  ...
+ok 151 parallel/test-http2-respond-file
+  ---
+  duration_ms: 175.85200
+  ...
+ok 152 parallel/test-http2-respond-file-204
+  ---
+  duration_ms: 178.29000
+  ...
+ok 153 parallel/test-http2-respond-file-304
+  ---
+  duration_ms: 177.77600
+  ...
+ok 154 parallel/test-http2-respond-file-404
+  ---
+  duration_ms: 175.39200
+  ...
+ok 155 parallel/test-http2-respond-file-compat
+  ---
+  duration_ms: 173.39600
+  ...
+ok 156 parallel/test-http2-respond-file-error-dir
+  ---
+  duration_ms: 174.56200
+  ...
+ok 157 parallel/test-http2-respond-file-error-pipe-offset
+  ---
+  duration_ms: 216.65800
+  ...
+ok 158 parallel/test-http2-respond-file-errors
+  ---
+  duration_ms: 173.08500
+  ...
+ok 159 parallel/test-http2-respond-file-fd
+  ---
+  duration_ms: 177.87700
+  ...
+ok 160 parallel/test-http2-respond-file-fd-errors
+  ---
+  duration_ms: 174.28200
+  ...
+ok 161 parallel/test-http2-respond-file-fd-invalid
+  ---
+  duration_ms: 175.01800
+  ...
+ok 162 parallel/test-http2-respond-file-fd-leak
+  ---
+  duration_ms: 173.24400
+  ...
+ok 163 parallel/test-http2-respond-file-fd-range
+  ---
+  duration_ms: 175.29400
+  ...
+ok 164 parallel/test-http2-respond-file-filehandle
+  ---
+  duration_ms: 173.44900
+  ...
+ok 165 parallel/test-http2-respond-file-push
+  ---
+  duration_ms: 215.27300
+  ...
+ok 166 parallel/test-http2-respond-file-range
+  ---
+  duration_ms: 176.03700
+  ...
+ok 167 parallel/test-http2-forget-closed-streams
+  ---
+  duration_ms: 3917.99900
+  ...
+ok 168 parallel/test-http2-respond-file-with-pipe
+  ---
+  duration_ms: 219.51500
+  ...
+ok 169 parallel/test-http2-respond-nghttperrors
+  ---
+  duration_ms: 182.42900
+  ...
+ok 170 parallel/test-http2-respond-no-data
+  ---
+  duration_ms: 175.88400
+  ...
+ok 171 parallel/test-http2-respond-with-fd-errors
+  ---
+  duration_ms: 213.58700
+  ...
+ok 172 parallel/test-http2-response-splitting
+  ---
+  duration_ms: 177.53300
+  ...
+ok 173 parallel/test-http2-server-close-callback
+  ---
+  duration_ms: 139.96600
+  ...
+ok 174 parallel/test-http2-sent-headers
+  ---
+  duration_ms: 214.33800
+  ...
+ok 175 parallel/test-http2-server-close-idle-connection
+  ---
+  duration_ms: 174.94400
+  ...
+ok 176 parallel/test-http2-server-errors
+  ---
+  duration_ms: 188.53000
+  ...
+ok 177 parallel/test-http2-server-push-disabled
+  ---
+  duration_ms: 180.76900
+  ...
+ok 178 parallel/test-http2-server-push-stream
+  ---
+  duration_ms: 177.74200
+  ...
+ok 179 parallel/test-http2-server-push-stream-errors
+  ---
+  duration_ms: 182.83600
+  ...
+ok 180 parallel/test-http2-server-push-stream-errors-args
+  ---
+  duration_ms: 173.08600
+  ...
+ok 181 parallel/test-http2-server-rst-before-respond
+  ---
+  duration_ms: 141.64200
+  ...
+ok 182 parallel/test-http2-server-push-stream-head
+  ---
+  duration_ms: 179.62400
+  ...
+ok 183 parallel/test-http2-server-session-destroy
+  ---
+  duration_ms: 143.74400
+  ...
+ok 184 parallel/test-http2-server-rst-stream
+  ---
+  duration_ms: 177.16000
+  ...
+ok 185 parallel/test-http2-server-set-header
+  ---
+  duration_ms: 177.08000
+  ...
+ok 186 parallel/test-http2-server-setLocalWindowSize
+  ---
+  duration_ms: 177.23800
+  ...
+ok 187 parallel/test-http2-server-shutdown-before-respond
+  ---
+  duration_ms: 175.42200
+  ...
+ok 188 parallel/test-http2-session-graceful-close
+  ---
+  duration_ms: 175.61800
+  ...
+ok 189 parallel/test-http2-session-reuse-different-authority
+  ---
+  duration_ms: 214.38300
+  ...
+ok 190 parallel/test-http2-server-timeout
+  ---
+  duration_ms: 331.31200
+  ...
+ok 191 parallel/test-http2-session-settings
+  ---
+  duration_ms: 174.79400
+  ...
+ok 192 parallel/test-http2-session-stream-state
+  ---
+  duration_ms: 173.37400
+  ...
+ok 193 parallel/test-http2-settings-unsolicited-ack
+  ---
+  duration_ms: 141.00600
+  ...
+ok 194 parallel/test-http2-session-timeout
+  ---
+  duration_ms: 335.58300
+  ...
+ok 195 parallel/test-http2-single-headers-validation-disabled
+  ---
+  duration_ms: 172.94900
+  ...
+ok 196 parallel/test-http2-short-stream-client-server
+  ---
+  duration_ms: 267.69500
+  ...
+ok 197 parallel/test-http2-socket-proxy-destroy
+  ---
+  duration_ms: 175.53600
+  ...
+ok 198 parallel/test-http2-status-code
+  ---
+  duration_ms: 174.57800
+  ...
+ok 199 parallel/test-http2-status-code-invalid
+  ---
+  duration_ms: 175.13000
+  ...
+ok 200 parallel/test-http2-stream-destroy-event-order
+  ---
+  duration_ms: 140.04100
+  ...
+ok 201 parallel/test-http2-stream-client
+  ---
+  duration_ms: 176.74400
+  ...
+ok 202 parallel/test-http2-too-large-headers
+  ---
+  duration_ms: 143.69500
+  ...
+ok 203 parallel/test-http2-too-many-headers
+  ---
+  duration_ms: 145.79200
+  ...
+ok 204 parallel/test-http2-server-startup
+  ---
+  duration_ms: 1321.75100
+  ...
+ok 205 parallel/test-http2-timeouts
+  ---
+  duration_ms: 339.72600
+  ...
+ok 206 parallel/test-http2-too-many-streams
+  ---
+  duration_ms: 177.45900
+  ...
+ok 207 parallel/test-http2-trailers
+  ---
+  duration_ms: 213.92700
+  ...
+ok 208 parallel/test-http2-trailers-after-session-close
+  ---
+  duration_ms: 178.86000
+  ...
+ok 209 parallel/test-http2-unbound-socket-proxy
+  ---
+  duration_ms: 176.80800
+  ...
+ok 210 parallel/test-http2-window-size
+  ---
+  duration_ms: 217.29300
+  ...
+ok 211 parallel/test-http2-write-callbacks
+  ---
+  duration_ms: 175.52300
+  ...
+ok 212 parallel/test-http2-write-empty-string
+  ---
+  duration_ms: 181.94100
+  ...
+ok 213 parallel/test-http2-zero-length-write
+  ---
+  duration_ms: 183.27900
+  ...
+ok 214 parallel/test-net-after-close
+  ---
+  duration_ms: 140.52100
+  ...
+ok 215 parallel/test-net-allow-half-open
+  ---
+  duration_ms: 145.14100
+  ...
+ok 216 parallel/test-net-autoselectfamily-default
+  ---
+  duration_ms: 143.71000
+  ...
+ok 217 parallel/test-https-eof-for-eom
+  ---
+  duration_ms: 338.39900
+  ...
+ok 218 parallel/test-net-connect-options-port
+  ---
+  duration_ms: 214.47500
+  ...
+ok 219 parallel/test-net-dns-lookup
+  ---
+  duration_ms: 139.92900
+  ...
+ok 220 parallel/test-net-bytes-written-large
+  ---
+  duration_ms: 338.42800
+  ...
+ok 221 parallel/test-net-connect-options-allowhalfopen
+  ---
+  duration_ms: 275.11800
+  ...
+ok 222 parallel/test-net-listen-after-destroying-stdin
+  ---
+  duration_ms: 122.50600
+  ...
+ok 223 parallel/test-net-normalize-args
+  ---
+  duration_ms: 152.32100
+  ...
+ok 224 parallel/test-net-keepalive
+  ---
+  duration_ms: 267.84700
+  ...
+ok 225 parallel/test-net-persistent-nodelay
+  ---
+  duration_ms: 114.86800
+  ...
+ok 226 parallel/test-net-pause-resume-connecting
+  ---
+  duration_ms: 266.33100
+  ...
+ok 227 parallel/test-net-onread-static-buffer
+  ---
+  duration_ms: 412.25800
+  ...
+ok 228 parallel/test-net-persistent-ref-unref
+  ---
+  duration_ms: 142.25200
+  ...
+ok 229 parallel/test-net-server-max-connections
+  ---
+  duration_ms: 139.61100
+  ...
+ok 230 parallel/test-net-server-pause-on-connect
+  ---
+  duration_ms: 121.76300
+  ...
+ok 231 parallel/test-net-socket-byteswritten
+  ---
+  duration_ms: 117.69200
+  ...
+ok 232 parallel/test-net-socket-connect-without-cb
+  ---
+  duration_ms: 142.84000
+  ...
+ok 233 parallel/test-net-socket-connecting
+  ---
+  duration_ms: 121.91700
+  ...
+ok 234 parallel/test-net-socket-close-after-end
+  ---
+  duration_ms: 269.28900
+  ...
+ok 235 parallel/test-net-socket-local-address
+  ---
+  duration_ms: 117.29400
+  ...
+ok 236 parallel/test-net-socket-ready-without-cb
+  ---
+  duration_ms: 119.04700
+  ...
+ok 237 parallel/test-net-socket-tos
+  ---
+  duration_ms: 120.60800
+  ...
+ok 238 parallel/test-net-writable
+  ---
+  duration_ms: 116.24000
+  ...
+ok 239 parallel/test-net-persistent-keepalive
+  ---
+  duration_ms: 816.02300
+  ...
+ok 240 parallel/test-net-write-after-end-nt
+  ---
+  duration_ms: 140.98100
+  ...
+ok 241 parallel/test-tls-client-cert-resumption
+  ---
+  duration_ms: 330.24100
+  ...
+ok 242 parallel/test-tls-client-mindhsize
+  ---
+  duration_ms: 510.62800
+  ...
+ok 243 parallel/test-tls-env-extra-ca
+  ---
+  duration_ms: 329.13100
+  ...
+ok 244 parallel/test-net-throttle
+  ---
+  duration_ms: 913.10100
+  ...
+ok 245 parallel/test-net-write-slow
+  ---
+  duration_ms: 914.88300
+  ...
+ok 246 parallel/test-tls-max-send-fragment
+  ---
+  duration_ms: 177.45300
+  ...
+ok 247 parallel/test-tls-env-extra-ca-with-options
+  ---
+  duration_ms: 337.12600
+  ...
+ok 248 parallel/test-tls-inception
+  ---
+  duration_ms: 329.62800
+  ...
+ok 249 parallel/test-tls-wrap-econnreset
+  ---
+  duration_ms: 142.62900
+  ...
+ok 250 parallel/test-tls-on-empty-socket
+  ---
+  duration_ms: 184.17500
+  ...
+ok 251 parallel/test-tls-wrap-econnreset-localaddress
+  ---
+  duration_ms: 140.79300
+  ...
+ok 252 parallel/test-tls-session-reuse-different-servername
+  ---
+  duration_ms: 274.40400
+  ...
+ok 253 parallel/test-tls-wrap-econnreset-socket
+  ---
+  duration_ms: 139.43400
+  ...
+ok 254 sequential/test-http2-large-file # TODO : Fix flaky test
+  ---
+  duration_ms: 710.41200
+  ...
+ok 255 sequential/test-net-localport
+  ---
+  duration_ms: 112.39400
+  ...
+not ok 256 sequential/test-tls-psk-client
+  ---
+  duration_ms: 180041.83900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    Failed: Timed out
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t871/node-v24.21.0/test/sequential/test-tls-psk-client.js

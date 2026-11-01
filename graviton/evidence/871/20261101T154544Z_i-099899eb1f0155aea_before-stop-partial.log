@@ -1,0 +1,10 @@
+# evidence: before-stop-partial
+# instance: i-099899eb1f0155aea   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T154544Z   end: 20261101T154606Z   rc: 0
+# script sha256: 136584eeb169772d71266135760f12e9a693b0b076d9f39461fac19ee3fc48be
+# ---- script ----
+# | killall python3; sleep 2; killall -9 node; sleep 1; ps | grep -cE "test.py|bin/node"
+# ---- raw output ----
+/tmp/ccrun/cc-20261101T154544Z-63350.sh: line 1: killall: command not found
+/tmp/ccrun/cc-20261101T154544Z-63350.sh: line 1: killall: command not found
+7

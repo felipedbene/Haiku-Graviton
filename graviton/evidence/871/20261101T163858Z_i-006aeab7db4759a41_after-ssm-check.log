@@ -1,0 +1,12 @@
+# evidence: after-ssm-check
+# instance: i-006aeab7db4759a41   region: us-west-2
+# ssm command: 64fddb9f-baf9-4322-8d7d-5985f1d4a799 (agent status: Success)
+# start: 20261101T163858Z   end: 20261101T164005Z   rc: 0   log bytes: 169
+# script sha256: e35a50fd13673773089193fb251c5ca84719aa8642a385403369ac3e004ae7cf
+# ---- script ----
+# | uname -v; listimage 1 | grep protocols/tcp; netstat -n | grep -c established; echo ssm-ok
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+ 2160 0xffff00000239c000 0xffff0000023ad000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+1
+ssm-ok

@@ -1,0 +1,8 @@
+# evidence: before-stop-partial
+# instance: i-099899eb1f0155aea   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T153914Z   end: 20261101T153936Z   rc: 0
+# script sha256: 16e03d4fa4b50973518e9735b6cb4af3316cc343319a42fdc97a6d2b7fcb8352
+# ---- script ----
+# | kill $(ps | awk "/tools\/test.py/ {print \$2}") 2>/dev/null; sleep 3; kill -9 $(ps | awk "/\/boot\/system\/bin\/node .*test\// {print \$2}") 2>/dev/null; ps | grep -cE "test.py|node-v24"
+# ---- raw output ----
+7

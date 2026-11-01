@@ -1,0 +1,51 @@
+# evidence: build-tcp-fix
+# instance: i-0cba68ecff251764c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T144457Z   end: 20261101T144616Z   rc: 1
+# script sha256: be68f0906c0236a65242a69d4520479670f0315c560ef96df021426df28a9d74
+# ---- script ----
+# | set -x
+# | pkgman install -y jam 2>&1 | tail -3
+# | command -v jam || exit 3
+# | cd /boot/home
+# | rm -rf hg && git clone -q --depth 1 --branch fix/871-tcp-fin-accepted-socket https://github.com/felipedbene/Haiku-Graviton.git hg || exit 4
+# | cd hg && git log -1 --format='%H %s'
+# | git fetch -q --depth 1 origin graviton && git log -1 --format='%H %s' FETCH_HEAD
+# | mkdir -p generated && cd generated
+# | ../configure --target-arch arm64 2>&1 | tail -15
+# | jam -q -j32 tcp > jam-tcp.log 2>&1; echo "JAM_TCP_RC=$?"
+# | tail -20 jam-tcp.log
+# | find objects -name tcp -type f -path '*protocols*' -exec ls -l {} \; -exec sha256sum {} \;
+# ---- raw output ----
++ pkgman install -y jam
++ tail -3
+[system] Changes applied. Old activation state backed up in "state_2026-09-19_02:43:26"
+[system] Cleaning up ...
+[system] Done.
++ command -v jam
+/boot/system/bin/jam
++ cd /boot/home
++ rm -rf hg
++ git clone -q --depth 1 --branch fix/871-tcp-fin-accepted-socket https://github.com/felipedbene/Haiku-Graviton.git hg
++ cd hg
++ git log -1 '--format=%H %s'
+f79fa4b3418c6424b3388b44a855107a3a93219c tcp: report the end of an accepted connection to poll() and select()
++ git fetch -q --depth 1 origin graviton
++ git log -1 '--format=%H %s' FETCH_HEAD
+e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ mkdir -p generated
++ cd generated
++ ../configure --target-arch arm64
++ tail -15
+../configure: line 932: nasm: command not found
+nasm cannot generate ELF files. Please install a working version.
++ jam -q -j32 tcp
++ echo JAM_TCP_RC=1
+JAM_TCP_RC=1
++ tail -20 jam-tcp.log
+/boot/home/hg/generated/Jamfile: No such file or directory
+don't know how to make tcp
+...patience...
+...found 1 target(s)...
+...can't find 1 target(s)...
++ find objects -name tcp -type f -path '*protocols*' -exec ls -l '{}' ';' -exec sha256sum '{}' ';'
+find: ‘objects’: No such file or directory
