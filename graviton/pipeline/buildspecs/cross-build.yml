@@ -284,8 +284,8 @@ phases:
         # stamped in that hpkg to equal the digest of THIS checkout's agent
         # patch, launch job, upstream tag and Go toolchain patches. An
         # unstamped hpkg passes only through a legacy record in
-        # graviton/go-arm64/provenance-legacy/ (today: -2, which passes with a
-        # WARNING that names what trunk has and the package lacks).
+        # graviton/go-arm64/provenance-legacy/ (none today; one that drifted
+        # passes with a WARNING that names what trunk has and the package lacks).
         python3 "$HAIKU_TOP/graviton/scripts/haiku-hpkg-provenance" check-pool \
           --package amazon_ssm_agent --top "$HAIKU_TOP" "$HG_POOL_DIR" || {
           echo "FATAL: s3://$WORK_BUCKET/hpkg-pool/ failed the amazon_ssm_agent provenance check (see above)." >&2

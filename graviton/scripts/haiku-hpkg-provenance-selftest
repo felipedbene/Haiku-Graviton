@@ -433,13 +433,10 @@ def arm_main(work):
     for sha, body in sorted(recs.items()):
         check(body.startswith("debeos-source-manifest 1\npackage "),
               "legacy %s... is a manifest" % sha[:12])
-    check(LEGACY_2_SHA in recs, "the -2 agent (sha256 %s...) has a legacy record" % LEGACY_2_SHA[:12])
-    if have and LEGACY_2_SHA in recs:
-        old = os.path.join(work, "at-848")
-        mod._extract(ROOT, PR848_COMMIT, old)
-        check(mod.manifest(old, "amazon_ssm_agent") == recs[LEGACY_2_SHA],
-              "the -2 record is exactly the manifest of the tree it was built from (%s)"
-              % PR848_COMMIT)
+    # The -2 grace record is gone: every bake pool carries a stamped agent
+    # (-3, then -4 for #894), which is when the record said to delete it.
+    check(LEGACY_2_SHA not in recs,
+          "the retired -2 agent (sha256 %s...) has no legacy record" % LEGACY_2_SHA[:12])
 
     print("== wiring")
     spec = open(os.path.join(ROOT, "graviton/pipeline/buildspecs/cross-build.yml")).read()
