@@ -1,0 +1,7 @@
+# evidence: x891-network (from the workstation, 20261101T201036Z)
+# which SG carries the instance-to-instance traffic: sg-002054e57f5449529 (tnet-x891-peer), self-referencing all-traffic ingress, created by the user
+i-00a66dcfd7fd3c9f3	ami-058776e58bd902fba	c7g.2xlarge	10.128.12.140	subnet-0d4f6b196024e9b92	sg-0efc97cc673949063,sg-002054e57f5449529
+i-0978339406d8c122c	ami-058776e58bd902fba	c7g.2xlarge	10.128.9.158	subnet-0c98257f993bfc1b2	sg-0efc97cc673949063,sg-002054e57f5449529
+i-0217bc36378442927	ami-0c69d861bdaf6271b	c7g.2xlarge	10.128.4.64	subnet-02f8f7929c0cd9607	sg-0efc97cc673949063,sg-002054e57f5449529
+sg-002054e57f5449529	tnet-x891-peer	[{"IpProtocol":"-1","UserIdGroupPairs":[{"UserId":"<ACCOUNT_ID>","GroupId":"sg-002054e57f5449529"}],"IpRanges":[],"Ipv6Ranges":[],"PrefixListIds":[]}]
+sg-0efc97cc673949063	DebeosOpsStack-BuilderSgC59BF1FD-QBuanivJ29uo	[{"IpProtocol":"tcp","FromPort":22,"ToPort":22,"UserIdGroupPairs":[{"Description":"SSH via Instance Connect Endpoint","UserId":"<ACCOUNT_ID>","GroupId":"sg-0babab9f8ec54ccde"}],"IpRanges":[{"Description":"SSH from on-prem over VPN","CidrIp":"10.0.0.0/16"}],"Ipv6Ranges":[],"PrefixListIds":[]},{"IpProtocol":"tcp","FromPort":10900,"ToPort":10902,"UserIdGroupPairs":[],"IpRanges":[{"Description":"remote desktop (app_server + broker) from on-prem over VPN","CidrIp":"10.0.0.0/16"}],"Ipv6Ranges":[],"PrefixListIds":[]},{"IpProtocol":"icmp","FromPort":-1,"ToPort":-1,"UserIdGroupPairs":[],"IpRanges":[{"Description":"ping from on-prem over VPN","CidrIp":"10.0.0.0/16"}],"Ipv6Ranges":[],"PrefixListIds":[]}]
