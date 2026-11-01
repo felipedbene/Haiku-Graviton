@@ -1,0 +1,262 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-888-repro
+# instance: i-0ec4a12b321d0f434   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T173731Z   end: 20261101T173820Z   rc: 0
+# script sha256: 41a65203cdaa7627cd2d449c2df823c1b25dfe0966d32f076f0a46aef26c5a23
+# ---- script ----
+# | cd /boot/home/tnet
+# | uname -a
+# | echo "--- loaded network modules / kernel"
+# | sha256sum /boot/system/kernel_arm64 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/* 2>/dev/null
+# | listimage 1 2>/dev/null | grep -E 'protocols/(unix|udp|ipv6|tcp)|kernel_arm64' | awk '{print $NF}' | sort -u
+# | for run in 1 2 3; do
+# | 	for c in unix885 unix890 iov886 udp887 ipv6_888 ipv6_889 tcp891; do
+# | 		echo "=== run $run: $c"
+# | 		if [ $c = tcp891 ]; then ./$c 5; else ./$c; fi
+# | 		echo "exit=$?"
+# | 	done
+# | done
+# ---- raw output ----
+Haiku ip-10-128-7-89.us-west-2.comput R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+--- loaded network modules / kernel
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+12603fbc48a9d96bc283a9276d6ba4b55c6e63ec1f5205afe29530d982b6ecf3  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+kernel_arm64
+=== run 1: unix885
+stream connect, regular file                 FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+dgram connect, regular file                  FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+dgram sendto, regular file                   FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+stream connect, no such path (control)       PASS  r=-1 errno=-2147459069 (No such file or directory)
+dgram connect, no such path (control)        PASS  r=-1 errno=-2147459069 (No such file or directory)
+dgram sendto, no such path (control)         PASS  r=-1 errno=-2147459069 (No such file or directory)
+stream connect, stale socket file (control)  PASS  r=-1 errno=-2147454944 (Connection refused)
+dgram connect, stale socket file (control)   PASS  r=-1 errno=-2147454944 (Connection refused)
+dgram sendto, stale socket file (control)    PASS  r=-1 errno=-2147454944 (Connection refused)
+unix885: 3 failed
+exit=3
+=== run 1: unix890
+socketpair sv[0], sv[1] closed, write                FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+socketpair sv[1], sv[0] closed, write                PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=1
+accepted end, peer closed, write                     FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+connecting end, peer closed, write                   PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=1
+socketpair sv[0], sv[1] closed, send(MSG_NOSIGNAL)   FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+socketpair sv[1], sv[0] closed, send(MSG_NOSIGNAL)   PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=0
+accepted end, peer closed, send(MSG_NOSIGNAL)        FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+connecting end, peer closed, send(MSG_NOSIGNAL)      PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=0
+unix890: 4 failed
+exit=4
+=== run 1: iov886
+sendto(NULL, 0) (control)                          PASS  r=0  received=0
+sendmsg iov{NULL,0}                                FAIL  r=-1 errno=-2147478783 (Bad address)  received=-1
+connected sendmsg iov{NULL,0}                      FAIL  r=-1 errno=-2147478783 (Bad address)  received=-1
+sendmsg iov{&byte,0} (control)                     PASS  r=0  received=0
+sendmsg iov{NULL,4} must fault                     PASS  r=-1 errno=-2147478783 (Bad address)  received=-1
+sendmsg iov{(void*)1,4} must fault                 PASS  r=-1 errno=-2147478783 (Bad address)  received=-1
+recvmsg iov{NULL,0} of a 0-byte datagram           FAIL  r=-1 errno=-2147478783 (Bad address)
+recvmsg iov{NULL,4} must fault                     PASS  r=-1 errno=-2147478783 (Bad address)
+iov886: 3 failed
+exit=3
+=== run 1: udp887
+udp4 sendto(wildcard address)                   FAIL  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp4 sendto(loopback) (control)                 PASS  r=2  received=1 from=127.0.0.1
+udp4 connect(wildcard) + send (control)         PASS  r=2  received=1 from=127.0.0.1
+udp4 unconnected send, no address (control)     PASS  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp6 sendto(wildcard address)                   FAIL  r=-1 errno=-2147454951 (Network is unreachable)  received=0 from=-
+udp6 sendto(loopback) (control)                 PASS  r=2  received=1 from=::1
+udp6 connect(wildcard) + send (control)         PASS  r=2  received=1 from=::1
+udp6 unconnected send, no address (control)     PASS  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp887: 2 failed
+exit=2
+=== run 1: ipv6_888
+set/get index 0 (default)                    PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 1 (loop)                       PASS  set r=0  get r=0 value=1
+    info: sendto(ff02::1%1) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 2 (/dev/net/ena/0)             PASS  set r=0  get r=0 value=2
+    info: sendto(ff02::1%2) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 0 (default again)              PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=-1 errno=-2147454951 (Network is unreachable)
+set index 1002 (no such interface)           PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+info: set in6_addr :: (16-byte form)         r=-1 errno=-2147483643 (Invalid Argument)
+ipv6_888: 0 failed
+exit=0
+=== run 1: ipv6_889
+udp6 bind 111::1                     FAIL  r=-1 errno=-1 (General system error)
+udp6 bind 2001:db8::1                FAIL  r=-1 errno=-1 (General system error)
+udp4 bind 1.1.1.1                    PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+udp6 bind ::1 (control)              PASS  r=0
+udp6 bind :: (control)               PASS  r=0
+tcp6 bind 111::1                     FAIL  r=-1 errno=-1 (General system error)
+tcp6 bind 2001:db8::1                FAIL  r=-1 errno=-1 (General system error)
+tcp4 bind 1.1.1.1                    PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+tcp6 bind ::1 (control)              PASS  r=0
+tcp6 bind :: (control)               PASS  r=0
+ipv6_889: 4 failed (EADDRNOTAVAIL=-2147454953)
+exit=4
+=== run 1: tcp891
+ipv4 closed     FAIL  read=0  still writing OK after 5005.1 ms (500 writes)
+ipv4 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+ipv6 closed     FAIL  read=0  still writing OK after 5005.0 ms (500 writes)
+ipv6 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+tcp891: 2 failed
+exit=2
+=== run 2: unix885
+stream connect, regular file                 FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+dgram connect, regular file                  FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+dgram sendto, regular file                   FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+stream connect, no such path (control)       PASS  r=-1 errno=-2147459069 (No such file or directory)
+dgram connect, no such path (control)        PASS  r=-1 errno=-2147459069 (No such file or directory)
+dgram sendto, no such path (control)         PASS  r=-1 errno=-2147459069 (No such file or directory)
+stream connect, stale socket file (control)  PASS  r=-1 errno=-2147454944 (Connection refused)
+dgram connect, stale socket file (control)   PASS  r=-1 errno=-2147454944 (Connection refused)
+dgram sendto, stale socket file (control)    PASS  r=-1 errno=-2147454944 (Connection refused)
+unix885: 3 failed
+exit=3
+=== run 2: unix890
+socketpair sv[0], sv[1] closed, write                FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+socketpair sv[1], sv[0] closed, write                PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=1
+accepted end, peer closed, write                     FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+connecting end, peer closed, write                   PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=1
+socketpair sv[0], sv[1] closed, send(MSG_NOSIGNAL)   FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+socketpair sv[1], sv[0] closed, send(MSG_NOSIGNAL)   PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=0
+accepted end, peer closed, send(MSG_NOSIGNAL)        FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+connecting end, peer closed, send(MSG_NOSIGNAL)      PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=0
+unix890: 4 failed
+exit=4
+=== run 2: iov886
+sendto(NULL, 0) (control)                          PASS  r=0  received=0
+sendmsg iov{NULL,0}                                FAIL  r=-1 errno=-2147478783 (Bad address)  received=-1
+connected sendmsg iov{NULL,0}                      FAIL  r=-1 errno=-2147478783 (Bad address)  received=-1
+sendmsg iov{&byte,0} (control)                     PASS  r=0  received=0
+sendmsg iov{NULL,4} must fault                     PASS  r=-1 errno=-2147478783 (Bad address)  received=-1
+sendmsg iov{(void*)1,4} must fault                 PASS  r=-1 errno=-2147478783 (Bad address)  received=-1
+recvmsg iov{NULL,0} of a 0-byte datagram           FAIL  r=-1 errno=-2147478783 (Bad address)
+recvmsg iov{NULL,4} must fault                     PASS  r=-1 errno=-2147478783 (Bad address)
+iov886: 3 failed
+exit=3
+=== run 2: udp887
+udp4 sendto(wildcard address)                   FAIL  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp4 sendto(loopback) (control)                 PASS  r=2  received=1 from=127.0.0.1
+udp4 connect(wildcard) + send (control)         PASS  r=2  received=1 from=127.0.0.1
+udp4 unconnected send, no address (control)     PASS  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp6 sendto(wildcard address)                   FAIL  r=-1 errno=-2147454951 (Network is unreachable)  received=0 from=-
+udp6 sendto(loopback) (control)                 PASS  r=2  received=1 from=::1
+udp6 connect(wildcard) + send (control)         PASS  r=2  received=1 from=::1
+udp6 unconnected send, no address (control)     PASS  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp887: 2 failed
+exit=2
+=== run 2: ipv6_888
+set/get index 0 (default)                    PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 1 (loop)                       PASS  set r=0  get r=0 value=1
+    info: sendto(ff02::1%1) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 2 (/dev/net/ena/0)             PASS  set r=0  get r=0 value=2
+    info: sendto(ff02::1%2) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 0 (default again)              PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=-1 errno=-2147454951 (Network is unreachable)
+set index 1002 (no such interface)           PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+info: set in6_addr :: (16-byte form)         r=-1 errno=-2147483643 (Invalid Argument)
+ipv6_888: 0 failed
+exit=0
+=== run 2: ipv6_889
+udp6 bind 111::1                     FAIL  r=-1 errno=-1 (General system error)
+udp6 bind 2001:db8::1                FAIL  r=-1 errno=-1 (General system error)
+udp4 bind 1.1.1.1                    PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+udp6 bind ::1 (control)              PASS  r=0
+udp6 bind :: (control)               PASS  r=0
+tcp6 bind 111::1                     FAIL  r=-1 errno=-1 (General system error)
+tcp6 bind 2001:db8::1                FAIL  r=-1 errno=-1 (General system error)
+tcp4 bind 1.1.1.1                    PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+tcp6 bind ::1 (control)              PASS  r=0
+tcp6 bind :: (control)               PASS  r=0
+ipv6_889: 4 failed (EADDRNOTAVAIL=-2147454953)
+exit=4
+=== run 2: tcp891
+ipv4 closed     FAIL  read=0  still writing OK after 5005.0 ms (500 writes)
+ipv4 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+ipv6 closed     FAIL  read=0  still writing OK after 5004.9 ms (500 writes)
+ipv6 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+tcp891: 2 failed
+exit=2
+=== run 3: unix885
+stream connect, regular file                 FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+dgram connect, regular file                  FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+dgram sendto, regular file                   FAIL  r=-1 errno=-2147483643 (Invalid Argument)
+stream connect, no such path (control)       PASS  r=-1 errno=-2147459069 (No such file or directory)
+dgram connect, no such path (control)        PASS  r=-1 errno=-2147459069 (No such file or directory)
+dgram sendto, no such path (control)         PASS  r=-1 errno=-2147459069 (No such file or directory)
+stream connect, stale socket file (control)  PASS  r=-1 errno=-2147454944 (Connection refused)
+dgram connect, stale socket file (control)   PASS  r=-1 errno=-2147454944 (Connection refused)
+dgram sendto, stale socket file (control)    PASS  r=-1 errno=-2147454944 (Connection refused)
+unix885: 3 failed
+exit=3
+=== run 3: unix890
+socketpair sv[0], sv[1] closed, write                FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+socketpair sv[1], sv[0] closed, write                PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=1
+accepted end, peer closed, write                     FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+connecting end, peer closed, write                   PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=1
+socketpair sv[0], sv[1] closed, send(MSG_NOSIGNAL)   FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+socketpair sv[1], sv[0] closed, send(MSG_NOSIGNAL)   PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=0
+accepted end, peer closed, send(MSG_NOSIGNAL)        FAIL  r=-1 errno=-2147454946 (Socket is not connected) sigpipe=0
+connecting end, peer closed, send(MSG_NOSIGNAL)      PASS  r=-1 errno=-2147459059 (Broken pipe) sigpipe=0
+unix890: 4 failed
+exit=4
+=== run 3: iov886
+sendto(NULL, 0) (control)                          PASS  r=0  received=0
+sendmsg iov{NULL,0}                                FAIL  r=-1 errno=-2147478783 (Bad address)  received=-1
+connected sendmsg iov{NULL,0}                      FAIL  r=-1 errno=-2147478783 (Bad address)  received=-1
+sendmsg iov{&byte,0} (control)                     PASS  r=0  received=0
+sendmsg iov{NULL,4} must fault                     PASS  r=-1 errno=-2147478783 (Bad address)  received=-1
+sendmsg iov{(void*)1,4} must fault                 PASS  r=-1 errno=-2147478783 (Bad address)  received=-1
+recvmsg iov{NULL,0} of a 0-byte datagram           FAIL  r=-1 errno=-2147478783 (Bad address)
+recvmsg iov{NULL,4} must fault                     PASS  r=-1 errno=-2147478783 (Bad address)
+iov886: 3 failed
+exit=3
+=== run 3: udp887
+udp4 sendto(wildcard address)                   FAIL  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp4 sendto(loopback) (control)                 PASS  r=2  received=1 from=127.0.0.1
+udp4 connect(wildcard) + send (control)         PASS  r=2  received=1 from=127.0.0.1
+udp4 unconnected send, no address (control)     PASS  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp6 sendto(wildcard address)                   FAIL  r=-1 errno=-2147454951 (Network is unreachable)  received=0 from=-
+udp6 sendto(loopback) (control)                 PASS  r=2  received=1 from=::1
+udp6 connect(wildcard) + send (control)         PASS  r=2  received=1 from=::1
+udp6 unconnected send, no address (control)     PASS  r=-1 errno=-2147454928 (Destination address required)  received=0 from=-
+udp887: 2 failed
+exit=2
+=== run 3: ipv6_888
+set/get index 0 (default)                    PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 1 (loop)                       PASS  set r=0  get r=0 value=1
+    info: sendto(ff02::1%1) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 2 (/dev/net/ena/0)             PASS  set r=0  get r=0 value=2
+    info: sendto(ff02::1%2) r=-1 errno=-2147454951 (Network is unreachable)
+set/get index 0 (default again)              PASS  set r=0  get r=0 value=0
+    info: sendto(ff02::1%0) r=-1 errno=-2147454951 (Network is unreachable)
+set index 1002 (no such interface)           PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+info: set in6_addr :: (16-byte form)         r=-1 errno=-2147483643 (Invalid Argument)
+ipv6_888: 0 failed
+exit=0
+=== run 3: ipv6_889
+udp6 bind 111::1                     FAIL  r=-1 errno=-1 (General system error)
+udp6 bind 2001:db8::1                FAIL  r=-1 errno=-1 (General system error)
+udp4 bind 1.1.1.1                    PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+udp6 bind ::1 (control)              PASS  r=0
+udp6 bind :: (control)               PASS  r=0
+tcp6 bind 111::1                     FAIL  r=-1 errno=-1 (General system error)
+tcp6 bind 2001:db8::1                FAIL  r=-1 errno=-1 (General system error)
+tcp4 bind 1.1.1.1                    PASS  r=-1 errno=-2147454953 (Can't assign requested address)
+tcp6 bind ::1 (control)              PASS  r=0
+tcp6 bind :: (control)               PASS  r=0
+ipv6_889: 4 failed (EADDRNOTAVAIL=-2147454953)
+exit=4
+=== run 3: tcp891
+ipv4 closed     FAIL  read=0  still writing OK after 5005.0 ms (500 writes)
+ipv4 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+ipv6 closed     FAIL  read=0  still writing OK after 5004.9 ms (500 writes)
+ipv6 halfclose  PASS  read=0  writes=100  server read 1000 bytes, then 0
+tcp891: 2 failed
+exit=2
