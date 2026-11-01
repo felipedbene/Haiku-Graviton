@@ -1101,6 +1101,18 @@ UdpEndpoint::SendData(net_buffer *buffer)
 	if (status != B_OK)
 		return status;
 
+	// A sendto() to INADDR_ANY (or in6addr_any) means this host, as it does
+	// for connect() (see UdpDomainSupport::ConnectEndpoint()) and as it does
+	// on Linux. Left as it is, the IP layer refuses it with EDESTADDRREQ.
+	// A connected send has already been mapped.
+	sockaddr* destination = buffer->destination;
+	if (AddressModule()->is_same_family(destination)
+		&& AddressModule()->is_empty_address(destination, false)) {
+		uint16 port = AddressModule()->get_port(destination);
+		AddressModule()->get_loopback_address(destination);
+		AddressModule()->set_port(destination, port);
+	}
+
 	return gDatalinkModule->send_data(this, NULL, buffer);
 }
 
