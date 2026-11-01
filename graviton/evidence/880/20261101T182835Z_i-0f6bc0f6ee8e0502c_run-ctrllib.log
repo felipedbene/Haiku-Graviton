@@ -1,0 +1,2143 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: run-ctrllib
+# instance: i-0f6bc0f6ee8e0502c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T182835Z   end: 20261101T194619Z   rc: 0
+# script sha256: 593d68c8c001f9d53a5331e8b6c6c38bc4562e30ae4d39ba615c69c880e4d73e
+# ---- script ----
+# | T880="parallel/test-process-umask-mask"; T881="parallel/test-os parallel/test-os-process-priority"
+# | REG='parallel/test-child-process-* parallel/test-cluster-* parallel/test-process-* parallel/test-fs-write*'
+# | cd /boot/home/td
+# | mkdir -p lib-trunk && curl -sSf -o lib-trunk/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.trunk?<PRESIGNED>'
+# | echo '638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  lib-trunk/libroot.so' | sha256sum -c
+# | mkdir -p lib-876 && curl -sSf -o lib-876/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.876?<PRESIGNED>'
+# | echo 'b82f81f5cb4d6eafdec7dcf0e88a39f28f0286516900661e8596fe1262a5307a  lib-876/libroot.so' | sha256sum -c
+# | mkdir -p lib-880 && curl -sSf -o lib-880/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.880?<PRESIGNED>'
+# | echo '7afadf1c9be3c9bf3199765ff44c32911982e62a8f41bc51862ddcdef391e1c9  lib-880/libroot.so' | sha256sum -c
+# | mkdir -p lib-881 && curl -sSf -o lib-881/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.881?<PRESIGNED>'
+# | echo '182e30f5cc55be7b391d771cf17568fa55db14ade868933c7b7680b191348a6c  lib-881/libroot.so' | sha256sum -c
+# | mkdir -p lib-872 && curl -sSf -o lib-872/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.872?<PRESIGNED>'
+# | echo '38783a255c93db7961f130b5ccbd62b92238da0946fc0f7f49ba4296a308aaf4  lib-872/libroot.so' | sha256sum -c
+# | mkdir -p lib-874 && curl -sSf -o lib-874/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.874?<PRESIGNED>'
+# | echo 'a331ffab25be4a790ab3958b10f6d13ce98d878e6818de007ca81018bd7f993a  lib-874/libroot.so' | sha256sum -c
+# | sha256sum /boot/system/lib/libroot.so
+# | cat > /boot/home/td/repros.sh <<'EOS'
+# | # All C repros, in whatever libroot LIBRARY_PATH selects (default: the system's).
+# | cd /boot/home/td
+# | echo "LIBRARY_PATH=${LIBRARY_PATH:-<unset>}"
+# | sleep 3 & listimage $! | grep -E "libroot" ; wait
+# | for r in "waitst876" "rlim877" "fsize878" "sigchld893 50" "umask880" "prio881" "shebang872" "forkonce874 40"; do
+# | 	echo "=== $r"; ./$r; echo "rc=$?"
+# | done
+# | echo "=== shell view"
+# | printf 'int main(){volatile int*p=(int*)-16;return *p;}\n' > sg.c && gcc -o sg sg.c
+# | printf '#include <stdlib.h>\nint main(){abort();}\n' > ab.c && gcc -o ab ab.c
+# | bash -c './sg'; echo "sg rc=$?"
+# | bash -c './ab'; echo "ab rc=$?"
+# | bash -c 'ulimit -n 64 && echo "ulimit -n 64: soft $(ulimit -Sn) hard $(ulimit -Hn)"'; echo "rc=$?"
+# | bash -c 'ulimit -f 1 && echo "ulimit -f 1: $(ulimit -f)" && head -c 4096 /dev/zero > f878.dat; echo "head rc=$?"; ls -l f878.dat'; echo "rc=$?"; rm -f f878.dat
+# | printf '#!/no/such/interp\necho hi\n' > s872.sh && chmod +x s872.sh
+# | bash -c './s872.sh'; echo "s872 rc=$?"
+# | node -e 'const r=require("child_process").spawnSync("./s872.sh"); console.log(JSON.stringify({error: r.error && r.error.code, status: r.status, signal: r.signal, stderr: String(r.stderr || "")}))'
+# | node -e 'process.umask(0o10664); console.log("node umask", process.umask().toString(8))'
+# | node -e 'const os=require("os"); os.setPriority(0, 10); console.log("node priority", os.getPriority(0))'
+# | node -e 'const r=require("child_process").spawnSync(process.execPath, ["-e", "process.abort()"]); console.log("node child abort:", JSON.stringify({status: r.status, signal: r.signal}))'
+# | node -e 'const r=require("child_process").spawnSync("./sg"); console.log("node child segv:", JSON.stringify({status: r.status, signal: r.signal}))'
+# | echo "=== debug_server in syslog"; grep -a "debug_server" /var/log/syslog | tail -6
+# | EOS
+# | cat > /boot/home/td/nodetests.sh <<'EOS'
+# | # nodetests.sh <label> <tests...>: Node 24.21.0's own runner, stdin a pipe (#870).
+# | label=$1; shift
+# | cd /boot/home/td/node-v24.21.0
+# | echo "LIBRARY_PATH=${LIBRARY_PATH:-<unset>} node $(node --version) tests: $*"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap "$@" > /boot/home/td/tap-$label.txt 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -aE "^(ok|not ok) " /boot/home/td/tap-$label.txt | sed -E 's/^(not ok|ok) [0-9]+ /\1 /' | sort -k2 | uniq
+# | echo "pass=$(grep -ac '^ok ' /boot/home/td/tap-$label.txt) fail=$(grep -ac '^not ok ' /boot/home/td/tap-$label.txt)"
+# | EOS
+# | cd /boot/home/td
+# | for a in 880 881 872 874; do
+# | 	echo "##### C repros with libroot $a"
+# | 	LIBRARY_PATH=/boot/home/td/lib-$a bash /boot/home/td/repros.sh
+# | done
+# | echo "##### node 880 with libroot 880"; LIBRARY_PATH=/boot/home/td/lib-880 bash /boot/home/td/nodetests.sh lib880-880 $T880
+# | echo "##### node 881 with libroot 881"; LIBRARY_PATH=/boot/home/td/lib-881 bash /boot/home/td/nodetests.sh lib881-881 $T881
+# | for a in 872 874 880 881; do
+# | 	echo "##### node regression slice with libroot $a"
+# | 	LIBRARY_PATH=/boot/home/td/lib-$a bash /boot/home/td/nodetests.sh lib$a-reg $REG
+# | done
+# ---- raw output ----
+runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory
+ib-872/libroot.so: OK
+lib-874/libroot.so: OK
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  /boot/system/lib/libroot.so
+##### C repros with libroot 880
+LIBRARY_PATH=/boot/home/td/lib-880
+ 3956 0x00000251d6e67000 0x00000251d6f84000     0          0 /boot/home/td/lib-880/libroot.so
+=== waitst876
+SIGABRT=6 SIGSEGV=11 SIGKILL=9 SIGILL=4 SIGTRAP=22 SIGKILLTHR=21
+Abort
+abort          FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-blocked  FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-ignored  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-handler  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-thread   FAIL  signaled  WTERMSIG=21 (Kill Thread)
+raise-abrt     PASS  signaled  WTERMSIG=6 (Abort)
+segv-null      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-high      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-thread    FAIL  signaled  WTERMSIG=21 (Kill Thread)
+fpe-trap       FAIL  signaled  WTERMSIG=21 (Kill Thread)
+kill-segv      PASS  signaled  WTERMSIG=11 (Segmentation violation)
+kill-9         PASS  signaled  WTERMSIG=9 (Killed (by death))
+exit-3         PASS  exited    WEXITSTATUS=3
+handled-segv   PASS  exited    WEXITSTATUS=7
+waitst876: 9 failed
+rc=9
+=== rlim877
+NOFILE lower {64,64}         FAIL  was {256,8192} rc=-1 Operation not allowed now {256,8192}
+NOFILE raise back as root    PASS  rc=0  now {256,8192}
+NOFILE raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOFILE lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOVMON lower {64,64}         FAIL  was {4096,65536} rc=-1 Operation not allowed now {4096,65536}
+NOVMON raise back as root    PASS  rc=0  now {4096,65536}
+NOVMON raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOVMON lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOFILE inherit exec          FAIL  exec'd child sees "256 8192"
+rlim877: 5 failed
+rc=5
+=== fsize878
+get-default  FAIL  rc=-1 Invalid Argument cur=0x21290842fa8 max=0x36a689d080
+set          FAIL  rc=-1 Invalid Argument now {0,0}
+partial      FAIL  setrlimit: Invalid Argument
+efbig        FAIL  setrlimit: Invalid Argument
+sigxfsz      FAIL  setrlimit: Invalid Argument
+default-kill FAIL  setrlimit: Invalid Argumentchild exited 1
+append       FAIL  append write(100)=100 then 100 
+pwrite       FAIL  pwrite(10 @ 2048)=10 
+writev       FAIL  writev(3 x 512)=1536
+ftruncate    FAIL  ftruncate(4096)=0 , ftruncate(512)=0
+no-limit     PASS  write(65536)=65536
+inherit      FAIL  child exit 1
+raise-user   FAIL  uid 1001 {1024,4096}: rc=-1 Invalid Argument
+pipe         PASS  write(pipe, 4096)=4096
+fsize878: 12 failed (SIGXFSZ=29 EFBIG=-2147454972)
+rc=12
+=== sigchld893 50
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+exit  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+sigchld893: 2 failed
+rc=1
+=== umask880
+umask(010664): reads back 0664 (want 0664), file 0777 -> 0113  PASS
+umask(07022): reads back 022 (want 022), file 0777 -> 0755  PASS
+umask(0777): reads back 0777 (want 0777), file 0777 -> 0  PASS
+umask(022): reads back 022 (want 022), file 0777 -> 0755  PASS
+umask(017777): reads back 0777 (want 0777), file 0777 -> 0  PASS
+umask(0): reads back 0 (want 0), file 0777 -> 0777  PASS
+exec'd sh after umask(010664) reports "0664" (want 0664)  PASS
+umask880: 0 failed
+rc=0
+=== prio881
+set -20  get(0)=-20  get(pid)=-20  PASS
+set -15  get(0)=-15  get(pid)=-15  PASS
+set -10  get(0)=-10  get(pid)=-10  PASS
+set  -5  get(0)= -5  get(pid)= -5  PASS
+set   0  get(0)=  0  get(pid)=  0  PASS
+set   1  get(0)=  0  get(pid)=  0  FAIL
+set   2  get(0)=  0  get(pid)=  0  FAIL
+set   4  get(0)=  3  get(pid)=  3  FAIL
+set   5  get(0)=  5  get(pid)=  5  PASS
+set   6  get(0)=  5  get(pid)=  5  FAIL
+set   8  get(0)=  7  get(pid)=  7  FAIL
+set  10  get(0)=  9  get(pid)=  9  FAIL
+set  12  get(0)= 11  get(pid)= 11  FAIL
+set  14  get(0)= 13  get(pid)= 13  FAIL
+set  15  get(0)= 15  get(pid)= 15  PASS
+set  16  get(0)= 15  get(pid)= 15  FAIL
+set  18  get(0)= 17  get(pid)= 17  FAIL
+forked child reads 9, parent 9  PASS
+prio881: 10 failed
+rc=10
+=== shebang872
+execv       #!/no/such/interp          errno=0 (-), child exit 3  FAIL
+posix_spawn #!/no/such/interp          error=-2147459069 (No such file or directory), child status 0xffffffff  PASS
+execv       #!./shebang872.txt         errno=0 (-), child exit 2  FAIL
+posix_spawn #!./shebang872.txt         error=-2147478782 (Not an executable), child status 0xffffffff  FAIL
+execv       #!/bin/sh                  errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh                  error=0 (-), child status 0  PASS
+execv       #!/bin/sh -e               errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh -e               error=0 (-), child status 0  PASS
+shebang872: 3 failed
+rc=3
+=== forkonce874 40
+round 0: fork child could not start a thread 
+round 1: fork child could not start a thread 
+round 2: fork child could not start a thread 
+forkonce874: 40 of 40 rounds failed (child 40, runner 0)
+rc=40
+=== shell view
+/boot/home/td/repros.sh: line 11:   884 Kill Thread                bash -c './sg'
+sg rc=149
+Abort
+/boot/home/td/repros.sh: line 12:   887 Kill Thread                bash -c './ab'
+ab rc=149
+bash: line 1: ulimit: open files: cannot modify limit: Operation not allowed
+rc=1
+bash: line 1: ulimit: file size: cannot get limit: Invalid Argument
+head rc=1
+ls: cannot access 'f878.dat': No such file or directory
+rc=2
+s872 rc=3
+{"status":3,"signal":null,"stderr":"runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory\n"}
+node umask 664
+node priority 9
+node child abort: {"status":null,"signal":"SIGKILLTHR"}
+node child segv: {"status":null,"signal":"SIGKILLTHR"}
+=== debug_server in syslog
+KERN: debug_server: Thread 940 entered the debugger: Segment violation
+KERN: debug_server: Failed to start debugger: No such file or directory
+KERN: debug_server: Killing team 940 (./sg)
+KERN: debug_server: TeamDebugHandler::Init(): Failed to get info for team 940: Operation on invalid team
+KERN: debug_server: KillTeam(): Error getting info for team 940: Operation on invalid team
+KERN: debug_server: Killing team 940 ()
+##### C repros with libroot 881
+LIBRARY_PATH=/boot/home/td/lib-881
+ 7762 0x0000013eea0b9000 0x0000013eea1d6000     0          0 /boot/home/td/lib-881/libroot.so
+=== waitst876
+SIGABRT=6 SIGSEGV=11 SIGKILL=9 SIGILL=4 SIGTRAP=22 SIGKILLTHR=21
+Abort
+abort          FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-blocked  FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-ignored  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-handler  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-thread   FAIL  signaled  WTERMSIG=21 (Kill Thread)
+raise-abrt     PASS  signaled  WTERMSIG=6 (Abort)
+segv-null      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-high      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-thread    FAIL  signaled  WTERMSIG=21 (Kill Thread)
+fpe-trap       FAIL  signaled  WTERMSIG=21 (Kill Thread)
+kill-segv      PASS  signaled  WTERMSIG=11 (Segmentation violation)
+kill-9         PASS  signaled  WTERMSIG=9 (Killed (by death))
+exit-3         PASS  exited    WEXITSTATUS=3
+handled-segv   PASS  exited    WEXITSTATUS=7
+waitst876: 9 failed
+rc=9
+=== rlim877
+NOFILE lower {64,64}         FAIL  was {256,8192} rc=-1 Operation not allowed now {256,8192}
+NOFILE raise back as root    PASS  rc=0  now {256,8192}
+NOFILE raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOFILE lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOVMON lower {64,64}         FAIL  was {4096,65536} rc=-1 Operation not allowed now {4096,65536}
+NOVMON raise back as root    PASS  rc=0  now {4096,65536}
+NOVMON raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOVMON lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOFILE inherit exec          FAIL  exec'd child sees "256 8192"
+rlim877: 5 failed
+rc=5
+=== fsize878
+get-default  FAIL  rc=-1 Invalid Argument cur=0x106784b2fa8 max=0x424b7a2080
+set          FAIL  rc=-1 Invalid Argument now {0,0}
+partial      FAIL  setrlimit: Invalid Argument
+efbig        FAIL  setrlimit: Invalid Argument
+sigxfsz      FAIL  setrlimit: Invalid Argument
+default-kill FAIL  setrlimit: Invalid Argumentchild exited 1
+append       FAIL  append write(100)=100 then 100 
+pwrite       FAIL  pwrite(10 @ 2048)=10 
+writev       FAIL  writev(3 x 512)=1536
+ftruncate    FAIL  ftruncate(4096)=0 , ftruncate(512)=0
+no-limit     PASS  write(65536)=65536
+inherit      FAIL  child exit 1
+raise-user   FAIL  uid 1001 {1024,4096}: rc=-1 Invalid Argument
+pipe         PASS  write(pipe, 4096)=4096
+fsize878: 12 failed (SIGXFSZ=29 EFBIG=-2147454972)
+rc=12
+=== sigchld893 50
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+exit  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+sigchld893: 2 failed
+rc=1
+=== umask880
+umask(010664): reads back 010664 (want 0664), file 0777 -> 0113  FAIL
+umask(07022): reads back 07022 (want 022), file 0777 -> 0755  FAIL
+umask(0777): reads back 0777 (want 0777), file 0777 -> 0  PASS
+umask(022): reads back 022 (want 022), file 0777 -> 0755  PASS
+umask(017777): reads back 017777 (want 0777), file 0777 -> 0  FAIL
+umask(0): reads back 0 (want 0), file 0777 -> 0777  PASS
+exec'd sh after umask(010664) reports "10664" (want 0664)  FAIL
+umask880: 4 failed
+rc=4
+=== prio881
+set -20  get(0)=-20  get(pid)=-20  PASS
+set -15  get(0)=-15  get(pid)=-15  PASS
+set -10  get(0)=-10  get(pid)=-10  PASS
+set  -5  get(0)= -5  get(pid)= -5  PASS
+set   0  get(0)=  0  get(pid)=  0  PASS
+set   5  get(0)=  5  get(pid)=  5  PASS
+set  10  get(0)= 10  get(pid)= 10  PASS
+set  15  get(0)= 15  get(pid)= 15  PASS
+forked child reads 10, parent 10  PASS
+prio881: 0 failed
+rc=0
+=== shebang872
+execv       #!/no/such/interp          errno=0 (-), child exit 3  FAIL
+posix_spawn #!/no/such/interp          error=-2147459069 (No such file or directory), child status 0xffffffff  PASS
+execv       #!./shebang872.txt         errno=0 (-), child exit 2  FAIL
+posix_spawn #!./shebang872.txt         error=-2147478782 (Not an executable), child status 0xffffffff  FAIL
+execv       #!/bin/sh                  errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh                  error=0 (-), child status 0  PASS
+execv       #!/bin/sh -e               errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh -e               error=0 (-), child status 0  PASS
+shebang872: 3 failed
+rc=3
+=== forkonce874 40
+round 0: fork child could not start a thread 
+round 1: fork child could not start a thread 
+round 2: fork child could not start a thread 
+forkonce874: 40 of 40 rounds failed (child 40, runner 0)
+rc=40
+=== shell view
+/boot/home/td/repros.sh: line 11:  1384 Kill Thread                bash -c './sg'
+sg rc=149
+Abort
+/boot/home/td/repros.sh: line 12:  1387 Kill Thread                bash -c './ab'
+ab rc=149
+bash: line 1: ulimit: open files: cannot modify limit: Operation not allowed
+rc=1
+bash: line 1: ulimit: file size: cannot get limit: Invalid Argument
+head rc=1
+ls: cannot access 'f878.dat': No such file or directory
+rc=2
+s872 rc=3
+{"status":3,"signal":null,"stderr":"runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory\n"}
+node umask 10664
+node priority 10
+node child abort: {"status":null,"signal":"SIGKILLTHR"}
+node child segv: {"status":null,"signal":"SIGKILLTHR"}
+=== debug_server in syslog
+KERN: debug_server: Thread 1440 entered the debugger: Segment violation
+KERN: debug_server: Failed to start debugger: No such file or directory
+KERN: debug_server: Killing team 1440 (./sg)
+KERN: debug_server: TeamDebugHandler::Init(): Failed to get info for team 1440: Operation on invalid team
+KERN: debug_server: KillTeam(): Error getting info for team 1440: Operation on invalid team
+KERN: debug_server: Killing team 1440 ()
+##### C repros with libroot 872
+LIBRARY_PATH=/boot/home/td/lib-872
+10917 0x000000c8eafe0000 0x000000c8eb0fd000     0          0 /boot/home/td/lib-872/libroot.so
+=== waitst876
+SIGABRT=6 SIGSEGV=11 SIGKILL=9 SIGILL=4 SIGTRAP=22 SIGKILLTHR=21
+Abort
+abort          FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-blocked  FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-ignored  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-handler  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-thread   FAIL  signaled  WTERMSIG=21 (Kill Thread)
+raise-abrt     PASS  signaled  WTERMSIG=6 (Abort)
+segv-null      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-high      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-thread    FAIL  signaled  WTERMSIG=21 (Kill Thread)
+fpe-trap       FAIL  signaled  WTERMSIG=21 (Kill Thread)
+kill-segv      PASS  signaled  WTERMSIG=11 (Segmentation violation)
+kill-9         PASS  signaled  WTERMSIG=9 (Killed (by death))
+exit-3         PASS  exited    WEXITSTATUS=3
+handled-segv   PASS  exited    WEXITSTATUS=7
+waitst876: 9 failed
+rc=9
+=== rlim877
+NOFILE lower {64,64}         FAIL  was {256,8192} rc=-1 Operation not allowed now {256,8192}
+NOFILE raise back as root    PASS  rc=0  now {256,8192}
+NOFILE raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOFILE lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOVMON lower {64,64}         FAIL  was {4096,65536} rc=-1 Operation not allowed now {4096,65536}
+NOVMON raise back as root    PASS  rc=0  now {4096,65536}
+NOVMON raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOVMON lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOFILE inherit exec          FAIL  exec'd child sees "256 8192"
+rlim877: 5 failed
+rc=5
+=== fsize878
+get-default  FAIL  rc=-1 Invalid Argument cur=0x14d93bd7fa8 max=0x1187704080
+set          FAIL  rc=-1 Invalid Argument now {0,0}
+partial      FAIL  setrlimit: Invalid Argument
+efbig        FAIL  setrlimit: Invalid Argument
+sigxfsz      FAIL  setrlimit: Invalid Argument
+default-kill FAIL  setrlimit: Invalid Argumentchild exited 1
+append       FAIL  append write(100)=100 then 100 
+pwrite       FAIL  pwrite(10 @ 2048)=10 
+writev       FAIL  writev(3 x 512)=1536
+ftruncate    FAIL  ftruncate(4096)=0 , ftruncate(512)=0
+no-limit     PASS  write(65536)=65536
+inherit      FAIL  child exit 1
+raise-user   FAIL  uid 1001 {1024,4096}: rc=-1 Invalid Argument
+pipe         PASS  write(pipe, 4096)=4096
+fsize878: 12 failed (SIGXFSZ=29 EFBIG=-2147454972)
+rc=12
+=== sigchld893 50
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+exit  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+sigchld893: 2 failed
+rc=1
+=== umask880
+umask(010664): reads back 010664 (want 0664), file 0777 -> 0113  FAIL
+umask(07022): reads back 07022 (want 022), file 0777 -> 0755  FAIL
+umask(0777): reads back 0777 (want 0777), file 0777 -> 0  PASS
+umask(022): reads back 022 (want 022), file 0777 -> 0755  PASS
+umask(017777): reads back 017777 (want 0777), file 0777 -> 0  FAIL
+umask(0): reads back 0 (want 0), file 0777 -> 0777  PASS
+exec'd sh after umask(010664) reports "10664" (want 0664)  FAIL
+umask880: 4 failed
+rc=4
+=== prio881
+set -20  get(0)=-20  get(pid)=-20  PASS
+set -15  get(0)=-15  get(pid)=-15  PASS
+set -10  get(0)=-10  get(pid)=-10  PASS
+set  -5  get(0)= -5  get(pid)= -5  PASS
+set   0  get(0)=  0  get(pid)=  0  PASS
+set   1  get(0)=  0  get(pid)=  0  FAIL
+set   2  get(0)=  0  get(pid)=  0  FAIL
+set   4  get(0)=  3  get(pid)=  3  FAIL
+set   5  get(0)=  5  get(pid)=  5  PASS
+set   6  get(0)=  5  get(pid)=  5  FAIL
+set   8  get(0)=  7  get(pid)=  7  FAIL
+set  10  get(0)=  9  get(pid)=  9  FAIL
+set  12  get(0)= 11  get(pid)= 11  FAIL
+set  14  get(0)= 13  get(pid)= 13  FAIL
+set  15  get(0)= 15  get(pid)= 15  PASS
+set  16  get(0)= 15  get(pid)= 15  FAIL
+set  18  get(0)= 17  get(pid)= 17  FAIL
+forked child reads 9, parent 9  PASS
+prio881: 10 failed
+rc=10
+=== shebang872
+execv       #!/no/such/interp          errno=-2147459069 (No such file or directory), child exit 127  PASS
+posix_spawn #!/no/such/interp          error=-2147459069 (No such file or directory), child status 0xffffffff  PASS
+execv       #!/no/such/interp          errno=-2147459069 (No such file or directory), child exit 127  PASS
+posix_spawn #!/no/such/interp          error=-2147459069 (No such file or directory), child status 0xffffffff  PASS
+execv       #!./shebang872.txt         errno=-2147483646 (Permission denied), child exit 127  PASS
+posix_spawn #!./shebang872.txt         error=-2147483646 (Permission denied), child status 0xffffffff  PASS
+execv       #!/bin/sh                  errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh                  error=0 (-), child status 0  PASS
+execv       #!/bin/sh -e               errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh -e               error=0 (-), child status 0  PASS
+shebang872: 0 failed
+rc=0
+=== forkonce874 40
+round 0: fork child could not start a thread 
+round 1: fork child could not start a thread 
+round 2: fork child could not start a thread 
+forkonce874: 40 of 40 rounds failed (child 40, runner 0)
+rc=40
+=== shell view
+/boot/home/td/repros.sh: line 11:  1885 Kill Thread                bash -c './sg'
+sg rc=149
+Abort
+/boot/home/td/repros.sh: line 12:  1888 Kill Thread                bash -c './ab'
+ab rc=149
+bash: line 1: ulimit: open files: cannot modify limit: Operation not allowed
+rc=1
+bash: line 1: ulimit: file size: cannot get limit: Invalid Argument
+head rc=1
+ls: cannot access 'f878.dat': No such file or directory
+rc=2
+bash: ./s872.sh: /no/such/interp: bad interpreter: No such file or directory
+s872 rc=126
+{"error":"ENOENT","status":null,"signal":null,"stderr":""}
+node umask 10664
+node priority 9
+node child abort: {"status":null,"signal":"SIGKILLTHR"}
+node child segv: {"status":null,"signal":"SIGKILLTHR"}
+=== debug_server in syslog
+KERN: debug_server: Thread 1941 entered the debugger: Segment violation
+KERN: debug_server: Failed to start debugger: No such file or directory
+KERN: debug_server: Killing team 1941 (./sg)
+KERN: debug_server: TeamDebugHandler::Init(): Failed to get info for team 1941: Operation on invalid team
+KERN: debug_server: KillTeam(): Error getting info for team 1941: Operation on invalid team
+KERN: debug_server: Killing team 1941 ()
+##### C repros with libroot 874
+LIBRARY_PATH=/boot/home/td/lib-874
+14078 0x000000b0ee4b6000 0x000000b0ee5d3000     0          0 /boot/home/td/lib-874/libroot.so
+=== waitst876
+SIGABRT=6 SIGSEGV=11 SIGKILL=9 SIGILL=4 SIGTRAP=22 SIGKILLTHR=21
+Abort
+abort          FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-blocked  FAIL  signaled  WTERMSIG=21 (Kill Thread)
+Abort
+abort-ignored  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-handler  FAIL  exited    WEXITSTATUS=1
+Abort
+abort-thread   FAIL  signaled  WTERMSIG=21 (Kill Thread)
+raise-abrt     PASS  signaled  WTERMSIG=6 (Abort)
+segv-null      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-high      FAIL  signaled  WTERMSIG=21 (Kill Thread)
+segv-thread    FAIL  signaled  WTERMSIG=21 (Kill Thread)
+fpe-trap       FAIL  signaled  WTERMSIG=21 (Kill Thread)
+kill-segv      PASS  signaled  WTERMSIG=11 (Segmentation violation)
+kill-9         PASS  signaled  WTERMSIG=9 (Killed (by death))
+exit-3         PASS  exited    WEXITSTATUS=3
+handled-segv   PASS  exited    WEXITSTATUS=7
+waitst876: 9 failed
+rc=9
+=== rlim877
+NOFILE lower {64,64}         FAIL  was {256,8192} rc=-1 Operation not allowed now {256,8192}
+NOFILE raise back as root    PASS  rc=0  now {256,8192}
+NOFILE raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOFILE lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOVMON lower {64,64}         FAIL  was {4096,65536} rc=-1 Operation not allowed now {4096,65536}
+NOVMON raise back as root    PASS  rc=0  now {4096,65536}
+NOVMON raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOVMON lower as uid 1001     FAIL  {32,32}: rc=-1 Operation not allowed
+NOFILE inherit exec          FAIL  exec'd child sees "256 8192"
+rlim877: 5 failed
+rc=5
+=== fsize878
+get-default  FAIL  rc=-1 Invalid Argument cur=0xc3d2771fa8 max=0x1a5045e080
+set          FAIL  rc=-1 Invalid Argument now {0,0}
+partial      FAIL  setrlimit: Invalid Argument
+efbig        FAIL  setrlimit: Invalid Argument
+sigxfsz      FAIL  setrlimit: Invalid Argument
+default-kill FAIL  setrlimit: Invalid Argumentchild exited 1
+append       FAIL  append write(100)=100 then 100 
+pwrite       FAIL  pwrite(10 @ 2048)=10 
+writev       FAIL  writev(3 x 512)=1536
+ftruncate    FAIL  ftruncate(4096)=0 , ftruncate(512)=0
+no-limit     PASS  write(65536)=65536
+inherit      FAIL  child exit 1
+raise-user   FAIL  uid 1001 {1024,4096}: rc=-1 Invalid Argument
+pipe         PASS  write(pipe, 4096)=4096
+fsize878: 12 failed (SIGXFSZ=29 EFBIG=-2147454972)
+rc=12
+=== sigchld893 50
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+kill  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+exit  SIGCHLD seen before the child's fds closed: 50 of 50; reaped with fds still open: 0 of 50  FAIL
+sigchld893: 2 failed
+rc=1
+=== umask880
+umask(010664): reads back 010664 (want 0664), file 0777 -> 0113  FAIL
+umask(07022): reads back 07022 (want 022), file 0777 -> 0755  FAIL
+umask(0777): reads back 0777 (want 0777), file 0777 -> 0  PASS
+umask(022): reads back 022 (want 022), file 0777 -> 0755  PASS
+umask(017777): reads back 017777 (want 0777), file 0777 -> 0  FAIL
+umask(0): reads back 0 (want 0), file 0777 -> 0777  PASS
+exec'd sh after umask(010664) reports "10664" (want 0664)  FAIL
+umask880: 4 failed
+rc=4
+=== prio881
+set -20  get(0)=-20  get(pid)=-20  PASS
+set -15  get(0)=-15  get(pid)=-15  PASS
+set -10  get(0)=-10  get(pid)=-10  PASS
+set  -5  get(0)= -5  get(pid)= -5  PASS
+set   0  get(0)=  0  get(pid)=  0  PASS
+set   1  get(0)=  0  get(pid)=  0  FAIL
+set   2  get(0)=  0  get(pid)=  0  FAIL
+set   4  get(0)=  3  get(pid)=  3  FAIL
+set   5  get(0)=  5  get(pid)=  5  PASS
+set   6  get(0)=  5  get(pid)=  5  FAIL
+set   8  get(0)=  7  get(pid)=  7  FAIL
+set  10  get(0)=  9  get(pid)=  9  FAIL
+set  12  get(0)= 11  get(pid)= 11  FAIL
+set  14  get(0)= 13  get(pid)= 13  FAIL
+set  15  get(0)= 15  get(pid)= 15  PASS
+set  16  get(0)= 15  get(pid)= 15  FAIL
+set  18  get(0)= 17  get(pid)= 17  FAIL
+forked child reads 9, parent 9  PASS
+prio881: 10 failed
+rc=10
+=== shebang872
+execv       #!/no/such/interp          errno=0 (-), child exit 3  FAIL
+posix_spawn #!/no/such/interp          error=-2147459069 (No such file or directory), child status 0xffffffff  PASS
+execv       #!./shebang872.txt         errno=0 (-), child exit 2  FAIL
+posix_spawn #!./shebang872.txt         error=-2147478782 (Not an executable), child status 0xffffffff  FAIL
+execv       #!/bin/sh                  errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh                  error=0 (-), child status 0  PASS
+execv       #!/bin/sh -e               errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh -e               error=0 (-), child status 0  PASS
+shebang872: 3 failed
+rc=3
+=== forkonce874 40
+forkonce874: 0 of 40 rounds failed (child 0, runner 0)
+rc=0
+=== shell view
+/boot/home/td/repros.sh: line 11:  2336 Kill Thread                bash -c './sg'
+sg rc=149
+Abort
+/boot/home/td/repros.sh: line 12:  2339 Kill Thread                bash -c './ab'
+ab rc=149
+bash: line 1: ulimit: open files: cannot modify limit: Operation not allowed
+rc=1
+bash: line 1: ulimit: file size: cannot get limit: Invalid Argument
+head rc=1
+ls: cannot access 'f878.dat': No such file or directory
+rc=2
+s872 rc=3
+{"status":3,"signal":null,"stderr":"runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory\n"}
+node umask 10664
+node priority 9
+node child abort: {"status":null,"signal":"SIGKILLTHR"}
+node child segv: {"status":null,"signal":"SIGKILLTHR"}
+=== debug_server in syslog
+KERN: debug_server: Thread 2392 entered the debugger: Segment violation
+KERN: debug_server: Failed to start debugger: No such file or directory
+KERN: debug_server: Killing team 2392 (./sg)
+KERN: debug_server: TeamDebugHandler::Init(): Failed to get info for team 2392: Operation on invalid team
+KERN: debug_server: KillTeam(): Error getting info for team 2392: Operation on invalid team
+KERN: debug_server: Killing team 2392 ()
+##### node 880 with libroot 880
+LIBRARY_PATH=/boot/home/td/lib-880 node v24.21.0 tests: parallel/test-process-umask-mask
+test.py rc=0 wall=4s
+ok parallel/test-process-umask-mask
+pass=1 fail=0
+##### node 881 with libroot 881
+LIBRARY_PATH=/boot/home/td/lib-881 node v24.21.0 tests: parallel/test-os parallel/test-os-process-priority
+test.py rc=1 wall=1s
+not ok parallel/test-os
+ok parallel/test-os-process-priority
+pass=1 fail=1
+##### node regression slice with libroot 872
+LIBRARY_PATH=/boot/home/td/lib-872 node v24.21.0 tests: parallel/test-child-process-* parallel/test-cluster-* parallel/test-process-* parallel/test-fs-write*
+test.py rc=1 wall=1090s
+not ok parallel/test-child-process-default-options
+not ok parallel/test-child-process-disconnect
+not ok parallel/test-child-process-env
+not ok parallel/test-child-process-exec-env
+not ok parallel/test-child-process-exec-kill-throws
+not ok parallel/test-child-process-fork-net
+not ok parallel/test-child-process-fork-net-socket
+not ok parallel/test-child-process-send-keep-open
+not ok parallel/test-cluster-concurrent-disconnect
+not ok parallel/test-cluster-dgram-1
+not ok parallel/test-cluster-disconnect
+not ok parallel/test-cluster-listen-pipe-readable-writable
+not ok parallel/test-cluster-net-listen-ipv6only-false
+not ok parallel/test-cluster-shared-leak
+not ok parallel/test-cluster-worker-kill-signal
+not ok parallel/test-fs-write-sigxfsz
+not ok parallel/test-process-dlopen-error-message-crash
+not ok parallel/test-process-env-allowed-flags-are-documented
+not ok parallel/test-process-euid-egid
+not ok parallel/test-process-getactivehandles
+not ok parallel/test-process-getactiveresources-track-active-handles
+not ok parallel/test-process-load-env-file
+not ok parallel/test-process-umask-mask
+not ok parallel/test-process-versions
+ok parallel/test-child-process-advanced-serialization
+ok parallel/test-child-process-advanced-serialization-host-objects
+ok parallel/test-child-process-advanced-serialization-largebuffer
+ok parallel/test-child-process-advanced-serialization-splitted-length-field
+ok parallel/test-child-process-bad-stdio
+ok parallel/test-child-process-can-write-to-stdout
+ok parallel/test-child-process-constructor
+ok parallel/test-child-process-cwd
+ok parallel/test-child-process-destroy
+ok parallel/test-child-process-detached
+ok parallel/test-child-process-dgram-reuseport # skip The `reusePort` is not supported
+ok parallel/test-child-process-double-pipe
+ok parallel/test-child-process-exec-abortcontroller-promisified
+ok parallel/test-child-process-exec-any-shells-windows # skip Windows specific test.
+ok parallel/test-child-process-exec-cwd
+ok parallel/test-child-process-exec-encoding
+ok parallel/test-child-process-exec-error
+ok parallel/test-child-process-exec-maxbuf
+ok parallel/test-child-process-exec-std-encoding
+ok parallel/test-child-process-exec-stdout-stderr-data-string
+ok parallel/test-child-process-exec-timeout-expire
+ok parallel/test-child-process-exec-timeout-kill
+ok parallel/test-child-process-exec-timeout-not-expired
+ok parallel/test-child-process-execFile-promisified-abortController
+ok parallel/test-child-process-execfile
+ok parallel/test-child-process-execfile-maxbuf
+ok parallel/test-child-process-execfilesync-maxbuf
+ok parallel/test-child-process-execsync-maxbuf
+ok parallel/test-child-process-exit-code
+ok parallel/test-child-process-flush-stdio
+ok parallel/test-child-process-fork
+ok parallel/test-child-process-fork-abort-signal
+ok parallel/test-child-process-fork-advanced-header-serialization
+ok parallel/test-child-process-fork-and-spawn
+ok parallel/test-child-process-fork-args
+ok parallel/test-child-process-fork-close
+ok parallel/test-child-process-fork-closed-channel-segfault
+ok parallel/test-child-process-fork-detached
+ok parallel/test-child-process-fork-dgram
+ok parallel/test-child-process-fork-exec-argv
+ok parallel/test-child-process-fork-exec-path
+ok parallel/test-child-process-fork-getconnections
+ok parallel/test-child-process-fork-net-server
+ok parallel/test-child-process-fork-no-shell
+ok parallel/test-child-process-fork-ref
+ok parallel/test-child-process-fork-ref2
+ok parallel/test-child-process-fork-stdio
+ok parallel/test-child-process-fork-stdio-string-variant
+ok parallel/test-child-process-fork-timeout-kill-signal
+ok parallel/test-child-process-fork-url
+ok parallel/test-child-process-fork3
+ok parallel/test-child-process-http-socket-leak
+ok parallel/test-child-process-internal
+ok parallel/test-child-process-ipc
+ok parallel/test-child-process-ipc-next-tick
+ok parallel/test-child-process-kill
+ok parallel/test-child-process-kill-sigwinch
+ok parallel/test-child-process-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-child-process-no-deprecation
+ok parallel/test-child-process-pipe-dataflow
+ok parallel/test-child-process-promisified
+ok parallel/test-child-process-prototype-tampering # skip undefined
+ok parallel/test-child-process-recv-handle
+ok parallel/test-child-process-reject-null-bytes
+ok parallel/test-child-process-send-after-close
+ok parallel/test-child-process-send-cb
+ok parallel/test-child-process-send-returns-boolean
+ok parallel/test-child-process-send-type-error
+ok parallel/test-child-process-send-utf8
+ok parallel/test-child-process-server-close
+ok parallel/test-child-process-set-blocking
+ok parallel/test-child-process-silent
+ok parallel/test-child-process-spawn-args
+ok parallel/test-child-process-spawn-argv0
+ok parallel/test-child-process-spawn-controller
+ok parallel/test-child-process-spawn-error
+ok parallel/test-child-process-spawn-event
+ok parallel/test-child-process-spawn-shell
+ok parallel/test-child-process-spawn-timeout-kill-signal
+ok parallel/test-child-process-spawn-typeerror
+ok parallel/test-child-process-spawn-windows-batch-file
+ok parallel/test-child-process-spawnsync
+ok parallel/test-child-process-spawnsync-args
+ok parallel/test-child-process-spawnsync-env
+ok parallel/test-child-process-spawnsync-input
+ok parallel/test-child-process-spawnsync-kill-signal
+ok parallel/test-child-process-spawnsync-maxbuf
+ok parallel/test-child-process-spawnsync-non-string-args
+ok parallel/test-child-process-spawnsync-shell
+ok parallel/test-child-process-spawnsync-timeout
+ok parallel/test-child-process-spawnsync-validation-errors
+ok parallel/test-child-process-stdin
+ok parallel/test-child-process-stdin-ipc
+ok parallel/test-child-process-stdio
+ok parallel/test-child-process-stdio-big-write-end
+ok parallel/test-child-process-stdio-inherit
+ok parallel/test-child-process-stdio-merge-stdouts-into-cat
+ok parallel/test-child-process-stdio-overlapped # skip overlapped-checker binary is not available
+ok parallel/test-child-process-stdio-reuse-readable-stdio
+ok parallel/test-child-process-stdout-flush
+ok parallel/test-child-process-stdout-flush-exit
+ok parallel/test-child-process-stdout-ipc
+ok parallel/test-child-process-uid-gid
+ok parallel/test-child-process-validate-stdio
+ok parallel/test-child-process-windows-hide
+ok parallel/test-cluster-accept-fail
+ok parallel/test-cluster-advanced-serialization
+ok parallel/test-cluster-basic
+ok parallel/test-cluster-bind-privileged-port # skip Test is not supposed to be run as root.
+ok parallel/test-cluster-bind-twice
+ok parallel/test-cluster-call-and-destroy
+ok parallel/test-cluster-child-index-dgram
+ok parallel/test-cluster-child-index-net
+ok parallel/test-cluster-cwd
+ok parallel/test-cluster-dgram-2
+ok parallel/test-cluster-dgram-bind-fd
+ok parallel/test-cluster-dgram-ipv6only
+ok parallel/test-cluster-dgram-reuse
+ok parallel/test-cluster-dgram-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-disconnect-before-exit
+ok parallel/test-cluster-disconnect-exitedAfterDisconnect-race
+ok parallel/test-cluster-disconnect-idle-worker
+ok parallel/test-cluster-disconnect-leak
+ok parallel/test-cluster-disconnect-race
+ok parallel/test-cluster-disconnect-unshared-tcp
+ok parallel/test-cluster-disconnect-unshared-udp
+ok parallel/test-cluster-disconnect-with-no-workers
+ok parallel/test-cluster-eaccess
+ok parallel/test-cluster-eaddrinuse
+ok parallel/test-cluster-fork-env
+ok parallel/test-cluster-fork-stdio
+ok parallel/test-cluster-fork-windowsHide
+ok parallel/test-cluster-http-pipe
+ok parallel/test-cluster-invalid-message
+ok parallel/test-cluster-ipc-throw
+ok parallel/test-cluster-kill-disconnect
+ok parallel/test-cluster-kill-infinite-loop
+ok parallel/test-cluster-listening-port
+ok parallel/test-cluster-message
+ok parallel/test-cluster-net-listen
+ok parallel/test-cluster-net-listen-backlog
+ok parallel/test-cluster-net-listen-relative-path
+ok parallel/test-cluster-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-net-send
+ok parallel/test-cluster-net-server-drop-connection
+ok parallel/test-cluster-primary-error
+ok parallel/test-cluster-primary-kill
+ok parallel/test-cluster-process-disconnect
+ok parallel/test-cluster-rr-domain-listen
+ok parallel/test-cluster-rr-handle-close
+ok parallel/test-cluster-rr-handle-keep-loop-alive
+ok parallel/test-cluster-rr-handle-ref-unref
+ok parallel/test-cluster-rr-ref
+ok parallel/test-cluster-send-deadlock
+ok parallel/test-cluster-send-handle-twice
+ok parallel/test-cluster-send-socket-to-worker-http-server
+ok parallel/test-cluster-server-restart-none
+ok parallel/test-cluster-server-restart-rr
+ok parallel/test-cluster-setup-primary
+ok parallel/test-cluster-setup-primary-argv
+ok parallel/test-cluster-setup-primary-cumulative
+ok parallel/test-cluster-setup-primary-emit
+ok parallel/test-cluster-setup-primary-multiple
+ok parallel/test-cluster-shared-handle-bind-error
+ok parallel/test-cluster-shared-handle-bind-privileged-port # skip as this test should not be run as `root`
+ok parallel/test-cluster-uncaught-exception
+ok parallel/test-cluster-worker-constructor
+ok parallel/test-cluster-worker-death
+ok parallel/test-cluster-worker-destroy
+ok parallel/test-cluster-worker-disconnect
+ok parallel/test-cluster-worker-disconnect-on-error
+ok parallel/test-cluster-worker-events
+ok parallel/test-cluster-worker-exit
+ok parallel/test-cluster-worker-forced-exit
+ok parallel/test-cluster-worker-handle-close
+ok parallel/test-cluster-worker-init
+ok parallel/test-cluster-worker-isconnected
+ok parallel/test-cluster-worker-isdead
+ok parallel/test-cluster-worker-kill
+ok parallel/test-cluster-worker-no-exit
+ok parallel/test-cluster-worker-wait-server-close
+ok parallel/test-fs-write
+ok parallel/test-fs-write-buffer
+ok parallel/test-fs-write-buffer-large
+ok parallel/test-fs-write-file
+ok parallel/test-fs-write-file-buffer
+ok parallel/test-fs-write-file-flush
+ok parallel/test-fs-write-file-invalid-path # skip This test is for Windows only.
+ok parallel/test-fs-write-file-sync
+ok parallel/test-fs-write-file-typedarrays
+ok parallel/test-fs-write-negativeoffset
+ok parallel/test-fs-write-no-fd
+ok parallel/test-fs-write-optional-params
+ok parallel/test-fs-write-reuse-callback
+ok parallel/test-fs-write-stream
+ok parallel/test-fs-write-stream-autoclose-option
+ok parallel/test-fs-write-stream-change-open
+ok parallel/test-fs-write-stream-close-without-callback
+ok parallel/test-fs-write-stream-double-close
+ok parallel/test-fs-write-stream-eagain
+ok parallel/test-fs-write-stream-encoding
+ok parallel/test-fs-write-stream-end
+ok parallel/test-fs-write-stream-err
+ok parallel/test-fs-write-stream-file-handle
+ok parallel/test-fs-write-stream-file-handle-2
+ok parallel/test-fs-write-stream-flush
+ok parallel/test-fs-write-stream-fs
+ok parallel/test-fs-write-stream-patch-open
+ok parallel/test-fs-write-stream-throw-type-error
+ok parallel/test-fs-write-sync
+ok parallel/test-fs-write-sync-optional-params
+ok parallel/test-fs-writefile-with-fd
+ok parallel/test-fs-writestream-open-write
+ok parallel/test-fs-writesync-crash
+ok parallel/test-fs-writev
+ok parallel/test-fs-writev-promises
+ok parallel/test-fs-writev-sync
+ok parallel/test-process-abort
+ok parallel/test-process-argv-0
+ok parallel/test-process-available-memory
+ok parallel/test-process-beforeexit
+ok parallel/test-process-beforeexit-throw-exit
+ok parallel/test-process-binding
+ok parallel/test-process-binding-internalbinding-allowlist
+ok parallel/test-process-binding-util
+ok parallel/test-process-chdir
+ok parallel/test-process-chdir-errormessage
+ok parallel/test-process-config # skip config.gypi does not exist.
+ok parallel/test-process-constants-noatime
+ok parallel/test-process-constrained-memory
+ok parallel/test-process-cpuUsage
+ok parallel/test-process-default
+ok parallel/test-process-dlopen-undefined-exports
+ok parallel/test-process-domain-segfault
+ok parallel/test-process-emit
+ok parallel/test-process-emitwarning
+ok parallel/test-process-env
+ok parallel/test-process-env-allowed-flags
+ok parallel/test-process-env-delete
+ok parallel/test-process-env-deprecation
+ok parallel/test-process-env-ignore-getter-setter
+ok parallel/test-process-env-sideeffects
+ok parallel/test-process-env-symbols
+ok parallel/test-process-env-tz
+ok parallel/test-process-env-windows-error-reset
+ok parallel/test-process-exception-capture
+ok parallel/test-process-exception-capture-errors
+ok parallel/test-process-exception-capture-should-abort-on-uncaught
+ok parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring
+ok parallel/test-process-exec-argv
+ok parallel/test-process-execpath
+ok parallel/test-process-execve
+ok parallel/test-process-execve-abort
+ok parallel/test-process-execve-no-args # skip /boot/system/bin/nop binary is not available
+ok parallel/test-process-execve-on-exit
+ok parallel/test-process-execve-permission-fail
+ok parallel/test-process-execve-permission-granted
+ok parallel/test-process-execve-socket
+ok parallel/test-process-execve-validation
+ok parallel/test-process-execve-worker-threads
+ok parallel/test-process-exit
+ok parallel/test-process-exit-after-fetch-throw
+ok parallel/test-process-exit-code
+ok parallel/test-process-exit-code-validation
+ok parallel/test-process-exit-from-before-exit
+ok parallel/test-process-exit-handler
+ok parallel/test-process-exit-recursive
+ok parallel/test-process-external-stdio-close
+ok parallel/test-process-external-stdio-close-spawn
+ok parallel/test-process-features
+ok parallel/test-process-finalization
+ok parallel/test-process-get-builtin
+ok parallel/test-process-getactiverequests
+ok parallel/test-process-getactiveresources
+ok parallel/test-process-getactiveresources-track-active-requests
+ok parallel/test-process-getactiveresources-track-interval-lifetime
+ok parallel/test-process-getactiveresources-track-multiple-timers
+ok parallel/test-process-getactiveresources-track-timer-lifetime
+ok parallel/test-process-getgroups
+ok parallel/test-process-hrtime
+ok parallel/test-process-hrtime-bigint
+ok parallel/test-process-initgroups
+ok parallel/test-process-kill-null
+ok parallel/test-process-kill-pid
+ok parallel/test-process-next-tick
+ok parallel/test-process-no-deprecation
+ok parallel/test-process-ppid
+ok parallel/test-process-prototype
+ok parallel/test-process-raw-debug
+ok parallel/test-process-really-exit
+ok parallel/test-process-redirect-warnings
+ok parallel/test-process-redirect-warnings-env
+ok parallel/test-process-ref-unref
+ok parallel/test-process-release
+ok parallel/test-process-remove-all-signal-listeners
+ok parallel/test-process-setgroups
+ok parallel/test-process-setsourcemapsenabled
+ok parallel/test-process-threadCpuUsage-main-thread
+ok parallel/test-process-threadCpuUsage-worker-threads
+ok parallel/test-process-title-cli
+ok parallel/test-process-uid-gid
+ok parallel/test-process-umask
+ok parallel/test-process-uncaught-exception-monitor
+ok parallel/test-process-uptime
+ok parallel/test-process-warning
+ok parallel/test-process-warnings
+pass=306 fail=24
+##### node regression slice with libroot 874
+LIBRARY_PATH=/boot/home/td/lib-874 node v24.21.0 tests: parallel/test-child-process-* parallel/test-cluster-* parallel/test-process-* parallel/test-fs-write*
+test.py rc=1 wall=1089s
+not ok parallel/test-child-process-default-options
+not ok parallel/test-child-process-disconnect
+not ok parallel/test-child-process-env
+not ok parallel/test-child-process-exec-env
+not ok parallel/test-child-process-fork-net
+not ok parallel/test-child-process-fork-net-socket
+not ok parallel/test-child-process-send-keep-open
+not ok parallel/test-cluster-concurrent-disconnect
+not ok parallel/test-cluster-dgram-1
+not ok parallel/test-cluster-disconnect
+not ok parallel/test-cluster-listen-pipe-readable-writable
+not ok parallel/test-cluster-net-listen-ipv6only-false
+not ok parallel/test-cluster-shared-leak
+not ok parallel/test-cluster-worker-kill-signal
+not ok parallel/test-fs-write-sigxfsz
+not ok parallel/test-process-dlopen-error-message-crash
+not ok parallel/test-process-env-allowed-flags-are-documented
+not ok parallel/test-process-euid-egid
+not ok parallel/test-process-getactivehandles
+not ok parallel/test-process-getactiveresources-track-active-handles
+not ok parallel/test-process-load-env-file
+not ok parallel/test-process-umask-mask
+not ok parallel/test-process-versions
+ok parallel/test-child-process-advanced-serialization
+ok parallel/test-child-process-advanced-serialization-host-objects
+ok parallel/test-child-process-advanced-serialization-largebuffer
+ok parallel/test-child-process-advanced-serialization-splitted-length-field
+ok parallel/test-child-process-bad-stdio
+ok parallel/test-child-process-can-write-to-stdout
+ok parallel/test-child-process-constructor
+ok parallel/test-child-process-cwd
+ok parallel/test-child-process-destroy
+ok parallel/test-child-process-detached
+ok parallel/test-child-process-dgram-reuseport # skip The `reusePort` is not supported
+ok parallel/test-child-process-double-pipe
+ok parallel/test-child-process-exec-abortcontroller-promisified
+ok parallel/test-child-process-exec-any-shells-windows # skip Windows specific test.
+ok parallel/test-child-process-exec-cwd
+ok parallel/test-child-process-exec-encoding
+ok parallel/test-child-process-exec-error
+ok parallel/test-child-process-exec-kill-throws
+ok parallel/test-child-process-exec-maxbuf
+ok parallel/test-child-process-exec-std-encoding
+ok parallel/test-child-process-exec-stdout-stderr-data-string
+ok parallel/test-child-process-exec-timeout-expire
+ok parallel/test-child-process-exec-timeout-kill
+ok parallel/test-child-process-exec-timeout-not-expired
+ok parallel/test-child-process-execFile-promisified-abortController
+ok parallel/test-child-process-execfile
+ok parallel/test-child-process-execfile-maxbuf
+ok parallel/test-child-process-execfilesync-maxbuf
+ok parallel/test-child-process-execsync-maxbuf
+ok parallel/test-child-process-exit-code
+ok parallel/test-child-process-flush-stdio
+ok parallel/test-child-process-fork
+ok parallel/test-child-process-fork-abort-signal
+ok parallel/test-child-process-fork-advanced-header-serialization
+ok parallel/test-child-process-fork-and-spawn
+ok parallel/test-child-process-fork-args
+ok parallel/test-child-process-fork-close
+ok parallel/test-child-process-fork-closed-channel-segfault
+ok parallel/test-child-process-fork-detached
+ok parallel/test-child-process-fork-dgram
+ok parallel/test-child-process-fork-exec-argv
+ok parallel/test-child-process-fork-exec-path
+ok parallel/test-child-process-fork-getconnections
+ok parallel/test-child-process-fork-net-server
+ok parallel/test-child-process-fork-no-shell
+ok parallel/test-child-process-fork-ref
+ok parallel/test-child-process-fork-ref2
+ok parallel/test-child-process-fork-stdio
+ok parallel/test-child-process-fork-stdio-string-variant
+ok parallel/test-child-process-fork-timeout-kill-signal
+ok parallel/test-child-process-fork-url
+ok parallel/test-child-process-fork3
+ok parallel/test-child-process-http-socket-leak
+ok parallel/test-child-process-internal
+ok parallel/test-child-process-ipc
+ok parallel/test-child-process-ipc-next-tick
+ok parallel/test-child-process-kill
+ok parallel/test-child-process-kill-sigwinch
+ok parallel/test-child-process-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-child-process-no-deprecation
+ok parallel/test-child-process-pipe-dataflow
+ok parallel/test-child-process-promisified
+ok parallel/test-child-process-prototype-tampering # skip undefined
+ok parallel/test-child-process-recv-handle
+ok parallel/test-child-process-reject-null-bytes
+ok parallel/test-child-process-send-after-close
+ok parallel/test-child-process-send-cb
+ok parallel/test-child-process-send-returns-boolean
+ok parallel/test-child-process-send-type-error
+ok parallel/test-child-process-send-utf8
+ok parallel/test-child-process-server-close
+ok parallel/test-child-process-set-blocking
+ok parallel/test-child-process-silent
+ok parallel/test-child-process-spawn-args
+ok parallel/test-child-process-spawn-argv0
+ok parallel/test-child-process-spawn-controller
+ok parallel/test-child-process-spawn-error
+ok parallel/test-child-process-spawn-event
+ok parallel/test-child-process-spawn-shell
+ok parallel/test-child-process-spawn-timeout-kill-signal
+ok parallel/test-child-process-spawn-typeerror
+ok parallel/test-child-process-spawn-windows-batch-file
+ok parallel/test-child-process-spawnsync
+ok parallel/test-child-process-spawnsync-args
+ok parallel/test-child-process-spawnsync-env
+ok parallel/test-child-process-spawnsync-input
+ok parallel/test-child-process-spawnsync-kill-signal
+ok parallel/test-child-process-spawnsync-maxbuf
+ok parallel/test-child-process-spawnsync-non-string-args
+ok parallel/test-child-process-spawnsync-shell
+ok parallel/test-child-process-spawnsync-timeout
+ok parallel/test-child-process-spawnsync-validation-errors
+ok parallel/test-child-process-stdin
+ok parallel/test-child-process-stdin-ipc
+ok parallel/test-child-process-stdio
+ok parallel/test-child-process-stdio-big-write-end
+ok parallel/test-child-process-stdio-inherit
+ok parallel/test-child-process-stdio-merge-stdouts-into-cat
+ok parallel/test-child-process-stdio-overlapped # skip overlapped-checker binary is not available
+ok parallel/test-child-process-stdio-reuse-readable-stdio
+ok parallel/test-child-process-stdout-flush
+ok parallel/test-child-process-stdout-flush-exit
+ok parallel/test-child-process-stdout-ipc
+ok parallel/test-child-process-uid-gid
+ok parallel/test-child-process-validate-stdio
+ok parallel/test-child-process-windows-hide
+ok parallel/test-cluster-accept-fail
+ok parallel/test-cluster-advanced-serialization
+ok parallel/test-cluster-basic
+ok parallel/test-cluster-bind-privileged-port # skip Test is not supposed to be run as root.
+ok parallel/test-cluster-bind-twice
+ok parallel/test-cluster-call-and-destroy
+ok parallel/test-cluster-child-index-dgram
+ok parallel/test-cluster-child-index-net
+ok parallel/test-cluster-cwd
+ok parallel/test-cluster-dgram-2
+ok parallel/test-cluster-dgram-bind-fd
+ok parallel/test-cluster-dgram-ipv6only
+ok parallel/test-cluster-dgram-reuse
+ok parallel/test-cluster-dgram-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-disconnect-before-exit
+ok parallel/test-cluster-disconnect-exitedAfterDisconnect-race
+ok parallel/test-cluster-disconnect-idle-worker
+ok parallel/test-cluster-disconnect-leak
+ok parallel/test-cluster-disconnect-race
+ok parallel/test-cluster-disconnect-unshared-tcp
+ok parallel/test-cluster-disconnect-unshared-udp
+ok parallel/test-cluster-disconnect-with-no-workers
+ok parallel/test-cluster-eaccess
+ok parallel/test-cluster-eaddrinuse
+ok parallel/test-cluster-fork-env
+ok parallel/test-cluster-fork-stdio
+ok parallel/test-cluster-fork-windowsHide
+ok parallel/test-cluster-http-pipe
+ok parallel/test-cluster-invalid-message
+ok parallel/test-cluster-ipc-throw
+ok parallel/test-cluster-kill-disconnect
+ok parallel/test-cluster-kill-infinite-loop
+ok parallel/test-cluster-listening-port
+ok parallel/test-cluster-message
+ok parallel/test-cluster-net-listen
+ok parallel/test-cluster-net-listen-backlog
+ok parallel/test-cluster-net-listen-relative-path
+ok parallel/test-cluster-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-net-send
+ok parallel/test-cluster-net-server-drop-connection
+ok parallel/test-cluster-primary-error
+ok parallel/test-cluster-primary-kill
+ok parallel/test-cluster-process-disconnect
+ok parallel/test-cluster-rr-domain-listen
+ok parallel/test-cluster-rr-handle-close
+ok parallel/test-cluster-rr-handle-keep-loop-alive
+ok parallel/test-cluster-rr-handle-ref-unref
+ok parallel/test-cluster-rr-ref
+ok parallel/test-cluster-send-deadlock
+ok parallel/test-cluster-send-handle-twice
+ok parallel/test-cluster-send-socket-to-worker-http-server
+ok parallel/test-cluster-server-restart-none
+ok parallel/test-cluster-server-restart-rr
+ok parallel/test-cluster-setup-primary
+ok parallel/test-cluster-setup-primary-argv
+ok parallel/test-cluster-setup-primary-cumulative
+ok parallel/test-cluster-setup-primary-emit
+ok parallel/test-cluster-setup-primary-multiple
+ok parallel/test-cluster-shared-handle-bind-error
+ok parallel/test-cluster-shared-handle-bind-privileged-port # skip as this test should not be run as `root`
+ok parallel/test-cluster-uncaught-exception
+ok parallel/test-cluster-worker-constructor
+ok parallel/test-cluster-worker-death
+ok parallel/test-cluster-worker-destroy
+ok parallel/test-cluster-worker-disconnect
+ok parallel/test-cluster-worker-disconnect-on-error
+ok parallel/test-cluster-worker-events
+ok parallel/test-cluster-worker-exit
+ok parallel/test-cluster-worker-forced-exit
+ok parallel/test-cluster-worker-handle-close
+ok parallel/test-cluster-worker-init
+ok parallel/test-cluster-worker-isconnected
+ok parallel/test-cluster-worker-isdead
+ok parallel/test-cluster-worker-kill
+ok parallel/test-cluster-worker-no-exit
+ok parallel/test-cluster-worker-wait-server-close
+ok parallel/test-fs-write
+ok parallel/test-fs-write-buffer
+ok parallel/test-fs-write-buffer-large
+ok parallel/test-fs-write-file
+ok parallel/test-fs-write-file-buffer
+ok parallel/test-fs-write-file-flush
+ok parallel/test-fs-write-file-invalid-path # skip This test is for Windows only.
+ok parallel/test-fs-write-file-sync
+ok parallel/test-fs-write-file-typedarrays
+ok parallel/test-fs-write-negativeoffset
+ok parallel/test-fs-write-no-fd
+ok parallel/test-fs-write-optional-params
+ok parallel/test-fs-write-reuse-callback
+ok parallel/test-fs-write-stream
+ok parallel/test-fs-write-stream-autoclose-option
+ok parallel/test-fs-write-stream-change-open
+ok parallel/test-fs-write-stream-close-without-callback
+ok parallel/test-fs-write-stream-double-close
+ok parallel/test-fs-write-stream-eagain
+ok parallel/test-fs-write-stream-encoding
+ok parallel/test-fs-write-stream-end
+ok parallel/test-fs-write-stream-err
+ok parallel/test-fs-write-stream-file-handle
+ok parallel/test-fs-write-stream-file-handle-2
+ok parallel/test-fs-write-stream-flush
+ok parallel/test-fs-write-stream-fs
+ok parallel/test-fs-write-stream-patch-open
+ok parallel/test-fs-write-stream-throw-type-error
+ok parallel/test-fs-write-sync
+ok parallel/test-fs-write-sync-optional-params
+ok parallel/test-fs-writefile-with-fd
+ok parallel/test-fs-writestream-open-write
+ok parallel/test-fs-writesync-crash
+ok parallel/test-fs-writev
+ok parallel/test-fs-writev-promises
+ok parallel/test-fs-writev-sync
+ok parallel/test-process-abort
+ok parallel/test-process-argv-0
+ok parallel/test-process-available-memory
+ok parallel/test-process-beforeexit
+ok parallel/test-process-beforeexit-throw-exit
+ok parallel/test-process-binding
+ok parallel/test-process-binding-internalbinding-allowlist
+ok parallel/test-process-binding-util
+ok parallel/test-process-chdir
+ok parallel/test-process-chdir-errormessage
+ok parallel/test-process-config # skip config.gypi does not exist.
+ok parallel/test-process-constants-noatime
+ok parallel/test-process-constrained-memory
+ok parallel/test-process-cpuUsage
+ok parallel/test-process-default
+ok parallel/test-process-dlopen-undefined-exports
+ok parallel/test-process-domain-segfault
+ok parallel/test-process-emit
+ok parallel/test-process-emitwarning
+ok parallel/test-process-env
+ok parallel/test-process-env-allowed-flags
+ok parallel/test-process-env-delete
+ok parallel/test-process-env-deprecation
+ok parallel/test-process-env-ignore-getter-setter
+ok parallel/test-process-env-sideeffects
+ok parallel/test-process-env-symbols
+ok parallel/test-process-env-tz
+ok parallel/test-process-env-windows-error-reset
+ok parallel/test-process-exception-capture
+ok parallel/test-process-exception-capture-errors
+ok parallel/test-process-exception-capture-should-abort-on-uncaught
+ok parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring
+ok parallel/test-process-exec-argv
+ok parallel/test-process-execpath
+ok parallel/test-process-execve
+ok parallel/test-process-execve-abort
+ok parallel/test-process-execve-no-args # skip /boot/system/bin/nop binary is not available
+ok parallel/test-process-execve-on-exit
+ok parallel/test-process-execve-permission-fail
+ok parallel/test-process-execve-permission-granted
+ok parallel/test-process-execve-socket
+ok parallel/test-process-execve-validation
+ok parallel/test-process-execve-worker-threads
+ok parallel/test-process-exit
+ok parallel/test-process-exit-after-fetch-throw
+ok parallel/test-process-exit-code
+ok parallel/test-process-exit-code-validation
+ok parallel/test-process-exit-from-before-exit
+ok parallel/test-process-exit-handler
+ok parallel/test-process-exit-recursive
+ok parallel/test-process-external-stdio-close
+ok parallel/test-process-external-stdio-close-spawn
+ok parallel/test-process-features
+ok parallel/test-process-finalization
+ok parallel/test-process-get-builtin
+ok parallel/test-process-getactiverequests
+ok parallel/test-process-getactiveresources
+ok parallel/test-process-getactiveresources-track-active-requests
+ok parallel/test-process-getactiveresources-track-interval-lifetime
+ok parallel/test-process-getactiveresources-track-multiple-timers
+ok parallel/test-process-getactiveresources-track-timer-lifetime
+ok parallel/test-process-getgroups
+ok parallel/test-process-hrtime
+ok parallel/test-process-hrtime-bigint
+ok parallel/test-process-initgroups
+ok parallel/test-process-kill-null
+ok parallel/test-process-kill-pid
+ok parallel/test-process-next-tick
+ok parallel/test-process-no-deprecation
+ok parallel/test-process-ppid
+ok parallel/test-process-prototype
+ok parallel/test-process-raw-debug
+ok parallel/test-process-really-exit
+ok parallel/test-process-redirect-warnings
+ok parallel/test-process-redirect-warnings-env
+ok parallel/test-process-ref-unref
+ok parallel/test-process-release
+ok parallel/test-process-remove-all-signal-listeners
+ok parallel/test-process-setgroups
+ok parallel/test-process-setsourcemapsenabled
+ok parallel/test-process-threadCpuUsage-main-thread
+ok parallel/test-process-threadCpuUsage-worker-threads
+ok parallel/test-process-title-cli
+ok parallel/test-process-uid-gid
+ok parallel/test-process-umask
+ok parallel/test-process-uncaught-exception-monitor
+ok parallel/test-process-uptime
+ok parallel/test-process-warning
+ok parallel/test-process-warnings
+pass=307 fail=23
+##### node regression slice with libroot 880
+LIBRARY_PATH=/boot/home/td/lib-880 node v24.21.0 tests: parallel/test-child-process-* parallel/test-cluster-* parallel/test-process-* parallel/test-fs-write*
+test.py rc=1 wall=1089s
+not ok parallel/test-child-process-default-options
+not ok parallel/test-child-process-disconnect
+not ok parallel/test-child-process-env
+not ok parallel/test-child-process-exec-env
+not ok parallel/test-child-process-fork-net
+not ok parallel/test-child-process-fork-net-socket
+not ok parallel/test-child-process-send-keep-open
+not ok parallel/test-cluster-concurrent-disconnect
+not ok parallel/test-cluster-dgram-1
+not ok parallel/test-cluster-disconnect
+not ok parallel/test-cluster-listen-pipe-readable-writable
+not ok parallel/test-cluster-net-listen-ipv6only-false
+not ok parallel/test-cluster-shared-leak
+not ok parallel/test-cluster-worker-kill-signal
+not ok parallel/test-fs-write-sigxfsz
+not ok parallel/test-process-dlopen-error-message-crash
+not ok parallel/test-process-env-allowed-flags-are-documented
+not ok parallel/test-process-euid-egid
+not ok parallel/test-process-getactivehandles
+not ok parallel/test-process-getactiveresources-track-active-handles
+not ok parallel/test-process-load-env-file
+not ok parallel/test-process-versions
+ok parallel/test-child-process-advanced-serialization
+ok parallel/test-child-process-advanced-serialization-host-objects
+ok parallel/test-child-process-advanced-serialization-largebuffer
+ok parallel/test-child-process-advanced-serialization-splitted-length-field
+ok parallel/test-child-process-bad-stdio
+ok parallel/test-child-process-can-write-to-stdout
+ok parallel/test-child-process-constructor
+ok parallel/test-child-process-cwd
+ok parallel/test-child-process-destroy
+ok parallel/test-child-process-detached
+ok parallel/test-child-process-dgram-reuseport # skip The `reusePort` is not supported
+ok parallel/test-child-process-double-pipe
+ok parallel/test-child-process-exec-abortcontroller-promisified
+ok parallel/test-child-process-exec-any-shells-windows # skip Windows specific test.
+ok parallel/test-child-process-exec-cwd
+ok parallel/test-child-process-exec-encoding
+ok parallel/test-child-process-exec-error
+ok parallel/test-child-process-exec-kill-throws
+ok parallel/test-child-process-exec-maxbuf
+ok parallel/test-child-process-exec-std-encoding
+ok parallel/test-child-process-exec-stdout-stderr-data-string
+ok parallel/test-child-process-exec-timeout-expire
+ok parallel/test-child-process-exec-timeout-kill
+ok parallel/test-child-process-exec-timeout-not-expired
+ok parallel/test-child-process-execFile-promisified-abortController
+ok parallel/test-child-process-execfile
+ok parallel/test-child-process-execfile-maxbuf
+ok parallel/test-child-process-execfilesync-maxbuf
+ok parallel/test-child-process-execsync-maxbuf
+ok parallel/test-child-process-exit-code
+ok parallel/test-child-process-flush-stdio
+ok parallel/test-child-process-fork
+ok parallel/test-child-process-fork-abort-signal
+ok parallel/test-child-process-fork-advanced-header-serialization
+ok parallel/test-child-process-fork-and-spawn
+ok parallel/test-child-process-fork-args
+ok parallel/test-child-process-fork-close
+ok parallel/test-child-process-fork-closed-channel-segfault
+ok parallel/test-child-process-fork-detached
+ok parallel/test-child-process-fork-dgram
+ok parallel/test-child-process-fork-exec-argv
+ok parallel/test-child-process-fork-exec-path
+ok parallel/test-child-process-fork-getconnections
+ok parallel/test-child-process-fork-net-server
+ok parallel/test-child-process-fork-no-shell
+ok parallel/test-child-process-fork-ref
+ok parallel/test-child-process-fork-ref2
+ok parallel/test-child-process-fork-stdio
+ok parallel/test-child-process-fork-stdio-string-variant
+ok parallel/test-child-process-fork-timeout-kill-signal
+ok parallel/test-child-process-fork-url
+ok parallel/test-child-process-fork3
+ok parallel/test-child-process-http-socket-leak
+ok parallel/test-child-process-internal
+ok parallel/test-child-process-ipc
+ok parallel/test-child-process-ipc-next-tick
+ok parallel/test-child-process-kill
+ok parallel/test-child-process-kill-sigwinch
+ok parallel/test-child-process-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-child-process-no-deprecation
+ok parallel/test-child-process-pipe-dataflow
+ok parallel/test-child-process-promisified
+ok parallel/test-child-process-prototype-tampering # skip undefined
+ok parallel/test-child-process-recv-handle
+ok parallel/test-child-process-reject-null-bytes
+ok parallel/test-child-process-send-after-close
+ok parallel/test-child-process-send-cb
+ok parallel/test-child-process-send-returns-boolean
+ok parallel/test-child-process-send-type-error
+ok parallel/test-child-process-send-utf8
+ok parallel/test-child-process-server-close
+ok parallel/test-child-process-set-blocking
+ok parallel/test-child-process-silent
+ok parallel/test-child-process-spawn-args
+ok parallel/test-child-process-spawn-argv0
+ok parallel/test-child-process-spawn-controller
+ok parallel/test-child-process-spawn-error
+ok parallel/test-child-process-spawn-event
+ok parallel/test-child-process-spawn-shell
+ok parallel/test-child-process-spawn-timeout-kill-signal
+ok parallel/test-child-process-spawn-typeerror
+ok parallel/test-child-process-spawn-windows-batch-file
+ok parallel/test-child-process-spawnsync
+ok parallel/test-child-process-spawnsync-args
+ok parallel/test-child-process-spawnsync-env
+ok parallel/test-child-process-spawnsync-input
+ok parallel/test-child-process-spawnsync-kill-signal
+ok parallel/test-child-process-spawnsync-maxbuf
+ok parallel/test-child-process-spawnsync-non-string-args
+ok parallel/test-child-process-spawnsync-shell
+ok parallel/test-child-process-spawnsync-timeout
+ok parallel/test-child-process-spawnsync-validation-errors
+ok parallel/test-child-process-stdin
+ok parallel/test-child-process-stdin-ipc
+ok parallel/test-child-process-stdio
+ok parallel/test-child-process-stdio-big-write-end
+ok parallel/test-child-process-stdio-inherit
+ok parallel/test-child-process-stdio-merge-stdouts-into-cat
+ok parallel/test-child-process-stdio-overlapped # skip overlapped-checker binary is not available
+ok parallel/test-child-process-stdio-reuse-readable-stdio
+ok parallel/test-child-process-stdout-flush
+ok parallel/test-child-process-stdout-flush-exit
+ok parallel/test-child-process-stdout-ipc
+ok parallel/test-child-process-uid-gid
+ok parallel/test-child-process-validate-stdio
+ok parallel/test-child-process-windows-hide
+ok parallel/test-cluster-accept-fail
+ok parallel/test-cluster-advanced-serialization
+ok parallel/test-cluster-basic
+ok parallel/test-cluster-bind-privileged-port # skip Test is not supposed to be run as root.
+ok parallel/test-cluster-bind-twice
+ok parallel/test-cluster-call-and-destroy
+ok parallel/test-cluster-child-index-dgram
+ok parallel/test-cluster-child-index-net
+ok parallel/test-cluster-cwd
+ok parallel/test-cluster-dgram-2
+ok parallel/test-cluster-dgram-bind-fd
+ok parallel/test-cluster-dgram-ipv6only
+ok parallel/test-cluster-dgram-reuse
+ok parallel/test-cluster-dgram-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-disconnect-before-exit
+ok parallel/test-cluster-disconnect-exitedAfterDisconnect-race
+ok parallel/test-cluster-disconnect-idle-worker
+ok parallel/test-cluster-disconnect-leak
+ok parallel/test-cluster-disconnect-race
+ok parallel/test-cluster-disconnect-unshared-tcp
+ok parallel/test-cluster-disconnect-unshared-udp
+ok parallel/test-cluster-disconnect-with-no-workers
+ok parallel/test-cluster-eaccess
+ok parallel/test-cluster-eaddrinuse
+ok parallel/test-cluster-fork-env
+ok parallel/test-cluster-fork-stdio
+ok parallel/test-cluster-fork-windowsHide
+ok parallel/test-cluster-http-pipe
+ok parallel/test-cluster-invalid-message
+ok parallel/test-cluster-ipc-throw
+ok parallel/test-cluster-kill-disconnect
+ok parallel/test-cluster-kill-infinite-loop
+ok parallel/test-cluster-listening-port
+ok parallel/test-cluster-message
+ok parallel/test-cluster-net-listen
+ok parallel/test-cluster-net-listen-backlog
+ok parallel/test-cluster-net-listen-relative-path
+ok parallel/test-cluster-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-net-send
+ok parallel/test-cluster-net-server-drop-connection
+ok parallel/test-cluster-primary-error
+ok parallel/test-cluster-primary-kill
+ok parallel/test-cluster-process-disconnect
+ok parallel/test-cluster-rr-domain-listen
+ok parallel/test-cluster-rr-handle-close
+ok parallel/test-cluster-rr-handle-keep-loop-alive
+ok parallel/test-cluster-rr-handle-ref-unref
+ok parallel/test-cluster-rr-ref
+ok parallel/test-cluster-send-deadlock
+ok parallel/test-cluster-send-handle-twice
+ok parallel/test-cluster-send-socket-to-worker-http-server
+ok parallel/test-cluster-server-restart-none
+ok parallel/test-cluster-server-restart-rr
+ok parallel/test-cluster-setup-primary
+ok parallel/test-cluster-setup-primary-argv
+ok parallel/test-cluster-setup-primary-cumulative
+ok parallel/test-cluster-setup-primary-emit
+ok parallel/test-cluster-setup-primary-multiple
+ok parallel/test-cluster-shared-handle-bind-error
+ok parallel/test-cluster-shared-handle-bind-privileged-port # skip as this test should not be run as `root`
+ok parallel/test-cluster-uncaught-exception
+ok parallel/test-cluster-worker-constructor
+ok parallel/test-cluster-worker-death
+ok parallel/test-cluster-worker-destroy
+ok parallel/test-cluster-worker-disconnect
+ok parallel/test-cluster-worker-disconnect-on-error
+ok parallel/test-cluster-worker-events
+ok parallel/test-cluster-worker-exit
+ok parallel/test-cluster-worker-forced-exit
+ok parallel/test-cluster-worker-handle-close
+ok parallel/test-cluster-worker-init
+ok parallel/test-cluster-worker-isconnected
+ok parallel/test-cluster-worker-isdead
+ok parallel/test-cluster-worker-kill
+ok parallel/test-cluster-worker-no-exit
+ok parallel/test-cluster-worker-wait-server-close
+ok parallel/test-fs-write
+ok parallel/test-fs-write-buffer
+ok parallel/test-fs-write-buffer-large
+ok parallel/test-fs-write-file
+ok parallel/test-fs-write-file-buffer
+ok parallel/test-fs-write-file-flush
+ok parallel/test-fs-write-file-invalid-path # skip This test is for Windows only.
+ok parallel/test-fs-write-file-sync
+ok parallel/test-fs-write-file-typedarrays
+ok parallel/test-fs-write-negativeoffset
+ok parallel/test-fs-write-no-fd
+ok parallel/test-fs-write-optional-params
+ok parallel/test-fs-write-reuse-callback
+ok parallel/test-fs-write-stream
+ok parallel/test-fs-write-stream-autoclose-option
+ok parallel/test-fs-write-stream-change-open
+ok parallel/test-fs-write-stream-close-without-callback
+ok parallel/test-fs-write-stream-double-close
+ok parallel/test-fs-write-stream-eagain
+ok parallel/test-fs-write-stream-encoding
+ok parallel/test-fs-write-stream-end
+ok parallel/test-fs-write-stream-err
+ok parallel/test-fs-write-stream-file-handle
+ok parallel/test-fs-write-stream-file-handle-2
+ok parallel/test-fs-write-stream-flush
+ok parallel/test-fs-write-stream-fs
+ok parallel/test-fs-write-stream-patch-open
+ok parallel/test-fs-write-stream-throw-type-error
+ok parallel/test-fs-write-sync
+ok parallel/test-fs-write-sync-optional-params
+ok parallel/test-fs-writefile-with-fd
+ok parallel/test-fs-writestream-open-write
+ok parallel/test-fs-writesync-crash
+ok parallel/test-fs-writev
+ok parallel/test-fs-writev-promises
+ok parallel/test-fs-writev-sync
+ok parallel/test-process-abort
+ok parallel/test-process-argv-0
+ok parallel/test-process-available-memory
+ok parallel/test-process-beforeexit
+ok parallel/test-process-beforeexit-throw-exit
+ok parallel/test-process-binding
+ok parallel/test-process-binding-internalbinding-allowlist
+ok parallel/test-process-binding-util
+ok parallel/test-process-chdir
+ok parallel/test-process-chdir-errormessage
+ok parallel/test-process-config # skip config.gypi does not exist.
+ok parallel/test-process-constants-noatime
+ok parallel/test-process-constrained-memory
+ok parallel/test-process-cpuUsage
+ok parallel/test-process-default
+ok parallel/test-process-dlopen-undefined-exports
+ok parallel/test-process-domain-segfault
+ok parallel/test-process-emit
+ok parallel/test-process-emitwarning
+ok parallel/test-process-env
+ok parallel/test-process-env-allowed-flags
+ok parallel/test-process-env-delete
+ok parallel/test-process-env-deprecation
+ok parallel/test-process-env-ignore-getter-setter
+ok parallel/test-process-env-sideeffects
+ok parallel/test-process-env-symbols
+ok parallel/test-process-env-tz
+ok parallel/test-process-env-windows-error-reset
+ok parallel/test-process-exception-capture
+ok parallel/test-process-exception-capture-errors
+ok parallel/test-process-exception-capture-should-abort-on-uncaught
+ok parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring
+ok parallel/test-process-exec-argv
+ok parallel/test-process-execpath
+ok parallel/test-process-execve
+ok parallel/test-process-execve-abort
+ok parallel/test-process-execve-no-args # skip /boot/system/bin/nop binary is not available
+ok parallel/test-process-execve-on-exit
+ok parallel/test-process-execve-permission-fail
+ok parallel/test-process-execve-permission-granted
+ok parallel/test-process-execve-socket
+ok parallel/test-process-execve-validation
+ok parallel/test-process-execve-worker-threads
+ok parallel/test-process-exit
+ok parallel/test-process-exit-after-fetch-throw
+ok parallel/test-process-exit-code
+ok parallel/test-process-exit-code-validation
+ok parallel/test-process-exit-from-before-exit
+ok parallel/test-process-exit-handler
+ok parallel/test-process-exit-recursive
+ok parallel/test-process-external-stdio-close
+ok parallel/test-process-external-stdio-close-spawn
+ok parallel/test-process-features
+ok parallel/test-process-finalization
+ok parallel/test-process-get-builtin
+ok parallel/test-process-getactiverequests
+ok parallel/test-process-getactiveresources
+ok parallel/test-process-getactiveresources-track-active-requests
+ok parallel/test-process-getactiveresources-track-interval-lifetime
+ok parallel/test-process-getactiveresources-track-multiple-timers
+ok parallel/test-process-getactiveresources-track-timer-lifetime
+ok parallel/test-process-getgroups
+ok parallel/test-process-hrtime
+ok parallel/test-process-hrtime-bigint
+ok parallel/test-process-initgroups
+ok parallel/test-process-kill-null
+ok parallel/test-process-kill-pid
+ok parallel/test-process-next-tick
+ok parallel/test-process-no-deprecation
+ok parallel/test-process-ppid
+ok parallel/test-process-prototype
+ok parallel/test-process-raw-debug
+ok parallel/test-process-really-exit
+ok parallel/test-process-redirect-warnings
+ok parallel/test-process-redirect-warnings-env
+ok parallel/test-process-ref-unref
+ok parallel/test-process-release
+ok parallel/test-process-remove-all-signal-listeners
+ok parallel/test-process-setgroups
+ok parallel/test-process-setsourcemapsenabled
+ok parallel/test-process-threadCpuUsage-main-thread
+ok parallel/test-process-threadCpuUsage-worker-threads
+ok parallel/test-process-title-cli
+ok parallel/test-process-uid-gid
+ok parallel/test-process-umask
+ok parallel/test-process-umask-mask
+ok parallel/test-process-uncaught-exception-monitor
+ok parallel/test-process-uptime
+ok parallel/test-process-warning
+ok parallel/test-process-warnings
+pass=308 fail=22
+##### node regression slice with libroot 881
+LIBRARY_PATH=/boot/home/td/lib-881 node v24.21.0 tests: parallel/test-child-process-* parallel/test-cluster-* parallel/test-process-* parallel/test-fs-write*
+test.py rc=1 wall=1090s
+not ok parallel/test-child-process-default-options
+not ok parallel/test-child-process-disconnect
+not ok parallel/test-child-process-env
+not ok parallel/test-child-process-exec-env
+not ok parallel/test-child-process-fork-net
+not ok parallel/test-child-process-fork-net-socket
+not ok parallel/test-child-process-send-keep-open
+not ok parallel/test-cluster-concurrent-disconnect
+not ok parallel/test-cluster-dgram-1
+not ok parallel/test-cluster-disconnect
+not ok parallel/test-cluster-listen-pipe-readable-writable
+not ok parallel/test-cluster-net-listen-ipv6only-false
+not ok parallel/test-cluster-shared-leak
+not ok parallel/test-cluster-worker-kill-signal
+not ok parallel/test-fs-write-sigxfsz
+not ok parallel/test-process-dlopen-error-message-crash
+not ok parallel/test-process-env-allowed-flags-are-documented
+not ok parallel/test-process-euid-egid
+not ok parallel/test-process-getactivehandles
+not ok parallel/test-process-getactiveresources-track-active-handles
+not ok parallel/test-process-load-env-file
+not ok parallel/test-process-umask-mask
+not ok parallel/test-process-versions
+ok parallel/test-child-process-advanced-serialization
+ok parallel/test-child-process-advanced-serialization-host-objects
+ok parallel/test-child-process-advanced-serialization-largebuffer
+ok parallel/test-child-process-advanced-serialization-splitted-length-field
+ok parallel/test-child-process-bad-stdio
+ok parallel/test-child-process-can-write-to-stdout
+ok parallel/test-child-process-constructor
+ok parallel/test-child-process-cwd
+ok parallel/test-child-process-destroy
+ok parallel/test-child-process-detached
+ok parallel/test-child-process-dgram-reuseport # skip The `reusePort` is not supported
+ok parallel/test-child-process-double-pipe
+ok parallel/test-child-process-exec-abortcontroller-promisified
+ok parallel/test-child-process-exec-any-shells-windows # skip Windows specific test.
+ok parallel/test-child-process-exec-cwd
+ok parallel/test-child-process-exec-encoding
+ok parallel/test-child-process-exec-error
+ok parallel/test-child-process-exec-kill-throws
+ok parallel/test-child-process-exec-maxbuf
+ok parallel/test-child-process-exec-std-encoding
+ok parallel/test-child-process-exec-stdout-stderr-data-string
+ok parallel/test-child-process-exec-timeout-expire
+ok parallel/test-child-process-exec-timeout-kill
+ok parallel/test-child-process-exec-timeout-not-expired
+ok parallel/test-child-process-execFile-promisified-abortController
+ok parallel/test-child-process-execfile
+ok parallel/test-child-process-execfile-maxbuf
+ok parallel/test-child-process-execfilesync-maxbuf
+ok parallel/test-child-process-execsync-maxbuf
+ok parallel/test-child-process-exit-code
+ok parallel/test-child-process-flush-stdio
+ok parallel/test-child-process-fork
+ok parallel/test-child-process-fork-abort-signal
+ok parallel/test-child-process-fork-advanced-header-serialization
+ok parallel/test-child-process-fork-and-spawn
+ok parallel/test-child-process-fork-args
+ok parallel/test-child-process-fork-close
+ok parallel/test-child-process-fork-closed-channel-segfault
+ok parallel/test-child-process-fork-detached
+ok parallel/test-child-process-fork-dgram
+ok parallel/test-child-process-fork-exec-argv
+ok parallel/test-child-process-fork-exec-path
+ok parallel/test-child-process-fork-getconnections
+ok parallel/test-child-process-fork-net-server
+ok parallel/test-child-process-fork-no-shell
+ok parallel/test-child-process-fork-ref
+ok parallel/test-child-process-fork-ref2
+ok parallel/test-child-process-fork-stdio
+ok parallel/test-child-process-fork-stdio-string-variant
+ok parallel/test-child-process-fork-timeout-kill-signal
+ok parallel/test-child-process-fork-url
+ok parallel/test-child-process-fork3
+ok parallel/test-child-process-http-socket-leak
+ok parallel/test-child-process-internal
+ok parallel/test-child-process-ipc
+ok parallel/test-child-process-ipc-next-tick
+ok parallel/test-child-process-kill
+ok parallel/test-child-process-kill-sigwinch
+ok parallel/test-child-process-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-child-process-no-deprecation
+ok parallel/test-child-process-pipe-dataflow
+ok parallel/test-child-process-promisified
+ok parallel/test-child-process-prototype-tampering # skip undefined
+ok parallel/test-child-process-recv-handle
+ok parallel/test-child-process-reject-null-bytes
+ok parallel/test-child-process-send-after-close
+ok parallel/test-child-process-send-cb
+ok parallel/test-child-process-send-returns-boolean
+ok parallel/test-child-process-send-type-error
+ok parallel/test-child-process-send-utf8
+ok parallel/test-child-process-server-close
+ok parallel/test-child-process-set-blocking
+ok parallel/test-child-process-silent
+ok parallel/test-child-process-spawn-args
+ok parallel/test-child-process-spawn-argv0
+ok parallel/test-child-process-spawn-controller
+ok parallel/test-child-process-spawn-error
+ok parallel/test-child-process-spawn-event
+ok parallel/test-child-process-spawn-shell
+ok parallel/test-child-process-spawn-timeout-kill-signal
+ok parallel/test-child-process-spawn-typeerror
+ok parallel/test-child-process-spawn-windows-batch-file
+ok parallel/test-child-process-spawnsync
+ok parallel/test-child-process-spawnsync-args
+ok parallel/test-child-process-spawnsync-env
+ok parallel/test-child-process-spawnsync-input
+ok parallel/test-child-process-spawnsync-kill-signal
+ok parallel/test-child-process-spawnsync-maxbuf
+ok parallel/test-child-process-spawnsync-non-string-args
+ok parallel/test-child-process-spawnsync-shell
+ok parallel/test-child-process-spawnsync-timeout
+ok parallel/test-child-process-spawnsync-validation-errors
+ok parallel/test-child-process-stdin
+ok parallel/test-child-process-stdin-ipc
+ok parallel/test-child-process-stdio
+ok parallel/test-child-process-stdio-big-write-end
+ok parallel/test-child-process-stdio-inherit
+ok parallel/test-child-process-stdio-merge-stdouts-into-cat
+ok parallel/test-child-process-stdio-overlapped # skip overlapped-checker binary is not available
+ok parallel/test-child-process-stdio-reuse-readable-stdio
+ok parallel/test-child-process-stdout-flush
+ok parallel/test-child-process-stdout-flush-exit
+ok parallel/test-child-process-stdout-ipc
+ok parallel/test-child-process-uid-gid
+ok parallel/test-child-process-validate-stdio
+ok parallel/test-child-process-windows-hide
+ok parallel/test-cluster-accept-fail
+ok parallel/test-cluster-advanced-serialization
+ok parallel/test-cluster-basic
+ok parallel/test-cluster-bind-privileged-port # skip Test is not supposed to be run as root.
+ok parallel/test-cluster-bind-twice
+ok parallel/test-cluster-call-and-destroy
+ok parallel/test-cluster-child-index-dgram
+ok parallel/test-cluster-child-index-net
+ok parallel/test-cluster-cwd
+ok parallel/test-cluster-dgram-2
+ok parallel/test-cluster-dgram-bind-fd
+ok parallel/test-cluster-dgram-ipv6only
+ok parallel/test-cluster-dgram-reuse
+ok parallel/test-cluster-dgram-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-disconnect-before-exit
+ok parallel/test-cluster-disconnect-exitedAfterDisconnect-race
+ok parallel/test-cluster-disconnect-idle-worker
+ok parallel/test-cluster-disconnect-leak
+ok parallel/test-cluster-disconnect-race
+ok parallel/test-cluster-disconnect-unshared-tcp
+ok parallel/test-cluster-disconnect-unshared-udp
+ok parallel/test-cluster-disconnect-with-no-workers
+ok parallel/test-cluster-eaccess
+ok parallel/test-cluster-eaddrinuse
+ok parallel/test-cluster-fork-env
+ok parallel/test-cluster-fork-stdio
+ok parallel/test-cluster-fork-windowsHide
+ok parallel/test-cluster-http-pipe
+ok parallel/test-cluster-invalid-message
+ok parallel/test-cluster-ipc-throw
+ok parallel/test-cluster-kill-disconnect
+ok parallel/test-cluster-kill-infinite-loop
+ok parallel/test-cluster-listening-port
+ok parallel/test-cluster-message
+ok parallel/test-cluster-net-listen
+ok parallel/test-cluster-net-listen-backlog
+ok parallel/test-cluster-net-listen-relative-path
+ok parallel/test-cluster-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-cluster-net-send
+ok parallel/test-cluster-net-server-drop-connection
+ok parallel/test-cluster-primary-error
+ok parallel/test-cluster-primary-kill
+ok parallel/test-cluster-process-disconnect
+ok parallel/test-cluster-rr-domain-listen
+ok parallel/test-cluster-rr-handle-close
+ok parallel/test-cluster-rr-handle-keep-loop-alive
+ok parallel/test-cluster-rr-handle-ref-unref
+ok parallel/test-cluster-rr-ref
+ok parallel/test-cluster-send-deadlock
+ok parallel/test-cluster-send-handle-twice
+ok parallel/test-cluster-send-socket-to-worker-http-server
+ok parallel/test-cluster-server-restart-none
+ok parallel/test-cluster-server-restart-rr
+ok parallel/test-cluster-setup-primary
+ok parallel/test-cluster-setup-primary-argv
+ok parallel/test-cluster-setup-primary-cumulative
+ok parallel/test-cluster-setup-primary-emit
+ok parallel/test-cluster-setup-primary-multiple
+ok parallel/test-cluster-shared-handle-bind-error
+ok parallel/test-cluster-shared-handle-bind-privileged-port # skip as this test should not be run as `root`
+ok parallel/test-cluster-uncaught-exception
+ok parallel/test-cluster-worker-constructor
+ok parallel/test-cluster-worker-death
+ok parallel/test-cluster-worker-destroy
+ok parallel/test-cluster-worker-disconnect
+ok parallel/test-cluster-worker-disconnect-on-error
+ok parallel/test-cluster-worker-events
+ok parallel/test-cluster-worker-exit
+ok parallel/test-cluster-worker-forced-exit
+ok parallel/test-cluster-worker-handle-close
+ok parallel/test-cluster-worker-init
+ok parallel/test-cluster-worker-isconnected
+ok parallel/test-cluster-worker-isdead
+ok parallel/test-cluster-worker-kill
+ok parallel/test-cluster-worker-no-exit
+ok parallel/test-cluster-worker-wait-server-close
+ok parallel/test-fs-write
+ok parallel/test-fs-write-buffer
+ok parallel/test-fs-write-buffer-large
+ok parallel/test-fs-write-file
+ok parallel/test-fs-write-file-buffer
+ok parallel/test-fs-write-file-flush
+ok parallel/test-fs-write-file-invalid-path # skip This test is for Windows only.
+ok parallel/test-fs-write-file-sync
+ok parallel/test-fs-write-file-typedarrays
+ok parallel/test-fs-write-negativeoffset
+ok parallel/test-fs-write-no-fd
+ok parallel/test-fs-write-optional-params
+ok parallel/test-fs-write-reuse-callback
+ok parallel/test-fs-write-stream
+ok parallel/test-fs-write-stream-autoclose-option
+ok parallel/test-fs-write-stream-change-open
+ok parallel/test-fs-write-stream-close-without-callback
+ok parallel/test-fs-write-stream-double-close
+ok parallel/test-fs-write-stream-eagain
+ok parallel/test-fs-write-stream-encoding
+ok parallel/test-fs-write-stream-end
+ok parallel/test-fs-write-stream-err
+ok parallel/test-fs-write-stream-file-handle
+ok parallel/test-fs-write-stream-file-handle-2
+ok parallel/test-fs-write-stream-flush
+ok parallel/test-fs-write-stream-fs
+ok parallel/test-fs-write-stream-patch-open
+ok parallel/test-fs-write-stream-throw-type-error
+ok parallel/test-fs-write-sync
+ok parallel/test-fs-write-sync-optional-params
+ok parallel/test-fs-writefile-with-fd
+ok parallel/test-fs-writestream-open-write
+ok parallel/test-fs-writesync-crash
+ok parallel/test-fs-writev
+ok parallel/test-fs-writev-promises
+ok parallel/test-fs-writev-sync
+ok parallel/test-process-abort
+ok parallel/test-process-argv-0
+ok parallel/test-process-available-memory
+ok parallel/test-process-beforeexit
+ok parallel/test-process-beforeexit-throw-exit
+ok parallel/test-process-binding
+ok parallel/test-process-binding-internalbinding-allowlist
+ok parallel/test-process-binding-util
+ok parallel/test-process-chdir
+ok parallel/test-process-chdir-errormessage
+ok parallel/test-process-config # skip config.gypi does not exist.
+ok parallel/test-process-constants-noatime
+ok parallel/test-process-constrained-memory
+ok parallel/test-process-cpuUsage
+ok parallel/test-process-default
+ok parallel/test-process-dlopen-undefined-exports
+ok parallel/test-process-domain-segfault
+ok parallel/test-process-emit
+ok parallel/test-process-emitwarning
+ok parallel/test-process-env
+ok parallel/test-process-env-allowed-flags
+ok parallel/test-process-env-delete
+ok parallel/test-process-env-deprecation
+ok parallel/test-process-env-ignore-getter-setter
+ok parallel/test-process-env-sideeffects
+ok parallel/test-process-env-symbols
+ok parallel/test-process-env-tz
+ok parallel/test-process-env-windows-error-reset
+ok parallel/test-process-exception-capture
+ok parallel/test-process-exception-capture-errors
+ok parallel/test-process-exception-capture-should-abort-on-uncaught
+ok parallel/test-process-exception-capture-should-abort-on-uncaught-setflagsfromstring
+ok parallel/test-process-exec-argv
+ok parallel/test-process-execpath
+ok parallel/test-process-execve
+ok parallel/test-process-execve-abort
+ok parallel/test-process-execve-no-args # skip /boot/system/bin/nop binary is not available
+ok parallel/test-process-execve-on-exit
+ok parallel/test-process-execve-permission-fail
+ok parallel/test-process-execve-permission-granted
+ok parallel/test-process-execve-socket
+ok parallel/test-process-execve-validation
+ok parallel/test-process-execve-worker-threads
+ok parallel/test-process-exit
+ok parallel/test-process-exit-after-fetch-throw
+ok parallel/test-process-exit-code
+ok parallel/test-process-exit-code-validation
+ok parallel/test-process-exit-from-before-exit
+ok parallel/test-process-exit-handler
+ok parallel/test-process-exit-recursive
+ok parallel/test-process-external-stdio-close
+ok parallel/test-process-external-stdio-close-spawn
+ok parallel/test-process-features
+ok parallel/test-process-finalization
+ok parallel/test-process-get-builtin
+ok parallel/test-process-getactiverequests
+ok parallel/test-process-getactiveresources
+ok parallel/test-process-getactiveresources-track-active-requests
+ok parallel/test-process-getactiveresources-track-interval-lifetime
+ok parallel/test-process-getactiveresources-track-multiple-timers
+ok parallel/test-process-getactiveresources-track-timer-lifetime
+ok parallel/test-process-getgroups
+ok parallel/test-process-hrtime
+ok parallel/test-process-hrtime-bigint
+ok parallel/test-process-initgroups
+ok parallel/test-process-kill-null
+ok parallel/test-process-kill-pid
+ok parallel/test-process-next-tick
+ok parallel/test-process-no-deprecation
+ok parallel/test-process-ppid
+ok parallel/test-process-prototype
+ok parallel/test-process-raw-debug
+ok parallel/test-process-really-exit
+ok parallel/test-process-redirect-warnings
+ok parallel/test-process-redirect-warnings-env
+ok parallel/test-process-ref-unref
+ok parallel/test-process-release
+ok parallel/test-process-remove-all-signal-listeners
+ok parallel/test-process-setgroups
+ok parallel/test-process-setsourcemapsenabled
+ok parallel/test-process-threadCpuUsage-main-thread
+ok parallel/test-process-threadCpuUsage-worker-threads
+ok parallel/test-process-title-cli
+ok parallel/test-process-uid-gid
+ok parallel/test-process-umask
+ok parallel/test-process-uncaught-exception-monitor
+ok parallel/test-process-uptime
+ok parallel/test-process-warning
+ok parallel/test-process-warnings
+pass=307 fail=23
