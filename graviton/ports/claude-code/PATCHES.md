@@ -13,6 +13,7 @@ Site counts below are the asserted ones.
 | R2 | 118 modules (547 sites) | `import.meta.require` → `__ccRequire`, plus a per-module prelude `const __ccRequire = createRequire(import.meta.url)` | `import.meta.require` is Bun-only. `createRequire` is the Node equivalent; Node ≥22.12 `require()`s ESM natively. | n |
 | R3 | 9 modules (9 sites) | `import.meta.dir` → `import.meta.dirname` | Bun-only property name for the same value (Node ≥20.11). | n |
 | R4 | `chunk-zy2k3hny.js` (1 site) | top-level `__ccRequire("…/chunk-vgzpjjhb.js")` → `import * as __ccR4_0 from "…/chunk-vgzpjjhb.js"` | The require runs while `zy2k3hny` is still evaluating, and `vgzpjjhb` statically imports `zy2k3hny`. Node's `require(esm)` refuses that cycle (`ERR_REQUIRE_CYCLE_MODULE`, observed on `--help`). A static import cycle is ordinary ESM. `tools/analyze-requires.mjs` (acorn) found 186 evaluation-time requires; only this one is cycle-capable, directly or indirectly. | n |
+| R5 | `audio-capture.node`, `clipboard-napi.node` (`tools/drop-napi.py`) | removed from the tree | They are linux-arm64 ELF addons that can never load on Haiku, and the port ships no Linux binaries. Both call sites already treat a missing addon as unavailable: audio returns `null` for any platform but darwin/linux/win32 (`chunk-wfe5p2va.js`), and the clipboard loader is `try{…}catch{}` with a vendor-path fallback (`chunk-9deh4a76.js`). Same observable result as a failed `dlopen`, without shipping the ELF. | n |
 
 ### Folded platform/arch restored (P1, one entry per site)
 

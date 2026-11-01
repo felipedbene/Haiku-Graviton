@@ -43,12 +43,14 @@ PROVIDES="
 	claude_code = $portVersion
 	cmd:claude = $portVersion
 	"
-# libuv >= 1.52.1-2 carries the Haiku fs-event backend: without it fs.watch throws ENOSYS
-# and settings hot reload, the task list and FileChanged hooks stop updating.
+# libuv_fs_event is provided by the libuv build with the Haiku fs-event backend (DeBeOS
+# libuv 1.52.1-3+): without it fs.watch throws ENOSYS and settings hot reload, the task
+# list and FileChanged hooks stop updating. (A revision can't be required directly:
+# resolvable versions carry no revision.)
 REQUIRES="
 	haiku
 	nodejs24 >= 24.21
-	libuv >= 1.52.1-2
+	libuv_fs_event
 	cmd:bash
 	cmd:git
 	cmd:rg

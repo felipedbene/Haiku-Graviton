@@ -16,6 +16,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 python3 -I "$here/extract-bun-bundle.py" "$bin" "$work/bunfs"
 python3 -I "$here/relocate-bundle.py" "$work/bunfs" "$out" "$prefix"
+python3 -I "$here/drop-napi.py" "$out"
 "$node" "$here/analyze-requires.mjs" "$out" "$prefix" "$deps" > "$work/requires.json"
 python3 -I "$here/apply-r4.py" "$out" "$work/requires.json"
 python3 -I "$here/apply-folds.py" "$out" "$here/folds-2.1.314.json" --acorn "$deps/acorn" --node "$node"
