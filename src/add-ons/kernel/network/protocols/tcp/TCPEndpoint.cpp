@@ -2477,6 +2477,19 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 	fOptions = parent->fOptions;
 	fAcceptSemaphore = parent->fAcceptSemaphore;
 
+	// An accepted connection must report its end the way the ones Connect()
+	// and Listen() set up do. Without the flag, _AvailableData() answers 0,
+	// not an error, in the states past the peer's FIN other than
+	// FINISH_RECEIVED and WAIT_FOR_FINISH_ACKNOWLEDGE -- TIME_WAIT, CLOSING
+	// and CLOSED -- and socket_notify() drops a 0 as being below the
+	// low-water mark. So a server that sent its FIN first (the peer's FIN
+	// takes it from FINISH_ACKNOWLEDGED to TIME_WAIT), or closed at the same
+	// time as the peer, never saw the socket become readable: a poll()-driven
+	// server never learnt of the EOF a read() would have returned at once.
+	// SendAvailable() likewise stayed at 0 instead of EPIPE once the
+	// connection was over.
+	fFlags |= FLAG_CAN_NOTIFY;
+
 	_PrepareReceivePath(segment);
 
 	// ECN (RFC 3168) stage A: if the peer's SYN is an ECN-setup SYN (ECE and
