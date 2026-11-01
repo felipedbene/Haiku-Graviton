@@ -1,0 +1,130 @@
+# evidence: libuv-probe2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T005322Z   end: 20261101T005344Z   rc: 127
+# script sha256: 71d648830e613bb67d74c625fb3af048eef05919339fb3319587871c4de964b9
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N && ls test/parallel/test-fs-watch* test/sequential/test-fs-watch* 
+# | grep -n "recursive\|isLinux\|isMacOS\|isWindows\|nonNative" lib/fs.js | sed -n 1,40p
+# | cat test/common/index.js | grep -n "isHaiku\|isIBMi\|isAIX" | head
+# | ps | grep -i -E "registrar|launch" | head
+# | ls /boot/system/develop/headers/private 2>&1 | head; ls /boot/system/develop/headers/private/system/syscalls.h /boot/system/develop/headers/private/kernel/util/KMessage.h 2>&1
+# | df / /tmp /boot/home 2>&1; ls -la /tmp
+# | getconf PIPE_BUF / 2>&1
+# ---- raw output ----
+test/parallel/test-fs-watch-abort-signal.js
+test/parallel/test-fs-watch-close-when-destroyed.js
+test/parallel/test-fs-watch-encoding.js
+test/parallel/test-fs-watch-enoent.js
+test/parallel/test-fs-watch-file-enoent-after-deletion.js
+test/parallel/test-fs-watch-ignore-function.js
+test/parallel/test-fs-watch-ignore-glob.js
+test/parallel/test-fs-watch-ignore-invalid.js
+test/parallel/test-fs-watch-ignore-mixed.js
+test/parallel/test-fs-watch-ignore-recursive-glob-subdirectories.js
+test/parallel/test-fs-watch-ignore-recursive-glob.js
+test/parallel/test-fs-watch-ignore-recursive-mixed.js
+test/parallel/test-fs-watch-ignore-recursive-regexp.js
+test/parallel/test-fs-watch-ignore-regexp.js
+test/parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js
+test/parallel/test-fs-watch-recursive-add-file-to-new-folder.js
+test/parallel/test-fs-watch-recursive-add-file-with-url.js
+test/parallel/test-fs-watch-recursive-add-file.js
+test/parallel/test-fs-watch-recursive-add-folder.js
+test/parallel/test-fs-watch-recursive-assert-leaks.js
+test/parallel/test-fs-watch-recursive-delete-race.js
+test/parallel/test-fs-watch-recursive-delete.js
+test/parallel/test-fs-watch-recursive-linux-parallel-remove.js
+test/parallel/test-fs-watch-recursive-prefix-sibling.js
+test/parallel/test-fs-watch-recursive-promise.js
+test/parallel/test-fs-watch-recursive-symlink.js
+test/parallel/test-fs-watch-recursive-sync-write.js
+test/parallel/test-fs-watch-recursive-update-file.js
+test/parallel/test-fs-watch-recursive-validate.js
+test/parallel/test-fs-watch-recursive-watch-file.js
+test/parallel/test-fs-watch-ref-unref.js
+test/parallel/test-fs-watch-stop-async.js
+test/parallel/test-fs-watch-stop-sync.js
+test/parallel/test-fs-watch.js
+test/parallel/test-fs-watchfile-bigint.js
+test/parallel/test-fs-watchfile-ref-unref.js
+test/parallel/test-fs-watchfile.js
+test/sequential/test-fs-watch.js
+99:  isWindows,
+100:  isMacOS,
+1189:  if (options?.recursive) {
+1226:  if (options?.recursive) {
+1230:      return binding.rmSync(path, options.maxRetries, options.recursive, options.retryDelay);
+1246: *   recursive?: boolean;
+1275: *   recursive?: boolean;
+1282:  return binding.rmSync(getValidatedPath(path), opts.maxRetries, opts.recursive, opts.retryDelay);
+1352: *   recursive?: boolean;
+1360:  let recursive = false;
+1366:    if (options.recursive !== undefined) {
+1367:      recursive = options.recursive;
+1368:      validateBoolean(recursive, 'options.recursive');
+1381:    recursive,
+1390: *   recursive?: boolean;
+1397:  let recursive = false;
+1401:    if (options.recursive !== undefined) {
+1402:      recursive = options.recursive;
+1403:      validateBoolean(recursive, 'options.recursive');
+1413:    recursive,
+1416:  if (recursive) {
+1422: * An recursive algorithm for reading the entire contents of the `basePath` directory.
+1565: *   recursive?: boolean;
+1577:  if (options.recursive != null) {
+1578:    validateBoolean(options.recursive, 'options.recursive');
+1581:  if (options.recursive) {
+1615: *   recursive?: boolean;
+1622:  if (options.recursive != null) {
+1623:    validateBoolean(options.recursive, 'options.recursive');
+1626:  if (options.recursive) {
+1869:  if (isWindows && type == null) {
+1920:  if (isWindows && type == null) {
+2572: *   recursive?: boolean;
+2593:  if (options.recursive === undefined) options.recursive = false;
+2599:  // TODO(anonrig): Remove non-native watcher when/if libuv supports recursive.
+2600:  // As of November 2022, libuv does not support recursive file watch on all platforms,
+2602:  if (options.recursive && !isMacOS && !isWindows) {
+2603:    const nonNativeWatcher = require('internal/fs/recursive_watch');
+2604:    watcher = new nonNativeWatcher.FSWatcher(options);
+2610:                                    options.recursive,
+296:  if (exports.isAIX || exports.isIBMi)
+1022:    } else if (this.isIBMi) {
+1049:  get isAIX() {
+1053:  get isIBMi() {
+/boot/system/servers/launch_daemon                    42        2    0    0 
+/boot/system/servers/registrar                        58        6    0    0 
+/boot/system/servers/launch_daemon baron              69        2    0    0 
+/boot/system/bin/grep -i -E registrar|launch       121089        1    0    0 
+app
+audio
+binary_compatibility
+bluetooth
+debug
+debugger
+device
+drivers
+file_systems
+firewire
+/boot/system/develop/headers/private/kernel/util/KMessage.h
+/boot/system/develop/headers/private/system/syscalls.h
+   Device No.: 1
+   Mounted at: /
+  Volume Name: "0 MiB rootfs volume"
+  File System: rootfs
+       Device: 
+        Flags: ------W
+     I/O Size:          0 (0 byte)
+   Block Size:          0 (0 byte)
+ Total Blocks:          0 (0 blocks)
+  Used Blocks:          0 (0 blocks)
+  Free Blocks:          0 (0 blocks)
+      Usage %:  100.0 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 1
+lrwxrwxrwx 1 baron root 22 Oct 30 22:26 /tmp -> /boot/system/cache/tmp
+/tmp/ccrun/cc-20261101T005322Z-86543.sh: line 8: getconf: command not found

@@ -1,0 +1,43 @@
+# evidence: compact-linux-x5
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 6a130cbf-5bc4-4e3e-9b70-b7b4999d0db0 (agent status: Success)
+# start: 20261101T004647Z   end: 20261101T005659Z   rc: 0   log bytes: 587
+# script sha256: 15e778f23332d77620b6958e4e2683b7740b64ebb49cc165dad9b18a1735c21c
+# ---- script ----
+# | set -u
+# | echo '64b1da633351466de8c9b46125936a04c128b255e8e05dd1682d7d7d965d3aaa  /opt/cc/w-ct.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-ct && mkdir -p /opt/cc/w-ct && tar xzf /opt/cc/w-ct.stage/p.tgz -C /opt/cc/w-ct 2>/dev/null
+# | cd /opt/cc/w-ct
+# | set -u
+# | W=/opt/cc/w-ct; N=/opt/node24/bin/node; BIN=/opt/cc/v2.1.314/package/claude
+# | echo "imds role: $(curl -s -m 2 http://169.254.169.254/latest/meta-data/iam/security-credentials/)"
+# | [ -f $W/tree/claude.mjs ] || { bash tools/fetch-deps.sh $W/deps > /dev/null && bash tools/build-tree.sh $BIN $W/tree $W/tree $N $W/deps | tail -1; }
+# | for i in 1 2 3 4 5; do
+# | 	bash tools/compact-test.sh real$i $BIN 2>&1 | grep -E "compaction:|recall:"; echo "real$i rc=${PIPESTATUS[0]}"
+# | 	bash tools/compact-test.sh node$i $N --zero-fill-buffers $W/tree/claude.mjs 2>&1 | grep -E "compaction:|recall:"; echo "node$i rc=${PIPESTATUS[0]}"
+# | done
+# ---- raw output ----
+imds role: 
+build-tree: /opt/cc/w-ct/tree ready (prefix /opt/cc/w-ct/tree)
+real1 rc=1
+node1 rc=1
+real2 rc=1
+node2 rc=1
+[real3] compaction: seen=1 finished=1 after 11s
+[real3] recall: OK
+real3 rc=0
+[node3] compaction: seen=1 finished=1 after 22s
+[node3] recall: OK
+node3 rc=0
+[real4] compaction: seen=1 finished=1 after 17s
+[real4] recall: OK
+real4 rc=0
+[node4] compaction: seen=1 finished=1 after 16s
+[node4] recall: OK
+node4 rc=0
+[real5] compaction: seen=1 finished=1 after 17s
+[real5] recall: OK
+real5 rc=0
+[node5] compaction: seen=1 finished=1 after 19s
+[node5] recall: OK
+node5 rc=0

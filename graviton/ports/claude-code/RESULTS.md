@@ -17,7 +17,12 @@ Linux reference `i-0a14e8aca787249b7` (Ubuntu arm64, stock Bun 1.4.4, Node 24.22
 | `claude --version`, `claude doctor` on Haiku | pass (`Platform: haiku-arm64`, rg found) | `20261031T142235Z_i-0e90d4b253c8134b3_claude-accept-install.log` |
 | Compat layer vs stock Bun, replayed **on Haiku** | all pure suites pass (hash, width 3.6M, slice, wrap, semver, deepEquals, YAML, TOML) | same log |
 | Interactive TUI, Haiku vs real binary on Linux | 60/64 byte-identical; 4 = tmux 3.4 vs 3.7c keycap rendering | `20261031T143250Z_workstation_tui-compare-linuxA-haikuB.log`, `…tmux-keycap-{haiku,linux}.log` |
-| Headless `-p` with Read/Grep/Bash; edit, bash, /compact in TUI; Grep timing | **not run**: needs `ANTHROPIC_API_KEY` | — |
+| Model access from Haiku (Amazon Bedrock, instance-profile credentials via IMDS) | `-p` → `pong`, rc 0, 6 s | `20261101T002859Z_i-0e90d4b253c8134b3_bedrock-headless-smoke.log` |
+| Headless `-p` with Read, Grep, Bash | correct answer `aurora-7\|src/a.js,src/deep/b.js\|Haiku`; each tool call and result in the stream | `20261101T003029Z_i-0e90d4b253c8134b3_bedrock-headless-tools.log` |
+| Grep tool vs direct rg (60 MB tree, 3273 files) | Grep tool 0.407 s (PreToolUse→PostToolUse hooks) vs rg median 0.144 s; same 3 files; hooks work | `20261101T003123Z_i-0e90d4b253c8134b3_bedrock-grep-timing.log` |
+| Interactive TUI with the model: edit, bash, resize | edit applied and verified on disk; `echo bash-ok-$(uname -s)` → `bash-ok-Haiku`; reflow at 70×24 and 130×40 | `20261101T003220Z_i-0e90d4b253c8134b3_bedrock-tui-session.log` |
+| `/compact` + recall | Haiku 5/5; Linux real binary 3/3 and node+compat 3/3 (first 2 Linux tries had no IMDS role yet) | `20261101T004621Z_i-0e90d4b253c8134b3_compact-haiku-x5.log`, `20261101T004647Z_i-0a14e8aca787249b7_compact-linux-x5.log` |
+| `/compact` stuck after a refused command + queued message | same hang with the real binary on Linux: upstream behaviour, not the port | `20261101T005814Z_i-0a14e8aca787249b7_bedrock-tui-session-real-linux.log` |
 | 30-min soak with RSS (idle TUI) | alive throughout, 11 threads; RSS 323 MB → 185 MB after GC, then flat (184.8–185.1 MB) | `20261031T143535Z_i-0e90d4b253c8134b3_tui-soak-30min.log` |
 | Ctrl-C at onboarding; headless `-p` without credentials | identical to the real binary on Linux (picker ignores Ctrl-C; `Not logged in · Please run /login`, rc 1) | `20261031T150644Z_i-0e90d4b253c8134b3_tui-ctrlc-and-headless.log`, `20261031T150818Z_i-0a14e8aca787249b7_tui-ctrlc-real-linux.log` |
 | Global Worker scenarios replayed on Haiku | 13/13 match the Bun recording | `20261031T151048Z_i-0e90d4b253c8134b3_compat-scenarios-on-haiku.log` |
@@ -84,9 +89,10 @@ Triage of the remaining failures (`20261101T004721Z_i-0e7bed4928e0f7bf7_node-fai
 
 ## Open items (blocked or owner decisions)
 
-1. `ANTHROPIC_API_KEY` for the model-backed acceptance tests (headless `-p` with tools,
-   TUI edit/bash/compact, Grep timing). The key transport (presigned URL into the process
-   environment only) is ready; the key has not been provided.
+1. Model-backed tests ran through Amazon Bedrock with instance-profile credentials (owner's
+   suggestion), so no API key was needed. The acceptance box's `ssm-instance-profile`
+   carries `PowerUserAccess`, which is broader than this needs; a dedicated
+   SSM+Bedrock profile (`cc-bedrock-ssm`) is pending the owner.
 2. `fs.watch` on Haiku: libuv backend (system library change) or polling (compat).
 3. Publishing nodejs24 / claude_code: not done, by instruction. claude_code redistributes
    Anthropic's proprietary bundle under its own terms (`LICENSE`: Anthropic Legal

@@ -1,0 +1,147 @@
+# evidence: bedrock-tui-session-real-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b259c256-74ba-4a13-ab60-fea36e498162 (agent status: Success)
+# start: 20261101T005814Z   end: 20261101T010141Z   rc: 0   log bytes: 10754
+# script sha256: 3135753f701b383c115ee1eb130850bab5e01d9a265d0f9c7ac0c7f79dbd81cd
+# ---- script ----
+# | set -u
+# | echo '3fdcc2d176e773f4125d595606ad6d4ff98ae46845e5766017d95727df8c2889  /opt/cc/w-b4.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-b4 && mkdir -p /opt/cc/w-b4 && tar xzf /opt/cc/w-b4.stage/p.tgz -C /opt/cc/w-b4 2>/dev/null
+# | cd /opt/cc/w-b4
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5
+# | H=/tmp/tui-home; rm -rf $H; mkdir -p $H/.claude
+# | W=/tmp/cc-tui; rm -rf $W; mkdir -p $W; printf 'line one\nline two\n' > $W/notes.txt
+# | cat > $H/.claude/settings.json <<J
+# | {"prefersReducedMotion":true,"theme":"dark","permissions":{"allow":["Edit","Write","Bash(echo:*)","Bash(sleep:*)","Bash(uname:*)"]}}
+# | J
+# | cat > $H/.claude.json <<J
+# | {"hasCompletedOnboarding":true,"theme":"dark","projects":{"$W":{"hasTrustDialogAccepted":true}}}
+# | J
+# | S=t; tmux -L $S kill-server 2>/dev/null
+# | tmux -L $S new-session -d -s $S -x 110 -y 34 "cd $W && env CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color /opt/cc/v2.1.314/package/claude 2>/tmp/tui.err; echo CLAUDE-EXITED rc=\$?; sleep 60"
+# | snap() { sleep "$1"; echo "----- [$2]"; tmux -L $S capture-pane -t $S -p | sed 's/[[:space:]]*$//' | grep -v '^$' | tail -${3:-14}; }
+# | waitfor() { for i in $(seq 1 $2); do tmux -L $S capture-pane -t $S -p | grep -q -- "$1" && return 0; sleep 2; done; echo "(timeout waiting for: $1)"; return 1; }
+# | snap 15 "startup"
+# | tmux -L $S send-keys -t $S -l 'Edit notes.txt: replace "line two" with "line two (edited on Haiku)". Then run: echo bash-ok-$(uname -s)'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "bash-ok-Haiku" 60; snap 4 "after edit + bash" 18
+# | echo "----- notes.txt on disk:"; cat $W/notes.txt
+# | tmux -L $S send-keys -t $S -l 'Run the bash command: sleep 120'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | sleep 15; snap 0 "during sleep 120" 8
+# | tmux -L $S send-keys -t $S Escape; snap 5 "after Esc (interrupt)" 8
+# | echo "----- sleep processes left: $(ps | grep -c '[s]leep 120')"
+# | tmux -L $S resize-window -t $S -x 70 -y 24; snap 3 "resized to 70x24" 10
+# | tmux -L $S resize-window -t $S -x 130 -y 40; snap 3 "resized to 130x40" 6
+# | tmux -L $S send-keys -t $S -l '/compact'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "ompact" 90; sleep 20; snap 0 "after /compact" 12
+# | tmux -L $S send-keys -t $S -l 'What word did I put in parentheses in notes.txt? Answer in one line.'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "Haiku)" 60; snap 5 "post-compact recall" 8
+# | tmux -L $S send-keys -t $S C-c; sleep 1; tmux -L $S send-keys -t $S C-c; sleep 4; snap 0 "after Ctrl-C Ctrl-C" 6
+# | echo "----- node teams left: $(ps | grep -c '[p]ackage/claude')"
+# | echo "----- stderr (filtered):"; grep -v "Cannot open directory /boot/system/non-packaged" /tmp/tui.err | head -5
+# | tmux -L $S kill-server
+# ---- raw output ----
+----- [startup]
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Sonnet 5 · Amazon Bedrock
+ ▝▝   ▝▝   /tmp/cc-tui
+▎ Auto mode is now Claude Code's default permission mode.
+▎ Auto mode lets Claude handle permission prompts automatically. Claude checks each tool call for risky
+▎ actions and prompt injection before executing, runs the ones it assesses as lower-risk, and blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+           tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux.conf for wheel scroll
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+(timeout waiting for: bash-ok-Haiku)
+----- [after edit + bash]
+▎ Auto mode lets Claude handle permission prompts automatically. Claude checks each tool call for risky
+▎ actions and prompt injection before executing, runs the ones it assesses as lower-risk, and blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+❯ Edit notes.txt: replace "line two" with "line two (edited on Haiku)". Then run: echo bash-ok-$(uname -s)
+  Searched for 1 pattern, read 1 file, ran 1 shell command
+● Update(notes.txt)
+  ⎿  Added 1 line, removed 1 line
+      1  line one
+      2 -line two
+      2 +line two (edited on Haiku)
+  Ran 1 shell command
+● Edited notes.txt (line two → "line two (edited on Haiku)") and ran the echo command — output: bash-ok-Linux.
+✻ Churned for 11s · done 12:58 AM
+                                                                      ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- notes.txt on disk:
+line one
+line two (edited on Haiku)
+----- [during sleep 120]
+● The sandbox blocks bare sleep calls since there's nothing to actually wait on. Is there a specific condition
+  or background process you want me to wait for instead?
+✻ Sautéed for 5s · done 1:00 AM
+                                                                      ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- [after Esc (interrupt)]
+● The sandbox blocks bare sleep calls since there's nothing to actually wait on. Is there a specific condition
+  or background process you want me to wait for instead?
+✻ Sautéed for 5s · done 1:00 AM
+                                                                      ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- sleep processes left: 0
+----- [resized to 70x24]
+  Ran 1 shell command
+● The sandbox blocks bare sleep calls since there's nothing to
+  actually wait on. Is there a specific condition or background
+  process you want me to wait for instead?
+✻ Sautéed for 5s · done 1:00 AM
+                              ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- [resized to 130x40]
+✻ Sautéed for 5s · done 1:00 AM
+                                                                                          ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- [after /compact]
+  Ran 1 shell command
+● The sandbox blocks bare sleep calls since there's nothing to actually wait on. Is there a specific condition or background
+  process you want me to wait for instead?
+✻ Sautéed for 5s · done 1:00 AM
+❯ /compact
+● Compacting conversation… (1s · ↓ 3 tokens)
+  ⎿  Tip: Use Plan Mode to prepare for a complex request before making changes. Press shift+tab twice to enable.
+                                                                                          ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt
+----- [post-compact recall]
+  ctrl+x ctrl+s to send now
+● Compacting conversation… (1s · ↓ 3 tokens)
+  ⎿  Tip: Use Plan Mode to prepare for a complex request before making changes. Press shift+tab twice to enable.
+                                                                                          ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Press up to edit queued messages
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt
+----- [after Ctrl-C Ctrl-C]
+  ⎿  Compaction canceled.
+                                                                                          ✔ Update installed · Restart to update
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ What word did I put in parentheses in notes.txt? Answer in one line.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)
+----- node teams left: 0
+----- stderr (filtered):

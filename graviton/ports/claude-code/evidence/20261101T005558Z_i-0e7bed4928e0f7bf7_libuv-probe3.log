@@ -1,0 +1,49 @@
+# evidence: libuv-probe3
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T005558Z   end: 20261101T005620Z   rc: 0
+# script sha256: 96146ef91cc64e3480f05a226bd54f3cffbb4fd491418d38c1b05bbe6113f285
+# ---- script ----
+# | which cmake autoconf automake libtoolize make gcc ninja pkg-config 2>&1
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | sed -n 1,80p $N/lib/internal/fs/recursive_watch.js | grep -n "watch\|require" 
+# | ls /boot/home/haikuports/dev-libs/libuv/download/ 2>&1
+# | ls /boot/home/haikuports/dev-libs/libuv/work-1.52.1/ /boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources 2>&1 | head
+# | which haiku-nativebuild; ls /boot/home/config/non-packaged/bin | head -40
+# | ls /boot/home/haikuports-patches 2>&1 | head -3
+# ---- raw output ----
+/boot/system/bin/cmake
+/boot/system/bin/autoconf
+/boot/system/bin/automake
+/boot/system/bin/libtoolize
+/boot/system/bin/make
+/boot/system/bin/gcc
+/boot/system/bin/ninja
+/boot/system/bin/pkg-config
+11:const { EventEmitter } = require('events');
+12:const assert = require('internal/assert');
+18:} = require('internal/errors');
+19:const { getValidatedPath } = require('internal/fs/utils');
+20:const { createIgnoreMatcher, kFSWatchStart, StatWatcher } = require('internal/fs/watchers');
+21:const { kEmptyObject } = require('internal/util');
+22:const { validateBoolean, validateAbortSignal, validateIgnoreOption } = require('internal/validators');
+29:} = require('path');
+34:  internalSync ??= require('fs');
+44:  #watchers = new SafeMap();
+47:  #watchingFile = false;
+58:    // TODO(anonrig): Add non-recursive support to non-native-watcher for IBMi & AIX support.
+78:      // This is required since on macOS and Windows it throws ERR_INVALID_ARG_VALUE
+ls: cannot access '/boot/home/haikuports/dev-libs/libuv/download/': No such file or directory
+ls: cannot access '/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources': No such file or directory
+/boot/home/haikuports/dev-libs/libuv/work-1.52.1/:
+port.recipe
+which: no haiku-nativebuild in (/boot/home/config/non-packaged/bin:/boot/home/config/bin:/boot/system/non-packaged/bin:/boot/system/bin:/boot/system/apps:/boot/system/preferences)
+curl
+depclosure
+haiku-package-closure
+haiku-srccache-fetch
+haikuporter
+python3
+wget
+README.md
+autoconf-2.72-doc-cut-stage1.patch
+cmake-4.1.6-bundled-libs-stage1.patch
