@@ -27,6 +27,7 @@ status_t devfs_rename_partition(const char* devicePath, const char* oldName,
 status_t devfs_unpublish_device(const char* path, bool disconnect);
 status_t devfs_publish_device(const char* path, device_hooks* calls);
 status_t devfs_publish_directory(const char* path);
+status_t devfs_publish_symlink(const char* name, const char* target);
 status_t devfs_rescan_driver(const char* driverName);
 
 void devfs_compute_geometry_size(device_geometry* geometry, uint64 blockCount,
