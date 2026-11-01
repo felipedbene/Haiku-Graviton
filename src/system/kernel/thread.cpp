@@ -2155,6 +2155,15 @@ thread_exit(void)
 			// kill off all other threads and the user debugger facilities
 			debuggerPort = team_shutdown_team(team);
 
+			// Close the team's file descriptors before its death is published
+			// below. Otherwise they stayed open until the last reference to
+			// the team went away, so a parent woken by SIGCHLD, or reaping the
+			// child, found the other end of a pipe or socket it shared with it
+			// still open, and only saw its EOF later. On other POSIX systems a
+			// reapable child has no open files.
+			if (team->io_context != NULL)
+				vfs_close_io_context_fds(team->io_context);
+
 			// acquire necessary locks, which are: process group lock, kernel
 			// team lock, parent team lock, and the team lock
 			team->LockProcessGroup();

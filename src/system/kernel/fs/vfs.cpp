@@ -5023,6 +5023,23 @@ vfs_exec_io_context(io_context* context)
 }
 
 
+/*!	Closes all file descriptors of the given I/O context. The context itself
+	stays valid, with its root and working directories.
+	To be called by the last thread of a team, before the team's death is
+	published.
+*/
+void
+vfs_close_io_context_fds(io_context* context)
+{
+	rw_lock_read_lock(&context->lock);
+	uint32 tableSize = context->table_size;
+	rw_lock_read_unlock(&context->lock);
+
+	for (uint32 i = 0; i < tableSize; i++)
+		close_fd_index(context, i);
+}
+
+
 /*! Sets up a new io_control structure, and inherits the properties
 	of the parent io_control if it is given.
 */
