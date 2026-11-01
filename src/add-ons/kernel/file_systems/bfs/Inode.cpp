@@ -1578,9 +1578,13 @@ Inode::ReadAt(off_t pos, uint8* buffer, size_t* _length)
 }
 
 
+/*!	Writes \a _length bytes from \a buffer at \a pos. With \a append, \a pos
+	is ignored and the data goes to the end of the file, as determined under
+	the inode's write lock (see below).
+*/
 status_t
 Inode::WriteAt(Transaction& transaction, off_t pos, const uint8* buffer,
-	size_t* _length)
+	size_t* _length, bool append)
 {
 	InodeReadLocker locker(this);
 
@@ -1593,6 +1597,9 @@ Inode::WriteAt(Transaction& transaction, off_t pos, const uint8* buffer,
 	// TODO: support INODE_LOGGED!
 
 	size_t length = *_length;
+	if (append)
+		pos = Size();
+			// only to decide whether the size changes, see below
 	bool changeSize = (uint64)pos + (uint64)length > (uint64)Size();
 
 	// set/check boundaries for pos/length
@@ -1607,6 +1614,14 @@ Inode::WriteAt(Transaction& transaction, off_t pos, const uint8* buffer,
 
 	WriteLocker writeLocker(fLock);
 
+	// An append must use the end of the file as it is now that we hold the
+	// write lock: the size read above may already be stale. The file is
+	// grown to cover the new data before the lock is dropped, so a
+	// concurrent appender sees the new end and cannot write over this one,
+	// which is what POSIX requires of O_APPEND.
+	if (append)
+		pos = Size();
+
 	// Work around possible race condition: Someone might have shrunken the file
 	// while we had no lock.
 	if (!transaction.IsStarted()
@@ -1614,6 +1629,8 @@ Inode::WriteAt(Transaction& transaction, off_t pos, const uint8* buffer,
 		writeLocker.Unlock();
 		transaction.Start(fVolume, BlockNumber());
 		writeLocker.Lock();
+		if (append)
+			pos = Size();
 	}
 
 	off_t oldSize = Size();
