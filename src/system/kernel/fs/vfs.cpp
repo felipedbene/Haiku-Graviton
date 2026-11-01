@@ -42,6 +42,7 @@
 #include <disk_device_manager/KDiskSystem.h>
 #include <fd.h>
 #include <file_cache.h>
+#include <fs/fdescfs.h>
 #include <fs/node_monitor.h>
 #include <KPath.h>
 #include <lock.h>
@@ -5578,7 +5579,11 @@ file_create_vnode(struct vnode* directory, const char* name, int openMode,
 				if (S_ISDIR(vnode->Type()))
 					return B_IS_A_DIRECTORY;
 
-				int fd = open_vnode(vnode.Get(), openMode & ~O_CREAT, kernel);
+				int fd;
+				if (fdescfs_open_vnode(vnode.Get(), openMode, kernel, fd))
+					return fd;
+
+				fd = open_vnode(vnode.Get(), openMode & ~O_CREAT, kernel);
 				// on success keep the vnode reference for the FD
 				if (fd >= 0)
 					vnode.Detach();
@@ -5743,7 +5748,11 @@ file_open_entry_ref(dev_t mountID, ino_t directoryID, const char* name,
 	if (status != B_OK)
 		return status;
 
-	int newFD = open_vnode(vnode.Get(), openMode, kernel);
+	int newFD;
+	if (fdescfs_open_vnode(vnode.Get(), openMode, kernel, newFD))
+		return newFD;
+
+	newFD = open_vnode(vnode.Get(), openMode, kernel);
 	if (newFD >= 0) {
 		cache_node_opened(vnode.Get(), vnode->cache, mountID,
 			directoryID, vnode->id, name);
@@ -5772,8 +5781,13 @@ file_open(int fd, char* path, int openMode, bool kernel)
 	if (status != B_OK)
 		return status;
 
+	// A /dev/fd/<n> node is not opened, but duplicates descriptor <n>.
+	int newFD;
+	if (fdescfs_open_vnode(vnode.Get(), openMode, kernel, newFD))
+		return newFD;
+
 	// open the vnode
-	int newFD = open_vnode(vnode.Get(), openMode, kernel);
+	newFD = open_vnode(vnode.Get(), openMode, kernel);
 	if (newFD >= 0) {
 		cache_node_opened(vnode.Get(), vnode->cache,
 			vnode->device, parentID, vnode->id, NULL);

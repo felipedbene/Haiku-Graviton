@@ -23,6 +23,8 @@
 #include <disk_device_manager/KPartitionVisitor.h>
 #include <DiskDeviceTypes.h>
 #include <file_cache.h>
+#include <fs/devfs.h>
+#include <fs/fdescfs.h>
 #include <fs/KPath.h>
 #include <kmodule.h>
 #include <syscalls.h>
@@ -430,6 +432,29 @@ get_boot_partitions(KMessage& bootVolume, PartitionStack& partitions)
 }
 
 
+/*!	Mounts fdescfs at /dev/fd, and links /dev/stdin, /dev/stdout and
+	/dev/stderr into it, as scripts and tools expect (see fdescfs.cpp).
+	vfs_bootstrap_file_systems() is too early for this: any lookup in /dev
+	makes devfs scan for drivers, which needs the device manager.
+*/
+static void
+mount_fd_file_system()
+{
+	status_t status = devfs_publish_directory("fd");
+	if (status == B_OK)
+		status = _kern_mount("/dev/fd", NULL, FDESCFS_NAME, 0, NULL, 0);
+	if (status < B_OK) {
+		dprintf("vfs: could not mount %s on /dev/fd: %s\n", FDESCFS_NAME,
+			strerror(status));
+		return;
+	}
+
+	devfs_publish_symlink("stdin", "fd/0");
+	devfs_publish_symlink("stdout", "fd/1");
+	devfs_publish_symlink("stderr", "fd/2");
+}
+
+
 //	#pragma mark -
 
 
@@ -573,5 +598,7 @@ vfs_mount_boot_file_system(kernel_args* args)
 	KDiskDeviceManager *manager = KDiskDeviceManager::Default();
 	manager->RescanDiskSystems();
 	manager->StartMonitoring();
+
+	mount_fd_file_system();
 }
 
