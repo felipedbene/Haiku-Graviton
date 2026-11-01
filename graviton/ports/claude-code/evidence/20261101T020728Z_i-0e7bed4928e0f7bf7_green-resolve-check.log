@@ -1,0 +1,9 @@
+# evidence: green-resolve-check
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T020728Z   end: 20261101T020750Z   rc: 0
+# script sha256: 478ebc1676c8bcd90f813e94da3ee088e25b105ef423665b911d9c61fd62c97d
+# ---- script ----
+# | pkgman refresh 2>&1 | tail -1
+# | for p in claude_code nodejs24 libuv; do pkgman search -a -D "$p" 2>&1 | grep -E "^ *(S|R|-)? *$p " | head -4; done
+# ---- raw output ----
+Activating repository cache for DeBeOS ...

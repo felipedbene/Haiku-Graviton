@@ -1,0 +1,11 @@
+# evidence: green-resolve-check
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T020848Z   end: 20261101T020911Z   rc: 0
+# script sha256: baff13055d14e9965803daf712e55027aa964903bb94e6318ac7b040acc1d7d2
+# ---- script ----
+# | for p in claude_code nodejs24 libuv; do pkgman search -a "$p" 2>&1 | grep -E "^ *[A-Za-z]+ +$p(_devel)? " ; done
+# ---- raw output ----
+S       nodejs24                                 A JavaScript runtime built on Chrome's V8 Engine                                                    
+S       nodejs24_devel                           A JavaScript runtime built on Chrome's V8 Engine (development files)                                
+S       libuv                                    Cross-platform asynchronous I/O                                                                     
+S       libuv_devel                              Cross-platform asynchronous I/O (development files)                                                 

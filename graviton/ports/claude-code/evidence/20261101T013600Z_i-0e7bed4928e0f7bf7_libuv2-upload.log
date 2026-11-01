@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: libuv2-upload
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T013600Z   end: 20261101T013622Z   rc: 0
+# script sha256: 7e63851e25c89ae68ceaf0958ef9d24c4316f7d0c331aa59a6e2b4137c23b1b1
+# ---- script ----
+# | cd /boot/home/haikuports/packages && ls -l libuv*1.52.1-2*.hpkg && sha256sum libuv-1.52.1-2-arm64.hpkg libuv_devel-1.52.1-2-arm64.hpkg
+# | /boot/system/bin/curl -sSf -X PUT --upload-file libuv-1.52.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv-1.52.1-2-arm64.hpkg?<PRESIGNED>' && echo up1-ok
+# | /boot/system/bin/curl -sSf -X PUT --upload-file libuv_devel-1.52.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv_devel-1.52.1-2-arm64.hpkg?<PRESIGNED>' && echo up2-ok
+# ---- raw output ----
+-rw-r--r-- 1 baron root  73484 Nov  1 01:29 libuv-1.52.1-2-arm64.hpkg
+-rw-r--r-- 1 baron root 210972 Nov  1 01:29 libuv_debuginfo-1.52.1-2-arm64.hpkg
+-rw-r--r-- 1 baron root  21813 Nov  1 01:29 libuv_devel-1.52.1-2-arm64.hpkg
+400f176a20e0fe108c4956fa9d9ee538164609262c6bd3db3d2527205a580a86  libuv-1.52.1-2-arm64.hpkg
+5f1ec79fa47da0900fbd8436f50b697b5ae2a4898ffd9820fe493185c1bdd594  libuv_devel-1.52.1-2-arm64.hpkg
+up1-ok
+up2-ok

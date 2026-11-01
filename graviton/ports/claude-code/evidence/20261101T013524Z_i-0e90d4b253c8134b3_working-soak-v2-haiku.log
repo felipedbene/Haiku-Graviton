@@ -1,0 +1,96 @@
+# evidence: working-soak-v2-haiku
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T013524Z   end: 20261101T020816Z   rc: 0
+# script sha256: 1cbe8d21713febb87f2921775e5e2ae7533fce37d3172290f844bb82d15d0492
+# ---- script ----
+# | set -u
+# | mkdir -p /tmp/wst && printf '%s' 'IyEvYmluL2Jhc2gKIyB3b3JraW5nLXNvYWsuc2ggPGxhYmVsPiA8bWludXRlcz4gPGNsYXVkZSBjb21tYW5kLi4uPjogYSB3b3JraW5nIHNvYWsuIFJlcGVhdGVkbHkgdHlwZXMgYQojIHNtYWxsIHRvb2wtdXNpbmcgdGFzayBpbnRvIHRoZSBpbnRlcmFjdGl2ZSBUVUkgKG1vZGVsIHZpYSBBbWF6b24gQmVkcm9jaywgaW5zdGFuY2UtcHJvZmlsZQojIGNyZWRlbnRpYWxzKSwgd2FpdHMgZm9yIGl0cyBvdXRwdXQgZmlsZSwgYW5kIHJlY29yZHMgcGVyLXRhc2sgbGF0ZW5jeSBwbHVzIHRoZSBwcm9jZXNzJ3MKIyBSU1MuIEEgdGFzayB0aGF0IGRvZXMgbm90IGNvbXBsZXRlIHdpdGhpbiAxNTAgcyBpcyByZXBvcnRlZCBhcyBmYWlsZWQuIExpbnV4IGFuZCBIYWlrdS4Kc2V0IC11CmxhYmVsPSQxIE1JTj0kMjsgc2hpZnQgMjsgQ01EPSIkKiIKZXhwb3J0IENMQVVERV9DT0RFX1VTRV9CRURST0NLPTEgQVdTX1JFR0lPTj11cy13ZXN0LTIgQU5USFJPUElDX01PREVMPSR7QU5USFJPUElDX01PREVMOi11cy5hbnRocm9waWMuY2xhdWRlLWhhaWt1LTQtNS0yMDI1MTAwMS12MTowfQpIPS90bXAvd3MtaG9tZS0kbGFiZWw7IHJtIC1yZiAkSDsgbWtkaXIgLXAgJEgvLmNsYXVkZQpXPSQoY2QgL3RtcCAmJiBwd2QgLVApL3dzLSRsYWJlbDsgcm0gLXJmICRXOyBta2RpciAtcCAkVwplY2hvICd7InByZWZlcnNSZWR1Y2VkTW90aW9uIjp0cnVlLCJ0aGVtZSI6ImRhcmsiLCJwZXJtaXNzaW9ucyI6eyJhbGxvdyI6WyJCYXNoKGVjaG86KikiLCJCYXNoKGRhdGU6KikiLCJSZWFkIiwiV3JpdGUiXX19JyA+ICRILy5jbGF1ZGUvc2V0dGluZ3MuanNvbgplY2hvICJ7XCJoYXNDb21wbGV0ZWRPbmJvYXJkaW5nXCI6dHJ1ZSxcInRoZW1lXCI6XCJkYXJrXCIsXCJwcm9qZWN0c1wiOntcIiRXXCI6e1wiaGFzVHJ1c3REaWFsb2dBY2NlcHRlZFwiOnRydWV9fX0iID4gJEgvLmNsYXVkZS5qc29uClM9d3MtJGxhYmVsOyB0bXV4IC1MICRTIGtpbGwtc2VydmVyIDI+L2Rldi9udWxsOyB0cmFwICd0bXV4IC1MICRTIGtpbGwtc2VydmVyIDI+L2Rldi9udWxsJyBFWElUCnRtdXggLUwgJFMgbmV3LXNlc3Npb24gLWQgLXMgJFMgLXggMTIwIC15IDQwICJjZCAkVyAmJiBlbnYgQ0xBVURFX0NPREVfVVNFX0JFRFJPQ0s9MSBBV1NfUkVHSU9OPSRBV1NfUkVHSU9OIEFOVEhST1BJQ19NT0RFTD0kQU5USFJPUElDX01PREVMIEhPTUU9JEggVEVSTT14dGVybS0yNTZjb2xvciAkQ01EIgpzbGVlcCAxNQpwaWRfb2YoKSB7CSMgdGhlIGNsYXVkZSBwcm9jZXNzOiBuZXdlc3Qgbm9kZS9jbGF1ZGUgZGVzY2VuZGFudCBvZiB0aGUgdG11eCBwYW5lCglpZiBbICIkKHVuYW1lIC1zKSIgPSBIYWlrdSBdOyB0aGVuIHBzIHwgYXdrICcvYmluXC9ub2RlIC0temVyby1maWxsLWJ1ZmZlcnMgXC9ib290XC9zeXN0ZW1cL2xpYlwvY2xhdS8geyBwcmludCAkKE5GLTMpIH0nIHwgc29ydCAtbiB8IHRhaWwgLTEKCWVsc2UgcGdyZXAgLW4gLWYgIiQoZWNobyAiJENNRCIgfCBhd2sgJ3twcmludCAkTkZ9JykiOyBmaTsgfQpyc3MoKSB7CglpZiBbICIkKHVuYW1lIC1zKSIgPSBIYWlrdSBdOyB0aGVuIGxpc3RhcmVhICIkMSIgfCBhd2sgJ05GID49IDEwICYmICQoTkYtNSkgfiAvXlswLTlhLWZdKyQvIHsgcyArPSBzdHJ0b251bSgiMHgiICQoTkYtNSkpIH0gRU5EIHsgcHJpbnRmICIlZCIsIHMgLyAxMDI0IH0nCgllbHNlIGF3ayAnL1ZtUlNTLyB7IHByaW50ICQyIH0nIC9wcm9jLyQxL3N0YXR1czsgZmk7IH0KcD0kKHBpZF9vZik7IGVjaG8gIlskbGFiZWxdIHBpZC90ZWFtICRwLCByc3MgJChyc3MgJHApS0IiCmVuZD0kKCggJChkYXRlICslcykgKyBNSU4gKiA2MCApKTsgaz0wIG9rPTAgZmFpbD0wCndoaWxlIFsgIiQoZGF0ZSArJXMpIiAtbHQgIiRlbmQiIF07IGRvCglrPSQoKGsgKyAxKSk7IHQwPSQoZGF0ZSArJXMpCgl0bXV4IC1MICRTIHNlbmQta2V5cyAtdCAkUyAtbCAiUnVuOiBlY2hvIHNvYWstJGstXCQoZGF0ZSArJXMpIGFuZCB3cml0ZSBpdHMgb3V0cHV0IHRvIHNvYWstJGsudHh0LCB0aGVuIHJlcGx5IHdpdGggb25seSB0aGUgd29yZCBkb25lLSRrIjsgc2xlZXAgMTsgdG11eCAtTCAkUyBzZW5kLWtleXMgLXQgJFMgRW50ZXIKCXI9IkZBSUwiOyBmb3IgaSBpbiAkKHNlcSAxIDE1MCk7IGRvIFsgLXMgJFcvc29hay0kay50eHQgXSAmJiB7IHI9Im9rICQoKCAkKGRhdGUgKyVzKSAtIHQwICkpcyI7IGJyZWFrOyB9OyBzbGVlcCAxOyBkb25lCglbICIkciIgPSBGQUlMIF0gJiYgZmFpbD0kKChmYWlsICsgMSkpIHx8IG9rPSQoKG9rICsgMSkpCgllY2hvICJbJGxhYmVsXSB0YXNrICRrOiAkciByc3M9JChyc3MgJHApS0IiCglbICIkciIgPSBGQUlMIF0gJiYgdG11eCAtTCAkUyBjYXB0dXJlLXBhbmUgLXQgJFMgLXAgfCBncmVwIC12ICdeICokJyB8IHRhaWwgLTYgfCBzZWQgInMvXi9bJGxhYmVsXSAgIC8iCglzbGVlcCAxMApkb25lCmVjaG8gIlskbGFiZWxdIHdvcmtpbmcgc29hazogJG9rIG9rIC8gJGZhaWwgZmFpbGVkIG92ZXIgJHtNSU59bWluOyBmaW5hbCByc3MgJChyc3MgJHApS0IiClsgJGZhaWwgLWVxIDAgXQo=' | base64 -d > /tmp/wst/working-soak.sh
+# | bash /tmp/wst/working-soak.sh haiku 30 claude; echo "rc=$?"
+# ---- raw output ----
+[haiku] pid/team 23970, rss 428180KB
+[haiku] task 1: FAIL rss=283396KB
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    A nested command in this command can't be checked before it runs
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 2: FAIL rss=282416KB
+[haiku]   ● done-1
+[haiku]   ✻ Baked for 4s · done 1:38 AM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 3: FAIL rss=299400KB
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    A nested command in this command can't be checked before it runs
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 4: FAIL rss=346316KB
+[haiku]   ● done-3
+[haiku]   ✻ Sautéed for 3s · done 1:43 AM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 5: FAIL rss=348824KB
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    A nested command in this command can't be checked before it runs
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 6: FAIL rss=353944KB
+[haiku]   ● done-5
+[haiku]   ✻ Worked for 3s · done 1:49 AM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 7: FAIL rss=293760KB
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    A nested command in this command can't be checked before it runs
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 8: FAIL rss=300012KB
+[haiku]   ● done-7
+[haiku]   ✻ Crunched for 3s · done 1:54 AM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 9: FAIL rss=316600KB
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    A nested command in this command can't be checked before it runs
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 10: FAIL rss=362364KB
+[haiku]   ● done-9
+[haiku]   ✻ Churned for 3s · done 2:00 AM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 11: FAIL rss=355436KB
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    A nested command in this command can't be checked before it runs
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 12: FAIL rss=366696KB
+[haiku]   ● done-11
+[haiku]   ✻ Cogitated for 3s · done 2:05 AM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] working soak: 0 ok / 12 failed over 30min; final rss 366696KB
+rc=1

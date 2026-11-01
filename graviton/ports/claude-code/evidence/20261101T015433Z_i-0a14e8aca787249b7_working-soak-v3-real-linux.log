@@ -1,0 +1,105 @@
+# evidence: working-soak-v3-real-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: ec5759a8-757d-45ed-90b5-84e168e7e572 (agent status: Success)
+# start: 20261101T015433Z   end: 20261101T020504Z   rc: 0   log bytes: 5987
+# script sha256: 2288dd24a3ae9e313fcadf7e710429bd075a7416a685f59e9594d2a4fdc9d695
+# ---- script ----
+# | set -u
+# | echo 'cb8536863c85c8c4870d73925a343fe8ab81003e8c92b15cef7558b3a5766c0f  /opt/cc/w-ws.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-ws && mkdir -p /opt/cc/w-ws && tar xzf /opt/cc/w-ws.stage/p.tgz -C /opt/cc/w-ws 2>/dev/null
+# | cd /opt/cc/w-ws
+# | bash tools/working-soak.sh real 10 /opt/cc/v2.1.314/package/claude; echo "rc=$?"
+# ---- raw output ----
+awk: fatal: cannot open file `/proc/70009/status' for reading: No such file or directory
+[real] pid/team 70009, rss KB
+awk: fatal: cannot open file `/proc/70039/status' for reading: No such file or directory
+[real] task 1: ok 4s rss=KB (pid 70039)
+awk: fatal: cannot open file `/proc/70064/status' for reading: No such file or directory
+[real] task 2: ok 4s rss=KB (pid 70064)
+awk: fatal: cannot open file `/proc/70085/status' for reading: No such file or directory
+[real] task 3: ok 3s rss=KB (pid 70085)
+awk: fatal: cannot open file `/proc/70107/status' for reading: No such file or directory
+[real] task 4: ok 3s rss=KB (pid 70107)
+awk: fatal: cannot open file `/proc/70128/status' for reading: No such file or directory
+[real] task 5: ok 3s rss=KB (pid 70128)
+awk: fatal: cannot open file `/proc/70149/status' for reading: No such file or directory
+[real] task 6: ok 4s rss=KB (pid 70149)
+awk: fatal: cannot open file `/proc/70170/status' for reading: No such file or directory
+[real] task 7: ok 3s rss=KB (pid 70170)
+awk: fatal: cannot open file `/proc/70191/status' for reading: No such file or directory
+[real] task 8: ok 4s rss=KB (pid 70191)
+awk: fatal: cannot open file `/proc/70214/status' for reading: No such file or directory
+[real] task 9: ok 3s rss=KB (pid 70214)
+awk: fatal: cannot open file `/proc/70235/status' for reading: No such file or directory
+[real] task 10: ok 4s rss=KB (pid 70235)
+awk: fatal: cannot open file `/proc/70257/status' for reading: No such file or directory
+[real] task 11: ok 4s rss=KB (pid 70257)
+awk: fatal: cannot open file `/proc/70277/status' for reading: No such file or directory
+[real] task 12: ok 3s rss=KB (pid 70277)
+awk: fatal: cannot open file `/proc/70303/status' for reading: No such file or directory
+[real] task 13: ok 4s rss=KB (pid 70303)
+awk: fatal: cannot open file `/proc/70325/status' for reading: No such file or directory
+[real] task 14: ok 4s rss=KB (pid 70325)
+awk: fatal: cannot open file `/proc/70346/status' for reading: No such file or directory
+[real] task 15: ok 4s rss=KB (pid 70346)
+awk: fatal: cannot open file `/proc/70367/status' for reading: No such file or directory
+[real] task 16: ok 3s rss=KB (pid 70367)
+awk: fatal: cannot open file `/proc/70434/status' for reading: No such file or directory
+[real] task 17: ok 3s rss=KB (pid 70434)
+awk: fatal: cannot open file `/proc/70471/status' for reading: No such file or directory
+[real] task 18: ok 4s rss=KB (pid 70471)
+awk: fatal: cannot open file `/proc/70493/status' for reading: No such file or directory
+[real] task 19: ok 4s rss=KB (pid 70493)
+awk: fatal: cannot open file `/proc/70515/status' for reading: No such file or directory
+[real] task 20: ok 4s rss=KB (pid 70515)
+awk: fatal: cannot open file `/proc/70537/status' for reading: No such file or directory
+[real] task 21: ok 4s rss=KB (pid 70537)
+awk: fatal: cannot open file `/proc/70564/status' for reading: No such file or directory
+[real] task 22: ok 4s rss=KB (pid 70564)
+awk: fatal: cannot open file `/proc/70585/status' for reading: No such file or directory
+[real] task 23: ok 4s rss=KB (pid 70585)
+awk: fatal: cannot open file `/proc/70610/status' for reading: No such file or directory
+[real] task 24: ok 4s rss=KB (pid 70610)
+awk: fatal: cannot open file `/proc/70631/status' for reading: No such file or directory
+[real] task 25: ok 4s rss=KB (pid 70631)
+awk: fatal: cannot open file `/proc/70656/status' for reading: No such file or directory
+[real] task 26: ok 4s rss=KB (pid 70656)
+awk: fatal: cannot open file `/proc/70677/status' for reading: No such file or directory
+[real] task 27: ok 4s rss=KB (pid 70677)
+awk: fatal: cannot open file `/proc/70704/status' for reading: No such file or directory
+[real] task 28: ok 4s rss=KB (pid 70704)
+awk: fatal: cannot open file `/proc/70725/status' for reading: No such file or directory
+[real] task 29: ok 4s rss=KB (pid 70725)
+awk: fatal: cannot open file `/proc/70748/status' for reading: No such file or directory
+[real] task 30: ok 4s rss=KB (pid 70748)
+awk: fatal: cannot open file `/proc/70771/status' for reading: No such file or directory
+[real] task 31: ok 5s rss=KB (pid 70771)
+awk: fatal: cannot open file `/proc/70796/status' for reading: No such file or directory
+[real] task 32: ok 4s rss=KB (pid 70796)
+awk: fatal: cannot open file `/proc/70817/status' for reading: No such file or directory
+[real] task 33: ok 4s rss=KB (pid 70817)
+awk: fatal: cannot open file `/proc/70841/status' for reading: No such file or directory
+[real] task 34: ok 4s rss=KB (pid 70841)
+awk: fatal: cannot open file `/proc/70867/status' for reading: No such file or directory
+[real] task 35: ok 4s rss=KB (pid 70867)
+awk: fatal: cannot open file `/proc/70889/status' for reading: No such file or directory
+[real] task 36: ok 4s rss=KB (pid 70889)
+awk: fatal: cannot open file `/proc/70911/status' for reading: No such file or directory
+[real] task 37: ok 4s rss=KB (pid 70911)
+awk: fatal: cannot open file `/proc/70935/status' for reading: No such file or directory
+[real] task 38: ok 4s rss=KB (pid 70935)
+awk: fatal: cannot open file `/proc/70959/status' for reading: No such file or directory
+[real] task 39: ok 4s rss=KB (pid 70959)
+awk: fatal: cannot open file `/proc/70981/status' for reading: No such file or directory
+[real] task 40: ok 4s rss=KB (pid 70981)
+awk: fatal: cannot open file `/proc/71003/status' for reading: No such file or directory
+[real] task 41: ok 4s rss=KB (pid 71003)
+awk: fatal: cannot open file `/proc/71024/status' for reading: No such file or directory
+[real] task 42: ok 4s rss=KB (pid 71024)
+awk: fatal: cannot open file `/proc/71049/status' for reading: No such file or directory
+[real] task 43: ok 4s rss=KB (pid 71049)
+awk: fatal: cannot open file `/proc/71072/status' for reading: No such file or directory
+[real] task 44: ok 4s rss=KB (pid 71072)
+awk: fatal: cannot open file `/proc/71072/status' for reading: No such file or directory
+[real] working soak: 44 ok / 0 failed over 10min; final rss KB
+rc=0

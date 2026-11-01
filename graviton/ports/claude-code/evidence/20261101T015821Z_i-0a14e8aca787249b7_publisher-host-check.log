@@ -1,0 +1,12 @@
+# evidence: publisher-host-check
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 78d87462-75f6-48e3-bdfa-7616d5de3c72 (agent status: Success)
+# start: 20261101T015821Z   end: 20261101T015824Z   rc: 0   log bytes: 163
+# script sha256: c75b8d2583ad5a2ac74c1d3b8aeb2e3ffeabf7f954848d2f28af5b58f1a9e88b
+# ---- script ----
+# | df -h /; aws --version; nproc
+# ---- raw output ----
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root        38G   11G   28G  27% /
+/tmp/ccrun/cc-20261101T015821Z-13477.sh: line 1: aws: command not found
+4

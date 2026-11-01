@@ -1,0 +1,34 @@
+# evidence: green-resolve-check
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T020807Z   end: 20261101T020829Z   rc: 0
+# script sha256: 0c4b052b286f835f790cfb5bc68ac31afedeba945b6e52a5aedbc49ef24e801d
+# ---- script ----
+# | for p in claude_code nodejs24 libuv; do echo "== $p"; pkgman search -a -D "$p" 2>&1 | head -8; done
+# ---- raw output ----
+== claude_code
+Repository  Name                                     Version                        Arch  
+------------------------------------------------------------------------------------------
+DeBeOS      0ad_data                                 0.28.0-1                       any   
+DeBeOS      2048                                     1.1.1-1                        arm64 
+DeBeOS      2048_libretro                            1.0_20251213-1                 arm64 
+DeBeOS      2pow                                     1.2.2-1                        arm64 
+DeBeOS      3dmov                                    0.2-2                          arm64 
+DeBeOS      64tass                                   1.60.3243-1                    arm64 
+== nodejs24
+Repository  Name                                     Version                        Arch  
+------------------------------------------------------------------------------------------
+DeBeOS      0ad_data                                 0.28.0-1                       any   
+DeBeOS      2048                                     1.1.1-1                        arm64 
+DeBeOS      2048_libretro                            1.0_20251213-1                 arm64 
+DeBeOS      2pow                                     1.2.2-1                        arm64 
+DeBeOS      3dmov                                    0.2-2                          arm64 
+DeBeOS      64tass                                   1.60.3243-1                    arm64 
+== libuv
+Repository  Name                                     Version                        Arch  
+------------------------------------------------------------------------------------------
+DeBeOS      0ad_data                                 0.28.0-1                       any   
+DeBeOS      2048                                     1.1.1-1                        arm64 
+DeBeOS      2048_libretro                            1.0_20251213-1                 arm64 
+DeBeOS      2pow                                     1.2.2-1                        arm64 
+DeBeOS      3dmov                                    0.2-2                          arm64 
+DeBeOS      64tass                                   1.60.3243-1                    arm64 

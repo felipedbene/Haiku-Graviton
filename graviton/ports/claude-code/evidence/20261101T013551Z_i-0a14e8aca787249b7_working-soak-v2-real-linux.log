@@ -1,0 +1,49 @@
+# evidence: working-soak-v2-real-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: a32b71dc-de9f-4af5-9720-6bf9976ff254 (agent status: Success)
+# start: 20261101T013551Z   end: 20261101T014656Z   rc: 0   log bytes: 3814
+# script sha256: a8c8af643eb8802bbc1765c28c6b3617e3edad9ea48d065534d32be2c7f416ab
+# ---- script ----
+# | set -u
+# | echo 'aa251e68418ed575a97d9cf4f336ce8befc5c9ebff04d9c1f81e6098941de564  /opt/cc/w-ws.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-ws && mkdir -p /opt/cc/w-ws && tar xzf /opt/cc/w-ws.stage/p.tgz -C /opt/cc/w-ws 2>/dev/null
+# | cd /opt/cc/w-ws
+# | bash tools/working-soak.sh real 10 /opt/cc/v2.1.314/package/claude; echo "rc=$?"
+# ---- raw output ----
+awk: fatal: cannot open file `/proc/68944/status' for reading: No such file or directory
+[real] pid/team 68944, rss KB
+awk: fatal: cannot open file `/proc/68944/status' for reading: No such file or directory
+[real] task 1: FAIL rss=KB
+[real]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[real]    A nested command in this command can't be checked before it runs
+[real]    Do you want to proceed?
+[real]    ❯ 1. Yes
+[real]      2. No
+[real]    Esc to cancel · Tab to amend
+awk: fatal: cannot open file `/proc/68944/status' for reading: No such file or directory
+[real] task 2: FAIL rss=KB
+[real]   ✻ Cooked for 3s · done 1:38 AM
+[real]                                                                                   ✔ Update installed · Restart to update
+[real]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[real]   ❯ 
+[real]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[real]     ⏸ manual mode on · ? for shortcuts
+awk: fatal: cannot open file `/proc/68944/status' for reading: No such file or directory
+[real] task 3: FAIL rss=KB
+[real]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[real]    A nested command in this command can't be checked before it runs
+[real]    Do you want to proceed?
+[real]    ❯ 1. Yes
+[real]      2. No
+[real]    Esc to cancel · Tab to amend
+awk: fatal: cannot open file `/proc/68944/status' for reading: No such file or directory
+[real] task 4: FAIL rss=KB
+[real]   ✻ Cogitated for 2s · done 1:44 AM
+[real]                                                                                   ✔ Update installed · Restart to update
+[real]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[real]   ❯ 
+[real]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[real]     ⏸ manual mode on · ? for shortcuts
+awk: fatal: cannot open file `/proc/68944/status' for reading: No such file or directory
+[real] working soak: 0 ok / 4 failed over 10min; final rss KB
+rc=1

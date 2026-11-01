@@ -1,0 +1,18 @@
+# evidence: green-resolve-claude
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T020930Z   end: 20261101T020952Z   rc: 0
+# script sha256: 29fea882ed99ac9a8479f3b23ad15b7d39a0b224f90ec13c72f003a5febcaca5
+# ---- script ----
+# | pkgman search -a claude 2>&1 | head; pkgman search -a -D claude_code 2>&1 | grep -i claude | head -3
+# ---- raw output ----
+Status  Name                                     Description                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+        0ad_data                                 O A.D. - Game Data                                                                                  
+        2048                                     The tile-matching game 2048                                                                         
+        2048_libretro                            A port of the 2048 puzzle game to the libretro architecture                                         
+        2pow                                     2048 game clone for Haiku                                                                           
+        3dmov                                    Play movies on 3D objects                                                                           
+        64tass                                   Multi pass optimizing macro assembler for the 65xx series of processors                             
+        7kaa                                     Seven Kingdoms: Ancient Adversaries                                                                 
+        7kaa_doc                                 Seven Kingdoms: Ancient Adversaries - Manual                                                        
+DeBeOS      claude_code                              2.1.314-1                      arm64 
