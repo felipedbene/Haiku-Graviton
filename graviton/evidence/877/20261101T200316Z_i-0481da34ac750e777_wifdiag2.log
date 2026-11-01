@@ -1,0 +1,35 @@
+# evidence: wifdiag2
+# instance: i-0481da34ac750e777   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T200316Z   end: 20261101T200432Z   rc: 0
+# script sha256: 101d60957ef59e3650e1173801c2d678d7eca71c1870bf103369babe03e9cbb3
+# ---- script ----
+# | cat > wif.js <<'JS'
+# | const { Worker } = require('worker_threads');
+# | const N = +process.argv[2];
+# | let msg = 0, err = 0, exit = 0; const codes = {};
+# | const t0 = Date.now();
+# | for (let i = 0; i < N; i++) {
+# | 	const w = new Worker('require("worker_threads").parentPort.postMessage(4)', { eval: true });
+# | 	w.on('message', () => msg++);
+# | 	w.on('error', (e) => { err++; codes[e.code] = (codes[e.code] || 0) + 1; });
+# | 	w.on('exit', () => { if (++exit === N) console.log(JSON.stringify({ N, msg, err, codes, ms: Date.now() - t0 })); });
+# | }
+# | setInterval(() => console.log(JSON.stringify({ t: Date.now() - t0, msg, err, exit, codes })), 5000).unref();
+# | JS
+# | for try in 1 2 3; do
+# | 	bash -c 'ulimit -n 128; exec node wif.js 128' > wifdiag.out 2>&1 &
+# | 	p=$!
+# | 	sleep 12
+# | 	echo "=== try $try: $(tail -1 wifdiag.out)"
+# | 	if kill -0 $p 2>/dev/null; then
+# | 		echo "--- still running after 12 s; threads of team $p:"
+# | 		ps -a $p 2>&1 | head -40
+# | 		kill -9 $p
+# | 	fi
+# | 	wait $p 2>/dev/null
+# | done
+# ---- raw output ----
+=== try 1: {"t":11631,"msg":47,"err":79,"exit":126,"codes":{"ERR_WORKER_INIT_FAILED":79}}
+--- still running after 12 s; threads of team 10590:
+=== try 2: {"N":128,"msg":50,"err":78,"codes":{"ERR_WORKER_INIT_FAILED":78},"ms":2323}
+=== try 3: {"N":128,"msg":60,"err":68,"codes":{"ERR_WORKER_INIT_FAILED":68},"ms":2577}
