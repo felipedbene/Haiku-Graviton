@@ -344,7 +344,8 @@ Inode::Inode(Volume* volume, ino_t id)
 	fTree(NULL),
 	fAttributes(NULL),
 	fCache(NULL),
-	fMap(NULL)
+	fMap(NULL),
+	fHasAccessTime(false)
 {
 	PRINT(("Inode::Inode(volume = %p, id = %" B_PRIdINO ") @ %p\n",
 		volume, id, this));
@@ -378,7 +379,8 @@ Inode::Inode(Volume* volume, Transaction& transaction, ino_t id, mode_t mode,
 	fTree(NULL),
 	fAttributes(NULL),
 	fCache(NULL),
-	fMap(NULL)
+	fMap(NULL),
+	fHasAccessTime(false)
 {
 	PRINT(("Inode::Inode(volume = %p, transaction = %p, id = %" B_PRIdINO
 		") @ %p\n", volume, &transaction, id, this));

@@ -44,15 +44,21 @@ struct identify_cookie {
 extern void fill_stat_buffer(Inode* inode, struct stat& stat);
 
 
+/*!	\a accessTime is the node's explicitly set access time, or \c NULL. */
 static void
-fill_stat_time(const bfs_inode& node, struct stat& stat)
+fill_stat_time(const bfs_inode& node, struct stat& stat,
+	const timespec* accessTime = NULL)
 {
-	bigtime_t now = real_time_clock_usecs();
-	stat.st_atim.tv_sec = now / 1000000LL;
-	stat.st_atim.tv_nsec = (now % 1000000LL) * 1000;
-
 	stat.st_mtim.tv_sec = bfs_inode::ToSecs(node.LastModifiedTime());
 	stat.st_mtim.tv_nsec = bfs_inode::ToNsecs(node.LastModifiedTime());
+
+	// BFS does not store an access time, and it does not track reads. Report
+	// the time that utimens() and friends last set while the node has been
+	// in memory, else the modification time: either way a stable value, the
+	// way a file system mounted noatime behaves. This used to be the current
+	// time, so two stat() calls never agreed, and an atime that was just set
+	// read back as "now".
+	stat.st_atim = accessTime != NULL ? *accessTime : stat.st_mtim;
 	stat.st_crtim.tv_sec = bfs_inode::ToSecs(node.CreateTime());
 	stat.st_crtim.tv_nsec = bfs_inode::ToNsecs(node.CreateTime());
 
@@ -82,7 +88,7 @@ fill_stat_buffer(Inode* inode, struct stat& stat)
 	stat.st_mode = node.Mode();
 	stat.st_type = node.Type();
 
-	fill_stat_time(node, stat);
+	fill_stat_time(node, stat, inode->AccessTime());
 
 	if (inode->IsSymLink() && (inode->Flags() & INODE_LONG_SYMLINK) == 0) {
 		// symlinks report the size of the link here
@@ -947,6 +953,11 @@ bfs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat,
 	if ((mask & B_STAT_CREATION_TIME) != 0) {
 		node.create_time
 			= HOST_ENDIAN_TO_BFS_INT64(bfs_inode::ToInode(stat->st_crtim));
+	}
+
+	if ((mask & B_STAT_ACCESS_TIME) != 0) {
+		// not stored on disk, see fill_stat_time()
+		inode->SetAccessTime(stat->st_atim);
 	}
 
 	if ((mask & B_STAT_MODIFICATION_TIME) != 0 || updateModificationTime) {
