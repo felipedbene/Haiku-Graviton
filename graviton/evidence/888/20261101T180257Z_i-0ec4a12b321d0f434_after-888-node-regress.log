@@ -1,0 +1,106 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-888-node-regress
+# instance: i-0ec4a12b321d0f434   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T180257Z   end: 20261101T180606Z   rc: 0
+# script sha256: 92dcb137227d9f9e418cc109ac9c740bffd1553ad7b5a9303662116577ee6772
+# ---- script ----
+# | cd /boot/home/tnet/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'protocols/(unix|udp|ipv6|tcp)' | awk '{print $NF}' | sort -u
+# | sha256sum /boot/system/kernel_arm64
+# | run() {
+# | 	local name=$1; shift
+# | 	local s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 60 -p tap "$@" > /tmp/regress-$name.tap 2>&1
+# | 	echo "=== $name: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/regress-$name.tap) notok=$(grep -c '^not ok ' /tmp/regress-$name.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/regress-$name.tap | sed 's/^/  /' | sort -k3
+# | }
+# | run dgram 'parallel/test-dgram-*'
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+=== dgram: rc=1 wall=184s ok=76 notok=5
+  not ok 27 parallel/test-dgram-connect-send-empty-buffer
+  not ok 38 parallel/test-dgram-error-message-address
+  not ok 79 parallel/test-dgram-connect-send-empty-array
+  not ok 80 parallel/test-dgram-send-empty-array
+  not ok 81 parallel/test-dgram-send-empty-buffer
+  ok 2 parallel/test-dgram-abort-closed
+  ok 1 parallel/test-dgram-address
+  ok 4 parallel/test-dgram-async-dispose
+  ok 3 parallel/test-dgram-bind
+  ok 6 parallel/test-dgram-bind-default-address
+  ok 5 parallel/test-dgram-bind-error-callback
+  ok 9 parallel/test-dgram-bind-error-repeat
+  ok 8 parallel/test-dgram-bind-fd
+  ok 7 parallel/test-dgram-bind-fd-error
+  ok 10 parallel/test-dgram-bind-socket-close-before-cluster-reply
+  ok 28 parallel/test-dgram-bind-socket-close-before-lookup
+  ok 11 parallel/test-dgram-bind-sync
+  ok 12 parallel/test-dgram-blocklist
+  ok 15 parallel/test-dgram-bytes-length
+  ok 13 parallel/test-dgram-close
+  ok 14 parallel/test-dgram-close-during-bind
+  ok 18 parallel/test-dgram-close-in-listening
+  ok 17 parallel/test-dgram-close-is-not-callback
+  ok 16 parallel/test-dgram-close-signal
+  ok 20 parallel/test-dgram-cluster-bind-error
+  ok 19 parallel/test-dgram-cluster-close-during-bind
+  ok 22 parallel/test-dgram-cluster-close-in-listening
+  ok 23 parallel/test-dgram-connect
+  ok 21 parallel/test-dgram-connect-send-callback-buffer
+  ok 24 parallel/test-dgram-connect-send-callback-buffer-length
+  ok 25 parallel/test-dgram-connect-send-callback-multi-buffer
+  ok 26 parallel/test-dgram-connect-send-default-host
+  ok 34 parallel/test-dgram-connect-send-empty-packet
+  ok 29 parallel/test-dgram-connect-send-multi-buffer-copy
+  ok 30 parallel/test-dgram-connect-send-multi-string-array
+  ok 32 parallel/test-dgram-connect-sync
+  ok 31 parallel/test-dgram-create-socket-handle
+  ok 33 parallel/test-dgram-create-socket-handle-fd
+  ok 35 parallel/test-dgram-createSocket-type
+  ok 36 parallel/test-dgram-custom-lookup
+  ok 37 parallel/test-dgram-default-lookup-ip
+  ok 41 parallel/test-dgram-deprecation-error
+  ok 40 parallel/test-dgram-exclusive-implicit-bind
+  ok 39 parallel/test-dgram-implicit-bind
+  ok 42 parallel/test-dgram-ipv6only
+  ok 44 parallel/test-dgram-listen-after-bind
+  ok 43 parallel/test-dgram-membership
+  ok 45 parallel/test-dgram-msgsize
+  ok 48 parallel/test-dgram-multicast-loopback
+  ok 46 parallel/test-dgram-multicast-set-interface
+  ok 47 parallel/test-dgram-multicast-setTTL
+  ok 50 parallel/test-dgram-oob-buffer
+  ok 49 parallel/test-dgram-recv-error
+  ok 51 parallel/test-dgram-ref
+  ok 52 parallel/test-dgram-reuseport # skip The `reusePort` option is not supported
+  ok 53 parallel/test-dgram-send-address-types
+  ok 54 parallel/test-dgram-send-bad-arguments
+  ok 55 parallel/test-dgram-send-callback-buffer
+  ok 56 parallel/test-dgram-send-callback-buffer-empty-address
+  ok 57 parallel/test-dgram-send-callback-buffer-length
+  ok 58 parallel/test-dgram-send-callback-buffer-length-empty-address
+  ok 59 parallel/test-dgram-send-callback-multi-buffer
+  ok 60 parallel/test-dgram-send-callback-multi-buffer-empty-address
+  ok 61 parallel/test-dgram-send-callback-recursive
+  ok 62 parallel/test-dgram-send-cb-quelches-error
+  ok 63 parallel/test-dgram-send-default-host
+  ok 64 parallel/test-dgram-send-empty-packet
+  ok 65 parallel/test-dgram-send-error
+  ok 66 parallel/test-dgram-send-invalid-msg-type
+  ok 67 parallel/test-dgram-send-multi-buffer-copy
+  ok 68 parallel/test-dgram-send-multi-string-array
+  ok 69 parallel/test-dgram-send-queue-info
+  ok 70 parallel/test-dgram-sendto
+  ok 71 parallel/test-dgram-setBroadcast
+  ok 72 parallel/test-dgram-setTTL
+  ok 73 parallel/test-dgram-socket-buffer-size
+  ok 74 parallel/test-dgram-udp4
+  ok 75 parallel/test-dgram-udp6-link-local-address # skip cannot find any IPv6 interfaces with a link local address
+  ok 76 parallel/test-dgram-udp6-send-default-host
+  ok 77 parallel/test-dgram-unref
+  ok 78 parallel/test-dgram-unref-in-cluster
