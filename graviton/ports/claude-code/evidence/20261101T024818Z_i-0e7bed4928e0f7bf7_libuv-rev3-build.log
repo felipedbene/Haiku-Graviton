@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: libuv-rev3-build
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T024818Z   end: 20261101T024905Z   rc: 0
+# script sha256: bf599216af7b984439ca3a973f5a007bffb59744db74c5245c40053be9eb00bf
+# ---- script ----
+# | set -u
+# | D=/boot/home/haikuports/dev-libs/libuv; ls $D
+# | printf '%s' 'U1VNTUFSWT0iQ3Jvc3MtcGxhdGZvcm0gYXN5bmNocm9ub3VzIEkvTyIKREVTQ1JJUFRJT049ImxpYnV2IGlzIGEgbXVsdGktcGxhdGZvcm0gc3VwcG9ydCBsaWJyYXJ5IHdpdGggYSBmb2N1cyBvbiBcCmFzeW5jaHJvbm91cyBJL08uIEl0IHdhcyBwcmltYXJpbHkgZGV2ZWxvcGVkIGZvciB1c2UgYnkgTm9kZS5qcywgYnV0IGl0J3MgYWxzbyBcCnVzZWQgYnkgTHV2aXQsIEp1bGlhLCBweXV2LCBhbmQgb3RoZXJzLgoKRGVCZU9TIGJ1aWxkOiB1dl9mc19ldmVudF90IChmcy53YXRjaCBpbiBOb2RlLmpzKSBpcyBpbXBsZW1lbnRlZCBvbiB0aGUgXApIYWlrdSBub2RlIG1vbml0b3IgaW5zdGVhZCBvZiBmYWlsaW5nIHdpdGggRU5PU1lTLiIKSE9NRVBBR0U9Imh0dHBzOi8vbGlidXYub3JnLyIKQ09QWVJJR0hUPSIyMDE1LXByZXNlbnQgbGlidXYgcHJvamVjdCBjb250cmlidXRvcnMiCkxJQ0VOU0U9Ik1JVCIKUkVWSVNJT049IjMiClNPVVJDRV9VUkk9Imh0dHBzOi8vZ2l0aHViLmNvbS9saWJ1di9saWJ1di9hcmNoaXZlL3YkcG9ydFZlcnNpb24vbGlidXYtJHBvcnRWZXJzaW9uLnRhci5neiIKQ0hFQ0tTVU1fU0hBMjU2PSI0NzhiYWYyNTk5YmZiYzg4MmMzNTUyODhjOWNiNmY5MmUwZTdkZGE0MzVmYTA0MDMxZmE1YjYwN2NmM2Y0MTRjIgpQQVRDSEVTPSJsaWJ1di0kcG9ydFZlcnNpb24ucGF0Y2hzZXQiCgpBUkNISVRFQ1RVUkVTPSJhbGwgIXg4Nl9nY2MyIgpTRUNPTkRBUllfQVJDSElURUNUVVJFUz0ieDg2IgoKbGliVmVyc2lvbj0iMS4wLjAiCmxpYlZlcnNpb25Db21wYXQ9IiRsaWJWZXJzaW9uIGNvbXBhdCA+PSAke2xpYlZlcnNpb24lJS4qfSIKCiMgbGlidXZfZnNfZXZlbnQ6IHRoaXMgYnVpbGQgaGFzIHRoZSBIYWlrdSBmcy1ldmVudCBiYWNrZW5kICh1dl9mc19ldmVudF90IG9uIG5vZGUKIyBtb25pdG9yaW5nKS4gUmVzb2x2YWJsZSB2ZXJzaW9ucyBjYXJyeSBubyBwYWNrYWdlIHJldmlzaW9uLCBzbyBkZXBlbmRlbnRzIHRoYXQgbmVlZAojIHdvcmtpbmcgZnMud2F0Y2ggKGNsYXVkZV9jb2RlKSByZXF1aXJlIHRoaXMgbmFtZSByYXRoZXIgdGhhbiAibGlidXYgPj0gMS41Mi4xLTIiLgpQUk9WSURFUz0iCglsaWJ1diRzZWNvbmRhcnlBcmNoU3VmZml4ID0gJHBvcnRWZXJzaW9uCglsaWI6bGlidXYkc2Vjb25kYXJ5QXJjaFN1ZmZpeCA9ICRsaWJWZXJzaW9uQ29tcGF0CglsaWJ1dl9mc19ldmVudCRzZWNvbmRhcnlBcmNoU3VmZml4ID0gJHBvcnRWZXJzaW9uCgkiClJFUVVJUkVTPSIKCWhhaWt1JHNlY29uZGFyeUFyY2hTdWZmaXgKCSIKClBST1ZJREVTX2RldmVsPSIKCWxpYnV2JHtzZWNvbmRhcnlBcmNoU3VmZml4fV9kZXZlbCA9ICRwb3J0VmVyc2lvbgoJZGV2ZWw6bGlidXYkc2Vjb25kYXJ5QXJjaFN1ZmZpeCA9ICRsaWJWZXJzaW9uQ29tcGF0CgkiClJFUVVJUkVTX2RldmVsPSIKCWxpYnV2JHNlY29uZGFyeUFyY2hTdWZmaXggPT0gJHBvcnRWZXJzaW9uCgkiCgpCVUlMRF9SRVFVSVJFUz0iCgloYWlrdSR7c2Vjb25kYXJ5QXJjaFN1ZmZpeH1fZGV2ZWwKCSIKQlVJTERfUFJFUkVRVUlSRVM9IgoJY21kOmF3awoJY21kOmF1dG9jb25mCgljbWQ6YXV0b21ha2UKCWNtZDpnY2Mkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJY21kOmxkJHNlY29uZGFyeUFyY2hTdWZmaXgKCWNtZDpsaWJ0b29saXplJHNlY29uZGFyeUFyY2hTdWZmaXgKCWNtZDptYWtlCgljbWQ6cGtnX2NvbmZpZyRzZWNvbmRhcnlBcmNoU3VmZml4CgkiCgpkZWZpbmVEZWJ1Z0luZm9QYWNrYWdlIGxpYnV2JHNlY29uZGFyeUFyY2hTdWZmaXggXAoJIiRsaWJEaXIiL2xpYnV2LnNvLiRsaWJWZXJzaW9uCgpCVUlMRCgpCnsKCS4vYXV0b2dlbi5zaAoKCUxERkxBR1M9Ii1sbmV0d29yayIgcnVuQ29uZmlndXJlIC4vY29uZmlndXJlIFwKCQktLWRpc2FibGUtc3RhdGljCgltYWtlICRqb2JBcmdzCn0KCklOU1RBTEwoKQp7CgltYWtlIGluc3RhbGwKCgkjIHJlbW92ZSBsaWJ0b29sIGZpbGUKCXJtIC1mICRsaWJEaXIvbGlidXYubGEKCglwcmVwYXJlSW5zdGFsbGVkRGV2ZWxMaWIgbGlidXYKCglmaXhQa2djb25maWcKCglwYWNrYWdlRW50cmllcyBkZXZlbCBcCgkJJGRldmVsb3BEaXIKfQoKVEVTVCgpCnsKCW1ha2UgY2hlY2sKfQo=' | base64 -d > $D/libuv-1.52.1.recipe && grep -n "REVISION\|libuv_fs_event" $D/libuv-1.52.1.recipe
+# | ls $D/patches/
+# | sh /boot/home/haiku-nativebuild libuv > /boot/home/uv3-nb.log 2>&1; grep -E "BUILD_OK|FAILED" /boot/home/uv3-nb.log | tail -2
+# | cd /boot/home/haikuports/packages && ls -l libuv*1.52.1-3*.hpkg && sha256sum libuv*1.52.1-3*.hpkg || exit 1
+# | package list -i libuv-1.52.1-3-arm64.hpkg | grep provides
+# | C=/boot/system/bin/curl
+# | $C -sSf -X PUT --upload-file libuv-1.52.1-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv-1.52.1-3-arm64.hpkg?<PRESIGNED>' && $C -sSf -X PUT --upload-file libuv_devel-1.52.1-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv_devel-1.52.1-3-arm64.hpkg?<PRESIGNED>' && $C -sSf -X PUT --upload-file libuv_debuginfo-1.52.1-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/libuv_debuginfo-1.52.1-3-arm64.hpkg?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+download
+libuv-1.52.1.recipe
+patches
+work-1.52.1
+11:REVISION="3"
+22:# libuv_fs_event: this build has the Haiku fs-event backend (uv_fs_event_t on node
+28:	libuv_fs_event$secondaryArchSuffix = $portVersion
+libuv-1.52.1.patchset
+libuv: BUILD_OK (attempt 1)
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  libuv =====
+-rw-r--r-- 1 baron root  73503 Nov  1 02:48 libuv-1.52.1-3-arm64.hpkg
+-rw-r--r-- 1 baron root 210973 Nov  1 02:48 libuv_debuginfo-1.52.1-3-arm64.hpkg
+-rw-r--r-- 1 baron root  21811 Nov  1 02:48 libuv_devel-1.52.1-3-arm64.hpkg
+88b3de816b6547ee0982661677662bfdc52bf1c29ff9d36147dd22f58a65ce08  libuv-1.52.1-3-arm64.hpkg
+5ef05873708eceaac5c15bc28791046232a6d6de4384c87a09976f523bfe8fcc  libuv_debuginfo-1.52.1-3-arm64.hpkg
+7127bfcdc443aed6f60f43946eddeb43cc0e6952d73da6983a45e2d2f697eabf  libuv_devel-1.52.1-3-arm64.hpkg
+	provides: libuv = 1.52.1
+	provides: lib:libuv = 1.0.0 (compatible >= 1)
+	provides: libuv_fs_event = 1.52.1
+upload-ok

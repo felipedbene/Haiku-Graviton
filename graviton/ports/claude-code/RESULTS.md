@@ -23,6 +23,9 @@ Linux reference `i-0a14e8aca787249b7` (Ubuntu arm64, stock Bun 1.4.4, Node 24.22
 | Interactive TUI with the model: edit, bash, resize | edit applied and verified on disk; `echo bash-ok-$(uname -s)` → `bash-ok-Haiku`; reflow at 70×24 and 130×40 | `20261101T003220Z_i-0e90d4b253c8134b3_bedrock-tui-session.log` |
 | `/compact` + recall | Haiku 5/5; Linux real binary 3/3 and node+compat 3/3 (first 2 Linux tries had no IMDS role yet) | `20261101T004621Z_i-0e90d4b253c8134b3_compact-haiku-x5.log`, `20261101T004647Z_i-0a14e8aca787249b7_compact-linux-x5.log` |
 | `/compact` stuck after a refused command + queued message | same hang with the real binary on Linux: upstream behaviour, not the port | `20261101T005814Z_i-0a14e8aca787249b7_bedrock-tui-session-real-linux.log` |
+| End-user install from the DeBeOS repo | `pkgman install claude_code` → claude_code 2.1.314-2 + libuv 1.52.1-3 (pulled by `libuv_fs_event`); `--version`, `doctor`, FileChanged hook, vectors all pass; 0 `.node` files. On images whose libuv is vendor "Haiku Project", pkgman asks once to allow the vendor change to DeBeOS | `20261101T034345Z_i-0e90d4b253c8134b3_enduser-fresh-install-3.log` |
+| fs.watch in Claude Code, before/after the libuv backend | libuv 1.52.1-1: `FileChanged: watcher error: ENOSYS`, hook fired 0×; 1.52.1-2+: `fs.watch probe: delivers`, hook fired 2× for 2 external edits | `20261101T024050Z_i-0e90d4b253c8134b3_filechanged-before-after-libuv.log` |
+| 30-min working soak (TUI + model, tool-using task every ~15 s) | Haiku 123/123 tasks, 4–6 s each, one process throughout; Linux real binary all tasks 3–4 s; Linux node+compat 125/125 | `20261101T021011Z_i-0e90d4b253c8134b3_working-soak-v3-haiku.log`, `20261101T015433Z_i-0a14e8aca787249b7_working-soak-v3-real-linux.log`, `20261101T024336Z_i-0a14e8aca787249b7_working-soak-v3-nodecompat-linux.log` |
 | 30-min soak with RSS (idle TUI) | alive throughout, 11 threads; RSS 323 MB → 185 MB after GC, then flat (184.8–185.1 MB) | `20261031T143535Z_i-0e90d4b253c8134b3_tui-soak-30min.log` |
 | Ctrl-C at onboarding; headless `-p` without credentials | identical to the real binary on Linux (picker ignores Ctrl-C; `Not logged in · Please run /login`, rc 1) | `20261031T150644Z_i-0e90d4b253c8134b3_tui-ctrlc-and-headless.log`, `20261031T150818Z_i-0a14e8aca787249b7_tui-ctrlc-real-linux.log` |
 | Global Worker scenarios replayed on Haiku | 13/13 match the Bun recording | `20261031T151048Z_i-0e90d4b253c8134b3_compat-scenarios-on-haiku.log` |
@@ -94,7 +97,9 @@ Triage of the remaining failures (`20261101T004721Z_i-0e7bed4928e0f7bf7_node-fai
    carries `PowerUserAccess`, which is broader than this needs; a dedicated
    SSM+Bedrock profile (`cc-bedrock-ssm`) is pending the owner.
 2. `fs.watch` on Haiku: libuv backend (system library change) or polling (compat).
-3. **Published to green on 2026-11-01 (owner's approval):** nodejs24 24.21.0-1 + _devel,
+3. **Current published revisions:** claude_code 2.1.314-2 (requires `libuv_fs_event`; R5 drops
+   the Linux ELF addons) and libuv 1.52.1-3 (+_devel, _debuginfo), provides `libuv_fs_event`.
+   **First publish on 2026-11-01 (owner's approval):** nodejs24 24.21.0-1 + _devel,
    claude_code 2.1.314-1, libuv 1.52.1-2 + _devel (the Haiku fs-event backend). Green went
    3289 → 3292 objects (libuv 1.52.1-1 replaced); `pkgman search` on a Haiku box resolves all
    five from the DeBeOS repo; prod and beta indexes invalidated. libuv_debuginfo 1.52.1-2

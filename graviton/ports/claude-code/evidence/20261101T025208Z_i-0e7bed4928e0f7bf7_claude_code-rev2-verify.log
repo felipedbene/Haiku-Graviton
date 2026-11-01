@@ -1,0 +1,22 @@
+# evidence: claude_code-rev2-verify
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T025208Z   end: 20261101T025229Z   rc: 0
+# script sha256: 7b83501523d1b26aed9846c2215f66b7a27c80e42cd912bdedde5a0517a77426
+# ---- script ----
+# | cd /boot/home/haikuports/packages
+# | package list -i claude_code-2.1.314-2-arm64.hpkg | grep -E "version:|requires:"
+# | echo ".node files in package: $(package list claude_code-2.1.314-2-arm64.hpkg | grep -c "\.node$")"
+# | echo "ELF files in package: $(package list claude_code-2.1.314-2-arm64.hpkg | grep -c -E "\.so|\.node")"
+# | grep -E "R5 removed" /boot/home/nb-claude_code.log
+# ---- raw output ----
+	version: 2.1.314-2
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: nodejs24>=24.21.0
+	requires: libuv_fs_event
+	requires: cmd:bash>=5.3
+	requires: cmd:git>=2.54.0
+	requires: cmd:rg
+.node files in package: 0
+ELF files in package: 0
+R5 removed audio-capture.node (linux ELF addon)
+R5 removed clipboard-napi.node (linux ELF addon)

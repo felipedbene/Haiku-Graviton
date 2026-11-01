@@ -1,0 +1,37 @@
+# evidence: claude_code-rev2-buildlog
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T024600Z   end: 20261101T024620Z   rc: 0
+# script sha256: 4135eee19812dcf4dcc615e52ac3a671ac3191fb001bbea638908750e0505acc
+# ---- script ----
+# | grep -n -i -E "error|fail|resolv|cannot|conflict" /boot/home/nb-claude_code.log | tail -15
+# | tail -25 /boot/home/nb-claude_code.log
+# ---- raw output ----
+102:parsed 56 modules, 0 failed
+107:parsed 16 modules, 0 failed
+133:Warning: Error: found provides for "libuv >= 1.52.1-2", but none matching the version requirement
+144:Error: Build has failed - stopping.
+P17 applied in chunk-6h8148nz.js (7 sites, + teaminfo helper)
+P17 applied in chunk-fgccedbt.js (1 sites, + teaminfo helper)
+P17 applied in chunk-2hxx68dq.js (1 sites, + teaminfo helper)
+P17 applied in chunk-s0dw5891.js (1 sites)
+build-tree: /sources/package/tree ready (prefix /boot/system/lib/claude-code)
+Collecting files to be packaged ...
+Warning: POLICY WARNING: can't find used library "libdl.so.2" for "/packaging/claude_code/lib/claude-code/audio-capture.node"
+Warning: POLICY WARNING: can't find used library "libc.so.6" for "/packaging/claude_code/lib/claude-code/audio-capture.node"
+Warning: POLICY WARNING: can't find used library "libasound.so.2" for "/packaging/claude_code/lib/claude-code/audio-capture.node"
+Warning: POLICY WARNING: can't find used library "libpthread.so.0" for "/packaging/claude_code/lib/claude-code/audio-capture.node"
+Warning: POLICY WARNING: can't find used library "libdl.so.2" for "/packaging/claude_code/lib/claude-code/clipboard-napi.node"
+Warning: POLICY WARNING: can't find used library "libc.so.6" for "/packaging/claude_code/lib/claude-code/clipboard-napi.node"
+Warning: POLICY WARNING: can't find used library "libpthread.so.0" for "/packaging/claude_code/lib/claude-code/clipboard-napi.node"
+Warning: Error: found provides for "libuv >= 1.52.1-2", but none matching the version requirement
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/dev-util/claude_code/work-2.1.314 intact for inspection
+Checking if any dependency-infos need to be updated ...
+	updating dependency infos of claude_code-2.1.314
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+dev-util::claude_code-2.1.314
+	/boot/home/haikuports/dev-util/claude_code/claude_code-2.1.314.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.
