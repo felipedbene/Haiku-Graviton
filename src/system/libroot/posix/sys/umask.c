@@ -20,7 +20,11 @@ mode_t
 umask(mode_t newMask)
 {
 	mode_t oldMask = __gUmask;
-	__gUmask = newMask;
+
+	// Only the file permission bits of the mask are used (POSIX); keeping the
+	// others would also hand them back from the next umask() call, and on to
+	// every program exec'd from here.
+	__gUmask = newMask & ACCESSPERMS;
 
 	return oldMask;
 }
