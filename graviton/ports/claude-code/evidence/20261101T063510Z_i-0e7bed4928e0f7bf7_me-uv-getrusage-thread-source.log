@@ -1,0 +1,54 @@
+# evidence: me-uv-getrusage-thread-source
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063510Z   end: 20261101T063532Z   rc: 0
+# script sha256: d1d06c7803ba84af3dda131756f5c68ac3de7809da5aaf7d1520cc0405f964ab
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "node links the system libuv: $(listimage 2>/dev/null | head -0; ldd /boot/system/bin/node 2>/dev/null | grep uv)"; strings /boot/system/bin/node | grep -c uv_getrusage_thread
+# | F=$(ls /boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-*/src/unix/core.c 2>/dev/null | head -1); [ -n "$F" ] || F=deps/uv/src/unix/core.c
+# | echo "== $F"; grep -n "uv_getrusage_thread" -A 40 $F | sed -n 1,45p
+# ---- raw output ----
+node links the system libuv: 
+2
+== /boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1/src/unix/core.c
+1144:int uv_getrusage_thread(uv_rusage_t* rusage) {
+1145-#if defined(__APPLE__)
+1146-  mach_msg_type_number_t count;
+1147-  thread_basic_info_data_t info;
+1148-  kern_return_t kr;
+1149-  thread_t thread;
+1150-
+1151-  thread = mach_thread_self();
+1152-  count = THREAD_BASIC_INFO_COUNT;
+1153-  kr = thread_info(thread,
+1154-                   THREAD_BASIC_INFO,
+1155-                   (thread_info_t)&info,
+1156-                   &count);
+1157-
+1158-  if (kr != KERN_SUCCESS) {
+1159-    mach_port_deallocate(mach_task_self(), thread);
+1160-    return UV_EINVAL;
+1161-  }
+1162-
+1163-  memset(rusage, 0, sizeof(*rusage));
+1164-
+1165-  rusage->ru_utime.tv_sec = info.user_time.seconds;
+1166-  rusage->ru_utime.tv_usec = info.user_time.microseconds;
+1167-  rusage->ru_stime.tv_sec = info.system_time.seconds;
+1168-  rusage->ru_stime.tv_usec = info.system_time.microseconds;
+1169-
+1170-  mach_port_deallocate(mach_task_self(), thread);
+1171-
+1172-  return 0;
+1173-
+1174-#elif defined(RUSAGE_LWP)
+1175-  return uv__getrusage(RUSAGE_LWP, rusage);
+1176-#elif defined(RUSAGE_THREAD)
+1177-  return uv__getrusage(RUSAGE_THREAD, rusage);
+1178-#endif  /* defined(__APPLE__) */
+1179-  return UV_ENOTSUP;
+1180-}
+1181-
+1182-
+1183-int uv__open_cloexec(const char* path, int flags) {
+1184-#if defined(O_CLOEXEC)

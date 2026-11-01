@@ -1,0 +1,18 @@
+# evidence: f2-rss-text-areas
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061853Z   end: 20261101T061914Z   rc: 0
+# script sha256: 4a80fe5e7ec9963724988040fbda79466215ea87d5fd378e79a629d29c2a4743
+# ---- script ----
+# | node -e "console.log(require(\"child_process\").execSync(\"listarea \"+process.pid).toString().split(\"\\n\").filter(l=>/ID|node_seg|libicudata|libcrypto.so.*seg/.test(l)).join(\"\\n\")); console.log(\"rss\",process.memoryUsage().rss)"; ls -l /boot/system/bin/node
+# ---- raw output ----
+   ID                             name          address     size   alloc. #-cow  #-in #-out lock prot
+13952975                      node_seg0rx    0x7d345b8000  32b2000        0     0     0     0    0   15
+13952976                      node_seg1rw    0x7d37879000    be000    be000     0     0     0    0   33
+13952977                      node_seg2rw    0x7d37937000    2b000    14000     0     0     0    0   33
+13953001            libcrypto.so.3_seg0rx    0x8fae9b7000   390000        0     0     0     0    0   15
+13953002            libcrypto.so.3_seg1rw    0x8faed47000    7d000    7d000     0     0     0    0   33
+13953003            libcrypto.so.3_seg2rw    0x8faedc4000     2000     2000     0     0     0    0   33
+13953020        libicudata.so.78.3_seg0rx   0x193e14c0000  1fb3000        0     0     0     0    0   15
+13953021        libicudata.so.78.3_seg1rw   0x193e3482000     1000     1000     0     0     0    0   33
+rss 12312576
+-r-xr-xr-x 1 baron root 53933048 Oct 31 04:08 /boot/system/bin/node

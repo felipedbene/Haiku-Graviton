@@ -1,0 +1,20 @@
+# evidence: f4-unix-pair-and-libpath
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061604Z   end: 20261101T061625Z   rc: 0
+# script sha256: 03cb55afd4d3a8b8aa9b238952305c2249c2ab23a779d98a9ec82dabdcb3f371
+# ---- script ----
+# | mkdir -p /tmp/f4 && cd /tmp/f4
+# | echo 'LyogV2hpY2ggZW5kIG9mIGFuIEFGX1VOSVggc3RyZWFtIGNvbm5lY3Rpb24gcmVwb3J0cyBFTk9UQ09OTiBhZnRlciB0aGUgcGVlciBjbG9zZXM/CiAgIChhKSBzb2NrZXRwYWlyIGVuZCAwIGFuZCBlbmQgMTsgKGIpIGNvbm5lY3QoKWluZyBzaWRlIHZzIGFjY2VwdCgpZWQgc2lkZS4gTGludXg6IEVQSVBFIGV2ZXJ5d2hlcmUuICovCiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8ZXJybm8uaD4KI2luY2x1ZGUgPHN0cmluZy5oPgojaW5jbHVkZSA8c2lnbmFsLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KI2luY2x1ZGUgPHN5cy9zb2NrZXQuaD4KI2luY2x1ZGUgPHN5cy91bi5oPgpzdGF0aWMgdm9pZCB3KGNvbnN0IGNoYXIqIHRhZywgaW50IGZkKSB7Cglzc2l6ZV90IG4gPSB3cml0ZShmZCwgIngiLCAxKTsKCXByaW50ZigiJS00MHMgd3JpdGUgLT4gJXpkIGVycm5vPSVkICglcylcbiIsIHRhZywgbiwgbiA8IDAgPyBlcnJubyA6IDAsIG4gPCAwID8gc3RyZXJyb3IoZXJybm8pIDogIm9rIik7Cn0KaW50IG1haW4odm9pZCkgewoJaW50IHN2WzJdOwoJc2lnbmFsKFNJR1BJUEUsIFNJR19JR04pOwoJc29ja2V0cGFpcihBRl9VTklYLCBTT0NLX1NUUkVBTSwgMCwgc3YpOyBjbG9zZShzdlsxXSk7IHcoInNvY2tldHBhaXI6IHdyaXRlIHN2WzBdLCBzdlsxXSBjbG9zZWQiLCBzdlswXSk7Cglzb2NrZXRwYWlyKEFGX1VOSVgsIFNPQ0tfU1RSRUFNLCAwLCBzdik7IGNsb3NlKHN2WzBdKTsgdygic29ja2V0cGFpcjogd3JpdGUgc3ZbMV0sIHN2WzBdIGNsb3NlZCIsIHN2WzFdKTsKCXN0cnVjdCBzb2NrYWRkcl91biBhOyBtZW1zZXQoJmEsIDAsIHNpemVvZiBhKTsgYS5zdW5fZmFtaWx5ID0gQUZfVU5JWDsgc3RyY3B5KGEuc3VuX3BhdGgsICIvdG1wL2Y0cGFpci5zb2NrIik7Cgl1bmxpbmsoYS5zdW5fcGF0aCk7CglpbnQgbCA9IHNvY2tldChBRl9VTklYLCBTT0NLX1NUUkVBTSwgMCk7IGJpbmQobCwgKHN0cnVjdCBzb2NrYWRkciopJmEsIHNpemVvZiBhKTsgbGlzdGVuKGwsIDIpOwoJaW50IGMgPSBzb2NrZXQoQUZfVU5JWCwgU09DS19TVFJFQU0sIDApOyBjb25uZWN0KGMsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhLCBzaXplb2YgYSk7IGludCBzID0gYWNjZXB0KGwsIE5VTEwsIE5VTEwpOwoJY2xvc2Uocyk7IHcoImNvbm5lY3QoKWluZyBzaWRlLCBhY2NlcHRlZCBzaWRlIGNsb3NlZCIsIGMpOwoJYyA9IHNvY2tldChBRl9VTklYLCBTT0NLX1NUUkVBTSwgMCk7IGNvbm5lY3QoYywgKHN0cnVjdCBzb2NrYWRkciopJmEsIHNpemVvZiBhKTsgcyA9IGFjY2VwdChsLCBOVUxMLCBOVUxMKTsKCWNsb3NlKGMpOyB3KCJhY2NlcHQoKWVkIHNpZGUsIGNvbm5lY3Rpbmcgc2lkZSBjbG9zZWQiLCBzKTsKCXVubGluayhhLnN1bl9wYXRoKTsKCXJldHVybiAwOwp9Cg==' | base64 -d > pair2.c
+# | gcc -Wall -o pair2 pair2.c -lnetwork && ./pair2
+# | echo "### which libnghttp2 does node map under LIBRARY_PATH=/tmp/f4/ng170?"
+# | LIBRARY_PATH=/tmp/f4/ng170:$LIBRARY_PATH node -e 'setTimeout(()=>{},3000)' & p=$!; sleep 1; listimage $p | grep -i nghttp2; wait $p
+# | node -e 'setTimeout(()=>{},3000)' & p=$!; sleep 1; echo "(default)"; listimage $p | grep -i nghttp2; wait $p
+# ---- raw output ----
+socketpair: write sv[0], sv[1] closed    write -> -1 errno=-2147454946 (Socket is not connected)
+socketpair: write sv[1], sv[0] closed    write -> -1 errno=-2147459059 (Broken pipe)
+connect()ing side, accepted side closed  write -> -1 errno=-2147459059 (Broken pipe)
+accept()ed side, connecting side closed  write -> -1 errno=-2147454946 (Socket is not connected)
+### which libnghttp2 does node map under LIBRARY_PATH=/tmp/f4/ng170?
+2512319 0x0000006bf9059000 0x0000006bf90a2000     0          0 /boot/system/cache/tmp/f4/ng170/libnghttp2.so.14
+(default)
+2512617 0x000001c146829000 0x000001c146871000     0          0 /boot/system/lib/libnghttp2.so.14.28.2

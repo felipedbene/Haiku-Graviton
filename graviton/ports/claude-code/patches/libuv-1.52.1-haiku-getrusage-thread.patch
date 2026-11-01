@@ -1,0 +1,47 @@
+From: DeBeOS <noreply@debeos>
+Subject: [PATCH] unix,haiku: implement uv_getrusage_thread with get_thread_info
+
+uv_getrusage_thread() has code for Apple, RUSAGE_LWP and RUSAGE_THREAD only;
+Haiku defines neither, so it always returned UV_ENOTSUP and Node's
+process.threadCpuUsage() and worker.cpuUsage() threw. Haiku's thread_info
+carries the calling thread's user and kernel time in microseconds.
+---
+ src/unix/core.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/src/unix/core.c b/src/unix/core.c
+--- a/src/unix/core.c
++++ b/src/unix/core.c
+@@ -21,6 +21,10 @@
+ #include "uv.h"
+ #include "internal.h"
+ #include "strtok.h"
++
++#if defined(__HAIKU__)
++# include <OS.h>  /* get_thread_info */
++#endif
+ 
+ #include <stddef.h> /* NULL */
+ #include <stdio.h> /* printf */
+@@ -1175,6 +1179,21 @@ int uv_getrusage_thread(uv_rusage_t* rusage) {
+   return uv__getrusage(RUSAGE_LWP, rusage);
+ #elif defined(RUSAGE_THREAD)
+   return uv__getrusage(RUSAGE_THREAD, rusage);
++#elif defined(__HAIKU__)
++  thread_info info;
++
++  if (get_thread_info(find_thread(NULL), &info) != B_OK)
++    return UV_EINVAL;
++
++  memset(rusage, 0, sizeof(*rusage));
++
++  /* user_time and kernel_time are bigtime_t microseconds. */
++  rusage->ru_utime.tv_sec = info.user_time / 1000000;
++  rusage->ru_utime.tv_usec = info.user_time % 1000000;
++  rusage->ru_stime.tv_sec = info.kernel_time / 1000000;
++  rusage->ru_stime.tv_usec = info.kernel_time % 1000000;
++
++  return 0;
+ #endif  /* defined(__APPLE__) */
+   return UV_ENOTSUP;
+ }

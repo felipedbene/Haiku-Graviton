@@ -1,0 +1,40 @@
+# evidence: f4-nghttp2-170-ab
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060230Z   end: 20261101T060317Z   rc: 0
+# script sha256: d3e3d7348171a186719983b648b735bfb4433bd62eb99e66a17ef7e0b50c8a7b
+# ---- script ----
+# | # A/B: run the two http2 tests against nghttp2 1.70.0 (Node's bundled copy, which its tests target)
+# | # instead of the system nghttp2 1.63.0 that --shared-nghttp2 links. Nothing installed; LIBRARY_PATH only.
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | O=/tmp/f4/ng170; rm -rf $O; mkdir -p $O; cd $N/deps/nghttp2
+# | gcc -O2 -fPIC -shared -D_U_= -DBUILDING_NGHTTP2 -DHAVE_CONFIG_H -Ilib/includes -Ilib \
+# |   lib/nghttp2_*.c lib/sfparse.c -Wl,-soname,libnghttp2.so.14 -o $O/libnghttp2.so.14 2>&1 | tail -5
+# | ls -l $O
+# | cd $N
+# | echo "== system lib:"; node -p process.versions.nghttp2
+# | echo "== override:"; LIBRARY_PATH=$O:$LIBRARY_PATH node -p process.versions.nghttp2
+# | T="parallel/test-http2-misbehaving-flow-control parallel/test-http2-misbehaving-flow-control-paused parallel/test-http2-max-invalid-frames"
+# | echo "######## with system nghttp2 1.63.0"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 --timeout=120 -p tap $T 2>&1 | grep -E "^(not )?ok|^1\.\."
+# | echo "######## with bundled nghttp2 1.70.0 (LIBRARY_PATH)"
+# | : | LIBRARY_PATH=$O:$LIBRARY_PATH python3 tools/test.py --shell=/boot/system/bin/node -j 1 --timeout=120 -p tap -v $T 2>&1 | grep -E "^(not )?ok|^1\.\.|Error|nghttp2" | head -40
+# ---- raw output ----
+total 276
+-rwxr-xr-x 1 baron root 279568 Nov  1 06:02 libnghttp2.so.14
+== system lib:
+1.63.0
+== override:
+1.63.0
+######## with system nghttp2 1.63.0
+1..3
+not ok 1 parallel/test-http2-misbehaving-flow-control
+not ok 2 parallel/test-http2-misbehaving-flow-control-paused
+not ok 3 parallel/test-http2-max-invalid-frames
+######## with bundled nghttp2 1.70.0 (LIBRARY_PATH)
+1..3
+ok 1 parallel/test-http2-misbehaving-flow-control
+ok 2 parallel/test-http2-misbehaving-flow-control-paused
+not ok 3 parallel/test-http2-max-invalid-frames
+    AssertionError [ERR_ASSERTION]: Request count (8523) must be around (±100) maxSessionInvalidFrames option (100)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)

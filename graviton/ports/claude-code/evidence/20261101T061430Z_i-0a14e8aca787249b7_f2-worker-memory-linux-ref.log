@@ -1,0 +1,20 @@
+# evidence: f2-worker-memory-linux-ref
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: e674f6bf-01e0-4eaf-b6a7-2a47928659f3 (agent status: Success)
+# start: 20261101T061430Z   end: 20261101T061439Z   rc: 0   log bytes: 177
+# script sha256: f81d1d1b8937dbcbe550bcc83ce74b165ec524a20c2977fe06ab9c1100f82fad
+# ---- script ----
+# | cat > /tmp/wm2.js <<'J'
+# | // test/parallel/test-worker-memory.js workload, numWorkers forced to 16 (as on the builder), with rss sampling
+# | const {Worker}=require('worker_threads');
+# | const numWorkers=16; const s=process.memoryUsage().rss; let finished=0;
+# | function run(n,done){ if(n<=0) return done(); const w=new Worker('require("worker_threads").parentPort.postMessage(2+2)',{eval:true}); w.on('exit',()=>run(n-1,done)); }
+# | for(let i=0;i<numWorkers;i++) run(60/numWorkers,()=>{ if(++finished===numWorkers){ const f=process.memoryUsage().rss;
+# |  console.log(`node ${process.version} ${process.platform}: rss start ${(s/1048576).toFixed(1)} MiB end ${(f/1048576).toFixed(1)} MiB ratio ${(f/s).toFixed(2)} (test requires < 5)`);
+# |  if(process.platform==='haiku'){ console.log(require('child_process').execSync('listarea '+process.pid).toString()); } }});
+# | J
+# | node --version; node /tmp/wm2.js; node /tmp/wm2.js | head -1
+# ---- raw output ----
+v22.23.4
+node v22.23.4 linux: rss start 42.4 MiB end 73.0 MiB ratio 1.72 (test requires < 5)
+node v22.23.4 linux: rss start 42.4 MiB end 73.4 MiB ratio 1.73 (test requires < 5)

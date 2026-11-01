@@ -1,0 +1,33 @@
+# evidence: f2-runner-worker-id-usagefile
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062338Z   end: 20261101T062411Z   rc: 0
+# script sha256: ad3925796dbcf2f03cd7c3fc11518d009fa5e784b471df2bc003167f98652c45
+# ---- script ----
+# | mkdir -p /tmp/rwid && cd /tmp/rwid
+# | cat > one.js <<'J'
+# | // Same workload as test-runner-worker-id 'worker IDs are reused when more tests than concurrency', but reports the raw usage file.
+# | const fs=require('fs'),path=require('path'),{spawnSync}=require('child_process');
+# | const dir=fs.mkdtempSync('/tmp/rwid/r-'); const usage=path.join(dir,'worker-usage.txt'); const files=[];
+# | for(let i=1;i<=9;i++){ const f=path.join(dir,`reuse-test-${i}.mjs`); fs.writeFileSync(f,`import { test } from 'node:test';
+# | import { appendFileSync } from 'node:fs';
+# | test('track worker ${i}', () => { appendFileSync(process.env.WORKER_USAGE_FILE, process.env.NODE_TEST_WORKER_ID + '\\n'); });
+# | `); files.push(f);}
+# | const r=spawnSync(process.execPath,['--test','--test-concurrency=3',...files],{env:{...process.env,WORKER_USAGE_FILE:usage}});
+# | const lines=fs.readFileSync(usage,'utf8').trim().split('\n'); const c={}; lines.forEach(x=>c[x]=(c[x]||0)+1);
+# | console.log(`status ${r.status} lines ${lines.length} counts ${JSON.stringify(c)} raw ${JSON.stringify(fs.readFileSync(usage,'utf8'))}`);
+# | J
+# | for i in $(seq 1 48); do node one.js > out.$i & if [ $((i % 16)) -eq 0 ]; then wait; fi; done; wait
+# | cat out.* | awk '{print}' > all.txt
+# | echo "runs: $(wc -l < all.txt); runs with != 9 lines: $(grep -vc 'lines 9 ' all.txt); runs with 9 lines but uneven counts: $(grep 'lines 9 ' all.txt | grep -vc '{"1":3,"2":3,"3":3}\|{"1":3,"3":3,"2":3}\|{"2":3,"1":3,"3":3}\|{"2":3,"3":3,"1":3}\|{"3":3,"1":3,"2":3}\|{"3":3,"2":3,"1":3}')"
+# | grep -v '"1":3,"2":3,"3":3\|"1":3,"3":3,"2":3\|"2":3,"1":3,"3":3\|"2":3,"3":3,"1":3\|"3":3,"1":3,"2":3\|"3":3,"2":3,"1":3' all.txt | head -8
+# | rm -rf /tmp/rwid
+# ---- raw output ----
+runs: 48; runs with != 9 lines: 17; runs with 9 lines but uneven counts: 0
+status 0 lines 8 counts {"1":2,"2":3,"3":3} raw "2\n3\n1\n2\n3\n1\n2\n3\n"
+status 0 lines 7 counts {"1":2,"2":2,"3":3} raw "1\n2\n3\n1\n2\n3\n3\n"
+status 0 lines 7 counts {"1":2,"2":3,"3":2} raw "1\n2\n3\n1\n2\n2\n3\n"
+status 0 lines 7 counts {"1":2,"2":3,"3":2} raw "1\n3\n2\n1\n2\n3\n2\n"
+status 0 lines 7 counts {"1":3,"2":1,"3":3} raw "1\n2\n3\n1\n3\n1\n3\n"
+status 0 lines 7 counts {"1":2,"2":2,"3":3} raw "1\n3\n2\n3\n1\n2\n3\n"
+status 0 lines 7 counts {"1":2,"2":2,"3":3} raw "1\n2\n3\n3\n1\n2\n3\n"
+status 0 lines 7 counts {"1":2,"2":2,"3":3} raw "1\n3\n2\n1\n2\n3\n3\n"

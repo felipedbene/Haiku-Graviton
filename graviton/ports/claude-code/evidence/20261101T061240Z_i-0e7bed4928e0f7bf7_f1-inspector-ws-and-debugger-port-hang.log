@@ -1,0 +1,105 @@
+# evidence: f1-inspector-ws-and-debugger-port-hang
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061240Z   end: 20261101T061339Z   rc: 0
+# script sha256: fdf599ba09189bc281a23ff5b409d9191055826e1fa99ccd08ef6071cb68fb8c
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | kill 204418 2>/dev/null
+# | cat > /tmp/f1-handles.js <<'JS'
+# | // preload: 20 s after start, print what keeps the loop alive, then exit 99
+# | setTimeout(() => {
+# |   console.error('[f1] after 20 s, active resources:', JSON.stringify(process.getActiveResourcesInfo()));
+# |   for (const h of process._getActiveHandles()) {
+# |     const n = h.constructor && h.constructor.name;
+# |     if (n === 'Server') console.error('[f1] Server listening, connections =', h._connections);
+# |     if (n === 'Socket') console.error('[f1] Socket', h.remoteAddress, h.remotePort, '->', h.localPort, 'readableEnded', h.readableEnded, 'writableFinished', h.writableFinished, 'destroyed', h.destroyed);
+# |   }
+# |   process.exit(99);
+# | }, 20000).unref();
+# | JS
+# | cd $N/test/parallel
+# | for t in test-inspector-network-websocket.js test-debugger-unavailable-port.js; do
+# |   echo "######## $t"
+# |   NODE_DEBUG=net /boot/system/bin/node --require /tmp/f1-handles.js $t 2>&1 | grep -v "^NET [0-9]*: \(afterWrite\|_read\|Socket._handle.readStart\|onread\)" | tail -40
+# |   echo "rc=${PIPESTATUS[0]}"
+# | done
+# ---- raw output ----
+######## test-inspector-network-websocket.js
+NOTE: The test started as a child_process using these flags: [ '--inspect=0', '--experimental-network-inspection' ] And these environment variables: {} Use NODE_SKIP_FLAG_CHECK to run the test with the original flags.
+Debugger listening on ws://127.0.0.1:44127/9900c6ec-9648-4d65-9e6d-e381fcdbf84b
+For help, see: https://nodejs.org/learn/getting-started/debugging
+NET 208763: setupListenHandle null 0 4 0 undefined
+NET 208763: setupListenHandle: create a handle
+NET 208763: bind to ::
+NET 208763: bind to 0.0.0.0
+NET 208763: createConnection [
+  {
+    highWaterMark: 65536,
+    path: undefined,
+    localAddress: null,
+    port: '44134',
+    host: '127.0.0.1'
+  },
+  null,
+  Symbol(normalizedArgs): true
+]
+NET 208763: pipe false undefined
+NET 208763: connect: attempting to connect to 127.0.0.1:44134 (addressType: 4)
+NET 208763: onconnection
+NET 208763: afterConnect
+NET 208763: _final: not ended, call shutdown()
+NET 208763: afterShutdown destroyed=false
+NET 208763: _final: not ended, call shutdown()
+NET 208763: afterShutdown destroyed=false
+NET 208763: destroy
+NET 208763: close
+NET 208763: close handle
+NET 208763: emit close
+NET 208763: SERVER _emitCloseIfDrained
+NET 208763: SERVER handle? false   connections? 1
+[f1] after 20 s, active resources: ["PipeWrap","TCPSocketWrap"]
+[f1] Socket undefined undefined -> undefined readableEnded true writableFinished false destroyed false
+[f1] Socket 127.0.0.1 44143 -> 44134 readableEnded false writableFinished true destroyed false
+rc=99
+######## test-debugger-unavailable-port.js
+NET 208826: _final: not ended, call shutdown()
+NET 208826: afterShutdown destroyed=false
+NET 208826: onconnection
+NET 208826: _final: not ended, call shutdown()
+NET 208826: afterShutdown destroyed=false
+NET 208826: _final: not ended, call shutdown()
+NET 208826: afterShutdown destroyed=false
+NET 208826: destroy
+NET 208826: close
+NET 208826: close handle
+NET 208826: _final: not ended, call shutdown()
+NET 208826: afterShutdown destroyed=false
+NET 208826: destroy
+NET 208826: close
+NET 208826: close handle
+NET 208826: emit close
+NET 208826: emit close
+NET 208826: SERVER _emitCloseIfDrained
+NET 208826: SERVER handle? false   connections? 19
+[f1] after 20 s, active resources: ["PipeWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap","TCPSocketWrap"]
+[f1] Socket undefined undefined -> undefined readableEnded true writableFinished false destroyed false
+[f1] Socket 127.0.0.1 44228 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44238 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44270 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44302 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44306 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44314 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44327 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44344 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44352 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44381 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44409 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44440 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44455 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44486 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44512 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44526 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44529 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44533 -> 44218 readableEnded false writableFinished true destroyed false
+[f1] Socket 127.0.0.1 44559 -> 44218 readableEnded false writableFinished true destroyed false
+rc=99

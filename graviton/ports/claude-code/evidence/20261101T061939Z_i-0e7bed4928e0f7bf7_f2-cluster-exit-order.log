@@ -1,0 +1,43 @@
+# evidence: f2-cluster-exit-order
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061939Z   end: 20261101T062000Z   rc: 0
+# script sha256: 629fde1a94b03bab95f546d3b4d6946f1c524ae7b8b7d5c363a082c6bf53f73d
+# ---- script ----
+# | U=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv
+# | grep -n "haiku" -A12 $U/uv.gyp | grep -n "\.c'" | head; grep -n "have_signals\|signal_io_watcher" $U/src/unix/posix-poll.c $U/src/unix/linux.c | head
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | grep -n "process.once('exit'\|isConnected()\|removeWorker(worker)\|'disconnect'" lib/internal/cluster/primary.js | head
+# | cat > /tmp/ck2.js <<'J'
+# | const cluster=require('cluster');
+# | if(cluster.isWorker){ require('http').Server(()=>{}).listen(0,'127.0.0.1'); }
+# | else { let order=[]; let runs=0; const N=20;
+# |  const one=()=>{ const w=cluster.fork(); w.once('listening',()=>w.kill('SIGKILL'));
+# |   const t=process.hrtime.bigint();
+# |   w.process.channel && 0;
+# |   w.on('disconnect',()=>order.push('disconnect'));
+# |   w.once('exit',()=>{ order.push('exit'); setTimeout(()=>{ if(++runs<N) one(); else { const s=order.join(',').split(',exit').length; let ef=0; for(let i=0;i<order.length;i+=2) if(order[i]==='exit') ef++; console.log(`exit before disconnect in ${ef} of ${N} kills`); }},50); }); };
+# |  one(); }
+# | J
+# | node /tmp/ck2.js
+# ---- raw output ----
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/posix-poll.c:145:  int have_signals;
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/posix-poll.c:242:    have_signals = 0;
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/posix-poll.c:271:        if (w == &loop->signal_io_watcher) {
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/posix-poll.c:272:          have_signals = 1;
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/posix-poll.c:289:    if (have_signals != 0) {
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/posix-poll.c:291:      uv__signal_event(loop, &loop->signal_io_watcher, POLLIN);
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/posix-poll.c:299:    if (have_signals != 0)
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/linux.c:1363:  int have_signals;
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/linux.c:1473:    have_signals = 0;
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/linux.c:1542:        if (w == &loop->signal_io_watcher) {
+142:function removeWorker(worker) {
+148:    intercom.emit('disconnect');
+174:  worker.process.once('exit', (exitCode, signalCode) => {
+180:    if (!worker.isConnected()) {
+182:      removeWorker(worker);
+191:  worker.process.once('disconnect', () => {
+205:      removeWorker(worker);
+209:    worker.emit('disconnect');
+210:    cluster.emit('disconnect', worker);
+227:    process.nextTick(() => intercom.emit('disconnect'));
+exit before disconnect in 20 of 20 kills

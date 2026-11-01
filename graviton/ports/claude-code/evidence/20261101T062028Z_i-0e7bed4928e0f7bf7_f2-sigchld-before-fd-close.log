@@ -1,0 +1,36 @@
+# evidence: f2-sigchld-before-fd-close
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062028Z   end: 20261101T062049Z   rc: 0
+# script sha256: e247a058f149fe18401a6a64e74091d0e15a8efa3800e2125980914e571392c1
+# ---- script ----
+# | cd /tmp; cat > ch.c <<'C'
+# | #include <poll.h>
+# | #include <signal.h>
+# | #include <stdio.h>
+# | #include <unistd.h>
+# | #include <fcntl.h>
+# | #include <sys/socket.h>
+# | #include <sys/wait.h>
+# | static int sp[2];
+# | static void h(int s){ (void)s; write(sp[1],"c",1); }
+# | int main(){ pipe(sp); fcntl(sp[0],F_SETFL,O_NONBLOCK); signal(SIGCHLD,h);
+# |  int N=50, sigonly=0, reaped_early=0;
+# |  for(int i=0;i<N;i++){ int sv[2]; socketpair(AF_UNIX,SOCK_STREAM,0,sv);
+# |   pid_t p=fork(); if(!p){ close(sv[0]); for(;;) pause(); } close(sv[1]);
+# |   usleep(20000); kill(p,SIGKILL);
+# |   struct pollfd pf[2]={{sp[0],POLLIN,0},{sv[0],POLLIN,0}};
+# |   while(poll(pf,2,-1)<0);
+# |   int sigready=!!(pf[0].revents&POLLIN), sockready=!!(pf[1].revents&(POLLIN|POLLHUP));
+# |   if(sigready && !sockready){ sigonly++; int st; if(waitpid(p,&st,WNOHANG)==p){ reaped_early++;
+# |      struct pollfd q={sv[0],POLLIN,0}; int r=poll(&q,1,0); if(i<3) printf("iter %d: SIGCHLD ready, socket not; waitpid(WNOHANG) reaped the child; socket ready right after reap? %s\n",i,r==1?"yes":"no"); } else waitpid(p,&st,0);}
+# |   else { int st; waitpid(p,&st,0); }
+# |   char b[8]; while(read(sp[0],b,8)>0); close(sv[0]); }
+# |  printf("first poll() wake: SIGCHLD pipe ready but peer socket NOT yet HUP/readable: %d of %d; of those, child already reapable by waitpid(WNOHANG): %d\n",sigonly,N,reaped_early);
+# |  return 0;}
+# | C
+# | gcc -o ch ch.c -lnetwork && ./ch
+# ---- raw output ----
+iter 0: SIGCHLD ready, socket not; waitpid(WNOHANG) reaped the child; socket ready right after reap? yes
+iter 1: SIGCHLD ready, socket not; waitpid(WNOHANG) reaped the child; socket ready right after reap? yes
+iter 2: SIGCHLD ready, socket not; waitpid(WNOHANG) reaped the child; socket ready right after reap? yes
+first poll() wake: SIGCHLD pipe ready but peer socket NOT yet HUP/readable: 50 of 50; of those, child already reapable by waitpid(WNOHANG): 50

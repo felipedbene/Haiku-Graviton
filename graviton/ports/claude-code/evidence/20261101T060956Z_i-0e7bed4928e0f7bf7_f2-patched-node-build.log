@@ -1,0 +1,118 @@
+# evidence: f2-patched-node-build
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060956Z   end: 20261101T061218Z   rc: 0
+# script sha256: 9c4fa768a599188465a8dcf8f9e91482ee3bf1ff27d295264756935c0cc99553
+# ---- script ----
+# | set -e
+# | SRC=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | D=/boot/home/f2-node
+# | rm -rf $D; mkdir -p $D
+# | cp -a $SRC $D/
+# | cd $D/node-v24.21.0
+# | echo "== copy made: $(du -sh . | cut -f1)"
+# | cat > /tmp/f2a.patch <<'P'
+# | diff --git a/src/node.cc b/src/node.cc
+# | --- a/src/node.cc
+# | +++ b/src/node.cc
+# | @@ -501,6 +501,10 @@ void ResetSignalHandlers() {
+# |    for (unsigned nr = 1; nr < kMaxSignal; nr += 1) {
+# |      if (nr == SIGKILL || nr == SIGSTOP)
+# |        continue;
+# | +#ifdef SIGKILLTHR
+# | +    if (nr == SIGKILLTHR)
+# | +      continue;  // Haiku: cannot be caught or ignored; sigaction() rejects it.
+# | +#endif
+# |      act.sa_handler = (nr == SIGPIPE || nr == SIGXFSZ) ? SIG_IGN : SIG_DFL;
+# |      if (act.sa_handler == SIG_DFL) {
+# |        // The only bad handler value we can inherit from before exec is SIG_IGN
+# | @@ -510,10 +514,10 @@ void ResetSignalHandlers() {
+# |        // library) has set up own signal handler for own purposes
+# |        // (e.g. profiling). If that's the case, we want to keep it intact.
+# |        struct sigaction old;
+# | -      // CHECK_EQ(0, sigaction(nr, nullptr, &old));
+# | +      CHECK_EQ(0, sigaction(nr, nullptr, &old));
+# |        if ((old.sa_flags & SA_SIGINFO) || old.sa_handler != SIG_IGN) continue;
+# |      }
+# | -    // CHECK_EQ(0, sigaction(nr, &act, nullptr));
+# | +    CHECK_EQ(0, sigaction(nr, &act, nullptr));
+# |    }
+# |  #endif  // __POSIX__
+# |  }
+# | P
+# | cat > /tmp/f2b.patch <<'P'
+# | diff --git a/src/api/utils.cc b/src/api/utils.cc
+# | --- a/src/api/utils.cc
+# | +++ b/src/api/utils.cc
+# | @@ -157,6 +157,10 @@ const char* signo_string(int signo) {
+# |  #endif
+# |  #endif
+# |  
+# | +#ifdef SIGKILLTHR
+# | +    SIGNO_CASE(SIGKILLTHR);
+# | +#endif
+# | +
+# |  #ifdef SIGSYS
+# |      SIGNO_CASE(SIGSYS);
+# |  #endif
+# | diff --git a/src/node_constants.cc b/src/node_constants.cc
+# | --- a/src/node_constants.cc
+# | +++ b/src/node_constants.cc
+# | @@ -815,6 +815,10 @@ void DefineSignalConstants(Local<Object> target) {
+# |    NODE_DEFINE_CONSTANT(target, SIGINFO);
+# |  #endif
+# |  
+# | +#ifdef SIGKILLTHR
+# | +  NODE_DEFINE_CONSTANT(target, SIGKILLTHR);
+# | +#endif
+# | +
+# |  #ifdef SIGSYS
+# |    NODE_DEFINE_CONSTANT(target, SIGSYS);
+# |  #endif
+# | P
+# | git apply -v /tmp/f2a.patch; git apply -v /tmp/f2b.patch
+# | sed -n 498,522p src/node.cc
+# | echo "== ninja (incremental) start $(date +%T)"
+# | ninja -C out/Release node > /tmp/f2-ninja.log 2>&1 || { tail -40 /tmp/f2-ninja.log; exit 1; }
+# | tail -3 /tmp/f2-ninja.log; echo "== ninja end $(date +%T)"
+# | ls -l out/Release/node
+# ---- raw output ----
+== copy made: 1.5G
+Checking patch src/node.cc...
+Hunk #1 succeeded at 503 (offset 2 lines).
+Hunk #2 succeeded at 516 (offset 2 lines).
+Applied patch src/node.cc cleanly.
+Checking patch src/api/utils.cc...
+Checking patch src/node_constants.cc...
+Applied patch src/api/utils.cc cleanly.
+Applied patch src/node_constants.cc cleanly.
+  memset(&act, 0, sizeof(act));
+
+  // The hard-coded upper limit is because NSIG is not very reliable; on Linux,
+  // it evaluates to 32, 34 or 64, depending on whether RT signals are enabled.
+  // Counting up to SIGRTMIN doesn't work for the same reason.
+  for (unsigned nr = 1; nr < kMaxSignal; nr += 1) {
+    if (nr == SIGKILL || nr == SIGSTOP)
+      continue;
+#ifdef SIGKILLTHR
+    if (nr == SIGKILLTHR)
+      continue;  // Haiku: cannot be caught or ignored; sigaction() rejects it.
+#endif
+    act.sa_handler = (nr == SIGPIPE || nr == SIGXFSZ) ? SIG_IGN : SIG_DFL;
+    if (act.sa_handler == SIG_DFL) {
+      // The only bad handler value we can inherit from before exec is SIG_IGN
+      // (any actual function pointer is reset to SIG_DFL during exec).
+      // If that's the case, we want to reset it back to SIG_DFL.
+      // However, it's also possible that an embeder (or an LD_PRELOAD-ed
+      // library) has set up own signal handler for own purposes
+      // (e.g. profiling). If that's the case, we want to keep it intact.
+      struct sigaction old;
+      CHECK_EQ(0, sigaction(nr, nullptr, &old));
+      if ((old.sa_flags & SA_SIGINFO) || old.sa_handler != SIG_IGN) continue;
+    }
+    CHECK_EQ(0, sigaction(nr, &act, nullptr));
+== ninja (incremental) start 06:11:34
+[7/11] ACTION libnode: node_mksnapshot_eb3cbee0fcebcc806d978ea5ec6c9763c0d78ba60b52cbe278ced2acd663d785
+[8/9] STAMP obj/node.actions_depends.stamp
+[9/9] LINK node
+== ninja end 06:12:06
+-rwxr-xr-x 1 baron root 67868608 Nov  1 06:12 out/Release/node

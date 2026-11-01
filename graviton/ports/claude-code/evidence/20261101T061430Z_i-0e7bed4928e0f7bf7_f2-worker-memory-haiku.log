@@ -1,0 +1,54 @@
+# evidence: f2-worker-memory-haiku
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061430Z   end: 20261101T061451Z   rc: 0
+# script sha256: 2cf6dc118727b3042c574148c9059f725cf44a2b6a6a529a41e8b7881f990e94
+# ---- script ----
+# | cat > /tmp/wm2.js <<'J'
+# | // test/parallel/test-worker-memory.js workload, numWorkers forced to 16 (as on the builder), with rss sampling
+# | const {Worker}=require('worker_threads');
+# | const numWorkers=16; const s=process.memoryUsage().rss; let finished=0;
+# | function run(n,done){ if(n<=0) return done(); const w=new Worker('require("worker_threads").parentPort.postMessage(2+2)',{eval:true}); w.on('exit',()=>run(n-1,done)); }
+# | for(let i=0;i<numWorkers;i++) run(60/numWorkers,()=>{ if(++finished===numWorkers){ const f=process.memoryUsage().rss;
+# |  console.log(`node ${process.version} ${process.platform}: rss start ${(s/1048576).toFixed(1)} MiB end ${(f/1048576).toFixed(1)} MiB ratio ${(f/s).toFixed(2)} (test requires < 5)`);
+# |  if(process.platform==='haiku'){ console.log(require('child_process').execSync('listarea '+process.pid).toString()); } }});
+# | J
+# | node /tmp/wm2.js > /tmp/wm2.out; head -1 /tmp/wm2.out; node /tmp/wm2.js | head -1; echo "-- listarea at end (largest by alloc):"; sed -n 2,6p /tmp/wm2.out; tail -n +7 /tmp/wm2.out | sort -k5 -r | head -30
+# ---- raw output ----
+node v24.21.0 haiku: rss start 11.1 MiB end 123.6 MiB ratio 11.16 (test requires < 5)
+node v24.21.0 haiku: rss start 11.1 MiB end 126.2 MiB ratio 11.40 (test requires < 5)
+-- listarea at end (largest by alloc):
+memory: total: 32992320KB, used: 3128924KB, left: 29863396KB
+
+/boot/system/bin/node /tmp/wm2.js (team 209742)
+   ID                             name          address     size   alloc. #-cow  #-in #-out lock prot
+-----------------------------------------------------------------------------------------------------
+13596812                        heap area    0x7fa0333000  2944000  271d000     0     0     0    0   33
+13596888                   node mmap area  0x3fef21940000    40000    40000     0     0     0    0   33
+13597395                   node mmap area  0x3fe385340000    40000    40000     0     0     0    0   33
+13597448                   node mmap area  0x3f9040980000    40000    40000     0     0     0    0   33
+13596861                   node mmap area  0x3eebdf080000    40000    40000     0     0     0    0   33
+13597436                   node mmap area  0x3ec129c00000    40000    40000     0     0     0    0   33
+13597266                   node mmap area  0x3eaecc200000    40000    40000     0     0     0    0   33
+13597345                   node mmap area  0x3e7fc3380000    40000    40000     0     0     0    0   33
+13596890                   node mmap area  0x3e7e49bc0000    40000    40000     0     0     0    0   33
+13597247                   node mmap area  0x3e634d9c0000    40000    40000     0     0     0    0   33
+13597307                   node mmap area  0x3e39da580000    40000    40000     0     0     0    0   33
+13596946                   node mmap area  0x3e1cf2800000    40000    40000     0     0     0    0   33
+13597256                   node mmap area  0x3df63e840000    40000    40000     0     0     0    0   33
+13596977                   node mmap area  0x3dd5b3580000    40000    40000     0     0     0    0   33
+13597545                   node mmap area  0x3dbaeeac0000    40000    40000     0     0     0    0   33
+13597394                   node mmap area  0x3db606f80000    40000    40000     0     0     0    0   33
+13597446                   node mmap area  0x3d3f0aa80000    40000    40000     0     0     0    0   33
+13597565                   node mmap area  0x3d2d0a780000    40000    40000     0     0     0    0   33
+13597017                   node mmap area  0x3cd7dc000000    40000    40000     0     0     0    0   33
+13597481                   node mmap area  0x3cd767c40000    40000    40000     0     0     0    0   33
+13597278                   node mmap area  0x3c8c5aac0000    40000    40000     0     0     0    0   33
+13597525                   node mmap area  0x3c6c8ab80000    40000    40000     0     0     0    0   33
+13597407                   node mmap area  0x3c48f3500000    40000    40000     0     0     0    0   33
+13596976                   node mmap area  0x3c2d3b380000    40000    40000     0     0     0    0   33
+13597250                   node mmap area  0x3bc395a80000    40000    40000     0     0     0    0   33
+13597371                   node mmap area  0x3b6c34dc0000    40000    40000     0     0     0    0   33
+13597301                   node mmap area  0x3b4af3600000    40000    40000     0     0     0    0   33
+13596895                   node mmap area  0x3ae461b40000    40000    40000     0     0     0    0   33
+13597526                   node mmap area  0x3add6e680000    40000    40000     0     0     0    0   33
+13597333                   node mmap area  0x3ad0235c0000    40000    40000     0     0     0    0   33

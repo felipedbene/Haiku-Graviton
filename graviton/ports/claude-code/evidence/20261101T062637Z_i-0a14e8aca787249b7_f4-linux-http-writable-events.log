@@ -1,0 +1,77 @@
+# evidence: f4-linux-http-writable-events
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 54e71f8c-1340-4b58-8456-194e7c88b494 (agent status: Success)
+# start: 20261101T062637Z   end: 20261101T062640Z   rc: 0   log bytes: 1197
+# script sha256: aa733a07147d47edfa6866fa3967550746dcc30ac9cbf3decc294d01f65e9494
+# ---- script ----
+# | N=/tmp/f4lin/node-v24.21.0; mkdir -p /tmp/f4
+# | cd /tmp/f4
+# | echo 'const t0 = Date.now(); globalThis.L = (s) => console.log(Date.now() - t0, s);' > /tmp/f4/L.js
+# | # Copy of the test (absolute require paths) with named event logging added; the test file itself is untouched.
+# | sed -e "s#require('../common')#require('$N/test/common')#" \
+# |     -e "s#^  res.on('finish', listener);#  req.socket.on('end', () => L('outer accepted socket: end (peer FIN)')); req.socket.on('close', () => L('outer accepted socket: close'));\n  res.on('finish', () => L('res finish')); res.on('close', () => L('res close'));\n  res.on('finish', listener);#" \
+# |     -e "s#inner.pipe(res);#L('inner response arrives, piping'); inner.pipe(res);#" \
+# |     -e "s#external.abort();#L('external.abort()'); external.abort();#" \
+# |     $N/test/parallel/test-http-writable-true-after-close.js > wtcopy2.js
+# | for i in 1 2 3; do echo "--- run $i"; /tmp/f4lin/node-v24.21.0-linux-arm64/bin/node -r /tmp/f4/L.js wtcopy2.js 2>&1 | grep -v "^    at "; done
+# ---- raw output ----
+--- run 1
+40 external.abort()
+43 outer accepted socket: end (peer FIN)
+44 inner response arrives, piping
+46 res close
+47 outer accepted socket: close
+node:assert:204
+  throw err;
+  ^
+
+AssertionError [ERR_ASSERTION]: Unexpected global(s) found: L
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: undefined,
+  operator: 'fail',
+  diff: 'simple'
+}
+
+Node.js v24.21.0
+--- run 2
+39 external.abort()
+43 outer accepted socket: end (peer FIN)
+43 inner response arrives, piping
+46 res close
+46 outer accepted socket: close
+node:assert:204
+  throw err;
+  ^
+
+AssertionError [ERR_ASSERTION]: Unexpected global(s) found: L
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: undefined,
+  operator: 'fail',
+  diff: 'simple'
+}
+
+Node.js v24.21.0
+--- run 3
+39 external.abort()
+43 outer accepted socket: end (peer FIN)
+43 inner response arrives, piping
+46 res close
+46 outer accepted socket: close
+node:assert:204
+  throw err;
+  ^
+
+AssertionError [ERR_ASSERTION]: Unexpected global(s) found: L
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: undefined,
+  operator: 'fail',
+  diff: 'simple'
+}
+
+Node.js v24.21.0

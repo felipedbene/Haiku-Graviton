@@ -1,0 +1,29 @@
+# evidence: f2-madvfree-and-pool
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061735Z   end: 20261101T061756Z   rc: 0
+# script sha256: 3b24b2d88e4316462b17e09f639c7a005c03aebc9e77ca6bded8d3dfb5bcb748
+# ---- script ----
+# | cd /tmp; sed -i 's/if(mode==0){name="madvise(MADV_DONTNEED)"; r=madvise(p,sz,MADV_DONTNEED);}/if(mode==0){name="posix_madvise(MADV_FREE) [V8 Haiku path]"; r=posix_madvise(p,sz,MADV_FREE);}/' md.c && gcc -o md md.c && ./md | head -1
+# | node --v8-options | grep -i -E "pool|uncommit|memory-reducer|large-page" | head
+# | cat > /tmp/wm4.js <<'J'
+# | const {Worker}=require('worker_threads'); const {execSync}=require('child_process');
+# | const cnt=()=>execSync('listarea '+process.pid).toString().split('\n').filter(l=>/node mmap area/.test(l)).length;
+# | const s=process.memoryUsage().rss, c0=cnt(); let fin=0;
+# | function run(n,done){ if(n<=0) return done(); const w=new Worker('require("worker_threads").parentPort.postMessage(4)',{eval:true}); w.on('exit',()=>run(n-1,done)); }
+# | for(let i=0;i<16;i++) run(60/16,()=>{ if(++fin===16){ console.log(process.execArgv.join(' ')||'(default)',': rss',(s/1048576).toFixed(1),'->',(process.memoryUsage().rss/1048576).toFixed(1),'MiB; node mmap areas',c0,'->',cnt()); }});
+# | J
+# | node /tmp/wm4.js; node --no-memory-pool /tmp/wm4.js 2>&1 | tail -1
+# ---- raw output ----
+posix_madvise(MADV_FREE) [V8 Haiku path] rc=0 (ok): area ram_size 64 MiB -> 0 MiB; first byte now 0
+  --decommit-pooled-pages (decommit, rather than discard pooled pages)
+        type: bool  default: --decommit-pooled-pages
+  --wasm-capi-thread-pool-size (size of the thread pool used by the wasm C API, with 0 meaning the maximum number of threads)
+        type: int  default: --wasm-capi-thread-pool-size=0
+  --trace-memory-reducer (print memory reducer behavior)
+        type: bool  default: --no-trace-memory-reducer
+  --memory-reducer-respects-frozen-state (don't schedule another GC when we are frozen)
+        type: bool  default: --no-memory-reducer-respects-frozen-state
+  --memory-reducer (use memory reducer)
+        type: bool  default: --memory-reducer
+(default) : rss 11.6 -> 123.0 MiB; node mmap areas 33 -> 352
+node: bad option: --no-memory-pool

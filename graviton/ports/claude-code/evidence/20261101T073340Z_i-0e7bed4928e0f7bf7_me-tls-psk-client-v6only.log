@@ -1,0 +1,25 @@
+# evidence: me-tls-psk-client-v6only
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T073340Z   end: 20261101T073401Z   rc: 0
+# script sha256: aae0696c8f778b9fd58527dfa3d43e800fa84f0b48f08545bbfad2adf6bab518
+# ---- script ----
+# | KEY=d731ef57be09e5204f0b205b60627028
+# | openssl s_server -accept 12347 -cipher PSK -psk $KEY -nocert -rev > /tmp/me-s.out 2>&1 & p=$!; sleep 2
+# | netstat -n | grep ":12347"
+# | echo "-- s_client to [::1]"; echo hello | timeout 5 openssl s_client -connect '[::1]:12347' -psk $KEY -cipher PSK 2>&1 | grep -E "Cipher is|olleh|errno|refused" | head -3
+# | echo "-- node net.connect to localhost (what the test's waitForPort does)"
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | /boot/system/bin/node -e 'const s=require("net").connect(12347,()=>{console.log("connected",s.remoteAddress);s.destroy()}).on("error",e=>console.log("error",e.code,e.address))'
+# | kill $p
+# | echo "-- with -4 (what the test passes only when !common.hasIPv6)"
+# | openssl s_server -4 -accept 12348 -cipher PSK -psk $KEY -nocert -rev > /tmp/me-s.out 2>&1 & p=$!; sleep 2; netstat -n | grep ":12348"
+# | /boot/system/bin/node -e 'const s=require("net").connect(12348,()=>{console.log("connected",s.remoteAddress);s.destroy()}).on("error",e=>console.log("error",e.code,e.address))'; kill $p
+# ---- raw output ----
+tcp         0      0 [::]:12347            [::]:0                listen       271307/openssl
+-- s_client to [::1]
+Reused, TLSv1.3, Cipher is TLS_CHACHA20_POLY1305_SHA256
+-- node net.connect to localhost (what the test's waitForPort does)
+error ECONNREFUSED 127.0.0.1
+-- with -4 (what the test passes only when !common.hasIPv6)
+tcp         0      0 *:12348               *:0                   listen       271327/openssl
+connected 127.0.0.1

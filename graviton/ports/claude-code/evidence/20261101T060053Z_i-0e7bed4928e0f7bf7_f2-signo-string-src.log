@@ -1,0 +1,103 @@
+# evidence: f2-signo-string-src
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060053Z   end: 20261101T060114Z   rc: 0
+# script sha256: 8319feca305370803b07de0fdea491a3a6d7a5cf125d9f4e2b606ef58d73c515
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | sed -n 295,315p deps/uv/src/unix/process.c
+# | f=$(grep -rln "^const char\* signo_string" src); echo "def in $f"; grep -n "^const char\* signo_string" -A 12 $f; grep -n "SIGPOLL\|SIGLOST\|SIGINFO" -B1 -A2 $f
+# | sed -n 795,812p src/node_constants.cc
+# | grep -n "SIGKILLTHR" ../../../patches/*.patchset | head
+# ---- raw output ----
+  int n;
+
+  /* Reset signal disposition first. Use a hard-coded limit because NSIG is not
+   * fixed on Linux: it's either 32, 34 or 64, depending on whether RT signals
+   * are enabled. We are not allowed to touch RT signal handlers, glibc uses
+   * them internally.
+   */
+  for (n = 1; n < 32; n += 1) {
+    if (n == SIGKILL || n == SIGSTOP)
+      continue;  /* Can't be changed. */
+
+#if defined(__HAIKU__)
+    if (n == SIGKILLTHR)
+      continue;  /* Can't be changed. */
+#endif
+
+    if (SIG_ERR != signal(n, SIG_DFL))
+      continue;
+
+    uv__write_errno(error_fd);
+  }
+def in src/api/utils.cc
+src/node.h
+src/api/utils.cc:7:const char* signo_string(int signo) {
+src/api/utils.cc-8-#define SIGNO_CASE(e)                                                          \
+src/api/utils.cc-9-  case e:                                                                      \
+src/api/utils.cc-10-    return #e;
+src/api/utils.cc-11-  switch (signo) {
+src/api/utils.cc-12-#ifdef SIGHUP
+src/api/utils.cc-13-    SIGNO_CASE(SIGHUP);
+src/api/utils.cc-14-#endif
+src/api/utils.cc-15-
+src/api/utils.cc-16-#ifdef SIGINT
+src/api/utils.cc-17-    SIGNO_CASE(SIGINT);
+src/api/utils.cc-18-#endif
+src/api/utils.cc-19-
+--
+src/node.h:1307:const char* signo_string(int errorno);
+src/node.h-1308-
+src/node.h-1309-
+src/node.h-1310-typedef void (*addon_register_func)(
+src/node.h-1311-    v8::Local<v8::Object> exports,
+src/node.h-1312-    v8::Local<v8::Value> module,
+src/node.h-1313-    void* priv);
+src/node.h-1314-
+src/node.h-1315-typedef void (*addon_context_register_func)(
+src/node.h-1316-    v8::Local<v8::Object> exports,
+src/node.h-1317-    v8::Local<v8::Value> module,
+src/node.h-1318-    v8::Local<v8::Context> context,
+src/node.h-1319-    void* priv);
+src/api/utils.cc-135-
+src/api/utils.cc:136:#ifdef SIGPOLL
+src/api/utils.cc:137:#if SIGPOLL != SIGIO
+src/api/utils.cc:138:    SIGNO_CASE(SIGPOLL);
+src/api/utils.cc-139-#endif
+src/api/utils.cc-140-#endif
+src/api/utils.cc-141-
+src/api/utils.cc:142:#ifdef SIGLOST
+src/api/utils.cc:143:#if SIGLOST != SIGABRT
+src/api/utils.cc:144:    SIGNO_CASE(SIGLOST);
+src/api/utils.cc-145-#endif
+src/api/utils.cc-146-#endif
+--
+src/api/utils.cc-148-#ifdef SIGPWR
+src/api/utils.cc:149:#if SIGPWR != SIGLOST
+src/api/utils.cc-150-    SIGNO_CASE(SIGPWR);
+src/api/utils.cc-151-#endif
+--
+src/api/utils.cc-153-
+src/api/utils.cc:154:#ifdef SIGINFO
+src/api/utils.cc:155:#if !defined(SIGPWR) || SIGINFO != SIGPWR
+src/api/utils.cc:156:    SIGNO_CASE(SIGINFO);
+src/api/utils.cc-157-#endif
+src/api/utils.cc-158-#endif
+  NODE_DEFINE_CONSTANT(target, SIGWINCH);
+#endif
+
+#ifdef SIGIO
+  NODE_DEFINE_CONSTANT(target, SIGIO);
+#endif
+
+#ifdef SIGPOLL
+  NODE_DEFINE_CONSTANT(target, SIGPOLL);
+#endif
+
+#ifdef SIGLOST
+  NODE_DEFINE_CONSTANT(target, SIGLOST);
+#endif
+
+#ifdef SIGPWR
+  NODE_DEFINE_CONSTANT(target, SIGPWR);
+#endif

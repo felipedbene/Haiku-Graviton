@@ -1,0 +1,20 @@
+# evidence: f4-linux-node24-setup
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: bf278e2d-54f4-4933-8cc0-ddf5193d03c5 (agent status: Success)
+# start: 20261101T062604Z   end: 20261101T062619Z   rc: 0   log bytes: 98
+# script sha256: 87066262a451f27c157a5c111c96daff9dcda7e8b0a71aa4965bb7ebb7f97d22
+# ---- script ----
+# | set -e
+# | mkdir -p /tmp/f4lin && cd /tmp/f4lin
+# | [ -d node-v24.21.0 ] || curl -fsSL https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz | tar xz node-v24.21.0/test node-v24.21.0/tools/test.py node-v24.21.0/tools/utils.py node-v24.21.0/tools/pseudo-tty.py 2>/dev/null || true
+# | [ -d node-v24.21.0-linux-arm64 ] || curl -fsSL https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz | tar xJ
+# | ls node-v24.21.0 | head; node-v24.21.0-linux-arm64/bin/node --version
+# | cd node-v24.21.0
+# | B=/tmp/f4lin/node-v24.21.0-linux-arm64/bin/node
+# | echo "### real test x10 on Linux"; for i in $(seq 1 10); do $B test/parallel/test-http-writable-true-after-close.js >/dev/null 2>&1; echo -n "rc=$? "; done; echo
+# ---- raw output ----
+test
+tools
+v24.21.0
+### real test x10 on Linux
+rc=0 rc=0 rc=0 rc=0 rc=0 rc=0 rc=0 rc=0 rc=0 rc=0 

@@ -1,0 +1,211 @@
+# evidence: f3-libuv-proctitle-patch-test
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061500Z   end: 20261101T061534Z   rc: 0
+# script sha256: 65fd29f6eefdabacc02e04714c0c1fd7d1fc939af94ac9540e6780bb14c139be
+# ---- script ----
+# | set -e
+# | U=/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1
+# | rm -rf /boot/home/f3uv && git clone -q $U /boot/home/f3uv && cd /boot/home/f3uv
+# | git log --oneline -1
+# | sed -i 's|src/unix/no-proctitle.c \\|src/unix/proctitle.c \\|' Makefile.am
+# | sed -i 's|  src/unix/no-proctitle.c\n|XX|' CMakeLists.txt
+# | python3 - <<'P'
+# | import re
+# | p='CMakeLists.txt'; s=open(p).read()
+# | i=s.index('if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")'); j=s.index('endif()',i)
+# | s=s[:i]+s[i:j].replace('src/unix/no-proctitle.c','src/unix/proctitle.c')+s[j:]
+# | open(p,'w').write(s)
+# | p='src/unix/haiku.c'; s=open(p).read()
+# | s+='''
+# | 
+# | void uv__set_process_title(const char* title) {
+# |   /* Haiku keeps a team's command line in the kernel (team_info.args), which
+# |    * userland cannot change; what can be renamed is the main thread, whose id
+# |    * is the team id. That is the name the Debugger, ProcessController and
+# |    * `ps -a` show for the main thread. */
+# |   rename_thread(getpid(), title);
+# | }
+# | '''
+# | open(p,'w').write(s)
+# | P
+# | git -c user.name=f3 -c user.email=f3@localhost commit -qam "unix,haiku: implement the process title (proctitle.c + rename_thread)"
+# | git format-patch -1 --stdout > /boot/home/f3-libuv-proctitle.patch
+# | cat /boot/home/f3-libuv-proctitle.patch
+# | ./autogen.sh > /tmp/f3uv-autogen.log 2>&1 && ./configure > /tmp/f3uv-conf.log 2>&1 && make -j8 > /tmp/f3uv-make.log 2>&1 || { tail -30 /tmp/f3uv-*.log; exit 1; }
+# | ls -l .libs/libuv.so*
+# | echo "== node with the patched libuv (LIBRARY_PATH, nothing installed)"
+# | export LIBRARY_PATH=/boot/home/f3uv/.libs:$LIBRARY_PATH
+# | node -e 'console.log("default:",JSON.stringify(process.title)); process.title="abc"; console.log("after set:",JSON.stringify(process.title))'
+# | node --title=foo -p 'JSON.stringify(process.title)'
+# | node -e 'process.title="f3title"; console.log(require("child_process").execSync("ps -a 2>&1 | grep -m1 -A1 \"^/boot/system/bin/node\" | head -3").toString())' || true
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap -v parallel/test-setproctitle parallel/test-process-title-cli sequential/test-process-title parallel/test-inspector-contexts parallel/test-worker-node-options parallel/test-trace-events-metadata 2>&1 | grep -v "^ *at "
+# ---- raw output ----
+1ac3032 test: require fs event filenames on haiku
+From e380f2bb94582d0597cac085cbd17efe3a93dda8 Mon Sep 17 00:00:00 2001
+From: f3 <f3@localhost>
+Date: Sun, 1 Nov 2026 06:15:07 +0000
+Subject: [PATCH] unix,haiku: implement the process title (proctitle.c +
+ rename_thread)
+
+---
+ CMakeLists.txt   |  2 +-
+ Makefile.am      | 10 +++++-----
+ src/unix/haiku.c |  9 +++++++++
+ 3 files changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8eda577..f7fc4f5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -417,7 +417,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
+ 	  src/unix/haiku.c
+ 	  src/unix/haiku-fsevents.c
+ 	  src/unix/bsd-ifaddrs.c
+-	  src/unix/no-proctitle.c
++	  src/unix/proctitle.c
+ 	  src/unix/posix-hrtime.c
+ 	  src/unix/posix-poll.c)
+ endif()
+diff --git a/Makefile.am b/Makefile.am
+index f7f52a0..6570efd 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -419,7 +419,7 @@ libuv_la_CFLAGS += -D_GNU_SOURCE
+ libuv_la_SOURCES += src/unix/cygwin.c \
+                     src/unix/bsd-ifaddrs.c \
+                     src/unix/no-fsevents.c \
+-                    src/unix/no-proctitle.c \
++                    src/unix/proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c \
+                     src/unix/procfs-exepath.c \
+@@ -470,7 +470,7 @@ libuv_la_CFLAGS += -D_BSD_SOURCE
+ libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
+                     src/unix/haiku.c \
+                     src/unix/haiku-fsevents.c \
+-                    src/unix/no-proctitle.c \
++                    src/unix/proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c
+ test_run_tests_LDFLAGS += -lbsd
+@@ -480,7 +480,7 @@ if HURD
+ uvinclude_HEADERS += include/uv/posix.h
+ libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
+                     src/unix/no-fsevents.c \
+-                    src/unix/no-proctitle.c \
++                    src/unix/proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c \
+                     src/unix/hurd.c
+@@ -502,7 +502,7 @@ libuv_la_CFLAGS += -D_GNU_SOURCE
+ libuv_la_SOURCES += src/unix/cygwin.c \
+                     src/unix/bsd-ifaddrs.c \
+                     src/unix/no-fsevents.c \
+-                    src/unix/no-proctitle.c \
++                    src/unix/proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c \
+                     src/unix/procfs-exepath.c \
+@@ -536,7 +536,7 @@ uvinclude_HEADERS += include/uv/sunos.h
+ libuv_la_CFLAGS += -D__EXTENSIONS__ \
+                    -D_XOPEN_SOURCE=500 \
+                    -D_REENTRANT
+-libuv_la_SOURCES += src/unix/no-proctitle.c \
++libuv_la_SOURCES += src/unix/proctitle.c \
+                     src/unix/sunos.c
+ endif
+ 
+diff --git a/src/unix/haiku.c b/src/unix/haiku.c
+index 22c1659..5211107 100644
+--- a/src/unix/haiku.c
++++ b/src/unix/haiku.c
+@@ -170,3 +170,12 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+ 
+   return 0;
+ }
++
++
++void uv__set_process_title(const char* title) {
++  /* Haiku keeps a team's command line in the kernel (team_info.args), which
++   * userland cannot change; what can be renamed is the main thread, whose id
++   * is the team id. That is the name the Debugger, ProcessController and
++   * `ps -a` show for the main thread. */
++  rename_thread(getpid(), title);
++}
+-- 
+2.54.0
+
+lrwxrwxrwx 1 baron root     14 Nov  1 06:15 .libs/libuv.so -> libuv.so.1.0.0
+lrwxrwxrwx 1 baron root     14 Nov  1 06:15 .libs/libuv.so.1 -> libuv.so.1.0.0
+-rwxr-xr-x 1 baron root 929880 Nov  1 06:15 .libs/libuv.so.1.0.0
+== node with the patched libuv (LIBRARY_PATH, nothing installed)
+default: "node"
+after set: "abc"
+"foo"
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/wor 27106       11    0    0 
+
+
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..6
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-setproctitle.js
+not ok 1 parallel/test-setproctitle
+  ---
+  duration_ms: 138.84700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + "ps: invalid option -- 'p'\n"
+    - ''
+    
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: "ps: invalid option -- 'p'\n",
+      expected: '',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --title=foo /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-title-cli.js
+ok 2 parallel/test-process-title-cli
+  ---
+  duration_ms: 112.04300
+  ...
+# /boot/system/bin/node --expose-gc /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-contexts.js
+ok 3 parallel/test-inspector-contexts
+  ---
+  duration_ms: 264.65800
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-node-options.js
+ok 4 parallel/test-worker-node-options
+  ---
+  duration_ms: 511.60400
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-metadata.js
+ok 5 parallel/test-trace-events-metadata
+  ---
+  duration_ms: 222.44200
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-process-title.js
+ok 6 sequential/test-process-title
+  ---
+  duration_ms: 213.52800
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-setproctitle.js

@@ -1,0 +1,37 @@
+# evidence: f1-debugger-port-probe-fetch
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061150Z   end: 20261101T061211Z   rc: 0
+# script sha256: 4cffea016e03a8d81e3d80ec4d8c90c057f72b1da4ec13dff5739936b5128ebb
+# ---- script ----
+# | echo "== earlier probe cc-20261101T060443Z-86072: rc file"; cat /tmp/ccrun/cc-20261101T060443Z-86072.rc 2>&1
+# | cat /tmp/ccrun/cc-20261101T060443Z-86072.log
+# | echo "== processes"; ps | grep -E "f1-dbgport|inspect|three-lines" | grep -v grep
+# ---- raw output ----
+== earlier probe cc-20261101T060443Z-86072: rc file
+cat: /tmp/ccrun/cc-20261101T060443Z-86072.rc: No such file or directory
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+blocker: accepted
+[err] Timeout (3000) waiting for 127.0.0.1:41731 to be free[err] 
+exit 1 null after 3086 ms
+== processes
+/boot/system/bin/node --inspect=0 --watch /boot/home/haikuports 112118        6    0    0 
+/boot/system/bin/node --inspect=0 /boot/home/haikuports/net-lib 112124        8    0    0 
+/boot/system/bin/node /tmp/f1-dbgport.js /boot/home/haikuports/ 204418        7    0    0 
+/boot/system/bin/node --inspect=0 --experimental-network-inspec 207059        8    0    0 

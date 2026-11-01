@@ -1,0 +1,11 @@
+# evidence: f4-stop-slow-rerun
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061920Z   end: 20261101T061942Z   rc: 0
+# script sha256: 18b9585802219343064e87ce3e74015ae0c0f85d3ba639ff5ecb1ae8a8cf84cb
+# ---- script ----
+# | # Stop my own first rerun (test.py --timeout=60, which test.py scales to 360 s per timeout); leave other forks' runs alone.
+# | ps -a 2>/dev/null | grep -- "--timeout=60" | grep -v grep
+# | for p in $(ps -a 2>/dev/null | grep -- "test.py --shell=/boot/system/bin/node -j 1 --timeout=60" | grep -v grep | awk '{print $2}'); do echo "kill $p"; kill $p; done
+# | sleep 3; ps -a | grep -- "--timeout=60" | grep -v grep || echo "gone"
+# ---- raw output ----
+gone

@@ -1,0 +1,81 @@
+# evidence: f2-rlimit-cwd-atime-dlerror
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060514Z   end: 20261101T060536Z   rc: 0
+# script sha256: 37006c4ff69a462797e2d024502698aa7c524cc95c11f3bfc9bb725ef412528f
+# ---- script ----
+# | cd /tmp
+# | cat > rl.c <<'C'
+# | #include <stdio.h>
+# | #include <string.h>
+# | #include <errno.h>
+# | #include <sys/resource.h>
+# | int main(){ struct rlimit r;
+# |  int e=getrlimit(RLIMIT_NOFILE,&r); printf("getrlimit(NOFILE) rc=%d cur=%llu max=%llu\n",e,(unsigned long long)r.rlim_cur,(unsigned long long)r.rlim_max);
+# |  struct rlimit s={64,64}; e=setrlimit(RLIMIT_NOFILE,&s); printf("setrlimit(NOFILE,{64,64}) rc=%d errno=%s\n",e,e?strerror(errno):"-");
+# |  struct rlimit t={64,r.rlim_max}; e=setrlimit(RLIMIT_NOFILE,&t); printf("setrlimit(NOFILE,{64,old max}) rc=%d errno=%s\n",e,e?strerror(errno):"-");
+# |  e=getrlimit(RLIMIT_FSIZE,&r); printf("getrlimit(FSIZE) rc=%d errno=%s\n",e,e?strerror(errno):"-");
+# |  struct rlimit f={512,512}; e=setrlimit(RLIMIT_FSIZE,&f); printf("setrlimit(FSIZE,{512,512}) rc=%d errno=%s\n",e,e?strerror(errno):"-");
+# |  return 0;}
+# | C
+# | gcc -o rl rl.c && ./rl
+# | echo "== bash: ulimit -n 64; ulimit -Sn 64; ulimit -f 1"; bash -c 'ulimit -n 64; echo rc=$?'; bash -c 'ulimit -Sn 64 && ulimit -n; echo rc=$?'; bash -c 'ulimit -f 1; echo rc=$?'
+# | cat > cw.c <<'C'
+# | #include <stdio.h>
+# | #include <string.h>
+# | #include <errno.h>
+# | #include <unistd.h>
+# | #include <sys/stat.h>
+# | int main(){ char b[1024]; mkdir("/tmp/cwdgone",0755); chdir("/tmp/cwdgone");
+# |  int r=rmdir("/tmp/cwdgone"); printf("rmdir(cwd) rc=%d %s\n",r,r?strerror(errno):"");
+# |  char*p=getcwd(b,sizeof b); printf("getcwd -> %s errno=%s\n",p?p:"NULL",p?"-":strerror(errno));
+# |  struct stat st; printf("stat(\".\") rc=%d\n", stat(".",&st)); return 0;}
+# | C
+# | gcc -o cw cw.c && ./cw
+# | echo "== node cwd after rmdir:"; mkdir -p /tmp/cwdgone2 && node -e 'process.chdir("/tmp/cwdgone2"); require("fs").rmdirSync("/tmp/cwdgone2"); try{console.log("cwd=",process.cwd())}catch(e){console.log("threw",e.code)}'
+# | echo "== atime:"; f=/tmp/at.txt; echo x > $f
+# | node -e 'const fs=require("fs");const f="/tmp/at.txt";const a=fs.statSync(f).atimeMs; setTimeout(()=>{const b=fs.statSync(f).atimeMs;console.log("two stats 200ms apart, no access between: atimeMs",a,b,"equal:",a===b);
+# | fs.utimesSync(f,new Date(1e12),new Date(1e12)); const s=fs.statSync(f); console.log("after utimes(atime=mtime=1e12 ms): atimeMs",s.atimeMs,"mtimeMs",s.mtimeMs, "now", Date.now());},200)'
+# | df /tmp | tail -1; mount 2>/dev/null | head -3
+# | echo "== errno constants:"; node -p 'const c=require("os").constants.errno; [c.ENOENT,c.EACCES,c.EPIPE].join(" ")'
+# | echo "== exec /usr/bin/env via sh:"; sh -c '/usr/bin/env'; echo "rc=$?"
+# | echo "== dlopen messages:"; cat > dl.c <<'C'
+# | #include <dlfcn.h>
+# | #include <stdio.h>
+# | int main(){ void*h=dlopen("foo-%s.node",RTLD_LAZY); printf("dlopen(missing) -> %p dlerror=\"%s\"\n",h,dlerror());
+# |  FILE*f=fopen("/tmp/notelf.node","w"); fputs("garbage\n",f); fclose(f);
+# |  h=dlopen("/tmp/notelf.node",RTLD_LAZY); printf("dlopen(non-ELF) -> %p dlerror=\"%s\"\n",h,dlerror()); return 0;}
+# | C
+# | gcc -o dl dl.c && ./dl
+# ---- raw output ----
+getrlimit(NOFILE) rc=0 cur=256 max=8192
+setrlimit(NOFILE,{64,64}) rc=-1 errno=Operation not allowed
+setrlimit(NOFILE,{64,old max}) rc=0 errno=-
+getrlimit(FSIZE) rc=-1 errno=Invalid Argument
+setrlimit(FSIZE,{512,512}) rc=-1 errno=Invalid Argument
+== bash: ulimit -n 64; ulimit -Sn 64; ulimit -f 1
+bash: line 1: ulimit: open files: cannot modify limit: Operation not allowed
+rc=1
+64
+rc=0
+bash: line 1: ulimit: file size: cannot get limit: Invalid Argument
+rc=1
+rmdir(cwd) rc=0 
+getcwd -> /boot/system/cache/tmp/cwdgone errno=-
+stat(".") rc=0
+== node cwd after rmdir:
+cwd= /boot/system/cache/tmp/cwdgone2
+== atime:
+two stats 200ms apart, no access between: atimeMs 1793513121678.056 1793513121878.294 equal: false
+after utimes(atime=mtime=1e12 ms): atimeMs 1793513121880.932 mtimeMs 1000000000000 now 1793513121880
+   Root Inode: 524288
+usage: mount [-ro] [-t fstype] [-p parameter] [device] directory
+	-ro	mounts the volume read-only
+	-t	specifies the file system to use (defaults to automatic recognition)
+== errno constants:
+-2147459069 -2147483646 -2147459059
+== exec /usr/bin/env via sh:
+sh: line 1: /usr/bin/env: No such file or directory
+rc=127
+== dlopen messages:
+dlopen(missing) -> (nil) dlerror="No such file or directory"
+dlopen(non-ELF) -> (nil) dlerror="Not an executable"

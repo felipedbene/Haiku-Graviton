@@ -1,0 +1,64 @@
+# evidence: f2-madvise-dontneed
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061606Z   end: 20261101T061627Z   rc: 0
+# script sha256: 752d64f12f479a3d9f46d9ae3da7011910757237cd023a83b9cbe9a294d1c69b
+# ---- script ----
+# | V=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/v8/src/base/platform
+# | grep -n "bool OS::DiscardSystemPages" -A 25 $V/platform-posix.cc | head -40
+# | grep -n "MADV_DONTNEED\|MADV_FREE\|madvise" /boot/system/develop/headers/posix/sys/mman.h
+# | cd /tmp; cat > md.c <<'C'
+# | #include <OS.h>
+# | #include <stdio.h>
+# | #include <string.h>
+# | #include <errno.h>
+# | #include <sys/mman.h>
+# | static size_t ram(void*p){ area_info i; get_area_info(area_for(p),&i); return i.ram_size; }
+# | int main(){ size_t sz=64<<20;
+# |  for(int mode=0;mode<3;mode++){
+# |   char*p=mmap(NULL,sz,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0); memset(p,1,sz);
+# |   size_t before=ram(p); int r; const char*name;
+# |   if(mode==0){name="madvise(MADV_DONTNEED)"; r=madvise(p,sz,MADV_DONTNEED);}
+# |   else if(mode==1){name="posix_madvise(POSIX_MADV_DONTNEED)"; r=posix_madvise(p,sz,POSIX_MADV_DONTNEED);}
+# |   else {name="mmap(MAP_FIXED) over the range"; r=(mmap(p,sz,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED,-1,0)==p)?0:-1;}
+# |   printf("%-36s rc=%d (%s): area ram_size %zu MiB -> %zu MiB; first byte now %d\n",name,r,r?strerror(errno):"ok",before>>20,ram(p)>>20,p[0]);
+# |   munmap(p,sz);}
+# |  return 0;}
+# | C
+# | gcc -o md md.c && ./md
+# ---- raw output ----
+574:bool OS::DiscardSystemPages(void* address, size_t size) {
+575-  // Roughly based on PartitionAlloc's DiscardSystemPagesInternal
+576-  // (base/allocator/partition_allocator/page_allocator_internals_posix.h)
+577-  DCHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % CommitPageSize());
+578-  DCHECK_EQ(0, size % CommitPageSize());
+579-#if defined(V8_OS_DARWIN)
+580-  // On OSX, MADV_FREE_REUSABLE has comparable behavior to MADV_FREE, but also
+581-  // marks the pages with the reusable bit, which allows both Activity Monitor
+582-  // and memory-infra to correctly track the pages.
+583-  int ret;
+584-  do {
+585-    ret = madvise(address, size, MADV_FREE_REUSABLE);
+586-  } while (ret != 0 && errno == EAGAIN);
+587-  if (ret) {
+588-    // MADV_FREE_REUSABLE sometimes fails, so fall back to MADV_DONTNEED.
+589-    ret = madvise(address, size, MADV_DONTNEED);
+590-  }
+591-#elif defined(_AIX) || defined(V8_OS_SOLARIS)
+592-  int ret = madvise(reinterpret_cast<caddr_t>(address), size, MADV_FREE);
+593-  if (ret != 0 && errno == ENOSYS) {
+594-    return true;  // madvise is not available on all systems.
+595-  }
+596-  if (ret != 0 && errno == EINVAL) {
+597-    ret = madvise(reinterpret_cast<caddr_t>(address), size, MADV_DONTNEED);
+598-  }
+599-#elif defined(__HAIKU__)
+37:/* madvise() values */
+42:#define MADV_DONTNEED		5
+43:#define MADV_FREE			6
+45:/* posix_madvise() values */
+50:#define POSIX_MADV_DONTNEED		MADV_DONTNEED
+62:int		madvise(void* address, size_t length, int advice);
+63:int		posix_madvise(void* address, size_t length, int advice);
+madvise(MADV_DONTNEED)               rc=0 (ok): area ram_size 64 MiB -> 64 MiB; first byte now 1
+posix_madvise(POSIX_MADV_DONTNEED)   rc=0 (ok): area ram_size 64 MiB -> 64 MiB; first byte now 1
+mmap(MAP_FIXED) over the range       rc=0 (ok): area ram_size 64 MiB -> 0 MiB; first byte now 0

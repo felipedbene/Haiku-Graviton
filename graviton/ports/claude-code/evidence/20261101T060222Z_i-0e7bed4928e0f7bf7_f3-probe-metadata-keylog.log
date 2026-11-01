@@ -1,0 +1,129 @@
+# evidence: f3-probe-metadata-keylog
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060222Z   end: 20261101T060243Z   rc: 0
+# script sha256: 51b349821a913be54cdf9b9394324703a1d0bda9598e440ab9c019c49c4735cc
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | N=/boot/system/bin/node
+# | echo "== trace-events-metadata: child run, __metadata events"
+# | D=$(mktemp -d); (cd $D && $N --trace-event-categories node.perf.usertiming --title=bar -e 'setTimeout(() => { for (let i = 0; i < 100000; i++) { "test" + i } }, 1);process.title = "foo"')
+# | $N -e 'const t=JSON.parse(require("fs").readFileSync(process.argv[1])).traceEvents.filter(x=>x.cat==="__metadata"); for (const x of t) console.log(x.name, JSON.stringify(x.name==="node"? {platform:x.args.process.platform, arch:x.args.process.arch, release:x.args.process.release, uv:x.args.process.versions.uv}: x.args))' $D/node_trace.1.log
+# | echo "== thread names / title as seen by Haiku"; $N -e 'process.title="foo"; require("child_process").execSync("ps 2>&1 | grep -E \"node|PID|Team\" | head -5",{stdio:"inherit"})'
+# | echo "== ps usage"; command -v ps; ps -p $$ -o args= 2>&1 | head -3
+# | echo "== keylog: file contents and keylog events"
+# | cp test/parallel/test-tls-enable-keylog-cli.js test/parallel/f3diag-keylog.js
+# | sed -i 's|^  assert.strictEqual(log.length, 2);|  console.log("KEYLOG LINES", JSON.stringify(log));\n  assert.strictEqual(log.length, 2);|' test/parallel/f3diag-keylog.js
+# | sed -i 's|^  connect({|  const tls = require("tls"); const _cs = tls.createSecureContext; let n = 0;\n  process.on("exit", () => console.log("exit"));\n  connect({|' test/parallel/f3diag-keylog.js
+# | $N test/parallel/f3diag-keylog.js 2>&1 | grep -v Deprecation | head -20
+# | rm -f test/parallel/f3diag-keylog.js
+# | echo "== keylog event count in-process (no CLI flag)"
+# | cat > /tmp/f3kl.js <<'J'
+# | const fixtures = require(process.argv[2] + '/test/common/fixtures');
+# | const { connect, keys } = require(fixtures.path('tls-connect'));
+# | let ev = [];
+# | connect({ client: { checkServerIdentity(){}, ca: `${keys.agent1.cert}\n${keys.agent6.ca}` },
+# |           server: { cert: keys.agent6.cert, key: keys.agent6.key, maxVersion: 'TLSv1.2' } },
+# |   (err, pair, cleanup) => {
+# |     console.log('handshake err', err && err.message, 'server.err', pair.server.err && pair.server.err.message, 'client.err', pair.client.err && pair.client.err.message);
+# |     cleanup();
+# |   });
+# | const tls = require('tls');
+# | const origS = tls.Server.prototype.emit;
+# | tls.Server.prototype.emit = function (e, ...a) { if (e === 'keylog') console.log('server keylog', a[0].toString().slice(0, 20)); return origS.call(this, e, ...a); };
+# | const origT = tls.TLSSocket.prototype.emit;
+# | tls.TLSSocket.prototype.emit = function (e, ...a) { if (e === 'keylog') console.log('client-side TLSSocket keylog', a[0].toString().slice(0, 20)); return origT.call(this, e, ...a); };
+# | J
+# | $N /tmp/f3kl.js $PWD 2>&1 | head
+# | echo "== --tls-keylog implementation"; grep -n -B2 -A14 "tls-keylog" lib/_tls_wrap.js lib/internal/tls/*.js 2>/dev/null | head -60
+# ---- raw output ----
+== trace-events-metadata: child run, __metadata events
+version {"node":"24.21.0"}
+thread_name {"name":"JavaScriptMainThread"}
+node {"platform":"haiku","arch":"arm64","release":{"name":"node","lts":"Krypton"},"uv":"1.52.1"}
+thread_name {"name":"WorkerThreadsTaskRunner::DelayedTaskScheduler"}
+thread_name {"name":"PlatformWorkerThread"}
+thread_name {"name":"PlatformWorkerThread"}
+thread_name {"name":"PlatformWorkerThread"}
+thread_name {"name":"PlatformWorkerThread"}
+process_name {"name":"foo"}
+version {"node":"24.21.0"}
+thread_name {"name":"JavaScriptMainThread"}
+node {"platform":"haiku","arch":"arm64","release":{"name":"node","lts":"Krypton"},"uv":"1.52.1"}
+thread_name {"name":"WorkerThreadsTaskRunner::DelayedTaskScheduler"}
+thread_name {"name":"PlatformWorkerThread"}
+thread_name {"name":"PlatformWorkerThread"}
+thread_name {"name":"PlatformWorkerThread"}
+thread_name {"name":"PlatformWorkerThread"}
+process_name {"name":"foo"}
+== thread names / title as seen by Haiku
+Team                                                  Id #Threads  Gid  Uid 
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/wor 27106       11    0    0 
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/wor 27158        7    0    0 
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/wor 27842        7    0    0 
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/wor 27884       11    0    0 
+== ps usage
+/boot/system/bin/ps
+ps: invalid option -- 'p'
+
+
+== keylog: file contents and keylog events
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:202945) Warning: Using --tls-keylog makes TLS connections insecure by writing secret key material to file /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.0/keylog.log
+exit
+KEYLOG LINES ["CLIENT_RANDOM ad20b0f608b07e5c25906fbab5d369082f6ab6f57dcc10543d7503fff2a5ede9 7181ab65a5762e899ee68600990643c21a34642bd234caf798587bd58efc0b0707b6a1e723e558a5f7b3f2aa5d9c86ad"]
+node:assert:152
+  throw new AssertionError(obj);
+  ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+1 !== 2
+
+    at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/f3diag-keylog.js:30:10)
+    at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+    at ChildProcess.emit (node:events:514:28)
+    at maybeClose (node:internal/child_process:1141:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:306:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+== keylog event count in-process (no CLI flag)
+(node:202961) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+handshake err undefined server.err undefined client.err undefined
+== --tls-keylog implementation
+lib/internal/tls/wrap.js-98-} = require('internal/crypto/x509');
+lib/internal/tls/wrap.js-99-const traceTls = getOptionValue('--trace-tls');
+lib/internal/tls/wrap.js:100:const tlsKeylog = getOptionValue('--tls-keylog');
+lib/internal/tls/wrap.js-101-const { appendFile } = require('fs');
+lib/internal/tls/wrap.js-102-const kConnectOptions = Symbol('connect-options');
+lib/internal/tls/wrap.js-103-const kDisableRenegotiation = Symbol('disable-renegotiation');
+lib/internal/tls/wrap.js-104-const kErrorEmitted = Symbol('error-emitted');
+lib/internal/tls/wrap.js-105-const kHandshakeTimeout = Symbol('handshake-timeout');
+lib/internal/tls/wrap.js-106-const kRes = Symbol('res');
+lib/internal/tls/wrap.js-107-const kSNICallback = Symbol('snicallback');
+lib/internal/tls/wrap.js-108-const kALPNCallback = Symbol('alpncallback');
+lib/internal/tls/wrap.js-109-const kEnableTrace = Symbol('enableTrace');
+lib/internal/tls/wrap.js-110-const kPskCallback = Symbol('pskcallback');
+lib/internal/tls/wrap.js-111-const kPskIdentityHint = Symbol('pskidentityhint');
+lib/internal/tls/wrap.js-112-const kPendingSession = Symbol('pendingSession');
+lib/internal/tls/wrap.js-113-const kIsVerified = Symbol('verified');
+lib/internal/tls/wrap.js-114-
+--
+lib/internal/tls/wrap.js-1000-    if (warnOnTlsKeylog) {
+lib/internal/tls/wrap.js-1001-      warnOnTlsKeylog = false;
+lib/internal/tls/wrap.js:1002:      process.emitWarning('Using --tls-keylog makes TLS connections insecure ' +
+lib/internal/tls/wrap.js-1003-        'by writing secret key material to file ' + tlsKeylog);
+lib/internal/tls/wrap.js-1004-    }
+lib/internal/tls/wrap.js-1005-    this.on('keylog', (line) => {
+lib/internal/tls/wrap.js-1006-      appendFile(tlsKeylog, line, { mode: 0o600 }, (err) => {
+lib/internal/tls/wrap.js-1007-        if (err && warnOnTlsKeylogError) {
+lib/internal/tls/wrap.js-1008-          warnOnTlsKeylogError = false;
+lib/internal/tls/wrap.js-1009-          process.emitWarning('Failed to write TLS keylog (this warning ' +
+lib/internal/tls/wrap.js-1010-            'will not be repeated): ' + err);
+lib/internal/tls/wrap.js-1011-        }
+lib/internal/tls/wrap.js-1012-      });
+lib/internal/tls/wrap.js-1013-    });
+lib/internal/tls/wrap.js-1014-  }
+lib/internal/tls/wrap.js-1015-
+lib/internal/tls/wrap.js-1016-  ssl.onerror = onerror;

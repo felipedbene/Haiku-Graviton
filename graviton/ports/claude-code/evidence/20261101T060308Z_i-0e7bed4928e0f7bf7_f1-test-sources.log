@@ -1,0 +1,175 @@
+# evidence: f1-test-sources
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060308Z   end: 20261101T060329Z   rc: 0
+# script sha256: d5f5a97e1ba76906b0a8a8acbfe7347eaaeffb819164401e40da0de77c209fc6
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test
+# | for f in parallel/test-debugger-unavailable-port.js parallel/test-inspector-network-websocket.js parallel/test-debugger-profile.js parallel/test-inspector-stop-profile-after-done.js; do echo "######## $f"; grep -v "^//\|^$" $f | head -90; done
+# ---- raw output ----
+######## parallel/test-debugger-unavailable-port.js
+'use strict';
+const common = require('../common');
+common.skipIfInspectorDisabled();
+const fixtures = require('../common/fixtures');
+const startCLI = require('../common/debugger');
+const assert = require('assert');
+const { createServer } = require('net');
+(async () => {
+  const blocker = createServer((socket) => socket.end());
+  const port = await new Promise((resolve, reject) => {
+    blocker.on('error', reject);
+    blocker.listen(0, '127.0.0.1', () => resolve(blocker.address().port));
+  });
+  try {
+    const script = fixtures.path('debugger', 'three-lines.js');
+    const cli = startCLI([`--port=${port}`, script], [], {}, { randomPort: false });
+    const code = await cli.quit();
+    assert.doesNotMatch(
+      cli.output,
+      /report this bug/,
+      'Omits message about reporting this as a bug');
+    assert.ok(
+      cli.output.includes(`waiting for 127.0.0.1:${port} to be free`),
+      'Tells the user that the port wasn\'t available');
+    assert.strictEqual(code, 1);
+  } finally {
+    blocker.close();
+  }
+})().then(common.mustCall());
+######## parallel/test-inspector-network-websocket.js
+'use strict';
+const common = require('../common');
+if (!common.hasCrypto)
+  common.skip('missing crypto');
+common.skipIfInspectorDisabled();
+const assert = require('node:assert');
+const { once } = require('node:events');
+const WebSocketServer = require('../common/websocket-server');
+const inspector = require('node:inspector/promises');
+const dc = require('diagnostics_channel');
+const nameRE = 'undici' in process.versions ? /^node:internal\/deps\/undici\/undici$/u : /undici/u;
+const session = new inspector.Session();
+session.connect();
+dc.channel('undici:websocket:socket_error').subscribe((message) => {
+  console.error('WebSocket error:', message);
+});
+function findFrameInInitiator(regex, initiator) {
+  const frame = initiator.stack.callFrames.find((it) => {
+    return regex.test(it.url);
+  });
+  return frame;
+}
+async function test() {
+  await session.post('Network.enable');
+  const CUSTOM_HEADER_NAME = 'X-Custom-Header';
+  const CUSTOM_HEADER_VALUE = 'CustomHeaderValue';
+  const server = new WebSocketServer({
+    responseError: true,
+    customHandleUpgradeHeaders: [
+      `${CUSTOM_HEADER_NAME}: ${CUSTOM_HEADER_VALUE}`,
+    ]
+  });
+  await server.start();
+  const url = `ws://127.0.0.1:${server.port}/`;
+  let requestId;
+  once(session, 'Network.webSocketCreated').then(common.mustCall(([message]) => {
+    assert.strictEqual(message.method, 'Network.webSocketCreated');
+    assert.strictEqual(message.params.url, url);
+    assert.ok(message.params.requestId);
+    assert.strictEqual(typeof message.params.initiator, 'object');
+    assert.strictEqual(message.params.initiator.type, 'script');
+    assert.ok(findFrameInInitiator(nameRE, message.params.initiator));
+    requestId = message.params.requestId;
+  }));
+  once(session, 'Network.webSocketHandshakeResponseReceived').then(common.mustCall(([message]) => {
+    assert.strictEqual(message.params.requestId, requestId);
+    assert.strictEqual(message.params.response.status, 101);
+    assert.strictEqual(message.params.response.statusText, 'Switching Protocols');
+    assert.strictEqual(message.params.response.headers.upgrade, 'websocket');
+    assert.strictEqual(message.params.response.headers.connection, 'Upgrade');
+    assert.ok(message.params.response.headers['sec-websocket-accept']);
+    assert.ok(message.params.response.headers['sec-websocket-accept'].length > 0);
+    assert.strictEqual(message.params.response.headers[CUSTOM_HEADER_NAME.toLowerCase()], CUSTOM_HEADER_VALUE);
+    assert.strictEqual(typeof message.params.timestamp, 'number');
+    socket.close();
+  }));
+  const socket = new WebSocket(url);
+  once(session, 'Network.webSocketClosed').then(common.mustCall(([message]) => {
+    assert.strictEqual(message.method, 'Network.webSocketClosed');
+    assert.strictEqual(message.params.requestId, requestId);
+    session.disconnect();
+    server.server.close();
+  }));
+}
+test().then(common.mustCall());
+######## parallel/test-debugger-profile.js
+'use strict';
+const common = require('../common');
+common.skipIfInspectorDisabled();
+const fixtures = require('../common/fixtures');
+const startCLI = require('../common/debugger');
+const assert = require('assert');
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+{
+  const cli = startCLI([fixtures.path('debugger/empty.js')], [], {
+    env: {
+      ...process.env,
+      // When this test is run with NODE_V8_COVERAGE, it clobbers the inspector
+      // output, so override to disable coverage for the child process.
+      NODE_V8_COVERAGE: undefined,
+    }
+  });
+  function onFatal(error) {
+    cli.quit();
+    throw error;
+  }
+  try {
+    (async () => {
+      await cli.waitForInitialBreak();
+      await cli.waitForPrompt();
+      await cli.command('exec console.profile()');
+      assert.match(cli.output, /undefined/);
+      await cli.command('exec console.profileEnd()');
+      await delay(250);
+      assert.match(cli.output, /undefined/);
+      assert.match(cli.output, /Captured new CPU profile\./);
+      await cli.quit();
+    })()
+        .then(common.mustCall());
+  } catch (error) {
+    return onFatal(error);
+  }
+}
+######## parallel/test-inspector-stop-profile-after-done.js
+'use strict';
+const common = require('../common');
+common.skipIfInspectorDisabled();
+const assert = require('assert');
+const { NodeInstance } = require('../common/inspector-helper.js');
+async function runTests() {
+  const child = new NodeInstance(['--inspect-brk=0'],
+                                 `let c = 0;
+                                  const interval = setInterval(() => {
+                                   console.log(new Object());
+                                   if (c++ === 10)
+                                     clearInterval(interval);
+                                 }, ${common.platformTimeout(30)});`);
+  const session = await child.connectInspectorSession();
+  await session.send({ method: 'NodeRuntime.enable' });
+  await session.waitForNotification('NodeRuntime.waitingForDebugger');
+  await session.send([
+    { method: 'Profiler.setSamplingInterval',
+      params: { interval: common.platformTimeout(300) } },
+    { method: 'Profiler.enable' }]);
+  await session.send({ method: 'Runtime.runIfWaitingForDebugger' });
+  await session.send({ method: 'NodeRuntime.disable' });
+  await session.send({ method: 'Profiler.start' });
+  while (await child.nextStderrString() !==
+         'Waiting for the debugger to disconnect...');
+  await session.send({ method: 'Profiler.stop' });
+  session.disconnect();
+  assert.strictEqual((await child.expectShutdown()).exitCode, 0);
+}
+runTests().then(common.mustCall());

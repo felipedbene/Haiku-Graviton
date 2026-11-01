@@ -1,0 +1,689 @@
+# evidence: f1-baseline-system-node
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060252Z   end: 20261101T061537Z   rc: 1
+# script sha256: 3525ef2ef418bde9f17cf3278418ababdcff38f6723f36b8f7c3062a5533b50b
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap -v parallel/test-debugger-profile parallel/test-debugger-profile-command parallel/test-debugger-unavailable-port parallel/test-inspector-has-idle parallel/test-inspector-network-websocket parallel/test-inspector-promises parallel/test-inspector-stop-profile-after-done parallel/test-tick-processor-arguments parallel/test-v8-cpu-profile sequential/test-cpu-prof-default sequential/test-cpu-prof-dir-absolute sequential/test-cpu-prof-dir-and-name sequential/test-cpu-prof-dir-relative sequential/test-cpu-prof-dir-worker sequential/test-cpu-prof-drained sequential/test-cpu-prof-exit sequential/test-cpu-prof-kill sequential/test-cpu-prof-name sequential/test-cpu-prof-worker-argv sequential/test-diagnostic-dir-cpu-prof sequential/test-worker-prof
+# ---- raw output ----
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..21
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-profile.js
+not ok 1 parallel/test-debugger-profile
+  ---
+  duration_ms: 10811.77700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:92
+            const timeoutErr = new Error(`Timeout (${TIMEOUT}) while waiting for ${pattern}`);
+                               ^
+    
+    Error: Timeout (10000) while waiting for />\s+$/
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:92:28
+        at new Promise (<anonymous>)
+        at Object.waitFor (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:67:14)
+        at Object.waitForPrompt (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:112:19)
+        at Object.command (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:172:19)
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-profile.js:35:17
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+      output: ''
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-profile-command.js
+not ok 2 parallel/test-debugger-profile-command
+  ---
+  duration_ms: 10811.28000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:92
+            const timeoutErr = new Error(`Timeout (${TIMEOUT}) while waiting for ${pattern}`);
+                               ^
+    
+    Error: Timeout (10000) while waiting for />\s+$/
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:92:28
+        at new Promise (<anonymous>)
+        at Object.waitFor (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:67:14)
+        at Object.waitForPrompt (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:112:19)
+        at Object.command (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/debugger.js:172:19)
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-profile-command.js:21:13
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+      output: ''
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-unavailable-port.js
+not ok 3 parallel/test-debugger-unavailable-port
+  ---
+  duration_ms: 360106.46600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-has-idle.js
+not ok 4 parallel/test-inspector-has-idle
+  ---
+  duration_ms: 1417.48700
+  severity: crashed
+  exitcode: -21
+  stack: |-
+  ...
+# /boot/system/bin/node --inspect=0 --experimental-network-inspection /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-network-websocket.js
+not ok 5 parallel/test-inspector-network-websocket
+  ---
+  duration_ms: 360094.33900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    Debugger listening on ws://127.0.0.1:43416/b4751e03-c52b-433b-b1f0-7ef1372300b0
+    For help, see: https://nodejs.org/learn/getting-started/debugging
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-promises.js
+not ok 6 parallel/test-inspector-promises
+  ---
+  duration_ms: 328.10300
+  severity: crashed
+  exitcode: -21
+  stack: |-
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-stop-profile-after-done.js
+not ok 7 parallel/test-inspector-stop-profile-after-done
+  ---
+  duration_ms: 712.43500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    [test] Connecting to a child Node process
+    [test] Testing /json/list
+    [err] Debugger listening on ws://127.0.0.1:45081/9dc5de01-35f5-4e3f-bbab-64272e964230
+    [err] For help, see: https://nodejs.org/learn/getting-started/debugging
+    [err] 
+    [err] Debugger attached.
+    [err] 
+    Mismatched noop function calls. Expected exactly 1, actual 0.
+        at Proxy.mustCall (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:439:10)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-stop-profile-after-done.js:33:24)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tick-processor-arguments.js
+not ok 8 parallel/test-tick-processor-arguments
+  ---
+  duration_ms: 408.79600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    [process 214808]: --- stderr ---
+    
+    [process 214808]: --- stdout ---
+    
+    [process 214808]: status = null, signal = 
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/child_process.js:112
+        throw error;
+        ^
+    
+    Error: - process terminated with status null, expected 0
+    - process terminated with signal , expected null
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tick-processor-arguments.js:16:1)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      options: {
+        cwd: '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.7'
+      },
+      command: '/boot/system/bin/node --prof -p 42'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-v8-cpu-profile.js
+not ok 9 parallel/test-v8-cpu-profile
+  ---
+  duration_ms: 264.07200
+  severity: crashed
+  exitcode: -21
+  stack: |-
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-default.js
+not ok 10 sequential/test-cpu-prof-default
+  ---
+  duration_ms: 407.64200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 1000 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-default.js:33:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-absolute.js
+not ok 11 sequential/test-cpu-prof-dir-absolute
+  ---
+  duration_ms: 332.94300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-absolute.js:39:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-and-name.js
+not ok 12 sequential/test-cpu-prof-dir-and-name
+  ---
+  duration_ms: 326.47900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-and-name.js:42:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-relative.js
+not ok 13 sequential/test-cpu-prof-dir-relative
+  ---
+  duration_ms: 332.86200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-relative.js:38:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-worker.js
+not ok 14 sequential/test-cpu-prof-dir-worker
+  ---
+  duration_ms: 330.54300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-worker.js:38:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-drained.js
+not ok 15 sequential/test-cpu-prof-drained
+  ---
+  duration_ms: 330.44800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-drained.js:36:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-exit.js
+not ok 16 sequential/test-cpu-prof-exit
+  ---
+  duration_ms: 408.95600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 55
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-exit.js:35:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 55,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-kill.js
+not ok 17 sequential/test-cpu-prof-kill
+  ---
+  duration_ms: 334.05400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    '' !== 'SIGINT'
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-kill.js:36:12)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '',
+      expected: 'SIGINT',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-name.js
+not ok 18 sequential/test-cpu-prof-name
+  ---
+  duration_ms: 326.64400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-name.js:41:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-worker-argv.js
+not ok 19 sequential/test-cpu-prof-worker-argv
+  ---
+  duration_ms: 407.36900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-worker-argv.js:34:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-diagnostic-dir-cpu-prof.js
+not ok 20 sequential/test-diagnostic-dir-cpu-prof
+  ---
+  duration_ms: 332.74000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Dispatching message { "id": 1, "method": "Profiler.enable" }
+    Received CPU profile message
+    {"id":1,"result":{}}
+    Dispatching message { "id": 2, "method": "Profiler.setSamplingInterval", "params": { "interval": 50 } }
+    Received CPU profile message
+    {"id":2,"result":{}}
+    Dispatching message { "id": 3, "method": "Profiler.start" }
+    Received CPU profile message
+    {"id":3,"result":{}}
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-diagnostic-dir-cpu-prof.js:41:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-worker-prof.js
+not ok 21 sequential/test-worker-prof
+  ---
+  duration_ms: 407.31500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    [process 215051]: --- stderr ---
+    
+    [process 215051]: --- stdout ---
+    
+    [process 215051]: status = null, signal = 
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/child_process.js:112
+        throw error;
+        ^
+    
+    Error: - process terminated with status null, expected 0
+    - process terminated with signal , expected null
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-worker-prof.js:53:22)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      options: {
+        cwd: '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.20',
+        encoding: 'utf8'
+      },
+      command: '/boot/system/bin/node --prof /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-worker-prof.js child'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-profile.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-profile-command.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-debugger-unavailable-port.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-has-idle.js
+/boot/system/bin/node --inspect=0 --experimental-network-inspection /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-network-websocket.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-promises.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-stop-profile-after-done.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tick-processor-arguments.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-v8-cpu-profile.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-default.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-absolute.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-and-name.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-relative.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-dir-worker.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-drained.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-exit.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-kill.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-name.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-cpu-prof-worker-argv.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-diagnostic-dir-cpu-prof.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-worker-prof.js

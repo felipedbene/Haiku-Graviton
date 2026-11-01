@@ -1,0 +1,15 @@
+# evidence: f4-ipv6-v6only-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062707Z   end: 20261101T062729Z   rc: 0
+# script sha256: db49018091d6ae4f9983fdcab652ff645b4f8e7b0c9c7e41a86523bd0c9b00a7
+# ---- script ----
+# | mkdir -p /tmp/f4 && cd /tmp/f4 && echo 'Ly8gSXMgZWFjaCBvZiB0Y3Atd3JhcC1saXN0ZW4gLyBuZXQtc2VydmVyLWFkZHJlc3MgLyBuZXQtY29ubmVjdC1sb2NhbC1lcnJvciB0aGUgSVBWNl9WNk9OTFk9MCByZWZ1c2FsICgjODczKT8KY29uc3QgbmV0ID0gcmVxdWlyZSgnbmV0Jyk7CmNvbnN0IHsgaW50ZXJuYWxCaW5kaW5nIH0gPSByZXF1aXJlKCdpbnRlcm5hbC90ZXN0L2JpbmRpbmcnKTsKY29uc3QgeyBUQ1AsIGNvbnN0YW50cyB9ID0gaW50ZXJuYWxCaW5kaW5nKCd0Y3Bfd3JhcCcpOwpjb25zdCBoID0gbmV3IFRDUChjb25zdGFudHMuU09DS0VUKTsKY29uc29sZS5sb2coJ3RjcF93cmFwIGJpbmQ2KCI6OiIsIDAsIGZsYWdzPTApICAgICAgICAgLT4nLCBoLmJpbmQ2KCc6OicsIDAsIDApKTsKY29uc3QgaDIgPSBuZXcgVENQKGNvbnN0YW50cy5TT0NLRVQpOwpjb25zb2xlLmxvZygndGNwX3dyYXAgYmluZDYoIjo6IiwgMCwgVVZfVENQX0lQVjZPTkxZKSAtPicsIGgyLmJpbmQ2KCc6OicsIDAsIDEpKTsKY29uc3QgcyA9IG5ldC5jcmVhdGVTZXJ2ZXIoKS5saXN0ZW4oMCwgKCkgPT4gewogIGNvbnNvbGUubG9nKCduZXQgbGlzdGVuKDApLCBubyBob3N0IC0+IGFkZHJlc3MnLCBKU09OLnN0cmluZ2lmeShzLmFkZHJlc3MoKSkpOyBzLmNsb3NlKCk7CiAgY29uc3QgczYgPSBuZXQuY3JlYXRlU2VydmVyKCkubGlzdGVuKHsgcG9ydDogMCwgaG9zdDogJzo6JywgaXB2Nk9ubHk6IHRydWUgfSwgKCkgPT4gewogICAgY29uc29sZS5sb2coJ25ldCBsaXN0ZW4oOjogaXB2Nk9ubHkpIC0+IGFkZHJlc3MnLCBKU09OLnN0cmluZ2lmeShzNi5hZGRyZXNzKCkpKTsgczYuY2xvc2UoKTsKICAgIGNvbnN0IGMgPSBuZXQuY29ubmVjdCh7IGhvc3Q6ICc6OjEnLCBmYW1pbHk6IDYsIHBvcnQ6IDEyMzQ2LCBsb2NhbFBvcnQ6IDEyMzQ3LCBsb2NhbEFkZHJlc3M6ICc6OjEnIH0pOwogICAgYy5vbignZXJyb3InLCAoZSkgPT4gY29uc29sZS5sb2coJ2Nvbm5lY3QgOjoxIHdpdGggbG9jYWxBZGRyZXNzIDo6MSAtPiBlcnJvcicsIGUuY29kZSwgZS5zeXNjYWxsLCBlLm1lc3NhZ2UpKTsKICB9KTsKfSk7Cg==' | base64 -d > v6.js
+# | node --expose-internals v6.js
+# ---- raw output ----
+tcp_wrap bind6("::", 0, flags=0)         -> -2147483643
+tcp_wrap bind6("::", 0, UV_TCP_IPV6ONLY) -> 0
+(node:245268) internal/test/binding: These APIs are for internal testing only. Do not use them.
+(Use `node --trace-warnings ...` to show where the warning was created)
+net listen(0), no host -> address {"address":"0.0.0.0","family":"IPv4","port":51283}
+net listen(:: ipv6Only) -> address {"address":"::","family":"IPv6","port":42658}
+connect ::1 with localAddress ::1 -> error EINVAL bind bind EINVAL ::1:12347

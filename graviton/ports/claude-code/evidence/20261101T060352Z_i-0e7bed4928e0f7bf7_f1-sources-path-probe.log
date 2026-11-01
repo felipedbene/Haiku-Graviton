@@ -1,0 +1,14 @@
+# evidence: f1-sources-path-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060352Z   end: 20261101T060413Z   rc: 0
+# script sha256: 6d036975e47b51ff0c1c7e784a072432ff1e100347d93218ecda39f67447ae8e
+# ---- script ----
+# | set -u
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | ls -ld /sources 2>&1
+# | ln -s /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources /sources 2>&1 || mkdir /sources 2>&1
+# | ls -ld /sources /sources/node-v24.21.0 2>&1
+# ---- raw output ----
+ls: cannot access '/sources': No such file or directory
+l--------- 1 baron root   58 Nov  1 06:03 /sources -> /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources
+drwxr-xr-x 1 baron root 4096 Oct 31 16:07 /sources/node-v24.21.0

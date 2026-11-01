@@ -1,0 +1,34 @@
+# evidence: f2-v8-discard-haiku
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061644Z   end: 20261101T061705Z   rc: 0
+# script sha256: 0704cfb16af23e55a9be4ed2950032bbbe5711a5d03e5978f10e1875af111b9b
+# ---- script ----
+# | sed -n 599,625p /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/v8/src/base/platform/platform-posix.cc
+# ---- raw output ----
+#elif defined(__HAIKU__)
+  int ret = posix_madvise(address, size, MADV_FREE);
+#else
+  int ret = madvise(address, size, MADV_DONTNEED);
+#endif
+  // madvise with MADV_DONTNEED only fails on illegal parameters. That's a bug
+  // in the caller.
+  CHECK_EQ(0, ret);
+  return true;
+}
+
+#if !defined(_AIX)
+// See AIX version for details.
+// static
+bool OS::DecommitPages(void* address, size_t size) {
+  DCHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % CommitPageSize());
+  DCHECK_EQ(0, size % CommitPageSize());
+  // From https://pubs.opengroup.org/onlinepubs/9699919799/functions/mmap.html:
+  // "If a MAP_FIXED request is successful, then any previous mappings [...] for
+  // those whole pages containing any part of the address range [pa,pa+len)
+  // shall be removed, as if by an appropriate call to munmap(), before the new
+  // mapping is established." As a consequence, the memory will be
+  // zero-initialized on next access.
+  void* ret = mmap(address, size, PROT_NONE,
+                   MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  if (V8_UNLIKELY(ret == MAP_FAILED)) {
+    // Decommitting pages can fail if the limit of VMAs is exceeded.

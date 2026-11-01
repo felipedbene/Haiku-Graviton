@@ -1,0 +1,68 @@
+# evidence: f4-dgram-node-probes
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060952Z   end: 20261101T061014Z   rc: 0
+# script sha256: 06b7d733e17544c2b565911ba82594eb8f711344987fa3416f3b2c8ddb7da557
+# ---- script ----
+# | mkdir -p /tmp/f4 && cd /tmp/f4
+# | echo 'Ly8gWmVyby1sZW5ndGggVURQIHNlbmRzIGZyb20gTm9kZTogY2FsbGJhY2sgZXJyb3IsIGFuZCB3aGV0aGVyIHRoZSBkYXRhZ3JhbSBhcnJpdmVzLgpjb25zdCBkZ3JhbSA9IHJlcXVpcmUoJ2RncmFtJyk7CmZ1bmN0aW9uIHJ1bihsYWJlbCwgY29ubmVjdGVkLCBwYXlsb2FkKSB7CiAgcmV0dXJuIG5ldyBQcm9taXNlKChyZXNvbHZlKSA9PiB7CiAgICBjb25zdCBzID0gZGdyYW0uY3JlYXRlU29ja2V0KCd1ZHA0Jyk7CiAgICBsZXQgZ290ID0gbnVsbDsKICAgIHMub24oJ21lc3NhZ2UnLCAoYikgPT4geyBnb3QgPSBiLmxlbmd0aDsgfSk7CiAgICBzLmJpbmQoMCwgJzEyNy4wLjAuMScsICgpID0+IHsKICAgICAgY29uc3QgcG9ydCA9IHMuYWRkcmVzcygpLnBvcnQ7CiAgICAgIGNvbnN0IGRvbmUgPSAoZXJyKSA9PiBzZXRUaW1lb3V0KCgpID0+IHsKICAgICAgICBjb25zb2xlLmxvZyhgJHtsYWJlbH06IHNlbmQgY2IgZXJyPSR7ZXJyID8gZXJyLmNvZGUgKyAnICcgKyBlcnIuZXJybm8gOiAnbm9uZSd9OyByZWNlaXZlZD0ke2dvdCA9PT0gbnVsbCA/ICdub3RoaW5nIGluIDUwMCBtcycgOiBnb3QgKyAnIGJ5dGVzJ31gKTsKICAgICAgICBzLmNsb3NlKCk7IHJlc29sdmUoKTsKICAgICAgfSwgNTAwKTsKICAgICAgaWYgKGNvbm5lY3RlZCkgcy5jb25uZWN0KHBvcnQsICcxMjcuMC4wLjEnLCAoKSA9PiBzLnNlbmQocGF5bG9hZCwgZG9uZSkpOwogICAgICBlbHNlIHMuc2VuZChwYXlsb2FkLCBwb3J0LCAnMTI3LjAuMC4xJywgZG9uZSk7CiAgICB9KTsKICB9KTsKfQooYXN5bmMgKCkgPT4gewogIGF3YWl0IHJ1bigndW5jb25uZWN0ZWQgQnVmZmVyLmFsbG9jKDApJywgZmFsc2UsIEJ1ZmZlci5hbGxvYygwKSk7CiAgYXdhaXQgcnVuKCd1bmNvbm5lY3RlZCBbXScsIGZhbHNlLCBbXSk7CiAgYXdhaXQgcnVuKCdjb25uZWN0ZWQgQnVmZmVyLmFsbG9jKDApJywgdHJ1ZSwgQnVmZmVyLmFsbG9jKDApKTsKICBhd2FpdCBydW4oJ2Nvbm5lY3RlZCBbXScsIHRydWUsIFtdKTsKICBhd2FpdCBydW4oJ3VuY29ubmVjdGVkIEJ1ZmZlci5mcm9tKCJ4IikgY29udHJvbCcsIGZhbHNlLCBCdWZmZXIuZnJvbSgneCcpKTsKfSkoKTsK' | base64 -d > dgram.js
+# | echo 'Ly8gY2x1c3Rlci1kZ3JhbS0xIGluc3RydW1lbnRlZDogcGVyLXdvcmtlciByZWNlaXZlIGNvdW50cywgYW5kIHdoYXQgdGhlIHByaW1hcnkgc2Vlcy4KY29uc3QgY2x1c3RlciA9IHJlcXVpcmUoJ2NsdXN0ZXInKTsgY29uc3QgZGdyYW0gPSByZXF1aXJlKCdkZ3JhbScpOwpjb25zdCBOVyA9IDQsIFBQVyA9IDEwOwppZiAoY2x1c3Rlci5pc1ByaW1hcnkpIHsKICBsZXQgbGlzdGVuaW5nID0gMDsgY29uc3QgcmVjID0ge307CiAgZm9yIChsZXQgaSA9IDA7IGkgPCBOVzsgaSsrKSBjbHVzdGVyLmZvcmsoKTsKICBjbHVzdGVyLm9uKCdsaXN0ZW5pbmcnLCAodywgYWRkcmVzcykgPT4gewogICAgY29uc29sZS5sb2coYHByaW1hcnk6IHdvcmtlciAke3cuaWR9IGxpc3RlbmluZyBvbiAke0pTT04uc3RyaW5naWZ5KGFkZHJlc3MpfWApOwogICAgaWYgKCsrbGlzdGVuaW5nIDwgTlcpIHJldHVybjsKICAgIGNvbnN0IHMgPSBkZ3JhbS5jcmVhdGVTb2NrZXQoJ3VkcDQnKTsgbGV0IHNlbnQgPSAwOwogICAgY29uc3QgZG9TZW5kID0gKCkgPT4gcy5zZW5kKEJ1ZmZlci5mcm9tKCdoZWxsbyB3b3JsZCcpLCBhZGRyZXNzLnBvcnQsIGFkZHJlc3MuYWRkcmVzcyB8fCAnMTI3LjAuMC4xJywgKGUpID0+IHsKICAgICAgaWYgKGUpIGNvbnNvbGUubG9nKCdzZW5kIGVycicsIGUuY29kZSk7IGlmICgrK3NlbnQgPCBOVyAqIFBQVykgZG9TZW5kKCk7IGVsc2UgeyBjb25zb2xlLmxvZygncHJpbWFyeTogc2VudCcsIHNlbnQpOyBzLmNsb3NlKCk7IH0gfSk7CiAgICBkb1NlbmQoKTsKICB9KTsKICBjbHVzdGVyLm9uKCdtZXNzYWdlJywgKHcsIG0pID0+IHsgcmVjW3cuaWRdID0gbS5yZWNlaXZlZDsgfSk7CiAgc2V0VGltZW91dCgoKSA9PiB7IGNvbnNvbGUubG9nKCdwcmltYXJ5OiBwZXItd29ya2VyIGNvdW50cyBhZnRlciA1IHMnLCBKU09OLnN0cmluZ2lmeShyZWMpKTsgZm9yIChjb25zdCBpZCBpbiBjbHVzdGVyLndvcmtlcnMpIGNsdXN0ZXIud29ya2Vyc1tpZF0ua2lsbCgpOyB9LCA1MDAwKTsKfSBlbHNlIHsKICBsZXQgcmVjZWl2ZWQgPSAwOyBjb25zdCBzID0gZGdyYW0uY3JlYXRlU29ja2V0KCd1ZHA0Jyk7CiAgcy5vbignbWVzc2FnZScsICgpID0+IHsgcmVjZWl2ZWQrKzsgcHJvY2Vzcy5zZW5kKHsgcmVjZWl2ZWQgfSk7IH0pOwogIHMuYmluZCgwLCAoKSA9PiBjb25zb2xlLmxvZyhgd29ya2VyICR7Y2x1c3Rlci53b3JrZXIuaWR9IHBpZCAke3Byb2Nlc3MucGlkfTogZmQtYmFja2VkIHBvcnQgJHtzLmFkZHJlc3MoKS5wb3J0fWApKTsKfQo=' | base64 -d > dgramclu.js
+# | echo "### zero-length UDP from Node"; node dgram.js
+# | echo "### cluster dgram distribution"; node dgramclu.js
+# ---- raw output ----
+### zero-length UDP from Node
+unconnected Buffer.alloc(0): send cb err=EFAULT -2147478783; received=nothing in 500 ms
+unconnected []: send cb err=EFAULT -2147478783; received=nothing in 500 ms
+connected Buffer.alloc(0): send cb err=EFAULT -2147478783; received=nothing in 500 ms
+connected []: send cb err=EFAULT -2147478783; received=nothing in 500 ms
+unconnected Buffer.from("x") control: send cb err=none; received=1 bytes
+### cluster dgram distribution
+worker 2 pid 207235: fd-backed port 50428
+worker 1 pid 207234: fd-backed port 50428
+primary: worker 2 listening on {"addressType":"udp4","address":"0.0.0.0","port":50428,"fd":-1}
+primary: worker 1 listening on {"addressType":"udp4","address":"0.0.0.0","port":50428,"fd":-1}
+worker 3 pid 207236: fd-backed port 50428
+primary: worker 3 listening on {"addressType":"udp4","address":"0.0.0.0","port":50428,"fd":-1}
+worker 4 pid 207237: fd-backed port 50428
+primary: worker 4 listening on {"addressType":"udp4","address":"0.0.0.0","port":50428,"fd":-1}
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+send err EDESTADDRREQ
+primary: sent 40
+primary: per-worker counts after 5 s {}

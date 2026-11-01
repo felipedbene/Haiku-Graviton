@@ -1,0 +1,72 @@
+# evidence: f3-probe-keylog-append2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061847Z   end: 20261101T061908Z   rc: 0
+# script sha256: ad0ff6bad68e416df8dfd6b03ad3106f214c108e3ab3614726af44f3d4ded13e
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | N=/boot/system/bin/node
+# | echo "== keylog events, server + client, TLSv1.2 (fixtures agent6); hard exit after 10 s"
+# | cat > /tmp/f3kl3.js <<'J'
+# | const tls = require('tls'); const fs = require('fs'); const k = (f) => fs.readFileSync(process.argv[2] + '/test/fixtures/keys/' + f);
+# | let n = { server: 0, client: 0 };
+# | const srv = tls.createServer({ cert: k('agent6-cert.pem'), key: k('agent6-key.pem'), maxVersion: 'TLSv1.2' }, (s) => { s.end(); });
+# | srv.on('keylog', (l) => { n.server++; console.log('server keylog', l.toString().trim().slice(0, 40)); });
+# | srv.listen(0, '127.0.0.1', () => {
+# |   const c = tls.connect({ port: srv.address().port, host: '127.0.0.1', rejectUnauthorized: false });
+# |   c.on('keylog', (l) => { n.client++; console.log('client keylog', l.toString().trim().slice(0, 40)); });
+# |   c.on('secureConnect', () => { console.log('secureConnect', c.getProtocol()); setTimeout(() => { console.log('counts', JSON.stringify(n)); process.exit(0); }, 500); });
+# | });
+# | setTimeout(() => { console.log('TIMEOUT counts', JSON.stringify(n)); process.exit(1); }, 10000);
+# | J
+# | $N /tmp/f3kl3.js $PWD
+# | echo "== two concurrent fs.appendFile of the same 161-byte line, 200 rounds"
+# | cat > /tmp/f3ap.js <<'J'
+# | const fs = require('fs'); const f = '/boot/home/f3-append.txt'; const line = 'X'.repeat(160) + '\n';
+# | let bad = 0, round = 0;
+# | function go() {
+# |   try { fs.unlinkSync(f); } catch {}
+# |   let done = 0;
+# |   const cb = (e) => { if (e) throw e; if (++done === 2) { const sz = fs.statSync(f).size; if (sz !== 2 * line.length) bad++; if (++round < 200) go(); else console.log('rounds', round, 'rounds with a lost append', bad); } };
+# |   fs.appendFile(f, line, { mode: 0o600 }, cb); fs.appendFile(f, line, { mode: 0o600 }, cb);
+# | }
+# | go();
+# | setTimeout(() => { console.log('TIMEOUT at round', round, 'bad', bad); process.exit(1); }, 60000).unref();
+# | J
+# | $N /tmp/f3ap.js
+# | echo "== C: two threads, each open(O_WRONLY|O_CREAT|O_APPEND)+write+close the same new file, 2000 rounds"
+# | cat > /tmp/f3ap.c <<'C'
+# | #include <stdio.h>
+# | #include <fcntl.h>
+# | #include <unistd.h>
+# | #include <pthread.h>
+# | #include <sys/stat.h>
+# | #include <string.h>
+# | static const char *F = "/boot/home/f3-append-c.txt"; static char line[161]; static int create;
+# | static pthread_barrier_t bar;
+# | static void *w(void *a) { pthread_barrier_wait(&bar); int fd = open(F, O_WRONLY|O_APPEND|(create?O_CREAT:0), 0600); write(fd, line, 161); close(fd); return 0; }
+# | int main(int argc, char **argv) { create = argc > 1; memset(line, 'X', 160); line[160] = '\n'; int bad = 0;
+# |   for (int r = 0; r < 2000; r++) {
+# |     if (create) unlink(F); else close(open(F, O_CREAT|O_TRUNC|O_WRONLY, 0600));
+# |     pthread_barrier_init(&bar, 0, 2); pthread_t a, b;
+# |     pthread_create(&a, 0, w, 0); pthread_create(&b, 0, w, 0); pthread_join(a, 0); pthread_join(b, 0);
+# |     struct stat st; stat(F, &st); if (st.st_size != 322) { if (bad < 3) printf("round %d size %lld\n", r, (long long)st.st_size); bad++; } pthread_barrier_destroy(&bar); }
+# |   printf("%s: rounds 2000, rounds with a lost append %d\n", create ? "file created by the racing opens" : "file pre-created", bad); unlink(F); return 0; }
+# | C
+# | gcc -O2 -o /tmp/f3ap /tmp/f3ap.c -lpthread 2>&1 && /tmp/f3ap create; /tmp/f3ap
+# ---- raw output ----
+== keylog events, server + client, TLSv1.2 (fixtures agent6); hard exit after 10 s
+client keylog CLIENT_RANDOM ff2c400d7ad6a09694252ed3ec
+server keylog CLIENT_RANDOM ff2c400d7ad6a09694252ed3ec
+secureConnect TLSv1.2
+counts {"server":1,"client":1}
+== two concurrent fs.appendFile of the same 161-byte line, 200 rounds
+rounds 200 rounds with a lost append 17
+== C: two threads, each open(O_WRONLY|O_CREAT|O_APPEND)+write+close the same new file, 2000 rounds
+round 0 size 161
+round 1 size 161
+round 2 size 161
+file created by the racing opens: rounds 2000, rounds with a lost append 1841
+round 0 size 161
+round 5 size 161
+round 13 size 161
+file pre-created: rounds 2000, rounds with a lost append 698

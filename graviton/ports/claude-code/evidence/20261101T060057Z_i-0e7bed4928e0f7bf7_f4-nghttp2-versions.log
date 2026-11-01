@@ -1,0 +1,206 @@
+# evidence: f4-nghttp2-versions
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060057Z   end: 20261101T060119Z   rc: 0
+# script sha256: 079de32fe6cf9b664f4dc4b71457a95a7519517980551e9fb16988c041f51cb7
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | node -p 'JSON.stringify({nghttp2:process.versions.nghttp2, uv:process.versions.uv, node:process.version})'
+# | echo "bundled deps/nghttp2 version:"; grep -n "define NGHTTP2_VERSION " $N/deps/nghttp2/lib/includes/nghttp2/nghttp2ver.h
+# | ls -d /boot/home/haikuports/*/nghttp2* 2>&1; ls /boot/home/haikuports/net-libs/nghttp2/ 2>&1
+# | pkgman search -a 2>/dev/null | grep -i -E "nghttp2|libuv" 
+# | echo "--- test sources (http2)"
+# | for f in test-http2-misbehaving-flow-control test-http2-max-invalid-frames; do echo "== $f"; grep -n "" $N/test/parallel/$f.js | grep -v "^[0-9]*: *//" ; done
+# ---- raw output ----
+{"nghttp2":"1.63.0","uv":"1.52.1","node":"v24.21.0"}
+bundled deps/nghttp2 version:
+32:#define NGHTTP2_VERSION "1.70.0"
+/boot/home/haikuports/net-libs/nghttp2
+/boot/home/haikuports/repository/nghttp2-1.63.0.DependencyInfo
+/boot/home/haikuports/repository/nghttp2-1.63.0.DependencyInfoMarker
+/boot/home/haikuports/repository/nghttp2_debuginfo-1.63.0.DependencyInfo
+/boot/home/haikuports/repository/nghttp2_devel-1.63.0.DependencyInfo
+nghttp2-1.63.0.recipe
+work-1.63.0
+S       libuv                                    Cross-platform asynchronous I/O                                                                     
+        libuv_debuginfo                          Cross-platform asynchronous I/O (debug info)                                                        
+S       libuv_devel                              Cross-platform asynchronous I/O (development files)                                                 
+        luv_luajit                               Bare libuv bindings for Lua                                                                         
+        luv_luajit_devel                         Bare libuv bindings for Lua (development files)                                                     
+S       nghttp2                                  HTTP/2 C Library                                                                                    
+        nghttp2_debuginfo                        HTTP/2 C Library (debug info)                                                                       
+S       nghttp2_devel                            HTTP/2 C Library (development files)                                                                
+--- test sources (http2)
+== test-http2-misbehaving-flow-control
+1:'use strict';
+2:
+3:const common = require('../common');
+4:
+5:if (!common.hasCrypto)
+6:  common.skip('missing crypto');
+7:
+8:const h2 = require('http2');
+9:const net = require('net');
+10:
+11:const preamble = Buffer.from([
+12:  0x50, 0x52, 0x49, 0x20, 0x2a, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f,
+13:  0x32, 0x2e, 0x30, 0x0d, 0x0a, 0x0d, 0x0a, 0x53, 0x4d, 0x0d, 0x0a,
+14:  0x0d, 0x0a, 0x00, 0x00, 0x0c, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+15:  0x00, 0x03, 0x00, 0x00, 0x00, 0x64, 0x00, 0x04, 0x00, 0x00, 0xff,
+16:  0xff, 0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+17:  0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+18:  0x00, 0xc8, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x05,
+19:  0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00,
+20:  0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,
+21:  0x02, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x07, 0x00,
+22:  0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00,
+23:  0x00, 0x03, 0x00, 0x00, 0x00, 0x2c, 0x01, 0x24, 0x00, 0x00, 0x00,
+24:  0x0d, 0x00, 0x00, 0x00, 0x0b, 0x0f, 0x83, 0x84, 0x86, 0x41, 0x8a,
+25:  0xa0, 0xe4, 0x1d, 0x13, 0x9d, 0x09, 0xb8, 0xf0, 0x1e, 0x07, 0x53,
+26:  0x03, 0x2a, 0x2f, 0x2a, 0x90, 0x7a, 0x8a, 0xaa, 0x69, 0xd2, 0x9a,
+27:  0xc4, 0xc0, 0x57, 0x0b, 0xcb, 0x87, 0x0f, 0x0d, 0x83, 0x08, 0x00,
+28:  0x0f,
+29:]);
+30:
+31:const data = Buffer.from([
+32:  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+33:  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+34:  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+35:  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+36:  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+37:  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+38:  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+39:  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+40:  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+41:  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+42:  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+43:  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+44:  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+45:  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+46:  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+47:  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+48:  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+49:  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+50:]);
+51:
+62:
+63:let client;
+64:const server = h2.createServer({ settings: { initialWindowSize: 18 } });
+65:
+66:server.on('session', common.mustCall((session) => {
+67:  session.on('error', common.expectsError({
+68:    code: 'ERR_HTTP2_ERROR',
+69:    name: 'Error',
+70:    message: 'Protocol error'
+71:  }));
+72:}));
+73:
+74:server.on('stream', common.mustCall((stream) => {
+75:  stream.on('error', common.expectsError({
+76:    code: 'ERR_HTTP2_ERROR',
+77:    name: 'Error',
+78:    message: 'Protocol error'
+79:  }));
+80:  stream.on('close', common.mustCall(() => {
+81:    server.close(common.mustCall());
+82:    client.destroy();
+83:  }));
+84:  stream.resume();
+85:  stream.respond();
+86:  stream.end('ok');
+87:}));
+88:
+89:server.on('close', common.mustCall());
+90:
+91:server.listen(0, common.mustCall(() => {
+92:  client = net.connect(server.address().port, common.mustCall(() => {
+93:    client.write(preamble);
+94:    client.write(data);
+95:    client.write(data);
+96:
+98:    client.on('close', common.mustCall());
+99:  }));
+100:}));
+== test-http2-max-invalid-frames
+1:'use strict';
+2:const common = require('../common');
+3:if (!common.hasCrypto)
+4:  common.skip('missing crypto');
+5:
+6:const assert = require('assert');
+7:const http2 = require('http2');
+8:const net = require('net');
+9:
+13:
+14:const maxSessionInvalidFrames = 100;
+15:const server = http2.createServer({ maxSessionInvalidFrames });
+16:server.on('stream', (stream) => {
+17:  stream.respond({
+18:    'content-type': 'text/plain',
+19:    ':status': 200
+20:  });
+21:  stream.end('Hello, world!\n');
+22:});
+23:
+24:server.listen(0, common.mustCall(() => {
+25:  const h2header = Buffer.alloc(9);
+26:  const conn = net.connect({
+27:    port: server.address().port,
+28:    allowHalfOpen: true
+29:  });
+30:
+31:  conn.write('PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n');
+32:
+33:  h2header[3] = 4;  // Send a settings frame.
+34:  conn.write(Buffer.from(h2header));
+35:
+36:  let inbuf = Buffer.alloc(0);
+37:  let state = 'settingsHeader';
+38:  let settingsFrameLength;
+39:  conn.on('data', (chunk) => {
+40:    inbuf = Buffer.concat([inbuf, chunk]);
+41:    switch (state) {
+42:      case 'settingsHeader':
+43:        if (inbuf.length < 9) return;
+44:        settingsFrameLength = inbuf.readIntBE(0, 3);
+45:        inbuf = inbuf.slice(9);
+46:        state = 'readingSettings';
+48:      case 'readingSettings':
+49:        if (inbuf.length < settingsFrameLength) return;
+50:        inbuf = inbuf.slice(settingsFrameLength);
+51:        h2header[3] = 4;  // Send a settings ACK.
+52:        h2header[4] = 1;
+53:        conn.write(Buffer.from(h2header));
+54:        state = 'ignoreInput';
+55:        writeRequests();
+56:    }
+57:  });
+58:
+59:  let gotError = false;
+60:  let streamId = 1;
+61:  let reqCount = 0;
+62:
+63:  function writeRequests() {
+64:    for (let i = 1; i < 10 && !gotError; i++) {
+65:      h2header[3] = 1;  // HEADERS
+66:      h2header[4] = 0x5;  // END_HEADERS|END_STREAM
+67:      h2header.writeIntBE(1, 0, 3);  // Length: 1
+68:      h2header.writeIntBE(streamId, 5, 4);  // Stream ID
+69:      streamId += 2;
+71:      if (!conn.write(Buffer.concat([h2header, Buffer.from([0x88])]))) {
+72:        break;
+73:      }
+74:      reqCount++;
+75:    }
+77:    if (!gotError)
+78:      setTimeout(writeRequests, 10);
+79:  }
+80:
+81:  conn.once('error', common.mustCall(() => {
+82:    gotError = true;
+83:    assert.ok(Math.abs(reqCount - maxSessionInvalidFrames) < 100,
+84:              `Request count (${reqCount}) must be around (±100)` +
+85:      ` maxSessionInvalidFrames option (${maxSessionInvalidFrames})`);
+86:    conn.destroy();
+87:    server.close();
+88:  }));
+89:}));

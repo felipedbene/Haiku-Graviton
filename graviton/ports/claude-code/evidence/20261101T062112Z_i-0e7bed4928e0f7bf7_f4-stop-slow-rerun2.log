@@ -1,0 +1,11 @@
+# evidence: f4-stop-slow-rerun2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062112Z   end: 20261101T062133Z   rc: 0
+# script sha256: 8bf316242919634254a1610e7fc46667683e33b42e37275c3d02c37e103f0a62
+# ---- script ----
+# | kill 199265; sleep 2
+# | ps | grep -E "test-dgram-connect-send-empty-array|test-dgram-connect-send-empty-buffer" | grep -v grep
+# | for p in $(ps | grep "test-dgram-connect-send-empty-array" | grep -v grep | awk '{print $(NF-3)}'); do echo "kill $p"; kill -9 $p; done
+# | ps | grep -E "199265|test.py" | grep -v grep
+# ---- raw output ----
+/boot/home/config/non-packaged/bin/python3 tools/test.py --shel 199578        8    0    0 

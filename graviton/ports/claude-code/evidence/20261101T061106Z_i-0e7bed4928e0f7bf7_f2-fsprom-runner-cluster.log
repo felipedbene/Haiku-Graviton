@@ -1,0 +1,103 @@
+# evidence: f2-fsprom-runner-cluster
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061106Z   end: 20261101T061129Z   rc: 0
+# script sha256: d08556dc0baf48b3c7541b1927dbd4765d66956763316c6748955835604f3368
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "== fs-promises 270-300:"; sed -n 270,300p test/parallel/test-fs-promises.js
+# | echo "== util-promisify stat compare:"; grep -n "stat" test/parallel/test-util-promisify.js | head -8
+# | echo "== runner-worker-id 80-100:"; sed -n 60,100p test/parallel/test-runner-worker-id.js
+# | echo "== cluster-worker-kill-signal, instrumented:"
+# | cat > /tmp/ckill.js <<'J'
+# | const cluster=require('cluster');
+# | if(cluster.isWorker){ require('http').Server(()=>{}).listen(0,'127.0.0.1'); }
+# | else { const w=cluster.fork(); w.once('listening',()=>w.kill('SIGKILL'));
+# |  w.on('disconnect',()=>console.log('disconnect; workers now',Object.keys(cluster.workers).length));
+# |  w.once('exit',(c,s)=>{ let alive; try{process.kill(w.process.pid,'SIGCONT');alive=true}catch(e){alive=e.code}
+# |   console.log('exit code',c,'signal',s,'alive?',alive,'workers',Object.keys(cluster.workers).length);});}
+# | J
+# | node /tmp/ckill.js
+# ---- raw output ----
+== fs-promises 270-300:
+    // Set modification times
+    {
+      await executeOnHandle(dest, async (handle) => {
+
+        await utimes(dest, new Date(), new Date());
+
+        try {
+          await handle.utimes(new Date(), new Date());
+        } catch (err) {
+          // Some systems do not have futimes. If there is an error,
+          // expect it to be ENOSYS
+          common.expectsError({
+            code: 'ENOSYS',
+            name: 'Error'
+          })(err);
+        }
+      });
+    }
+
+    // Set modification times with lutimes
+    {
+      const a_time = new Date();
+      a_time.setMinutes(a_time.getMinutes() - 1);
+      const m_time = new Date();
+      m_time.setHours(m_time.getHours() - 1);
+      await lutimes(dest, a_time, m_time);
+      const stats = await stat(dest);
+
+      assert.strictEqual(a_time.toString(), stats.atime.toString());
+      assert.strictEqual(m_time.toString(), stats.mtime.toString());
+    }
+== util-promisify stat compare:
+33:const stat = promisify(fs.stat);
+36:  const promise = stat(__filename);
+39:    assert.deepStrictEqual(value, fs.statSync(__filename));
+44:  const promise = stat('/dontexist');
+46:    assert(error.message.includes('ENOENT: no such file or directory, stat'));
+== runner-worker-id 80-100:
+  assert.strictEqual(result.status, 0, `Test failed: ${result.stderr.toString()}`);
+});
+
+test('NODE_TEST_WORKER_ID is 1 with isolation=none', async () => {
+  const args = [
+    '--test',
+    '--test-isolation=none',
+    fixtures.path('test-runner', 'worker-id', 'test-1.mjs'),
+    fixtures.path('test-runner', 'worker-id', 'test-2.mjs'),
+  ];
+  const result = spawnSync(process.execPath, args, {
+    cwd: fixtures.path(),
+    env: { ...process.env }
+  });
+
+  assert.strictEqual(result.status, 0, `Test failed: ${result.stderr.toString()}`);
+});
+
+test('context.workerId matches NODE_TEST_WORKER_ID', async () => {
+  const args = ['--test', fixtures.path('test-runner', 'worker-id', 'test-1.mjs')];
+  const result = spawnSync(process.execPath, args, {
+    cwd: fixtures.path(),
+    env: { ...process.env }
+  });
+
+  // The fixture tests already verify that context.workerId matches the env var
+  assert.strictEqual(result.status, 0, `Test failed: ${result.stderr.toString()}`);
+});
+
+test('worker IDs are reused when more tests than concurrency', async () => {
+  const tmpdir = require('../common/tmpdir');
+  const { writeFileSync } = require('node:fs');
+  tmpdir.refresh();
+
+  // Create 9 separate test files dynamically
+  const testFiles = [];
+  const usageFile = tmpdir.resolve('worker-usage.txt');
+  for (let i = 1; i <= 9; i++) {
+    const testFile = tmpdir.resolve(`reuse-test-${i}.mjs`);
+    writeFileSync(
+      testFile,
+== cluster-worker-kill-signal, instrumented:
+exit code null signal SIGKILL alive? ESRCH workers 1
+disconnect; workers now 0

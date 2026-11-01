@@ -1,0 +1,12 @@
+# evidence: f4-peek
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061837Z   end: 20261101T061858Z   rc: 0
+# script sha256: 96c62042d399b7f766bf599f170856a5e77a24ec4f3a849073bb28ee7397d1c4
+# ---- script ----
+# | f=$(grep -l "f4-rerun\|--timeout=60" /tmp/ccrun/*.sh 2>/dev/null | head -1); echo $f; grep -c "^ok\|^not ok" ${f%.sh}.log; grep "^ok\|^not ok" ${f%.sh}.log | tail -3
+# ---- raw output ----
+/tmp/ccrun/cc-20261101T055631Z-75909.sh
+9
+not ok 7 parallel/test-cluster-disconnect
+not ok 8 parallel/test-cluster-listen-pipe-readable-writable
+not ok 9 parallel/test-cluster-shared-leak

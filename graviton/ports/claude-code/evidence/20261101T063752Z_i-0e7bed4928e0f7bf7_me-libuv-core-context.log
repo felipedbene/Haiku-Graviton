@@ -1,0 +1,29 @@
+# evidence: me-libuv-core-context
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063752Z   end: 20261101T063813Z   rc: 0
+# script sha256: 60dce8168c14ac5b9a48314d56e27c00f9201b633ee34a6f95a762c6c902ba17
+# ---- script ----
+# | sed -n 18,30p /boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1/src/unix/core.c; sed -n 465,473p /boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1/src/unix/internal.h
+# ---- raw output ----
+ * IN THE SOFTWARE.
+ */
+
+#include "uv.h"
+#include "internal.h"
+#include "strtok.h"
+
+#include <stddef.h> /* NULL */
+#include <stdio.h> /* printf */
+#include <stdlib.h>
+#include <string.h> /* strerror */
+#include <errno.h>
+#include <assert.h>
+#endif /* defined(__APPLE__) */
+
+#if defined(__HAIKU__)
+
+void uv__haiku_fsevents_loop_delete(uv_loop_t* loop);
+int uv__haiku_fsevents_fork(uv_loop_t* loop);
+
+#endif /* defined(__HAIKU__) */
+

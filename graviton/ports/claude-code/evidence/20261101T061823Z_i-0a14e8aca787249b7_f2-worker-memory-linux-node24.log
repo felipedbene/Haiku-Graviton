@@ -1,0 +1,24 @@
+# evidence: f2-worker-memory-linux-node24
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 7362c5ea-6ac3-4c63-9492-209c4de10263 (agent status: Success)
+# start: 20261101T061823Z   end: 20261101T061832Z   rc: 0   log bytes: 482
+# script sha256: 92566e7c7b4c5b786644cf8810979d8fd636142c85c2b4cd34fd278d679016b9
+# ---- script ----
+# | cat > /tmp/wm2.js <<'J'
+# | // test/parallel/test-worker-memory.js workload, numWorkers forced to 16 (as on the builder), with rss sampling
+# | const {Worker}=require('worker_threads');
+# | const numWorkers=16; const s=process.memoryUsage().rss; let finished=0;
+# | function run(n,done){ if(n<=0) return done(); const w=new Worker('require("worker_threads").parentPort.postMessage(2+2)',{eval:true}); w.on('exit',()=>run(n-1,done)); }
+# | for(let i=0;i<numWorkers;i++) run(60/numWorkers,()=>{ if(++finished===numWorkers){ const f=process.memoryUsage().rss;
+# |  console.log(`node ${process.version} ${process.platform}: rss start ${(s/1048576).toFixed(1)} MiB end ${(f/1048576).toFixed(1)} MiB ratio ${(f/s).toFixed(2)} (test requires < 5)`);
+# |  if(process.platform==='haiku'){ console.log(require('child_process').execSync('listarea '+process.pid).toString()); } }});
+# | J
+# | N=/opt/node24/bin/node; $N --version; for i in 1 2 3; do $N /tmp/wm2.js; done; echo "-- anon vs file RSS at end (/proc/self/status of the same workload):"; $N -e "$(sed "s/console.log(\`node/console.log(require(\"fs\").readFileSync(\"\/proc\/self\/status\",\"utf8\").split(\"\\\\n\").filter(l=>\/Rss\/.test(l)).join(\" \"));console.log(\`node/" /tmp/wm2.js)"
+# ---- raw output ----
+v24.22.2
+node v24.22.2 linux: rss start 42.3 MiB end 148.1 MiB ratio 3.50 (test requires < 5)
+node v24.22.2 linux: rss start 42.3 MiB end 154.8 MiB ratio 3.66 (test requires < 5)
+node v24.22.2 linux: rss start 42.3 MiB end 141.3 MiB ratio 3.34 (test requires < 5)
+-- anon vs file RSS at end (/proc/self/status of the same workload):
+RssAnon:	  111456 kB RssFile:	   42356 kB RssShmem:	       0 kB
+node v24.22.2 linux: rss start 42.7 MiB end 150.6 MiB ratio 3.52 (test requires < 5)

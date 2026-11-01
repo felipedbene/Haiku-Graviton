@@ -1,0 +1,17 @@
+# evidence: f4-ps2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062034Z   end: 20261101T062054Z   rc: 0
+# script sha256: c1d657eaf3111dc4cf95467526eebe616293385f3638dfb57444011ecda1b244
+# ---- script ----
+# | ps | grep -E "ccrun|test.py" | grep -v grep
+# ---- raw output ----
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T055631Z-7590 199258        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T055631Z-75909.sh 199259        1    0    0 
+/boot/home/config/non-packaged/bin/python3 tools/test.py --shel 199265        1    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T055659Z-7649 199560        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T055659Z-76491.sh 199561        1    0    0 
+/boot/home/config/non-packaged/bin/python3 tools/test.py --shel 199578        8    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T060315Z-8460 203747        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T060315Z-84609.sh 203748        1    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T062034Z-3087 230700        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T062034Z-3087.sh 230701        1    0    0 

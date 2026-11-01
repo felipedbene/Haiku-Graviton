@@ -1,0 +1,186 @@
+# evidence: f3-libuv-proctitle-src
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061327Z   end: 20261101T061349Z   rc: 0
+# script sha256: 90ae74dfab009ab6bbaaaf9b38fed95be4a6a95dd6afa8ba246255a53c1000a5
+# ---- script ----
+# | U=/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1
+# | cat -n $U/src/unix/proctitle.c
+# | grep -rn "uv__set_process_title" $U/src/unix/*.c $U/src/unix/*.h
+# | ls /boot/home/haikuports/dev-libs/libuv/patches/; grep -n "PATCHES\|cmake\|BUILD()" -A3 /boot/home/haikuports/dev-libs/libuv/libuv-1.52.1.recipe | head -30
+# | cd $U && git status --short 2>&1 | head; git log --oneline -3 2>&1 | head
+# ---- raw output ----
+     1	/* Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+     2	 * Permission is hereby granted, free of charge, to any person obtaining a copy
+     3	 * of this software and associated documentation files (the "Software"), to
+     4	 * deal in the Software without restriction, including without limitation the
+     5	 * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+     6	 * sell copies of the Software, and to permit persons to whom the Software is
+     7	 * furnished to do so, subject to the following conditions:
+     8	 *
+     9	 * The above copyright notice and this permission notice shall be included in
+    10	 * all copies or substantial portions of the Software.
+    11	 *
+    12	 * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    13	 * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    14	 * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    15	 * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    16	 * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    17	 * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+    18	 * IN THE SOFTWARE.
+    19	 */
+    20	
+    21	#include "uv.h"
+    22	#include "internal.h"
+    23	
+    24	#include <stdlib.h>
+    25	#include <string.h>
+    26	
+    27	struct uv__process_title {
+    28	  char* str;
+    29	  size_t len;  /* Length of the current process title. */
+    30	  size_t cap;  /* Maximum capacity. Computed once in uv_setup_args(). */
+    31	};
+    32	
+    33	extern void uv__set_process_title(const char* title);
+    34	
+    35	static uv_mutex_t process_title_mutex;
+    36	static uv_once_t process_title_mutex_once = UV_ONCE_INIT;
+    37	static struct uv__process_title process_title;
+    38	static void* args_mem;
+    39	
+    40	
+    41	static void init_process_title_mutex_once(void) {
+    42	  uv_mutex_init(&process_title_mutex);
+    43	}
+    44	
+    45	
+    46	char** uv_setup_args(int argc, char** argv) {
+    47	  struct uv__process_title pt;
+    48	  char** new_argv;
+    49	  size_t size;
+    50	  char* s;
+    51	  int i;
+    52	
+    53	  if (argc <= 0)
+    54	    return argv;
+    55	
+    56	  pt.str = argv[0];
+    57	  pt.len = strlen(argv[0]);
+    58	  pt.cap = pt.len + 1;
+    59	
+    60	  /* Calculate how much memory we need for the argv strings. */
+    61	  size = pt.cap;
+    62	  for (i = 1; i < argc; i++)
+    63	    size += strlen(argv[i]) + 1;
+    64	
+    65	  /* Add space for the argv pointers. */
+    66	  size += (argc + 1) * sizeof(char*);
+    67	
+    68	  new_argv = uv__malloc(size);
+    69	  if (new_argv == NULL)
+    70	    return argv;
+    71	
+    72	  /* Copy over the strings and set up the pointer table. */
+    73	  i = 0;
+    74	  s = (char*) &new_argv[argc + 1];
+    75	  size = pt.cap;
+    76	  goto loop;
+    77	
+    78	  for (/* empty */; i < argc; i++) {
+    79	    size = strlen(argv[i]) + 1;
+    80	  loop:
+    81	    memcpy(s, argv[i], size);
+    82	    new_argv[i] = s;
+    83	    s += size;
+    84	  }
+    85	  new_argv[i] = NULL;
+    86	
+    87	  pt.cap = argv[i - 1] + size - argv[0];
+    88	
+    89	  args_mem = new_argv;
+    90	  process_title = pt;
+    91	
+    92	  return new_argv;
+    93	}
+    94	
+    95	
+    96	int uv_set_process_title(const char* title) {
+    97	  struct uv__process_title* pt;
+    98	  size_t len;
+    99	
+   100	  /* If uv_setup_args wasn't called or failed, we can't continue. */
+   101	  if (args_mem == NULL)
+   102	    return UV_ENOBUFS;
+   103	
+   104	  pt = &process_title;
+   105	  len = strlen(title);
+   106	
+   107	  uv_once(&process_title_mutex_once, init_process_title_mutex_once);
+   108	  uv_mutex_lock(&process_title_mutex);
+   109	
+   110	  if (len >= pt->cap) {
+   111	    len = 0;
+   112	    if (pt->cap > 0)
+   113	      len = pt->cap - 1;
+   114	  }
+   115	
+   116	  memcpy(pt->str, title, len);
+   117	  memset(pt->str + len, '\0', pt->cap - len);
+   118	  pt->len = len;
+   119	  uv__set_process_title(pt->str);
+   120	
+   121	  uv_mutex_unlock(&process_title_mutex);
+   122	
+   123	  return 0;
+   124	}
+   125	
+   126	
+   127	int uv_get_process_title(char* buffer, size_t size) {
+   128	  if (buffer == NULL || size == 0)
+   129	    return UV_EINVAL;
+   130	
+   131	  /* If uv_setup_args wasn't called or failed, we can't continue. */
+   132	  if (args_mem == NULL)
+   133	    return UV_ENOBUFS;
+   134	
+   135	  uv_once(&process_title_mutex_once, init_process_title_mutex_once);
+   136	  uv_mutex_lock(&process_title_mutex);
+   137	
+   138	  if (size <= process_title.len) {
+   139	    uv_mutex_unlock(&process_title_mutex);
+   140	    return UV_ENOBUFS;
+   141	  }
+   142	
+   143	  if (process_title.len != 0)
+   144	    memcpy(buffer, process_title.str, process_title.len + 1);
+   145	
+   146	  buffer[process_title.len] = '\0';
+   147	
+   148	  uv_mutex_unlock(&process_title_mutex);
+   149	
+   150	  return 0;
+   151	}
+   152	
+   153	
+   154	void uv__process_title_cleanup(void) {
+   155	  uv__free(args_mem);  /* Keep valgrind happy. */
+   156	  args_mem = NULL;
+   157	}
+/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1/src/unix/darwin-proctitle.c:36:int uv__set_process_title(const char* title) {
+/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1/src/unix/linux.c:2029:void uv__set_process_title(const char* title) {
+/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1/src/unix/proctitle.c:33:extern void uv__set_process_title(const char* title);
+/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1/src/unix/proctitle.c:119:  uv__set_process_title(pt->str);
+libuv-1.52.1.patchset
+14:PATCHES="libuv-$portVersion.patchset"
+15-
+16-ARCHITECTURES="all !x86_gcc2"
+17-SECONDARY_ARCHITECTURES="x86"
+--
+59:BUILD()
+60-{
+61-	./autogen.sh
+62-
+?? configure~
+1ac3032 test: require fs event filenames on haiku
+4c63263 unix,haiku: implement uv_fs_event_t on the node monitor
+551ed1d Haiku: build tests with libbsd

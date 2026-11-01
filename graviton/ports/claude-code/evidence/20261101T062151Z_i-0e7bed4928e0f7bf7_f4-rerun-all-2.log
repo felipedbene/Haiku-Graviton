@@ -1,0 +1,813 @@
+# evidence: f4-rerun-all-2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062151Z   end: 20261101T062923Z   rc: 1
+# script sha256: 16335d866d1b7ff01ad9387b57826fbd9624b506e23658b73df04cf58f0fdffa
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "node $(/boot/system/bin/node --version); libuv $(/boot/system/bin/node -p process.versions.uv); $(uname -a)"
+# | echo "######## F4 tests that failed (non-timeout) in the suite run: default timeout"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap -v parallel/test-cluster-concurrent-disconnect parallel/test-cluster-listen-pipe-readable-writable parallel/test-dgram-connect-send-empty-buffer parallel/test-dgram-error-message-address parallel/test-dgram-multicast-set-interface parallel/test-http-writable-true-after-close parallel/test-http2-max-invalid-frames parallel/test-http2-misbehaving-flow-control parallel/test-http2-misbehaving-flow-control-paused parallel/test-net-pipe-connect-errors parallel/test-net-server-listen-path parallel/test-tcp-wrap-listen sequential/test-net-connect-local-error sequential/test-net-server-address
+# | echo "######## F4 tests that timed out in the suite run: --timeout=10 (test.py scales it, see duration_ms)"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 --timeout=10 -p tap -v parallel/test-child-process-disconnect parallel/test-child-process-fork-net parallel/test-child-process-fork-net-socket parallel/test-child-process-send-keep-open parallel/test-cluster-dgram-1 parallel/test-cluster-disconnect parallel/test-cluster-shared-leak parallel/test-dgram-connect-send-empty-array parallel/test-dgram-send-empty-array parallel/test-dgram-send-empty-buffer parallel/test-process-getactivehandles parallel/test-process-getactiveresources-track-active-handles parallel/test-set-http-max-http-headers parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+# ---- raw output ----
+node v24.21.0; libuv 1.52.1; Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+######## F4 tests that failed (non-timeout) in the suite run: default timeout
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..14
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js
+not ok 1 parallel/test-cluster-concurrent-disconnect
+  ---
+  duration_ms: 523.90600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:66
+          throw message;
+          ^
+    
+    Error: write ENOTCONN
+        at target._send (node:internal/child_process:917:20)
+        at target.send (node:internal/child_process:792:19)
+        at Worker.send (node:internal/cluster/worker:49:10)
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js:39:18)
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Worker.wrapper (node:events:639:12)
+        at Worker.emit (node:events:514:28)
+        at ChildProcess.<anonymous> (node:internal/cluster/primary:209:12)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28) {
+      errno: -2147454946,
+      code: 'ENOTCONN',
+      syscall: 'write'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-listen-pipe-readable-writable.js
+not ok 2 parallel/test-cluster-listen-pipe-readable-writable
+  ---
+  duration_ms: 212.32500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 0.
+        at Proxy.mustCall (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:439:10)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-listen-pipe-readable-writable.js:23:13)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47
+    node:net:2608
+            throw new ErrnoException(err, 'uv_pipe_chmod');
+            ^
+    
+    Error: uv_pipe_chmod Unknown system error -2147459058
+        at Server.listen (node:net:2608:15)
+        at new RoundRobinHandle (node:internal/cluster/round_robin_handle:36:17)
+        at queryServer (node:internal/cluster/primary:302:16)
+        at Worker.onmessage (node:internal/cluster/primary:254:5)
+        at ChildProcess.onInternalMessage (node:internal/cluster/utils:49:5)
+        at ChildProcess.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147459058,
+      code: 'Unknown system error -2147459058',
+      syscall: 'uv_pipe_chmod'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js
+not ok 3 parallel/test-dgram-connect-send-empty-buffer
+  ---
+  duration_ms: 111.27400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: send EFAULT
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:444:12
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15
+        at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+        at doSend (node:dgram:881:16)
+        at defaultTriggerAsyncIdScope (node:internal/async_hooks:473:18)
+        at afterDns (node:dgram:820:5)
+        at Socket.send (node:dgram:830:5)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js:13:12)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.wrapper (node:events:639:12)
+        at Socket.emit (node:events:514:28)
+        at node:dgram:604:31
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: Error: send EFAULT
+          at doSend (node:dgram:881:16)
+          at defaultTriggerAsyncIdScope (node:internal/async_hooks:473:18)
+          at afterDns (node:dgram:820:5)
+          at Socket.send (node:dgram:830:5)
+          at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js:13:12)
+          at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+          at Socket.wrapper (node:events:639:12)
+          at Socket.emit (node:events:514:28)
+          at node:dgram:604:31
+          at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+        errno: -2147478783,
+        code: 'EFAULT',
+        syscall: 'send',
+        address: undefined
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-error-message-address.js
+not ok 4 parallel/test-dgram-error-message-address
+  ---
+  duration_ms: 112.36700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: 'Unknown system error -1' was not one of EADDRNOTAVAIL,EAFNOSUPPORT,EPROTONOSUPPORT.
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-error-message-address.js:50:3)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.emit (node:events:514:28)
+        at node:dgram:418:14
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-multicast-set-interface.js
+not ok 5 parallel/test-dgram-multicast-set-interface
+  ---
+  duration_ms: 113.00800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:dgram:1009
+        throw new ErrnoException(err, 'setMulticastInterface');
+        ^
+    
+    Error: setMulticastInterface EINVAL
+        at Socket.setMulticastInterface (node:dgram:1009:11)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-multicast-set-interface.js:119:12)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.emit (node:events:514:28)
+        at startListening (node:dgram:216:10)
+        at node:dgram:423:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'setMulticastInterface'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js
+not ok 6 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 147.14500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-invalid-frames.js
+not ok 7 parallel/test-http2-max-invalid-frames
+  ---
+  duration_ms: 9810.93700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Request count (8541) must be around (±100) maxSessionInvalidFrames option (100)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-invalid-frames.js:83:12)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.wrapper (node:events:639:12)
+        at Socket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-misbehaving-flow-control.js
+not ok 8 parallel/test-http2-misbehaving-flow-control
+  ---
+  duration_ms: 171.36600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:487
+          throw err;
+          ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      Comparison {
+    +   code: 'ERR_HTTP2_STREAM_ERROR',
+    +   message: 'Stream closed with error code NGHTTP2_FLOW_CONTROL_ERROR',
+    -   code: 'ERR_HTTP2_ERROR',
+    -   message: 'Protocol error',
+        name: 'Error'
+      }
+    
+        at ServerHttp2Stream.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:714:12)
+        at ServerHttp2Stream.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ServerHttp2Stream.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: Error [ERR_HTTP2_STREAM_ERROR]: Stream closed with error code NGHTTP2_FLOW_CONTROL_ERROR
+          at ServerHttp2Stream._destroy (node:internal/http2/core:2530:13)
+          at _destroy (node:internal/streams/destroy:122:10)
+          at ServerHttp2Stream.destroy (node:internal/streams/destroy:84:5)
+          at Writable.destroy (node:internal/streams/writable:1124:11)
+          at Http2Stream.onStreamClose (node:internal/http2/core:611:12) {
+        code: 'ERR_HTTP2_STREAM_ERROR'
+      },
+      expected: { code: 'ERR_HTTP2_ERROR', name: 'Error', message: 'Protocol error' },
+      operator: 'throws',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-misbehaving-flow-control-paused.js
+not ok 9 parallel/test-http2-misbehaving-flow-control-paused
+  ---
+  duration_ms: 138.31700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:487
+          throw err;
+          ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      Comparison {
+    +   code: 'ERR_HTTP2_STREAM_ERROR',
+    +   message: 'Stream closed with error code NGHTTP2_FLOW_CONTROL_ERROR',
+    -   code: 'ERR_HTTP2_ERROR',
+    -   message: 'Protocol error',
+        name: 'Error'
+      }
+    
+        at ServerHttp2Stream.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:714:12)
+        at ServerHttp2Stream.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ServerHttp2Stream.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: Error [ERR_HTTP2_STREAM_ERROR]: Stream closed with error code NGHTTP2_FLOW_CONTROL_ERROR
+          at ServerHttp2Stream._destroy (node:internal/http2/core:2530:13)
+          at _destroy (node:internal/streams/destroy:122:10)
+          at ServerHttp2Stream.destroy (node:internal/streams/destroy:84:5)
+          at Writable.destroy (node:internal/streams/writable:1124:11)
+          at Http2Stream.onStreamClose (node:internal/http2/core:611:12) {
+        code: 'ERR_HTTP2_STREAM_ERROR'
+      },
+      expected: { code: 'ERR_HTTP2_ERROR', name: 'Error', message: 'Protocol error' },
+      operator: 'throws',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-pipe-connect-errors.js
+not ok 10 parallel/test-net-pipe-connect-errors
+  ---
+  duration_ms: 112.44600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: received EINVAL instead of ENOTSOCK or ECONNREFUSED
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-pipe-connect-errors.js:65:3)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-server-listen-path.js
+not ok 11 parallel/test-net-server-listen-path
+  ---
+  duration_ms: 110.95700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:net:2608
+            throw new ErrnoException(err, 'uv_pipe_chmod');
+            ^
+    
+    Error: uv_pipe_chmod Unknown system error -2147459058
+        at Server.listen (node:net:2608:15)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-server-listen-path.js:59:6)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      errno: -2147459058,
+      code: 'Unknown system error -2147459058',
+      syscall: 'uv_pipe_chmod'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tcp-wrap-listen.js
+not ok 12 parallel/test-tcp-wrap-listen
+  ---
+  duration_ms: 105.18300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    -2147483643 !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tcp-wrap-listen.js:20:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: -2147483643,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-connect-local-error.js
+not ok 13 sequential/test-net-connect-local-error
+  ---
+  duration_ms: 118.98000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert.ok(expectedErrorCodes.includes(err.code))
+    
+        at onError (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-connect-local-error.js:26:10)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-connect-local-error.js:46:49)
+        at Socket.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-address.js
+not ok 14 sequential/test-net-server-address
+  ---
+  duration_ms: 113.28500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    '0.0.0.0' !== '::'
+    
+        at Server.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-address.js:78:12)
+        at Server.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Server.wrapper (node:events:639:12)
+        at Server.emit (node:events:514:28)
+        at emitListeningNT (node:net:2423:10)
+        at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '0.0.0.0',
+      expected: '::',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-concurrent-disconnect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-listen-pipe-readable-writable.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-error-message-address.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-multicast-set-interface.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-invalid-frames.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-misbehaving-flow-control.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-misbehaving-flow-control-paused.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-pipe-connect-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-server-listen-path.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tcp-wrap-listen.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-connect-local-error.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-address.js
+######## F4 tests that timed out in the suite run: --timeout=10 (test.py scales it, see duration_ms)
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..14
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-disconnect.js
+not ok 1 parallel/test-child-process-disconnect
+  ---
+  duration_ms: 30041.34000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net.js
+not ok 2 parallel/test-child-process-fork-net
+  ---
+  duration_ms: 30161.61400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net-socket.js
+not ok 3 parallel/test-child-process-fork-net-socket
+  ---
+  duration_ms: 30040.15500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-send-keep-open.js
+not ok 4 parallel/test-child-process-send-keep-open
+  ---
+  duration_ms: 30055.53300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-dgram-1.js
+not ok 5 parallel/test-cluster-dgram-1
+  ---
+  duration_ms: 30025.36600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-disconnect.js
+not ok 6 parallel/test-cluster-disconnect
+  ---
+  duration_ms: 30051.64600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-shared-leak.js
+not ok 7 parallel/test-cluster-shared-leak
+  ---
+  duration_ms: 30024.12400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-array.js
+not ok 8 parallel/test-dgram-connect-send-empty-array
+  ---
+  duration_ms: 30022.78800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-send-empty-array.js
+not ok 9 parallel/test-dgram-send-empty-array
+  ---
+  duration_ms: 30023.34900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-send-empty-buffer.js
+not ok 10 parallel/test-dgram-send-empty-buffer
+  ---
+  duration_ms: 30024.62300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-getactivehandles.js
+not ok 11 parallel/test-process-getactivehandles
+  ---
+  duration_ms: 30023.20200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-getactiveresources-track-active-handles.js
+not ok 12 parallel/test-process-getactiveresources-track-active-handles
+  ---
+  duration_ms: 30022.68200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-set-http-max-http-headers.js
+not ok 13 parallel/test-set-http-max-http-headers
+  ---
+  duration_ms: 30023.23600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    running subtest expecting failure
+    pid is 245378
+    max header size is 1024
+    test1
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 9
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js
+not ok 14 parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+  ---
+  duration_ms: 30022.59700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-disconnect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net-socket.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-send-keep-open.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-dgram-1.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-disconnect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-shared-leak.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-array.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-send-empty-array.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-send-empty-buffer.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-getactivehandles.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-getactiveresources-track-active-handles.js
+/boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-set-http-max-http-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js

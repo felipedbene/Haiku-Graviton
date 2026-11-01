@@ -1,0 +1,147 @@
+# evidence: f3-probe-devstdin-link
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060059Z   end: 20261101T060120Z   rc: 0
+# script sha256: 7665d2e16066f972101e3fda21c2d4ede830d32ba05e9c4452265a925210df89
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "== /dev top level"; ls /dev; ls -l /dev/stdin /dev/fd /dev/stdout 2>&1
+# | echo "== stdin via shell"; echo hi | cat /dev/stdin 2>&1; echo "rc=$?"
+# | echo "== test skip lines"; for t in fs-readfile-eof fs-readfile-pipe fs-readfile-pipe-large fs-readfilesync-pipe-large fs-realpath-pipe; do echo "-- $t"; grep -n "skip\|/dev/stdin" test/parallel/test-$t.js | head -6; done
+# | echo "== link C probe (BFS /boot/home and /tmp)"
+# | cat > /tmp/f3l.c <<'C'
+# | #include <stdio.h>
+# | #include <unistd.h>
+# | #include <errno.h>
+# | #include <string.h>
+# | #include <fcntl.h>
+# | int main(int c,char**v){ const char*d=v[1]; char a[256],b[256],e[256];
+# |  snprintf(a,256,"%s/f3a",d); snprintf(b,256,"%s/f3b",d); snprintf(e,256,"%s/f3e",d);
+# |  close(open(a,O_CREAT|O_WRONLY,0644)); close(open(e,O_CREAT|O_WRONLY,0644)); unlink(b);
+# |  errno=0; int r=link(a,b); printf("%s: link(new name)=%d errno=%d (%s)\n",d,r,errno,strerror(errno));
+# |  errno=0; r=link(a,e); printf("%s: link(existing name)=%d errno=%d (%s) [POSIX: EEXIST]\n",d,r,errno,strerror(errno));
+# |  unlink(a);unlink(b);unlink(e); return 0;}
+# | C
+# | gcc -o /tmp/f3l /tmp/f3l.c && /tmp/f3l /boot/home && /tmp/f3l /tmp; df /boot/home /tmp 2>&1 | head
+# | echo "== inspector-contexts lines 20-60"; sed -n 20,60p test/parallel/test-inspector-contexts.js | cat -n
+# | echo "== worker fixture"; cat test/fixtures/spawn-worker-with-copied-env.js
+# ---- raw output ----
+== /dev top level
+acpi
+bus
+disk
+dprintf
+dvb
+full
+graphics
+input
+misc
+net
+null
+ports
+power
+pt
+ptmx
+random
+tt
+tty
+urandom
+zero
+ls: cannot access '/dev/stdin': No such file or directory
+ls: cannot access '/dev/fd': No such file or directory
+ls: cannot access '/dev/stdout': No such file or directory
+== stdin via shell
+cat: /dev/stdin: No such file or directory
+rc=1
+== test skip lines
+-- fs-readfile-eof
+5:  common.skip(`No /dev/stdin on ${process.platform}.`);
+12:  fs.readFile('/dev/stdin', 'utf8').then((data) => {
+17:  fs.readFile('/dev/stdin').then((data) => {
+-- fs-readfile-pipe
+28:  common.skip(`No /dev/stdin on ${process.platform}.`);
+34:  fs.readFile('/dev/stdin', common.mustSucceed((data) => {
+-- fs-readfile-pipe-large
+7:  common.skip(`No /dev/stdin on ${process.platform}.`);
+13:  fs.readFile('/dev/stdin', common.mustSucceed((data) => {
+-- fs-readfilesync-pipe-large
+7:  common.skip(`No /dev/stdin on ${process.platform}.`);
+13:  process.stdout.write(fs.readFileSync('/dev/stdin', 'utf8'));
+-- fs-realpath-pipe
+6:  common.skip(`No /dev/stdin on ${process.platform}.`);
+13:  `require('fs').realpath('/dev/stdin', (err, resolvedPath) => {
+23:    if (require('fs').realpathSync('/dev/stdin')) {
+== link C probe (BFS /boot/home and /tmp)
+/boot/home: link(new name)=-1 errno=-2147483633 (Operation not allowed)
+/boot/home: link(existing name)=-1 errno=-2147483633 (Operation not allowed) [POSIX: EEXIST]
+/tmp: link(new name)=-1 errno=-2147483633 (Operation not allowed)
+/tmp: link(existing name)=-1 errno=-2147483633 (Operation not allowed) [POSIX: EEXIST]
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:  120.0 GiB (62896119 blocks)
+  Used Blocks:   33.0 GiB (17277786 blocks)
+== inspector-contexts lines 20-60
+     1	
+     2	async function testContextCreatedAndDestroyed() {
+     3	  console.log('Testing context created/destroyed notifications');
+     4	  {
+     5	    const mainContextPromise =
+     6	        notificationPromise('Runtime.executionContextCreated');
+     7	
+     8	    session.post('Runtime.enable', assert.ifError);
+     9	    const contextCreated = await mainContextPromise;
+    10	    const { name, origin, auxData } = contextCreated.params.context;
+    11	    if (common.isSunOS || common.isWindows || common.isIBMi) {
+    12	      // uv_get_process_title() is unimplemented on Solaris-likes and IBMi,
+    13	      // it returns an empty string.  On the Windows CI buildbots it returns
+    14	      // "Administrator: Windows PowerShell[42]" because of a GetConsoleTitle()
+    15	      // quirk. Not much we can do about either, just verify that it contains
+    16	      // the PID.
+    17	      assert.strictEqual(name.includes(`[${process.pid}]`), true);
+    18	    } else {
+    19	      let expects = `${process.argv0}[${process.pid}]`;
+    20	      if (!isMainThread) {
+    21	        expects = `Worker[${require('worker_threads').threadId}]`;
+    22	      }
+    23	      assert.strictEqual(expects, name);
+    24	    }
+    25	    assert.strictEqual(origin, '',
+    26	                       JSON.stringify(contextCreated));
+    27	    assert.strictEqual(auxData.isDefault, true,
+    28	                       JSON.stringify(contextCreated));
+    29	  }
+    30	
+    31	  {
+    32	    const vmContextCreatedPromise =
+    33	        notificationPromise('Runtime.executionContextCreated');
+    34	
+    35	    let contextDestroyed = null;
+    36	    session.once('Runtime.executionContextDestroyed',
+    37	                 (notification) => contextDestroyed = notification);
+    38	
+    39	    vm.runInNewContext('1 + 1');
+    40	
+    41	    const contextCreated = await vmContextCreatedPromise;
+== worker fixture
+'use strict';
+
+// This test is meant to be spawned with NODE_OPTIONS=--title=foo
+const assert = require('assert');
+if (process.platform !== 'sunos' && process.platform !== 'os400') {  // --title is unsupported on SmartOS and IBM i.
+  assert.strictEqual(process.title, 'foo');
+}
+
+// Spawns a worker that may copy NODE_OPTIONS if it's set by the parent.
+const { Worker } = require('worker_threads');
+new Worker(`require('assert').strictEqual(process.env.TEST_VAR, 'bar')`, {
+  env: {
+    ...process.env,
+    TEST_VAR: 'bar',
+  },
+  eval: true,
+});

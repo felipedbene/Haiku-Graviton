@@ -1,0 +1,33 @@
+# evidence: f3-trace-events-without-hardlinks
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062302Z   end: 20261101T062324Z   rc: 0
+# script sha256: f2a1a5f671ba828fb12e1d954b2c7f4e195a8ab5e242190db8647a9a4fe37d42
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "== hard-link sites"; grep -n "fs.link\|linkSync(" test/parallel/test-trace-events-fs-async.js test/parallel/test-trace-events-fs-sync.js | grep -v "unlinkSync\|symlinkSync\|readlinkSync"
+# | python3 - <<'P'
+# | import re
+# | s = open('test/parallel/test-trace-events-fs-sync.js').read()
+# | i = s.index("tests['fs.sync.link']"); j = s.index("tests['fs.sync.lstat']")
+# | t = s[:i] + s[j:]
+# | t = re.sub(r'fs\.linkSync\(', 'fs.copyFileSync(', t)
+# | open('test/parallel/f3diag-trace-events-fs-sync.js', 'w').write(t)
+# | s = open('test/parallel/test-trace-events-fs-async.js').read()
+# | t = s.replace('tests.link = wrapper(link);\n', '')
+# | t = re.sub(r'fs\.linkSync\(', 'fs.copyFileSync(', t)
+# | open('test/parallel/f3diag-trace-events-fs-async.js', 'w').write(t)
+# | P
+# | echo "== diagnostic copies: the hard-link test case removed, hard-link setup steps done with copyFileSync"
+# | for f in f3diag-trace-events-fs-async f3diag-trace-events-fs-sync; do /boot/system/bin/node test/parallel/$f.js > /tmp/$f.out 2>&1; echo "$f rc=$?"; grep -v "^    at " /tmp/$f.out | head -25; done
+# | rm -f test/parallel/f3diag-*.js
+# ---- raw output ----
+== hard-link sites
+test/parallel/test-trace-events-fs-async.js:143:  fs.link('fs13.txt', 'fs14.txt', () => {
+test/parallel/test-trace-events-fs-async.js:198:  fs.linkSync('fs18.txt', 'fs19.txt');
+test/parallel/test-trace-events-fs-async.js:230:  fs.linkSync('fs23.txt', 'fs24.txt');
+test/parallel/test-trace-events-fs-sync.js:63:                        'fs.linkSync("fs13.txt", "fs14.txt");' +
+test/parallel/test-trace-events-fs-sync.js:80:                            'fs.linkSync("fs18.txt", "fs19.txt");' +
+test/parallel/test-trace-events-fs-sync.js:93:                          'fs.linkSync("fs23.txt", "fs24.txt");' +
+== diagnostic copies: the hard-link test case removed, hard-link setup steps done with copyFileSync
+f3diag-trace-events-fs-async rc=0
+f3diag-trace-events-fs-sync rc=0

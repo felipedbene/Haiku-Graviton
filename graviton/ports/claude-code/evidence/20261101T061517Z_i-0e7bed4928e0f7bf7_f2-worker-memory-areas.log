@@ -1,0 +1,70 @@
+# evidence: f2-worker-memory-areas
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061517Z   end: 20261101T061538Z   rc: 0
+# script sha256: 14308ce97b19239580aa995be3dc18c5a49b9003cf14ef97b3103bff3ddb9f23
+# ---- script ----
+# | cat > /tmp/wm3.js <<'J'
+# | const {Worker}=require('worker_threads'); const {execSync}=require('child_process');
+# | function areas(){ const t={}; let tot=0; for(const l of execSync('listarea '+process.pid).toString().split('\n')){
+# |   const m=l.match(/^\s*\d+\s+(.+?)\s+0x[0-9a-f]+\s+([0-9a-f]+)\s+([0-9a-f]+)\s/); if(!m) continue;
+# |   const k=m[1].replace(/\d+/g,'#'); const a=parseInt(m[3],16); t[k]=t[k]||{n:0,alloc:0}; t[k].n++; t[k].alloc+=a; tot+=a; }
+# |   return {t,tot}; }
+# | const pr=(lbl,a)=>{ console.log(`${lbl}: rss(process.memoryUsage) ${(process.memoryUsage().rss/1048576).toFixed(1)} MiB, sum of listarea alloc ${(a.tot/1048576).toFixed(1)} MiB`);
+# |   for(const [k,v] of Object.entries(a.t).sort((x,y)=>y[1].alloc-x[1].alloc).slice(0,8)) console.log(`   ${k.padEnd(34)} n=${String(v.n).padStart(4)} alloc ${(v.alloc/1048576).toFixed(1)} MiB`); };
+# | pr('start',areas()); let fin=0;
+# | function run(n,done){ if(n<=0) return done(); const w=new Worker('require("worker_threads").parentPort.postMessage(4)',{eval:true}); w.on('exit',()=>run(n-1,done)); }
+# | for(let i=0;i<16;i++) run(60/16,()=>{ if(++fin===16){ pr('after 60 workers exited',areas()); setTimeout(()=>pr('5 s later',areas()),5000);} });
+# | J
+# | node /tmp/wm3.js
+# | U=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/uv/src/unix/haiku.c; grep -n "uv_resident_set_memory" -A 22 $U
+# ---- raw output ----
+start: rss(process.memoryUsage) 12.0 MiB, sum of listarea alloc 11.7 MiB
+   node mmap area                     n=  33 alloc 6.0 MiB
+   heap area                          n=   1 alloc 3.5 MiB
+   node_seg#rw                        n=   2 alloc 0.8 MiB
+   libcrypto.so.#_seg#rw              n=   2 alloc 0.5 MiB
+   rld heap                           n=   1 alloc 0.3 MiB
+   libicui#n.so.#.#_seg#rw            n=   2 alloc 0.1 MiB
+   libicuuc.so.#.#_seg#rw             n=   2 alloc 0.1 MiB
+   libstdc++.so.#.#.#_seg#rw          n=   2 alloc 0.1 MiB
+after 60 workers exited: rss(process.memoryUsage) 118.0 MiB, sum of listarea alloc 118.0 MiB
+   node mmap area                     n= 342 alloc 79.0 MiB
+   heap area                          n=   1 alloc 36.7 MiB
+   node_seg#rw                        n=   2 alloc 0.8 MiB
+   libcrypto.so.#_seg#rw              n=   2 alloc 0.5 MiB
+   rld heap                           n=   1 alloc 0.3 MiB
+   libicui#n.so.#.#_seg#rw            n=   2 alloc 0.1 MiB
+   libicuuc.so.#.#_seg#rw             n=   2 alloc 0.1 MiB
+   node pthread_#_stack               n=   6 alloc 0.1 MiB
+5 s later: rss(process.memoryUsage) 118.0 MiB, sum of listarea alloc 118.0 MiB
+   node mmap area                     n= 342 alloc 79.0 MiB
+   heap area                          n=   1 alloc 36.7 MiB
+   node_seg#rw                        n=   2 alloc 0.8 MiB
+   libcrypto.so.#_seg#rw              n=   2 alloc 0.5 MiB
+   rld heap                           n=   1 alloc 0.3 MiB
+   libicui#n.so.#.#_seg#rw            n=   2 alloc 0.1 MiB
+   libicuuc.so.#.#_seg#rw             n=   2 alloc 0.1 MiB
+   node pthread_#_stack               n=   6 alloc 0.1 MiB
+92:int uv_resident_set_memory(size_t* rss) {
+93-  area_info area;
+94-  ssize_t cookie;
+95-  status_t status;
+96-  thread_info thread;
+97-
+98-  status = get_thread_info(find_thread(NULL), &thread);
+99-  if (status != B_OK)
+100-    return UV__ERR(status);
+101-
+102-  cookie = 0;
+103-  *rss = 0;
+104-  while (get_next_area_info(thread.team, &cookie, &area) == B_OK)
+105-    *rss += area.ram_size;
+106-
+107-  return 0;
+108-}
+109-
+110-
+111-int uv_uptime(double* uptime) {
+112-  /* system_time() returns time since booting in microseconds */
+113-  *uptime = (double)system_time() / 1000000;
+114-  return 0;

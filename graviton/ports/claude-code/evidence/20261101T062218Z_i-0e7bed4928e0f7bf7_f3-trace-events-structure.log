@@ -1,0 +1,85 @@
+# evidence: f3-trace-events-structure
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062218Z   end: 20261101T062239Z   rc: 0
+# script sha256: fe908351afe4c10f4deaa0ab9f68870341c7501f3b49f0cf1bdcb876c1cc6ee4
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | grep -n "link" test/parallel/test-trace-events-fs-async.js | grep -v "unlink\|symlink\|readlink" 
+# | grep -n "^tests\[\|^  tests\[\|tests\['" test/parallel/test-trace-events-fs-sync.js | head -60
+# | sed -n 100,140p test/parallel/test-trace-events-fs-sync.js
+# ---- raw output ----
+140:function link() {
+143:  fs.link('fs13.txt', 'fs14.txt', () => {
+198:  fs.linkSync('fs18.txt', 'fs19.txt');
+230:  fs.linkSync('fs23.txt', 'fs24.txt');
+283:tests.link = wrapper(link);
+18:tests['fs.sync.access'] = 'fs.writeFileSync("fs0.txt", "123", "utf8");' +
+21:tests['fs.sync.chmod'] = 'fs.writeFileSync("fs1.txt", "123", "utf8");' +
+24:tests['fs.sync.chown'] = 'fs.writeFileSync("fs2.txt", "123", "utf8");' +
+27:tests['fs.sync.close'] = 'fs.writeFileSync("fs3.txt", "123", "utf8");' +
+29:tests['fs.sync.copyfile'] = 'fs.writeFileSync("fs4.txt", "123", "utf8");' +
+32:tests['fs.sync.fchmod'] = 'fs.writeFileSync("fs5.txt", "123", "utf8");' +
+36:tests['fs.sync.fchown'] = 'fs.writeFileSync("fs6.txt", "123", "utf8");' +
+40:tests['fs.sync.fdatasync'] = 'fs.writeFileSync("fs7.txt", "123", "utf8");' +
+44:tests['fs.sync.fstat'] = 'fs.writeFileSync("fs8.txt", "123", "utf8");' +
+47:tests['fs.sync.fsync'] = 'fs.writeFileSync("fs9.txt", "123", "utf8");' +
+51:tests['fs.sync.ftruncate'] = 'fs.writeFileSync("fs10.txt", "123", "utf8");' +
+55:tests['fs.sync.futimes'] = 'fs.writeFileSync("fs11.txt", "123", "utf8");' +
+59:tests['fs.sync.lchown'] = 'fs.writeFileSync("fs12.txt", "123", "utf8");' +
+62:tests['fs.sync.link'] = 'fs.writeFileSync("fs13.txt", "123", "utf8");' +
+66:tests['fs.sync.lstat'] = 'fs.writeFileSync("fs15.txt", "123", "utf8");' +
+69:tests['fs.sync.mkdir'] = 'fs.mkdirSync("fstemp0");' +
+71:tests['fs.sync.mkdtemp'] = 'const fp = fs.mkdtempSync("fstemp1");' +
+73:tests['fs.sync.open'] = 'fs.writeFileSync("fs16.txt", "123", "utf8");' +
+75:tests['fs.sync.read'] = 'fs.writeFileSync("fs17.txt", "123", "utf8");' +
+78:tests['fs.sync.readdir'] = 'fs.readdirSync("./")';
+79:tests['fs.sync.realpath'] = 'fs.writeFileSync("fs18.txt", "123", "utf8");' +
+84:tests['fs.sync.rename'] = 'fs.writeFileSync("fs20.txt", "123", "utf8");' +
+87:tests['fs.sync.rmdir'] = 'fs.mkdirSync("fstemp2");' +
+89:tests['fs.sync.stat'] = 'fs.writeFileSync("fs22.txt", "123", "utf8");' +
+92:tests['fs.sync.unlink'] = 'fs.writeFileSync("fs23.txt", "123", "utf8");' +
+96:tests['fs.sync.utimes'] = 'fs.writeFileSync("fs25.txt", "123", "utf8");' +
+99:tests['fs.sync.write'] = 'fs.writeFileSync("fs26.txt", "123", "utf8");' +
+105:  tests['fs.sync.symlink'] = 'fs.writeFileSync("fs27.txt", "123", "utf8");' +
+109:  tests['fs.sync.readlink'] = 'fs.writeFileSync("fs29.txt", "123", "utf8");' +
+                         'fs.unlinkSync("fs26.txt")';
+
+// On windows, we need permissions to test symlink and readlink.
+// We'll only try to run these tests if we have enough privileges.
+if (common.canCreateSymLink()) {
+  tests['fs.sync.symlink'] = 'fs.writeFileSync("fs27.txt", "123", "utf8");' +
+                             'fs.symlinkSync("fs27.txt", "fs28.txt");' +
+                             'fs.unlinkSync("fs27.txt");' +
+                             'fs.unlinkSync("fs28.txt")';
+  tests['fs.sync.readlink'] = 'fs.writeFileSync("fs29.txt", "123", "utf8");' +
+                              'fs.symlinkSync("fs29.txt", "fs30.txt");' +
+                              'fs.readlinkSync("fs30.txt");' +
+                              'fs.unlinkSync("fs29.txt");' +
+                              'fs.unlinkSync("fs30.txt")';
+}
+
+const tmpdir = require('../common/tmpdir');
+tmpdir.refresh();
+const traceFile = tmpdir.resolve('node_trace.1.log');
+
+for (const tr in tests) {
+  const proc = cp.spawnSync(process.execPath,
+                            [ '--trace-events-enabled',
+                              '--trace-event-categories', 'node.fs.sync',
+                              '-e', tests[tr] ],
+                            { cwd: tmpdir.path, encoding: 'utf8' });
+
+  // Make sure the operation is successful.
+  // Don't use assert with a custom message here. Otherwise the
+  // inspection in the message is done eagerly and wastes a lot of CPU
+  // time.
+  if (proc.status !== 0) {
+    throw new Error(`${tr}:\n${util.inspect(proc)}`);
+  }
+
+  // Confirm that trace log file is created.
+  assert(fs.existsSync(traceFile));
+  const data = fs.readFileSync(traceFile);
+  const traces = JSON.parse(data.toString()).traceEvents;
+  assert(traces.length > 0);
+

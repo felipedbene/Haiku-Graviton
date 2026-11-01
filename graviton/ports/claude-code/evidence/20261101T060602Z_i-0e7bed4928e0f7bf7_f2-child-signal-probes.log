@@ -1,0 +1,154 @@
+# evidence: f2-child-signal-probes
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060602Z   end: 20261101T060623Z   rc: 0
+# script sha256: 74bfe4d90f256308d0feba06d3274e5f3ef1103919adb0028667770b319f90cb
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | T=test
+# | mark(){ echo "--- syslog debug_server since mark:"; tail -n +$1 /boot/system/var/log/syslog | grep -a "debug_server" | grep -av "Failed to get info\|Error getting info" | tail -8; }
+# | S=$(wc -l < /boot/system/var/log/syslog)
+# | echo "== cli-node-print-help: source 50-80"; sed -n 50,80p $T/parallel/test-cli-node-print-help.js
+# | node -e 'const {spawn}=require("child_process");const cp=spawn(process.execPath,["--help"]);let n=0;cp.stdout.on("data",d=>n+=d.length);cp.on("exit",(c,s)=>console.log("spawn --help exit code",c,"signal",JSON.stringify(s),"bytes",n))'
+# | node --help > /tmp/h.txt; echo "node --help rc=$? bytes=$(wc -c </tmp/h.txt)"
+# | mark $S; S=$(wc -l < /boot/system/var/log/syslog)
+# | echo "== crypto-no-algorithm child:"; node --openssl-config=$T/fixtures/openssl3-conf/base_only.cnf -p '"hello"' > /tmp/c.out 2>&1; echo "rc=$?"; head -c 600 /tmp/c.out; echo
+# | mark $S; S=$(wc -l < /boot/system/var/log/syslog)
+# | echo "== external-stdio-close child (fork, stdout destroyed):"
+# | node -e '
+# | const cp=require("child_process");
+# | const c=cp.fork("'$T'/parallel/test-process-external-stdio-close.js",["child"],{silent:true});
+# | c.stderr.on("data",d=>process.stdout.write("child stderr: "+d));
+# | c.on("close",(code,sig)=>console.log("close code",code,"signal",JSON.stringify(sig),"signalCode",JSON.stringify(c.signalCode)));
+# | c.stdout.destroy(); c.send("go");'
+# | mark $S; S=$(wc -l < /boot/system/var/log/syslog)
+# | echo "== stdout-close-catch pipeline:"; cat $T/fixtures/catch-stdout-error.js | grep -v "^//" | head -30
+# | bash -c "node $T/fixtures/catch-stdout-error.js | node -pe \"process.stdin.on('data' , () => process.exit(1))\"; echo \"PIPESTATUS=\${PIPESTATUS[*]}\"" 2>&1 | head -c 1500; echo
+# | mark $S; S=$(wc -l < /boot/system/var/log/syslog)
+# | echo "== fs-promises failing assertion source:"; grep -n "toDateString\|toString()" $T/parallel/test-fs-promises.js | head; 
+# ---- raw output ----
+== cli-node-print-help: source 50-80
+                         `Unexpected flag ${flag} in ${stdOut}`);
+    }
+  }
+}
+
+startPrintHelpTest();
+
+// Test closed stdout for `node --help`. Like `node --help | head -n5`.
+(async () => {
+  const cp = spawn(process.execPath, ['--help'], {
+    stdio: ['inherit', 'pipe', 'inherit'],
+  });
+  cp.stdout.destroy();
+  const [exitCode] = await once(cp, 'exit');
+  assert.strictEqual(exitCode, 0);
+})().then(common.mustCall());
+spawn --help exit code 0 signal null bytes 25342
+node --help rc=0 bytes=25342
+--- syslog debug_server since mark:
+== crypto-no-algorithm child:
+/tmp/ccrun/cc-20261101T060602Z-87542.sh: line 9: 205332 Kill Thread                node --openssl-config=$T/fixtures/openssl3-conf/base_only.cnf -p '"hello"' > /tmp/c.out 2>&1
+rc=149
+
+  #  [205332]: std::shared_ptr<node::InitializationResultImpl> node::InitializeOncePerProcessInternal(const std::vector<std::__cxx11::basic_string<char> >&, ProcessInitializationFlags::Flags) at ../../src/node.cc:1266
+  #  Assertion failed: ncrypto::CSPRNG(nullptr, 0)
+
+----- Native stack trace -----
+
+Abort
+
+--- syslog debug_server since mark:
+KERN: debug_server: Thread 205332 entered the debugger: Debugger call: `abort() called'
+KERN: debug_server: Failed to start debugger: No such file or directory
+KERN: debug_server: Killing team 205332 (/boot/system/bin/node --openssl-config=test/fixtures/openssl3-c)
+KERN: debug_server: Killing team 205332 ()
+== external-stdio-close child (fork, stdout destroyed):
+close code null signal "SIGPIPE" signalCode "SIGPIPE"
+--- syslog debug_server since mark:
+KERN: debug_server: Killing team 205332 ()
+== stdout-close-catch pipeline:
+
+function write() {
+  try {
+    process.stdout.write('Hello, world\n');
+  } catch {
+    throw new Error('this should never happen');
+  }
+  setImmediate(function() {
+    write();
+  });
+}
+
+process.stdout.on('error', function(er) {
+  console.error(JSON.stringify(er));
+  process.exit(42);
+});
+
+write();
+<ref *1> Socket {
+  connecting: false,
+  _hadError: false,
+  _parent: null,
+  _host: null,
+  _closeAfterHandlingError: false,
+  _events: {
+    close: undefined,
+    error: undefined,
+    prefinish: undefined,
+    finish: undefined,
+    drain: undefined,
+    data: [Function (anonymous)],
+    end: [Function: onReadableStreamEnd],
+    readable: undefined,
+    pause: [Function (anonymous)]
+  },
+  _readableState: ReadableState {
+    highWaterMark: 65536,
+    buffer: [],
+    bufferIndex: 0,
+    length: 0,
+    pipes: [],
+    awaitDrainWriters: null,
+    Symbol(kState): 194519300
+  },
+  _writableState: WritableState {
+    highWaterMark: 65536,
+    length: 0,
+    corked: 0,
+    onwrite: [Function (anonymous)],
+    writelen: 0,
+    bufferedIndex: 0,
+    pendingcb: 0,
+    Symbol(kState): 1093415684,
+    Symbol(kBufferedValue): null
+  },
+  allowHalfOpen: false,
+  _maxListeners: undefined,
+  _eventsCount: 3,
+  _sockname: null,
+  _pendingData: null,
+  _pendingEncoding: '',
+  server: null,
+  _server: null,
+  fd: 0,
+  Symbol(async_id_symbol): 2,
+  Symbol(kHandle): Pipe { reading: true, Symbol(owner_symbol): [Circular *1] },
+  Symbol(lastWriteQueueSize): 0,
+  Symbol(timeout): null,
+  Symbol(kBuffer): null,
+  Symbol(kBufferCb): null,
+  Symbol(kBufferGen): null,
+  Symbol(shapeMode): true,
+  Symbol(kCapture): false,
+  Symbol(kSetNoDelay): false,
+  Symbol(kSetKeepAlive): false,
+  Symbol(kSetKeepAliveInitialDelay): 0,
+  Symbol(kSetTOS): undefined,
+  Symbol(kBytesRead): 0,
+  Symbol(kBytesWritten): 
+--- syslog debug_server since mark:
+KERN: debug_server: Killing team 205332 ()
+== fs-promises failing assertion source:
+228:        assert.strictEqual((await readFile(dest)).toString(), 'hello');
+298:      assert.strictEqual(a_time.toString(), stats.atime.toString());
+299:      assert.strictEqual(m_time.toString(), stats.mtime.toString());

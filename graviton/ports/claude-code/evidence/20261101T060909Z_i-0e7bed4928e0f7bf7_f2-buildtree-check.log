@@ -1,0 +1,51 @@
+# evidence: f2-buildtree-check
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060909Z   end: 20261101T060930Z   rc: 0
+# script sha256: b3598b6078bf09cf8cb376bb5cb0c1049e5f36d9325f8f2467ec19138f57666e
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | df -h . ; du -sh . ; ls out/ out/Release | head -40; ls -la --time-style=+%T out/Release | sort -k6 | tail -5; ps -o pid,args 2>/dev/null | grep -i "make\|ninja\|cc1plus" | grep -v grep | head; nproc 2>/dev/null || sysinfo | grep -c "CPU #"
+# ---- raw output ----
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:  120.0 GiB (62896119 blocks)
+  Used Blocks:   33.0 GiB (17312037 blocks)
+  Free Blocks:   86.9 GiB (45584082 blocks)
+      Usage %:   27.5 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288
+1.5G	.
+out/:
+Debug
+Release
+tools
+
+out/Release:
+build.ninja
+bytecode_builtins_list_generator
+cctest
+embedtest
+gen
+gen-regexp-special-case
+mksnapshot
+node
+node_js2c
+node_mksnapshot
+nop
+obj
+overlapped-checker
+torque
+-rw-r--r-- 1 baron root  4064244 06:06:41 .ninja_deps
+drwxr-xr-x 1 baron root     4096 06:06:41 obj
+-rwxr-xr-x 1 baron root 67868440 06:06:43 node
+drwxr-xr-x 1 baron root     2048 06:06:44 .
+-rw-r--r-- 1 baron root   381956 06:06:44 .ninja_log
+16

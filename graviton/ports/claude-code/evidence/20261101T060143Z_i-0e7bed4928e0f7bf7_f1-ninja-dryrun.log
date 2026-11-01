@@ -1,0 +1,35 @@
+# evidence: f1-ninja-dryrun
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060143Z   end: 20261101T060204Z   rc: 0
+# script sha256: dc4380f22876efec3190ecfa96a490a8edd1504ec7748e975aa14f38b3499b29
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N
+# | ls out/Release | head -30
+# | find out/Release -name 'sampler*.o' | head
+# | ninja -C out/Release -n node 2>&1 | tail -5
+# | syslog 2>/dev/null | grep -c "debug_server: Killing team" ; grep -h "debug_server: Killing team" /var/log/syslog* 2>/dev/null | tail -3
+# | ps | grep -i debug_server | head -2
+# ---- raw output ----
+build.ninja
+bytecode_builtins_list_generator
+cctest
+embedtest
+gen
+gen-regexp-special-case
+mksnapshot
+node
+node_js2c
+node_mksnapshot
+nop
+obj
+overlapped-checker
+torque
+ninja: Entering directory `out/Release'
+ninja: no work to do.
+0
+KERN: debug_server: Killing team 201967 ()
+KERN: debug_server: Killing team 201984 (/boot/system/bin/node --abort-on-uncaught-exception /boot/home/)
+KERN: debug_server: Killing team 201984 ()
+/boot/system/servers/debug_server                     51        2    0    0 
+/boot/system/bin/grep -i debug_server              202756        1    0    0 

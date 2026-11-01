@@ -1,0 +1,16 @@
+# evidence: f4-http-writable-order
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062217Z   end: 20261101T062253Z   rc: 0
+# script sha256: e8e731bd4c554c65ec95e82bf5c446fcc902071690524b9ba64ab5edfe89a085
+# ---- script ----
+# | mkdir -p /tmp/f4 && cd /tmp/f4 && echo 'Ly8gdGVzdC1odHRwLXdyaXRhYmxlLXRydWUtYWZ0ZXItY2xvc2UsIGluc3RydW1lbnRlZCwgb25lIGxpbmUgcGVyIHJ1bjogZXZlbnQgb3JkZXIgb24gdGhlIG91dGVyIHNlcnZlci4KY29uc3QgaHR0cCA9IHJlcXVpcmUoJ2h0dHAnKTsgY29uc3QgdDAgPSBEYXRlLm5vdygpOyBjb25zdCBldiA9IFtdOyBjb25zdCBUID0gKHMpID0+IGV2LnB1c2goYCR7RGF0ZS5ub3coKSAtIHQwfToke3N9YCk7CmxldCBpbnRlcm5hbCwgZXh0ZXJuYWw7CmNvbnN0IHNlcnZlciA9IGh0dHAuY3JlYXRlU2VydmVyKChyZXEsIHJlcykgPT4gewogIHJlcS5zb2NrZXQub24oJ2VuZCcsICgpID0+IFQoJ3NvY2tFbmQnKSk7CiAgcmVxLnNvY2tldC5vbignY2xvc2UnLCAoKSA9PiBUKCdzb2NrQ2xvc2UnKSk7CiAgcmVzLm9uKCdmaW5pc2gnLCAoKSA9PiBUKCdyZXNGaW5pc2gnKSk7CiAgcmVzLm9uKCdjbG9zZScsICgpID0+IFQoJ3Jlc0Nsb3NlJykpOwogIGh0dHAuZ2V0KGBodHRwOi8vMTI3LjAuMC4xOiR7aW50ZXJuYWwuYWRkcmVzcygpLnBvcnR9YCwgKGlubmVyKSA9PiB7IFQoJ2lubmVyUmVzcCcpOyBpbm5lci5waXBlKHJlcyk7IH0pOwp9KS5saXN0ZW4oMCwgKCkgPT4gewogIGludGVybmFsID0gaHR0cC5jcmVhdGVTZXJ2ZXIoKHJlcSwgcmVzKSA9PiB7CiAgICByZXMud3JpdGVIZWFkKDIwMCk7CiAgICBzZXRJbW1lZGlhdGUoKCkgPT4geyBUKCdhYm9ydCcpOyBleHRlcm5hbC5hYm9ydCgpOyByZXMuZW5kKCdIZWxsbyBXb3JsZFxuJyk7IH0pOwogIH0pLmxpc3RlbigwLCAoKSA9PiB7CiAgICBleHRlcm5hbCA9IGh0dHAuZ2V0KGBodHRwOi8vMTI3LjAuMC4xOiR7c2VydmVyLmFkZHJlc3MoKS5wb3J0fWApOwogICAgZXh0ZXJuYWwub24oJ2Vycm9yJywgKGUpID0+IHsgVCgnY2xpZW50RXJyOicgKyBlLmNvZGUpOyBzZXRUaW1lb3V0KCgpID0+IHsgY29uc29sZS5sb2coZXYuam9pbignICcpKTsgcHJvY2Vzcy5leGl0KDApOyB9LCA1MDApOyB9KTsKICB9KTsKfSk7Cg==' | base64 -d > httpwt2.js
+# | echo "### instrumented x20 (resFinish present = the test's failure mode)"
+# | for i in $(seq 1 20); do node httpwt2.js; done | sed -E 's/^[0-9]+://; s/ [0-9]+:/ /g' | sort | uniq -c
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | echo "### real test x10"
+# | for i in $(seq 1 10); do node test/parallel/test-http-writable-true-after-close.js >/dev/null 2>&1; echo -n "rc=$? "; done; echo
+# ---- raw output ----
+### instrumented x20 (resFinish present = the test's failure mode)
+     20 abort clientErr:ECONNRESET sockEnd innerResp resClose sockClose
+### real test x10
+rc=1 rc=1 rc=1 rc=1 rc=1 rc=1 rc=1 rc=1 rc=1 rc=1 

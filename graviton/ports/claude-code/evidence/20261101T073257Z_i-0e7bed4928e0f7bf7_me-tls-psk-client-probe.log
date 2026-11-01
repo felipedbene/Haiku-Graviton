@@ -1,0 +1,169 @@
+# evidence: me-tls-psk-client-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T073257Z   end: 20261101T073318Z   rc: 0
+# script sha256: 41bf5a7a90055d882da29318641197b13d93cf869c77d4f299d09393a9e4598d
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | sed -n 1,110p test/sequential/test-tls-psk-client.js
+# | echo "== which openssl does common/crypto pick:"; /boot/system/bin/node -e 'console.log(require("./test/common/crypto").opensslCli)'
+# | O=$(/boot/system/bin/node -e 'console.log(require("./test/common/crypto").opensslCli)'); $O version
+# | echo "== s_server alone, 6 s"; KEY=d731ef57be09e5204f0b205b60627028
+# | ( $O s_server -accept 12346 -cipher PSK -psk $KEY -psk_hint IDENTITY -nocert 2>&1 & p=$!; sleep 6; kill $p ) 
+# | echo "== netstat while s_server runs"; $O s_server -accept 12347 -cipher PSK -psk $KEY -nocert > /tmp/me-s.out 2>&1 & p=$!; sleep 2; netstat -n | grep -E ":1234[67]"; echo "-- s_client"; echo hello | timeout 5 $O s_client -connect 127.0.0.1:12347 -psk $KEY -cipher PSK 2>&1 | tail -5; kill $p; cat /tmp/me-s.out | head
+# ---- raw output ----
+'use strict';
+const common = require('../common');
+
+if (!common.hasCrypto) {
+  common.skip('missing crypto');
+}
+
+if (process.features.openssl_is_boringssl) {
+  require('../common/boringssl').testPskTls13Unsupported();
+  return;
+}
+
+const { opensslCli } = require('../common/crypto');
+
+if (!opensslCli) {
+  common.skip('missing openssl cli');
+}
+
+const assert = require('assert');
+const tls = require('tls');
+const net = require('net');
+const { spawn } = require('child_process');
+
+const CIPHERS = 'PSK+HIGH';
+const KEY = 'd731ef57be09e5204f0b205b60627028';
+const IDENTITY = 'Client_identity';  // Hardcoded by `openssl s_server`
+const useIPv4 = !common.hasIPv6;
+
+const server = spawn(opensslCli, [
+  's_server',
+  '-accept', common.PORT,
+  '-cipher', CIPHERS,
+  '-psk', KEY,
+  '-psk_hint', IDENTITY,
+  '-nocert',
+  '-rev',
+  ...(useIPv4 ? ['-4'] : []),
+], { encoding: 'utf8' });
+let serverErr = '';
+let serverOut = '';
+server.stderr.on('data', (data) => serverErr += data);
+server.stdout.on('data', (data) => serverOut += data);
+server.on('error', common.mustNotCall());
+server.on('exit', common.mustCall((code, signal) => {
+  // Server is expected to be terminated by cleanUp().
+  assert.strictEqual(code, null,
+                     `'${server.spawnfile} ${server.spawnargs.join(' ')}' unexpected exited with output:\n${serverOut}\n${serverErr}`);
+  assert.strictEqual(signal, 'SIGTERM');
+}));
+
+const cleanUp = (err) => {
+  clearTimeout(timeout);
+  if (err)
+    console.log('Failed:', err);
+  server.kill();
+  process.exitCode = err ? 1 : 0;
+};
+
+const timeout = setTimeout(() => cleanUp('Timed out'), 5000);
+
+function waitForPort(port, cb) {
+  const socket = net.connect(common.PORT, () => {
+    socket.on('data', () => {});
+    socket.end();
+    socket.on('end', cb);
+  });
+  socket.on('error', (e) => {
+    if (e.code === 'ENOENT' || e.code === 'ECONNREFUSED') {
+      setTimeout(() => waitForPort(port, cb), 1000);
+    } else {
+      cb(e);
+    }
+  });
+}
+
+waitForPort(common.PORT, common.mustCall((err) => {
+  if (err) {
+    cleanUp(err);
+    return;
+  }
+
+  const message = 'hello';
+  const reverse = message.split('').reverse().join('');
+  runClient(message, common.mustCall((err, data) => {
+    try {
+      if (!err) assert.strictEqual(data.trim(), reverse);
+    } finally {
+      cleanUp(err);
+    }
+  }));
+}));
+
+function runClient(message, cb) {
+  const s = tls.connect(common.PORT, {
+    ciphers: CIPHERS,
+    checkServerIdentity: () => {},
+    pskCallback(hint) {
+      // 'hint' will be null in TLS1.3.
+      if (hint === null || hint === IDENTITY) {
+        return {
+          identity: IDENTITY,
+          psk: Buffer.from(KEY, 'hex'),
+        };
+      }
+    },
+  });
+  s.on('secureConnect', common.mustCall(() => {
+    let data = '';
+    s.on('data', common.mustCallAtLeast((d) => {
+      data += d;
+== which openssl does common/crypto pick:
+openssl
+node:assert:204
+  throw err;
+  ^
+
+AssertionError [ERR_ASSERTION]: Unexpected global(s) found: __filename, module, exports, __dirname, require
+    at process.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:408:14)
+    at process.emit (node:events:514:28) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: undefined,
+  operator: 'fail',
+  diff: 'simple'
+}
+
+Node.js v24.21.0
+node:assert:204
+  throw err;
+  ^
+
+AssertionError [ERR_ASSERTION]: Unexpected global(s) found: __filename, module, exports, __dirname, require
+    at process.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:408:14)
+    at process.emit (node:events:514:28) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: undefined,
+  operator: 'fail',
+  diff: 'simple'
+}
+
+Node.js v24.21.0
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+== s_server alone, 6 s
+Using default temp DH parameters
+ACCEPT
+== netstat while s_server runs
+tcp         0      0 [::]:12347            [::]:0                listen       271255/openssl
+-- s_client
+E840F75260010000:error:80007020:system library:BIO_connect:Connection refused:crypto/bio/bio_sock2.c:183:calling connect()
+E840F75260010000:error:10000067:BIO routines:BIO_connect:connect error:crypto/bio/bio_sock2.c:185:
+connect:errno=-2147454944
+Using default temp DH parameters
+ACCEPT

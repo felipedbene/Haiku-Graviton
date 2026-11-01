@@ -1,0 +1,53 @@
+# evidence: f2-sigaction-loop
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060830Z   end: 20261101T060851Z   rc: 0
+# script sha256: e36fcbfed49a314e744f714d8df7bbe699021f29baa8ccaa19e875b8cc629f95
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | grep -n "CHECK_EQ(0, sigaction" -B8 -A3 ../../../patches/nodejs-24.21.0.patchset
+# | ls -ld out out/Release 2>&1; ls out/Release/node out/Release/obj.target 2>&1 | head -3; du -sh out 2>/dev/null; df -h /boot | tail -1
+# | ls /boot/home/haikuports/net-libs/nodejs/work-24.21.0/ ; ps | grep -c "make\|g++" 
+# | cd /tmp; cat > sa.c <<'C'
+# | #include <signal.h>
+# | #include <stdio.h>
+# | #include <string.h>
+# | #include <errno.h>
+# | int main(){ struct sigaction a; memset(&a,0,sizeof a);
+# |  for(int n=1;n<32;n++){ if(n==SIGKILL||n==SIGSTOP) continue; struct sigaction o; int g=sigaction(n,NULL,&o); a.sa_handler=(n==SIGPIPE||n==SIGXFSZ)?SIG_IGN:SIG_DFL; int r=sigaction(n,&a,NULL);
+# |   if(g||r) printf("signal %d (%s): get rc=%d set rc=%d errno=%s\n",n,strsignal(n),g,r,strerror(errno)); }
+# |  printf("done\n"); return 0;}
+# | C
+# | gcc -o sa sa.c && ./sa
+# ---- raw output ----
+174-diff --git a/src/node.cc b/src/node.cc
+175-index 838106ac..63dec698 100644
+176---- a/src/node.cc
+177-+++ b/src/node.cc
+178-@@ -512,10 +512,10 @@ void ResetSignalHandlers() {
+179-       // library) has set up own signal handler for own purposes
+180-       // (e.g. profiling). If that's the case, we want to keep it intact.
+181-       struct sigaction old;
+182:-      CHECK_EQ(0, sigaction(nr, nullptr, &old));
+183:+      // CHECK_EQ(0, sigaction(nr, nullptr, &old));
+184-       if ((old.sa_flags & SA_SIGINFO) || old.sa_handler != SIG_IGN) continue;
+185-     }
+186:-    CHECK_EQ(0, sigaction(nr, &act, nullptr));
+187:+    // CHECK_EQ(0, sigaction(nr, &act, nullptr));
+188-   }
+189- #endif  // __POSIX__
+190- }
+drwxr-xr-x 1 baron root 2048 Oct 31 02:16 out
+drwxr-xr-x 1 baron root 2048 Nov  1 06:06 out/Release
+ls: cannot access 'out/Release/obj.target': No such file or directory
+out/Release/node
+564M	out
+   Root Inode: 524288
+flag.build
+flag.patchset
+flag.unpack
+flag.validate
+sources
+wrapper-script
+1
+signal 21 (Kill Thread): get rc=-1 set rc=-1 errno=Invalid Argument
+done

@@ -1,0 +1,3323 @@
+# evidence: me-rerun-t871-timeout20
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063326Z   end: 20261101T070754Z   rc: 0
+# script sha256: 529f64f230cd61add9a58882e9f865b77a4072acd47fa9209e7c3857e4ab70ea
+# ---- script ----
+# | # Re-run the t871 group of failing tests from the 2026-10-31 TAP run, now (libuv $(pkgman search -i -D libuv 2>/dev/null | grep -m1 libuv)).
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "node $(/boot/system/bin/node --version); uname: $(uname -a); cpus: $(sysinfo -cpu 2>/dev/null | grep -c 'CPU #')"
+# | ls /boot/system/packages | grep -i -E '^(libuv|nodejs)'
+# | grep -n "'--timeout'" -A2 tools/test.py | head -5
+# | J=8; TO=--timeout=20
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j $J $TO -p tap -v parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer parallel/test-diagnostics-channel-http2-client-stream-body-single-string parallel/test-diagnostics-channel-http2-client-stream-close parallel/test-diagnostics-channel-http2-client-stream-created parallel/test-diagnostics-channel-http2-client-stream-finish parallel/test-diagnostics-channel-http2-client-stream-start parallel/test-diagnostics-channel-http2-server-stream-close parallel/test-diagnostics-channel-http2-server-stream-close-error parallel/test-diagnostics-channel-http2-server-stream-created parallel/test-diagnostics-channel-http2-server-stream-created-start-timing parallel/test-diagnostics-channel-http2-server-stream-error parallel/test-diagnostics-channel-http2-server-stream-start parallel/test-diagnostics-channel-http2-server-stream-finish parallel/test-h2-large-header-cause-client-to-hangup parallel/test-http-client-parse-error parallel/test-http-extra-response parallel/test-http-max-http-headers parallel/test-http-multi-line-headers parallel/test-http-no-content-length parallel/test-http-response-no-headers parallel/test-http-response-status-message parallel/test-http-should-keep-alive parallel/test-http-socket-encoding-error parallel/test-http-upgrade-advertise parallel/test-http-upgrade-server parallel/test-http2-altsvc parallel/test-http2-async-local-storage parallel/test-http2-autoselect-protocol parallel/test-http2-buffersize parallel/test-http2-byteswritten-server parallel/test-http2-capture-rejection parallel/test-http2-clean-output parallel/test-http2-client-data-end parallel/test-http2-client-destroy parallel/test-http2-client-onconnect-errors parallel/test-http2-client-priority-before-connect parallel/test-http2-client-promisify-connect parallel/test-http2-client-proxy-over-http2 parallel/test-http2-client-request-listeners-warning parallel/test-http2-client-request-options-errors parallel/test-http2-client-rststream-before-connect parallel/test-http2-client-set-priority parallel/test-http2-client-setLocalWindowSize parallel/test-http2-client-setNextStreamID-errors parallel/test-http2-client-settings-before-connect parallel/test-http2-client-stream-destroy-before-connect parallel/test-http2-client-unescaped-path parallel/test-http2-client-upload parallel/test-http2-client-upload-reject parallel/test-http2-client-write-before-connect parallel/test-http2-client-write-empty-string parallel/test-http2-compat-client-upload-reject parallel/test-http2-compat-errors parallel/test-http2-compat-expect-continue parallel/test-http2-compat-expect-continue-check parallel/test-http2-compat-expect-handling parallel/test-http2-compat-method-connect parallel/test-http2-compat-serverrequest parallel/test-http2-compat-serverrequest-end parallel/test-http2-compat-serverrequest-headers parallel/test-http2-compat-serverrequest-host parallel/test-http2-compat-serverrequest-pause parallel/test-http2-compat-serverrequest-pipe parallel/test-http2-compat-serverrequest-settimeout parallel/test-http2-compat-serverrequest-trailers parallel/test-http2-compat-serverresponse parallel/test-http2-compat-serverresponse-createpushresponse parallel/test-http2-compat-serverresponse-destroy parallel/test-http2-compat-serverresponse-drain parallel/test-http2-compat-serverresponse-end parallel/test-http2-compat-serverresponse-end-after-statuses-without-body parallel/test-http2-compat-serverresponse-finished parallel/test-http2-compat-serverresponse-flushheaders parallel/test-http2-compat-serverresponse-headers parallel/test-http2-compat-serverresponse-headers-after-destroy parallel/test-http2-compat-serverresponse-headers-send-date parallel/test-http2-compat-serverresponse-settimeout parallel/test-http2-compat-serverresponse-statuscode parallel/test-http2-compat-serverresponse-statusmessage parallel/test-http2-compat-serverresponse-statusmessage-property parallel/test-http2-compat-serverresponse-statusmessage-property-set parallel/test-http2-compat-serverresponse-trailers parallel/test-http2-compat-serverresponse-write parallel/test-http2-compat-serverresponse-writehead parallel/test-http2-compat-serverresponse-writehead-array parallel/test-http2-compat-short-stream-client-server parallel/test-http2-compat-socket parallel/test-http2-compat-socket-destroy-delayed parallel/test-http2-compat-socket-set parallel/test-http2-compat-write-early-hints parallel/test-http2-compat-write-early-hints-invalid-header parallel/test-http2-compat-write-head-after-close parallel/test-http2-compat-write-head-destroyed parallel/test-http2-compat-write-information parallel/test-http2-connect-method parallel/test-http2-connect-method-extended parallel/test-http2-connect-method-extended-cant-turn-off parallel/test-http2-cookies parallel/test-http2-create-client-secure-session parallel/test-http2-create-client-session parallel/test-http2-createwritereq parallel/test-http2-date-header parallel/test-http2-debug parallel/test-http2-destroy-after-write parallel/test-http2-dont-override parallel/test-http2-empty-frame-without-eof parallel/test-http2-endafterheaders parallel/test-http2-exceeds-server-trailer-size parallel/test-http2-forget-closed-streams parallel/test-http2-goaway-opaquedata parallel/test-http2-graceful-close parallel/test-http2-head-request parallel/test-http2-info-headers parallel/test-http2-info-headers-errors parallel/test-http2-invalidargtypes-errors parallel/test-http2-invalidheaderfield parallel/test-http2-invalidheaderfields-client parallel/test-http2-large-write-multiple-requests parallel/test-http2-max-concurrent-streams parallel/test-http2-max-session-memory-leak parallel/test-http2-max-session-memory-stalled-headers parallel/test-http2-methods parallel/test-http2-misused-pseudoheaders parallel/test-http2-multi-content-length parallel/test-http2-multiheaders parallel/test-http2-multiheaders-raw parallel/test-http2-multiplex parallel/test-http2-no-more-streams parallel/test-http2-no-wanttrailers-listener parallel/test-http2-onping parallel/test-http2-options-max-headers-block-length parallel/test-http2-options-max-reserved-streams parallel/test-http2-options-server-request parallel/test-http2-options-server-response parallel/test-http2-origin parallel/test-http2-pack-end-stream-flag parallel/test-http2-perf_hooks parallel/test-http2-ping parallel/test-http2-pipe parallel/test-http2-priority-cycle- parallel/test-http2-priority-event parallel/test-http2-raw-headers parallel/test-http2-raw-headers-defaults parallel/test-http2-removed-header-stays-removed parallel/test-http2-request-remove-connect-listener parallel/test-http2-res-corked parallel/test-http2-res-writable-properties parallel/test-http2-respond-errors parallel/test-http2-respond-file parallel/test-http2-respond-file-204 parallel/test-http2-respond-file-304 parallel/test-http2-respond-file-404 parallel/test-http2-respond-file-compat parallel/test-http2-respond-file-error-dir parallel/test-http2-respond-file-error-pipe-offset parallel/test-http2-respond-file-errors parallel/test-http2-respond-file-fd parallel/test-http2-respond-file-fd-errors parallel/test-http2-respond-file-fd-invalid parallel/test-http2-respond-file-fd-leak parallel/test-http2-respond-file-fd-range parallel/test-http2-respond-file-filehandle parallel/test-http2-respond-file-push parallel/test-http2-respond-file-range parallel/test-http2-respond-file-with-pipe parallel/test-http2-respond-nghttperrors parallel/test-http2-respond-no-data parallel/test-http2-respond-with-fd-errors parallel/test-http2-response-splitting parallel/test-http2-sent-headers parallel/test-http2-server-close-callback parallel/test-http2-server-close-idle-connection parallel/test-http2-server-errors parallel/test-http2-server-push-disabled parallel/test-http2-server-push-stream parallel/test-http2-server-push-stream-errors parallel/test-http2-server-push-stream-errors-args parallel/test-http2-server-push-stream-head parallel/test-http2-server-rst-before-respond parallel/test-http2-server-rst-stream parallel/test-http2-server-session-destroy parallel/test-http2-server-set-header parallel/test-http2-server-setLocalWindowSize parallel/test-http2-server-shutdown-before-respond parallel/test-http2-server-startup parallel/test-http2-server-timeout parallel/test-http2-session-graceful-close parallel/test-http2-session-reuse-different-authority parallel/test-http2-session-settings parallel/test-http2-session-stream-state parallel/test-http2-session-timeout parallel/test-http2-settings-unsolicited-ack parallel/test-http2-short-stream-client-server parallel/test-http2-single-headers-validation-disabled parallel/test-http2-socket-proxy-destroy parallel/test-http2-status-code parallel/test-http2-status-code-invalid parallel/test-http2-stream-client parallel/test-http2-stream-destroy-event-order parallel/test-http2-timeouts parallel/test-http2-too-large-headers parallel/test-http2-too-many-headers parallel/test-http2-too-many-streams parallel/test-http2-trailers parallel/test-http2-trailers-after-session-close parallel/test-http2-unbound-socket-proxy parallel/test-http2-window-size parallel/test-http2-write-callbacks parallel/test-http2-write-empty-string parallel/test-http2-zero-length-write parallel/test-https-eof-for-eom parallel/test-net-after-close parallel/test-net-allow-half-open parallel/test-net-autoselectfamily-default parallel/test-net-bytes-written-large parallel/test-net-connect-options-allowhalfopen parallel/test-net-connect-options-port parallel/test-net-dns-lookup parallel/test-net-keepalive parallel/test-net-listen-after-destroying-stdin parallel/test-net-normalize-args parallel/test-net-onread-static-buffer parallel/test-net-pause-resume-connecting parallel/test-net-persistent-keepalive parallel/test-net-persistent-nodelay parallel/test-net-persistent-ref-unref parallel/test-net-server-max-connections parallel/test-net-server-pause-on-connect parallel/test-net-socket-byteswritten parallel/test-net-socket-close-after-end parallel/test-net-socket-connect-without-cb parallel/test-net-socket-connecting parallel/test-net-socket-local-address parallel/test-net-socket-ready-without-cb parallel/test-net-socket-tos parallel/test-net-throttle parallel/test-net-writable parallel/test-net-write-after-end-nt parallel/test-net-write-slow parallel/test-tls-client-cert-resumption parallel/test-tls-client-mindhsize parallel/test-tls-env-extra-ca parallel/test-tls-env-extra-ca-with-options parallel/test-tls-inception parallel/test-tls-max-send-fragment parallel/test-tls-on-empty-socket parallel/test-tls-session-reuse-different-servername parallel/test-tls-wrap-econnreset parallel/test-tls-wrap-econnreset-localaddress parallel/test-tls-wrap-econnreset-socket sequential/test-http2-large-file sequential/test-net-localport sequential/test-tls-psk-client > /tmp/rerun-t871b.tap 2>&1
+# | echo "== summary: $(grep -c '^ok ' /tmp/rerun-t871b.tap) ok, $(grep -c '^not ok ' /tmp/rerun-t871b.tap) not ok, $(grep -c '^    timeout$' /tmp/rerun-t871b.tap) timeout"
+# | grep -E '^(not )?ok ' /tmp/rerun-t871b.tap
+# | echo "== full TAP"; cat /tmp/rerun-t871b.tap
+# ---- raw output ----
+node v24.21.0; uname: Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku; cpus: 0
+libuv-1.52.1-2-arm64.hpkg
+libuv_devel-1.52.1-2-arm64.hpkg
+nodejs24-24.21.0-1-arm64.hpkg
+nodejs24_devel-24.21.0-1-arm64.hpkg
+== summary: 3 ok, 253 not ok, 253 timeout
+not ok 1 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings
+not ok 2 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers
+not ok 3 parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks
+not ok 4 parallel/test-diagnostics-channel-http2-client-stream-body-single-string
+not ok 5 parallel/test-diagnostics-channel-http2-client-stream-created
+not ok 6 parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer
+not ok 7 parallel/test-diagnostics-channel-http2-client-stream-finish
+not ok 8 parallel/test-diagnostics-channel-http2-client-stream-close
+not ok 9 parallel/test-diagnostics-channel-http2-server-stream-close
+not ok 10 parallel/test-diagnostics-channel-http2-client-stream-start
+not ok 11 parallel/test-diagnostics-channel-http2-server-stream-close-error
+not ok 12 parallel/test-diagnostics-channel-http2-server-stream-created
+not ok 13 parallel/test-diagnostics-channel-http2-server-stream-finish
+not ok 14 parallel/test-diagnostics-channel-http2-server-stream-created-start-timing
+not ok 15 parallel/test-diagnostics-channel-http2-server-stream-start
+not ok 16 parallel/test-diagnostics-channel-http2-server-stream-error
+not ok 17 parallel/test-http-client-parse-error
+not ok 18 parallel/test-h2-large-header-cause-client-to-hangup
+not ok 19 parallel/test-http-extra-response
+not ok 20 parallel/test-http-multi-line-headers
+not ok 21 parallel/test-http-no-content-length
+not ok 22 parallel/test-http-response-status-message
+not ok 23 parallel/test-http-max-http-headers
+not ok 24 parallel/test-http-response-no-headers
+not ok 25 parallel/test-http-should-keep-alive
+not ok 26 parallel/test-http-upgrade-advertise
+not ok 27 parallel/test-http-socket-encoding-error
+not ok 28 parallel/test-http2-async-local-storage
+not ok 29 parallel/test-http2-autoselect-protocol
+not ok 30 parallel/test-http-upgrade-server
+not ok 31 parallel/test-http2-buffersize
+not ok 32 parallel/test-http2-altsvc
+ok 33 parallel/test-http2-client-data-end
+not ok 34 parallel/test-http2-capture-rejection
+not ok 35 parallel/test-http2-clean-output
+not ok 36 parallel/test-http2-byteswritten-server
+ok 37 parallel/test-http2-client-request-options-errors
+not ok 38 parallel/test-http2-client-destroy
+not ok 39 parallel/test-http2-client-promisify-connect
+not ok 40 parallel/test-http2-client-onconnect-errors
+not ok 41 parallel/test-http2-client-priority-before-connect
+not ok 42 parallel/test-http2-client-proxy-over-http2
+not ok 43 parallel/test-http2-client-request-listeners-warning
+not ok 44 parallel/test-http2-client-rststream-before-connect
+not ok 45 parallel/test-http2-client-set-priority
+not ok 46 parallel/test-http2-client-setLocalWindowSize
+not ok 47 parallel/test-http2-client-settings-before-connect
+not ok 48 parallel/test-http2-client-stream-destroy-before-connect
+not ok 49 parallel/test-http2-client-setNextStreamID-errors
+not ok 50 parallel/test-http2-client-unescaped-path
+not ok 51 parallel/test-http2-client-upload
+not ok 52 parallel/test-http2-client-upload-reject
+not ok 53 parallel/test-http2-client-write-before-connect
+not ok 54 parallel/test-http2-compat-expect-continue
+not ok 55 parallel/test-http2-compat-errors
+not ok 56 parallel/test-http2-client-write-empty-string
+not ok 57 parallel/test-http2-compat-client-upload-reject
+not ok 58 parallel/test-http2-compat-expect-continue-check
+not ok 59 parallel/test-http2-compat-expect-handling
+not ok 60 parallel/test-http2-compat-method-connect
+not ok 61 parallel/test-http2-compat-serverrequest
+not ok 62 parallel/test-http2-compat-serverrequest-end
+not ok 63 parallel/test-http2-compat-serverrequest-headers
+not ok 64 parallel/test-http2-compat-serverrequest-host
+not ok 65 parallel/test-http2-compat-serverrequest-pause
+not ok 66 parallel/test-http2-compat-serverrequest-pipe
+not ok 67 parallel/test-http2-compat-serverrequest-settimeout
+not ok 68 parallel/test-http2-compat-serverrequest-trailers
+not ok 69 parallel/test-http2-compat-serverresponse
+not ok 70 parallel/test-http2-compat-serverresponse-drain
+not ok 71 parallel/test-http2-compat-serverresponse-destroy
+not ok 72 parallel/test-http2-compat-serverresponse-createpushresponse
+not ok 73 parallel/test-http2-compat-serverresponse-end
+not ok 74 parallel/test-http2-compat-serverresponse-end-after-statuses-without-body
+not ok 75 parallel/test-http2-compat-serverresponse-finished
+not ok 76 parallel/test-http2-compat-serverresponse-flushheaders
+not ok 77 parallel/test-http2-compat-serverresponse-headers
+not ok 78 parallel/test-http2-compat-serverresponse-headers-after-destroy
+not ok 79 parallel/test-http2-compat-serverresponse-statuscode
+not ok 80 parallel/test-http2-compat-serverresponse-headers-send-date
+not ok 81 parallel/test-http2-compat-serverresponse-settimeout
+not ok 82 parallel/test-http2-compat-serverresponse-statusmessage
+not ok 83 parallel/test-http2-compat-serverresponse-statusmessage-property
+not ok 84 parallel/test-http2-compat-serverresponse-statusmessage-property-set
+not ok 85 parallel/test-http2-compat-serverresponse-trailers
+not ok 86 parallel/test-http2-compat-serverresponse-writehead
+not ok 87 parallel/test-http2-compat-serverresponse-writehead-array
+not ok 88 parallel/test-http2-compat-serverresponse-write
+not ok 89 parallel/test-http2-compat-short-stream-client-server
+not ok 90 parallel/test-http2-compat-socket
+not ok 91 parallel/test-http2-compat-socket-destroy-delayed
+not ok 92 parallel/test-http2-compat-socket-set
+not ok 93 parallel/test-http2-compat-write-early-hints
+not ok 94 parallel/test-http2-compat-write-head-destroyed
+not ok 95 parallel/test-http2-compat-write-head-after-close
+not ok 96 parallel/test-http2-compat-write-information
+not ok 97 parallel/test-http2-connect-method
+not ok 98 parallel/test-http2-compat-write-early-hints-invalid-header
+not ok 99 parallel/test-http2-connect-method-extended
+not ok 100 parallel/test-http2-connect-method-extended-cant-turn-off
+not ok 101 parallel/test-http2-cookies
+not ok 102 parallel/test-http2-debug
+not ok 103 parallel/test-http2-date-header
+not ok 104 parallel/test-http2-create-client-secure-session
+not ok 105 parallel/test-http2-createwritereq
+not ok 106 parallel/test-http2-create-client-session
+not ok 107 parallel/test-http2-destroy-after-write
+not ok 108 parallel/test-http2-dont-override
+not ok 109 parallel/test-http2-empty-frame-without-eof
+not ok 110 parallel/test-http2-goaway-opaquedata
+not ok 111 parallel/test-http2-exceeds-server-trailer-size
+not ok 112 parallel/test-http2-graceful-close
+not ok 113 parallel/test-http2-endafterheaders
+not ok 114 parallel/test-http2-forget-closed-streams
+not ok 115 parallel/test-http2-head-request
+not ok 116 parallel/test-http2-info-headers
+not ok 117 parallel/test-http2-info-headers-errors
+not ok 118 parallel/test-http2-invalidheaderfield
+not ok 119 parallel/test-http2-invalidargtypes-errors
+not ok 120 parallel/test-http2-invalidheaderfields-client
+not ok 121 parallel/test-http2-large-write-multiple-requests
+not ok 122 parallel/test-http2-max-concurrent-streams
+not ok 123 parallel/test-http2-max-session-memory-leak
+not ok 124 parallel/test-http2-max-session-memory-stalled-headers
+not ok 125 parallel/test-http2-methods
+not ok 126 parallel/test-http2-multi-content-length
+not ok 127 parallel/test-http2-multiheaders
+not ok 128 parallel/test-http2-misused-pseudoheaders
+not ok 129 parallel/test-http2-multiheaders-raw
+not ok 130 parallel/test-http2-multiplex
+not ok 131 parallel/test-http2-no-more-streams
+not ok 132 parallel/test-http2-no-wanttrailers-listener
+not ok 133 parallel/test-http2-onping
+not ok 134 parallel/test-http2-origin
+not ok 135 parallel/test-http2-options-max-headers-block-length
+not ok 136 parallel/test-http2-options-max-reserved-streams
+not ok 137 parallel/test-http2-options-server-response
+not ok 138 parallel/test-http2-options-server-request
+not ok 139 parallel/test-http2-pack-end-stream-flag
+not ok 140 parallel/test-http2-perf_hooks
+not ok 141 parallel/test-http2-ping
+not ok 142 parallel/test-http2-pipe
+not ok 143 parallel/test-http2-priority-cycle-
+not ok 144 parallel/test-http2-raw-headers
+not ok 145 parallel/test-http2-priority-event
+not ok 146 parallel/test-http2-raw-headers-defaults
+not ok 147 parallel/test-http2-removed-header-stays-removed
+not ok 148 parallel/test-http2-request-remove-connect-listener
+not ok 149 parallel/test-http2-res-corked
+not ok 150 parallel/test-http2-res-writable-properties
+not ok 151 parallel/test-http2-respond-file-304
+not ok 152 parallel/test-http2-respond-file-204
+not ok 153 parallel/test-http2-respond-file
+not ok 154 parallel/test-http2-respond-errors
+not ok 155 parallel/test-http2-respond-file-404
+not ok 156 parallel/test-http2-respond-file-compat
+not ok 157 parallel/test-http2-respond-file-error-dir
+not ok 158 parallel/test-http2-respond-file-error-pipe-offset
+not ok 159 parallel/test-http2-respond-file-fd-invalid
+not ok 160 parallel/test-http2-respond-file-errors
+not ok 161 parallel/test-http2-respond-file-fd-errors
+not ok 162 parallel/test-http2-respond-file-fd
+not ok 163 parallel/test-http2-respond-file-fd-leak
+not ok 164 parallel/test-http2-respond-file-fd-range
+not ok 165 parallel/test-http2-respond-file-filehandle
+not ok 166 parallel/test-http2-respond-file-push
+not ok 167 parallel/test-http2-respond-file-with-pipe
+not ok 168 parallel/test-http2-respond-no-data
+not ok 169 parallel/test-http2-respond-file-range
+not ok 170 parallel/test-http2-respond-nghttperrors
+not ok 171 parallel/test-http2-respond-with-fd-errors
+not ok 172 parallel/test-http2-response-splitting
+not ok 173 parallel/test-http2-sent-headers
+not ok 174 parallel/test-http2-server-push-disabled
+not ok 175 parallel/test-http2-server-close-callback
+not ok 176 parallel/test-http2-server-close-idle-connection
+not ok 177 parallel/test-http2-server-errors
+not ok 178 parallel/test-http2-server-push-stream
+not ok 179 parallel/test-http2-server-push-stream-errors
+not ok 180 parallel/test-http2-server-push-stream-errors-args
+not ok 181 parallel/test-http2-server-push-stream-head
+not ok 182 parallel/test-http2-server-setLocalWindowSize
+not ok 183 parallel/test-http2-server-rst-before-respond
+not ok 184 parallel/test-http2-server-set-header
+not ok 185 parallel/test-http2-server-session-destroy
+not ok 186 parallel/test-http2-server-rst-stream
+not ok 187 parallel/test-http2-server-shutdown-before-respond
+not ok 188 parallel/test-http2-server-startup
+not ok 189 parallel/test-http2-server-timeout
+not ok 190 parallel/test-http2-session-settings
+not ok 191 parallel/test-http2-session-stream-state
+not ok 192 parallel/test-http2-session-reuse-different-authority
+not ok 193 parallel/test-http2-session-timeout
+not ok 194 parallel/test-http2-session-graceful-close
+ok 195 parallel/test-http2-status-code
+not ok 196 parallel/test-http2-settings-unsolicited-ack
+not ok 197 parallel/test-http2-short-stream-client-server
+not ok 198 parallel/test-http2-single-headers-validation-disabled
+not ok 199 parallel/test-http2-socket-proxy-destroy
+not ok 200 parallel/test-http2-stream-destroy-event-order
+not ok 201 parallel/test-http2-stream-client
+not ok 202 parallel/test-http2-status-code-invalid
+not ok 203 parallel/test-http2-timeouts
+not ok 204 parallel/test-http2-too-large-headers
+not ok 205 parallel/test-http2-too-many-headers
+not ok 206 parallel/test-http2-too-many-streams
+not ok 207 parallel/test-http2-unbound-socket-proxy
+not ok 208 parallel/test-http2-window-size
+not ok 209 parallel/test-http2-trailers
+not ok 210 parallel/test-http2-trailers-after-session-close
+not ok 211 parallel/test-http2-write-callbacks
+not ok 212 parallel/test-http2-write-empty-string
+not ok 213 parallel/test-http2-zero-length-write
+not ok 214 parallel/test-https-eof-for-eom
+not ok 215 parallel/test-net-autoselectfamily-default
+not ok 216 parallel/test-net-allow-half-open
+not ok 217 parallel/test-net-after-close
+not ok 218 parallel/test-net-bytes-written-large
+not ok 219 parallel/test-net-connect-options-allowhalfopen
+not ok 220 parallel/test-net-connect-options-port
+not ok 221 parallel/test-net-dns-lookup
+not ok 222 parallel/test-net-keepalive
+not ok 223 parallel/test-net-normalize-args
+not ok 224 parallel/test-net-onread-static-buffer
+not ok 225 parallel/test-net-listen-after-destroying-stdin
+not ok 226 parallel/test-net-pause-resume-connecting
+not ok 227 parallel/test-net-persistent-keepalive
+not ok 228 parallel/test-net-persistent-nodelay
+not ok 229 parallel/test-net-persistent-ref-unref
+not ok 230 parallel/test-net-server-max-connections
+not ok 231 parallel/test-net-socket-connect-without-cb
+not ok 232 parallel/test-net-server-pause-on-connect
+not ok 233 parallel/test-net-socket-close-after-end
+not ok 234 parallel/test-net-socket-byteswritten
+not ok 235 parallel/test-net-socket-connecting
+not ok 236 parallel/test-net-socket-local-address
+not ok 237 parallel/test-net-socket-ready-without-cb
+not ok 238 parallel/test-net-socket-tos
+not ok 239 parallel/test-net-write-after-end-nt
+not ok 240 parallel/test-net-throttle
+not ok 241 parallel/test-net-write-slow
+not ok 242 parallel/test-net-writable
+not ok 243 parallel/test-tls-client-cert-resumption
+not ok 244 parallel/test-tls-client-mindhsize
+not ok 245 parallel/test-tls-env-extra-ca
+not ok 246 parallel/test-tls-env-extra-ca-with-options
+not ok 247 parallel/test-tls-inception
+not ok 248 parallel/test-tls-session-reuse-different-servername
+not ok 249 parallel/test-tls-max-send-fragment
+not ok 250 parallel/test-tls-on-empty-socket
+not ok 251 parallel/test-tls-wrap-econnreset
+not ok 252 parallel/test-tls-wrap-econnreset-localaddress
+not ok 253 parallel/test-tls-wrap-econnreset-socket
+not ok 254 sequential/test-http2-large-file
+not ok 255 sequential/test-net-localport
+not ok 256 sequential/test-tls-psk-client
+== full TAP
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..256
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-single-string.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-close.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-created.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-finish.js
+not ok 1 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings
+  ---
+  duration_ms: 60072.54600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-start.js
+not ok 2 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers
+  ---
+  duration_ms: 60088.92500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-close.js
+not ok 3 parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks
+  ---
+  duration_ms: 60091.83800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-close-error.js
+not ok 4 parallel/test-diagnostics-channel-http2-client-stream-body-single-string
+  ---
+  duration_ms: 60131.33900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-created.js
+not ok 5 parallel/test-diagnostics-channel-http2-client-stream-created
+  ---
+  duration_ms: 60133.02300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 6 parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-created-start-timing.js
+  ---
+  duration_ms: 60147.32100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 7 parallel/test-diagnostics-channel-http2-client-stream-finish
+  ---
+  duration_ms: 60134.00200
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-error.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 8 parallel/test-diagnostics-channel-http2-client-stream-close
+  ---
+  duration_ms: 60143.36700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-start.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-finish.js
+not ok 9 parallel/test-diagnostics-channel-http2-server-stream-close
+  ---
+  duration_ms: 60047.14300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-h2-large-header-cause-client-to-hangup.js
+not ok 10 parallel/test-diagnostics-channel-http2-client-stream-start
+  ---
+  duration_ms: 60066.65500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 11 parallel/test-diagnostics-channel-http2-server-stream-close-error
+  ---
+  duration_ms: 60047.80600
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-client-parse-error.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-extra-response.js
+not ok 12 parallel/test-diagnostics-channel-http2-server-stream-created
+  ---
+  duration_ms: 60073.10300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-max-http-headers.js
+not ok 13 parallel/test-diagnostics-channel-http2-server-stream-finish
+  ---
+  duration_ms: 60063.89600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 14 parallel/test-diagnostics-channel-http2-server-stream-created-start-timing
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-multi-line-headers.js
+  ---
+  duration_ms: 60073.48600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 15 parallel/test-diagnostics-channel-http2-server-stream-start
+  ---
+  duration_ms: 60066.85300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 16 parallel/test-diagnostics-channel-http2-server-stream-error
+  ---
+  duration_ms: 60077.65700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-response-no-headers.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-response-status-message.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-no-content-length.js
+not ok 17 parallel/test-http-client-parse-error
+  ---
+  duration_ms: 60042.52400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-should-keep-alive.js
+not ok 18 parallel/test-h2-large-header-cause-client-to-hangup
+  ---
+  duration_ms: 60051.31400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-socket-encoding-error.js
+not ok 19 parallel/test-http-extra-response
+  ---
+  duration_ms: 60048.53200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    Got res code: 500
+    Response ended, read 13 bytes
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-upgrade-advertise.js
+not ok 20 parallel/test-http-multi-line-headers
+  ---
+  duration_ms: 60063.02100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 21 parallel/test-http-no-content-length
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-upgrade-server.js
+  duration_ms: 60059.06400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 22 parallel/test-http-response-status-message
+  ---
+  duration_ms: 60059.39600
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-altsvc.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    client: expected status message: OK
+    client: actual status message: OK
+    client: expected status message: Internal Server Error
+    client: actual status message: Internal Server Error
+    client: expected status message: Moved Temporarily
+    client: actual status message: Moved Temporarily
+    client: expected status message: 
+    client: actual status message: 
+    client: expected status message: 
+    client: actual status message: 
+  ...
+not ok 23 parallel/test-http-max-http-headers
+  ---
+  duration_ms: 60076.31700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    pid is 246343
+    max header size is 16384
+    test1
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 100
+    writing chunk of size 9
+  ...
+not ok 24 parallel/test-http-response-no-headers
+  ---
+  duration_ms: 60067.70300
+  severity: fail
+  exitcode: -15
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-async-local-storage.js
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-buffersize.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-autoselect-protocol.js
+not ok 25 parallel/test-http-should-keep-alive
+  ---
+  duration_ms: 60048.32700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 26 parallel/test-http-upgrade-advertise
+  ---
+  duration_ms: 60043.04800
+  severity: fail
+  exitcode: -15
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-byteswritten-server.js
+  stack: |-
+    timeout
+  ...
+not ok 27 parallel/test-http-socket-encoding-error
+  ---
+  duration_ms: 60047.18400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-clean-output.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-capture-rejection.js
+not ok 28 parallel/test-http2-async-local-storage
+  ---
+  duration_ms: 60068.39300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 29 parallel/test-http2-autoselect-protocol
+  ---
+  duration_ms: 60064.37800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 30 parallel/test-http-upgrade-server
+  ---
+  duration_ms: 60077.55500
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-destroy.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 31 parallel/test-http2-buffersize
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-data-end.js
+  duration_ms: 60069.69800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 32 parallel/test-http2-altsvc
+  ---
+  duration_ms: 60084.21000
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-onconnect-errors.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-priority-before-connect.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-promisify-connect.js
+ok 33 parallel/test-http2-client-data-end
+  ---
+  duration_ms: 185.71700
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-proxy-over-http2.js
+not ok 34 parallel/test-http2-capture-rejection
+  ---
+  duration_ms: 60039.55800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-request-listeners-warning.js
+not ok 35 parallel/test-http2-clean-output
+  ---
+  duration_ms: 60043.42900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-request-options-errors.js
+not ok 36 parallel/test-http2-byteswritten-server
+  ---
+  duration_ms: 60050.49700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-rststream-before-connect.js
+ok 37 parallel/test-http2-client-request-options-errors
+  ---
+  duration_ms: 140.64600
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-set-priority.js
+not ok 38 parallel/test-http2-client-destroy
+  ---
+  duration_ms: 60061.28900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-setLocalWindowSize.js
+not ok 39 parallel/test-http2-client-promisify-connect
+  ---
+  duration_ms: 60051.53000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-setNextStreamID-errors.js
+not ok 40 parallel/test-http2-client-onconnect-errors
+  ---
+  duration_ms: 60061.08800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:247112) internal/test/binding: These APIs are for internal testing only. Do not use them.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-settings-before-connect.js
+not ok 41 parallel/test-http2-client-priority-before-connect
+  ---
+  duration_ms: 60057.43600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:247113) [DEP0194] DeprecationWarning: http2Stream.priority is longer supported after priority signalling was deprecated in RFC 9113
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-stream-destroy-before-connect.js
+not ok 42 parallel/test-http2-client-proxy-over-http2
+  ---
+  duration_ms: 60027.16000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-unescaped-path.js
+not ok 43 parallel/test-http2-client-request-listeners-warning
+  ---
+  duration_ms: 60042.99400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-upload.js
+not ok 44 parallel/test-http2-client-rststream-before-connect
+  ---
+  duration_ms: 60054.63900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-upload-reject.js
+not ok 45 parallel/test-http2-client-set-priority
+  ---
+  duration_ms: 60044.40400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:247321) [DEP0194] DeprecationWarning: Priority signaling has been deprecated as of RFC 9113.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-write-before-connect.js
+not ok 46 parallel/test-http2-client-setLocalWindowSize
+  ---
+  duration_ms: 60039.91600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-write-empty-string.js
+not ok 47 parallel/test-http2-client-settings-before-connect
+  ---
+  duration_ms: 60056.16400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 48 parallel/test-http2-client-stream-destroy-before-connect
+  ---
+  duration_ms: 60051.20500
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-client-upload-reject.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 49 parallel/test-http2-client-setNextStreamID-errors
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-errors.js
+  duration_ms: 60065.76900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-expect-continue.js
+not ok 50 parallel/test-http2-client-unescaped-path
+  ---
+  duration_ms: 60031.24600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-expect-continue-check.js
+not ok 51 parallel/test-http2-client-upload
+  ---
+  duration_ms: 60029.69200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-expect-handling.js
+not ok 52 parallel/test-http2-client-upload-reject
+  ---
+  duration_ms: 60028.87200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-method-connect.js
+not ok 53 parallel/test-http2-client-write-before-connect
+  ---
+  duration_ms: 60027.84200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest.js
+not ok 54 parallel/test-http2-compat-expect-continue
+  ---
+  duration_ms: 60043.91700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 55 parallel/test-http2-compat-errors
+  ---
+  duration_ms: 60048.90900
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-end.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 56 parallel/test-http2-client-write-empty-string
+  ---
+  duration_ms: 60078.33400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-headers.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-host.js
+not ok 57 parallel/test-http2-compat-client-upload-reject
+  ---
+  duration_ms: 60062.40000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-pause.js
+not ok 58 parallel/test-http2-compat-expect-continue-check
+  ---
+  duration_ms: 60028.68400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-pipe.js
+not ok 59 parallel/test-http2-compat-expect-handling
+  ---
+  duration_ms: 60030.65100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-settimeout.js
+not ok 60 parallel/test-http2-compat-method-connect
+  ---
+  duration_ms: 60048.59100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-trailers.js
+not ok 61 parallel/test-http2-compat-serverrequest
+  ---
+  duration_ms: 60027.60400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse.js
+not ok 62 parallel/test-http2-compat-serverrequest-end
+  ---
+  duration_ms: 60055.65400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-createpushresponse.js
+not ok 63 parallel/test-http2-compat-serverrequest-headers
+  ---
+  duration_ms: 60060.32300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-destroy.js
+not ok 64 parallel/test-http2-compat-serverrequest-host
+  ---
+  duration_ms: 60061.18700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-drain.js
+not ok 65 parallel/test-http2-compat-serverrequest-pause
+  ---
+  duration_ms: 60059.97900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-end.js
+not ok 66 parallel/test-http2-compat-serverrequest-pipe
+  ---
+  duration_ms: 60028.00600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-end-after-statuses-without-body.js
+not ok 67 parallel/test-http2-compat-serverrequest-settimeout
+  ---
+  duration_ms: 60027.95700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-finished.js
+not ok 68 parallel/test-http2-compat-serverrequest-trailers
+  ---
+  duration_ms: 60027.95900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-flushheaders.js
+not ok 69 parallel/test-http2-compat-serverresponse
+  ---
+  duration_ms: 60026.20200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-headers.js
+not ok 70 parallel/test-http2-compat-serverresponse-drain
+  ---
+  duration_ms: 60043.21000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 71 parallel/test-http2-compat-serverresponse-destroy
+  ---
+  duration_ms: 60049.50700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 72 parallel/test-http2-compat-serverresponse-createpushresponse
+  ---
+  duration_ms: 60055.77200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-headers-send-date.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-settimeout.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-headers-after-destroy.js
+not ok 73 parallel/test-http2-compat-serverresponse-end
+  ---
+  duration_ms: 60049.18100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statuscode.js
+not ok 74 parallel/test-http2-compat-serverresponse-end-after-statuses-without-body
+  ---
+  duration_ms: 60028.11500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statusmessage.js
+not ok 75 parallel/test-http2-compat-serverresponse-finished
+  ---
+  duration_ms: 60029.22900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statusmessage-property.js
+not ok 76 parallel/test-http2-compat-serverresponse-flushheaders
+  ---
+  duration_ms: 60026.28600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statusmessage-property-set.js
+not ok 77 parallel/test-http2-compat-serverresponse-headers
+  ---
+  duration_ms: 60025.90700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-trailers.js
+not ok 78 parallel/test-http2-compat-serverresponse-headers-after-destroy
+  ---
+  duration_ms: 60058.19100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 79 parallel/test-http2-compat-serverresponse-statuscode
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-write.js
+  ---
+  duration_ms: 60049.77600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 80 parallel/test-http2-compat-serverresponse-headers-send-date
+  ---
+  duration_ms: 60062.19400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 81 parallel/test-http2-compat-serverresponse-settimeout
+  ---
+  duration_ms: 60062.73200
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-writehead.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-writehead-array.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-short-stream-client-server.js
+not ok 82 parallel/test-http2-compat-serverresponse-statusmessage
+  ---
+  duration_ms: 60047.77000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:248491) UnsupportedWarning: Status message is not supported by HTTP/2 (RFC7540 8.1.2.4)
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-socket.js
+not ok 83 parallel/test-http2-compat-serverresponse-statusmessage-property
+  ---
+  duration_ms: 60026.91800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:248591) UnsupportedWarning: Status message is not supported by HTTP/2 (RFC7540 8.1.2.4)
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-socket-destroy-delayed.js
+not ok 84 parallel/test-http2-compat-serverresponse-statusmessage-property-set
+  ---
+  duration_ms: 60029.76200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:248592) UnsupportedWarning: Status message is not supported by HTTP/2 (RFC7540 8.1.2.4)
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-socket-set.js
+not ok 85 parallel/test-http2-compat-serverresponse-trailers
+  ---
+  duration_ms: 60027.35400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-early-hints.js
+not ok 86 parallel/test-http2-compat-serverresponse-writehead
+  ---
+  duration_ms: 60047.15700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 87 parallel/test-http2-compat-serverresponse-writehead-array
+  ---
+  duration_ms: 60047.36700
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-early-hints-invalid-header.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 88 parallel/test-http2-compat-serverresponse-write
+  ---
+  duration_ms: 60052.25600
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-head-after-close.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-head-destroyed.js
+not ok 89 parallel/test-http2-compat-short-stream-client-server
+  ---
+  duration_ms: 60063.78200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-information.js
+not ok 90 parallel/test-http2-compat-socket
+  ---
+  duration_ms: 60040.23800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect-method.js
+not ok 91 parallel/test-http2-compat-socket-destroy-delayed
+  ---
+  duration_ms: 60029.87400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect-method-extended.js
+not ok 92 parallel/test-http2-compat-socket-set
+  ---
+  duration_ms: 60028.31500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect-method-extended-cant-turn-off.js
+not ok 93 parallel/test-http2-compat-write-early-hints
+  ---
+  duration_ms: 60031.82500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-cookies.js
+not ok 94 parallel/test-http2-compat-write-head-destroyed
+  ---
+  duration_ms: 60070.45900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 95 parallel/test-http2-compat-write-head-after-close
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-create-client-secure-session.js
+  ---
+  duration_ms: 60074.30800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 96 parallel/test-http2-compat-write-information
+  ---
+  duration_ms: 60060.82900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 97 parallel/test-http2-connect-method
+  ---
+  duration_ms: 60054.89400
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-create-client-session.js
+  severity: fail
+# /boot/system/bin/node --expose-gc /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-createwritereq.js
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 98 parallel/test-http2-compat-write-early-hints-invalid-header
+  ---
+  duration_ms: 60080.63000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-debug.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-date-header.js
+not ok 99 parallel/test-http2-connect-method-extended
+  ---
+  duration_ms: 60028.58000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-destroy-after-write.js
+not ok 100 parallel/test-http2-connect-method-extended-cant-turn-off
+  ---
+  duration_ms: 60029.21700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-dont-override.js
+not ok 101 parallel/test-http2-cookies
+  ---
+  duration_ms: 60027.35000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-empty-frame-without-eof.js
+not ok 102 parallel/test-http2-debug
+  ---
+  duration_ms: 60053.31900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-endafterheaders.js
+not ok 103 parallel/test-http2-date-header
+  ---
+  duration_ms: 60056.89800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-exceeds-server-trailer-size.js
+not ok 104 parallel/test-http2-create-client-secure-session
+  ---
+  duration_ms: 60070.81100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 105 parallel/test-http2-createwritereq
+  ---
+  duration_ms: 60067.73700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-forget-closed-streams.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-goaway-opaquedata.js
+not ok 106 parallel/test-http2-create-client-session
+  ---
+  duration_ms: 60075.23200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-graceful-close.js
+not ok 107 parallel/test-http2-destroy-after-write
+  ---
+  duration_ms: 60031.54400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-head-request.js
+not ok 108 parallel/test-http2-dont-override
+  ---
+  duration_ms: 60027.41000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-info-headers.js
+not ok 109 parallel/test-http2-empty-frame-without-eof
+  ---
+  duration_ms: 60028.69900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-info-headers-errors.js
+not ok 110 parallel/test-http2-goaway-opaquedata
+  ---
+  duration_ms: 60064.54700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 111 parallel/test-http2-exceeds-server-trailer-size
+  ---
+  duration_ms: 60069.62300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-invalidargtypes-errors.js
+not ok 112 parallel/test-http2-graceful-close
+  ---
+  duration_ms: 60060.70400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 113 parallel/test-http2-endafterheaders
+  ---
+  duration_ms: 60077.57800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-invalidheaderfields-client.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-large-write-multiple-requests.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-invalidheaderfield.js
+not ok 114 parallel/test-http2-forget-closed-streams
+  ---
+  duration_ms: 60093.91600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-concurrent-streams.js
+not ok 115 parallel/test-http2-head-request
+  ---
+  duration_ms: 60028.44400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-session-memory-leak.js
+not ok 116 parallel/test-http2-info-headers
+  ---
+  duration_ms: 60035.43000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-session-memory-stalled-headers.js
+not ok 117 parallel/test-http2-info-headers-errors
+  ---
+  duration_ms: 60028.74300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:249169) internal/test/binding: These APIs are for internal testing only. Do not use them.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-methods.js
+not ok 118 parallel/test-http2-invalidheaderfield
+  ---
+  duration_ms: 60065.95300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 119 parallel/test-http2-invalidargtypes-errors
+  ---
+  duration_ms: 60067.21300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 120 parallel/test-http2-invalidheaderfields-client
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-misused-pseudoheaders.js
+  duration_ms: 60064.28200
+  severity: fail
+  exitcode: -15
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multi-content-length.js
+  stack: |-
+    timeout
+  ...
+not ok 121 parallel/test-http2-large-write-multiple-requests
+  ---
+  duration_ms: 60070.26800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    server sends content 1
+    server sends content 2
+    server sends content 3
+    server sends content 4
+    server sends content 5
+    server sends content 6
+    server sends content 7
+    server sends content 8
+    server sends content 9
+    server sends content 10
+    server sends content 11
+    server sends content 12
+    server sends content 13
+    server sends content 14
+    server sends content 15
+    server sends content 16
+    server sends content 17
+    server sends content 18
+    server sends content 19
+    server sends content 20
+    server sends content 21
+    server sends content 22
+    server sends content 23
+    server sends content 24
+    server sends content 25
+    server sends content 26
+    server sends content 27
+    server sends content 28
+    server sends content 29
+    server sends content 30
+    server sends content 31
+    server sends content 32
+    server sends content 33
+    server sends content 34
+    server sends content 35
+    server sends content 36
+    server sends content 37
+    server sends content 38
+    server sends content 39
+    server sends content 40
+    server sends content 41
+    server sends content 42
+    server sends content 43
+    server sends content 44
+    server sends content 45
+    server sends content 46
+    server sends content 47
+    server sends content 48
+    server sends content 49
+    server sends content 50
+    server sends content 51
+    server sends content 52
+    server sends content 53
+    server sends content 54
+    server sends content 55
+    server sends content 56
+    server sends content 57
+    server sends content 58
+    server sends content 59
+    server sends content 60
+    server sends content 61
+    server sends content 62
+    server sends content 63
+    server sends content 64
+    server sends content 65
+    server sends content 66
+    server sends content 67
+    server sends content 68
+    server sends content 69
+    server sends content 70
+    server sends content 71
+    server sends content 72
+    server sends content 73
+    server sends content 74
+    server sends content 75
+    server sends content 76
+    server sends content 77
+    server sends content 78
+    server sends content 79
+    server sends content 80
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multiheaders.js
+    server sends content 81
+    server sends content 82
+    server sends content 83
+    server sends content 84
+    server sends content 85
+    server sends content 86
+    server sends content 87
+    server sends content 88
+    server sends content 89
+    server sends content 90
+    server sends content 91
+    server sends content 92
+    server sends content 93
+    server sends content 94
+    server sends content 95
+    server sends content 96
+    server sends content 97
+    server sends content 98
+    server sends content 99
+    server sends content 100
+    client receives content 1
+    client receives content 2
+    client receives content 3
+    client receives content 4
+    client receives content 5
+    client receives content 6
+    client receives content 7
+    client receives content 8
+    client receives content 9
+    client receives content 10
+    client receives content 11
+    client receives content 12
+    client receives content 13
+    client receives content 14
+    client receives content 15
+    client receives content 16
+    client receives content 17
+    client receives content 18
+    client receives content 19
+    client receives content 20
+    client receives content 21
+    client receives content 22
+    client receives content 23
+    client receives content 24
+    client receives content 25
+    client receives content 26
+    client receives content 27
+    client receives content 28
+    client receives content 29
+    client receives content 30
+    client receives content 31
+    client receives content 32
+    client receives content 33
+    client receives content 34
+    client receives content 35
+    client receives content 36
+    client receives content 37
+    client receives content 38
+    client receives content 39
+    client receives content 40
+    client receives content 41
+    client receives content 42
+    client receives content 43
+    client receives content 44
+    client receives content 45
+    client receives content 46
+    client receives content 47
+    client receives content 48
+    client receives content 49
+    client receives content 50
+    client receives content 51
+    client receives content 52
+    client receives content 53
+    client receives content 54
+    client receives content 55
+    client receives content 56
+    client receives content 57
+    client receives content 58
+    client receives content 59
+    client receives content 60
+    client receives content 61
+    client receives content 62
+    client receives content 63
+    client receives content 64
+    client receives content 65
+    client receives content 66
+    client receives content 67
+    client receives content 68
+    client receives content 69
+    client receives content 70
+    client receives content 71
+    client receives content 72
+    client receives content 73
+    client receives content 74
+    client receives content 75
+    client receives content 76
+    client receives content 77
+    client receives content 78
+    client receives content 79
+    client receives content 80
+    client receives content 81
+    client receives content 82
+    client receives content 83
+    client receives content 84
+    client receives content 85
+    client receives content 86
+    client receives content 87
+    client receives content 88
+    client receives content 89
+    client receives content 90
+    client receives content 91
+    client receives content 92
+    client receives content 93
+    client receives content 94
+    client receives content 95
+    client receives content 96
+    client receives content 97
+    client receives content 98
+    client receives content 99
+    client receives content 100
+  ...
+not ok 122 parallel/test-http2-max-concurrent-streams
+  ---
+  duration_ms: 60051.80200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multiplex.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multiheaders-raw.js
+not ok 123 parallel/test-http2-max-session-memory-leak
+  ---
+  duration_ms: 60033.42000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-no-more-streams.js
+not ok 124 parallel/test-http2-max-session-memory-stalled-headers
+  ---
+  duration_ms: 60027.72000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-no-wanttrailers-listener.js
+not ok 125 parallel/test-http2-methods
+  ---
+  duration_ms: 60031.45600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-onping.js
+not ok 126 parallel/test-http2-multi-content-length
+  ---
+  duration_ms: 60068.72100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 127 parallel/test-http2-multiheaders
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-max-headers-block-length.js
+  ---
+  duration_ms: 60064.77200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-max-reserved-streams.js
+not ok 128 parallel/test-http2-misused-pseudoheaders
+  ---
+  duration_ms: 60076.56100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 129 parallel/test-http2-multiheaders-raw
+  ---
+  duration_ms: 60061.21500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-server-request.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-server-response.js
+not ok 130 parallel/test-http2-multiplex
+  ---
+  duration_ms: 60067.51300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-origin.js
+not ok 131 parallel/test-http2-no-more-streams
+  ---
+  duration_ms: 60030.93500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-pack-end-stream-flag.js
+not ok 132 parallel/test-http2-no-wanttrailers-listener
+  ---
+  duration_ms: 60029.36300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --no-warnings /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-perf_hooks.js
+not ok 133 parallel/test-http2-onping
+  ---
+  duration_ms: 60025.83600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-ping.js
+not ok 134 parallel/test-http2-origin
+  ---
+  duration_ms: 60051.47300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-pipe.js
+not ok 135 parallel/test-http2-options-max-headers-block-length
+  ---
+  duration_ms: 60067.69100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 136 parallel/test-http2-options-max-reserved-streams
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-priority-cycle-.js
+  duration_ms: 60069.48800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 137 parallel/test-http2-options-server-response
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-priority-event.js
+  duration_ms: 60066.06500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 138 parallel/test-http2-options-server-request
+  ---
+  duration_ms: 60070.87400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-raw-headers-defaults.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-raw-headers.js
+not ok 139 parallel/test-http2-pack-end-stream-flag
+  ---
+  duration_ms: 60029.22600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-removed-header-stays-removed.js
+not ok 140 parallel/test-http2-perf_hooks
+  ---
+  duration_ms: 60028.40900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-request-remove-connect-listener.js
+not ok 141 parallel/test-http2-ping
+  ---
+  duration_ms: 60028.32200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-res-corked.js
+not ok 142 parallel/test-http2-pipe
+  ---
+  duration_ms: 60038.54400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-res-writable-properties.js
+not ok 143 parallel/test-http2-priority-cycle-
+  ---
+  duration_ms: 60059.45100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:249595) [DEP0194] DeprecationWarning: http2Stream.priority is longer supported after priority signalling was deprecated in RFC 9113
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+  ...
+not ok 144 parallel/test-http2-raw-headers
+  ---
+  duration_ms: 60052.41300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 145 parallel/test-http2-priority-event
+  ---
+  duration_ms: 60058.96600
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-errors.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:249596) [DEP0194] DeprecationWarning: http2Stream.priority is longer supported after priority signalling was deprecated in RFC 9113
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-204.js
+not ok 146 parallel/test-http2-raw-headers-defaults
+  ---
+  duration_ms: 60060.05800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-304.js
+not ok 147 parallel/test-http2-removed-header-stays-removed
+  ---
+  duration_ms: 60028.12300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-404.js
+not ok 148 parallel/test-http2-request-remove-connect-listener
+  ---
+  duration_ms: 60032.79400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-compat.js
+not ok 149 parallel/test-http2-res-corked
+  ---
+  duration_ms: 60025.96100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-error-dir.js
+not ok 150 parallel/test-http2-res-writable-properties
+  ---
+  duration_ms: 60052.15800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-error-pipe-offset.js
+not ok 151 parallel/test-http2-respond-file-304
+  ---
+  duration_ms: 60047.68400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-errors.js
+not ok 152 parallel/test-http2-respond-file-204
+  ---
+  duration_ms: 60059.88800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 153 parallel/test-http2-respond-file
+  ---
+  duration_ms: 60061.84200
+  severity: fail
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd.js
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 154 parallel/test-http2-respond-errors
+  ---
+  duration_ms: 60062.82400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:249729) internal/test/binding: These APIs are for internal testing only. Do not use them.
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-errors.js
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-invalid.js
+not ok 155 parallel/test-http2-respond-file-404
+  ---
+  duration_ms: 60029.65100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-leak.js
+not ok 156 parallel/test-http2-respond-file-compat
+  ---
+  duration_ms: 60026.76500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-range.js
+not ok 157 parallel/test-http2-respond-file-error-dir
+  ---
+  duration_ms: 60026.89300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-filehandle.js
+not ok 158 parallel/test-http2-respond-file-error-pipe-offset
+  ---
+  duration_ms: 60088.77500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-push.js
+not ok 159 parallel/test-http2-respond-file-fd-invalid
+  ---
+  duration_ms: 60054.37500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 160 parallel/test-http2-respond-file-errors
+  ---
+  duration_ms: 60064.75700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 161 parallel/test-http2-respond-file-fd-errors
+  ---
+  duration_ms: 60059.61500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 162 parallel/test-http2-respond-file-fd
+  ---
+  duration_ms: 60061.81200
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-with-pipe.js
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-nghttperrors.js
+  severity: fail
+  exitcode: -15
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-range.js
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-no-data.js
+not ok 163 parallel/test-http2-respond-file-fd-leak
+  ---
+  duration_ms: 60030.37600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-with-fd-errors.js
+not ok 164 parallel/test-http2-respond-file-fd-range
+  ---
+  duration_ms: 60031.72200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-response-splitting.js
+not ok 165 parallel/test-http2-respond-file-filehandle
+  ---
+  duration_ms: 60027.45600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-sent-headers.js
+not ok 166 parallel/test-http2-respond-file-push
+  ---
+  duration_ms: 60063.45500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 167 parallel/test-http2-respond-file-with-pipe
+  ---
+  duration_ms: 60059.31800
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-close-callback.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 168 parallel/test-http2-respond-no-data
+  ---
+  duration_ms: 60053.62300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 169 parallel/test-http2-respond-file-range
+  ---
+  duration_ms: 60063.27800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 170 parallel/test-http2-respond-nghttperrors
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-disabled.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-close-idle-connection.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-errors.js
+  ---
+  duration_ms: 60064.08400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:250002) internal/test/binding: These APIs are for internal testing only. Do not use them.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream.js
+not ok 171 parallel/test-http2-respond-with-fd-errors
+  ---
+  duration_ms: 60029.84600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:250106) internal/test/binding: These APIs are for internal testing only. Do not use them.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream-errors.js
+not ok 172 parallel/test-http2-response-splitting
+  ---
+  duration_ms: 60026.58200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream-errors-args.js
+not ok 173 parallel/test-http2-sent-headers
+  ---
+  duration_ms: 60028.24000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream-head.js
+not ok 174 parallel/test-http2-server-push-disabled
+  ---
+  duration_ms: 60064.57100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-rst-before-respond.js
+not ok 175 parallel/test-http2-server-close-callback
+  ---
+  duration_ms: 60073.15800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 176 parallel/test-http2-server-close-idle-connection
+  ---
+  duration_ms: 60069.59900
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-rst-stream.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 177 parallel/test-http2-server-errors
+  ---
+  duration_ms: 60069.71300
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-session-destroy.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 178 parallel/test-http2-server-push-stream
+  ---
+  duration_ms: 60075.14800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-set-header.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-setLocalWindowSize.js
+not ok 179 parallel/test-http2-server-push-stream-errors
+  ---
+  duration_ms: 60030.77100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:250239) internal/test/binding: These APIs are for internal testing only. Do not use them.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-shutdown-before-respond.js
+not ok 180 parallel/test-http2-server-push-stream-errors-args
+  ---
+  duration_ms: 60026.42100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-startup.js
+not ok 181 parallel/test-http2-server-push-stream-head
+  ---
+  duration_ms: 60034.92600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-timeout.js
+not ok 182 parallel/test-http2-server-setLocalWindowSize
+  ---
+  duration_ms: 60056.07100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-graceful-close.js
+not ok 183 parallel/test-http2-server-rst-before-respond
+  ---
+  duration_ms: 60072.56800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 184 parallel/test-http2-server-set-header
+  ---
+  duration_ms: 60061.64000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:250278) UnsupportedWarning: The provided connection header is not valid, the value will be dropped from the header and will never be in use.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+not ok 185 parallel/test-http2-server-session-destroy
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-settings.js
+  ---
+  duration_ms: 60069.84000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-stream-state.js
+not ok 186 parallel/test-http2-server-rst-stream
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-reuse-different-authority.js
+  ---
+  duration_ms: 60077.35100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-timeout.js
+not ok 187 parallel/test-http2-server-shutdown-before-respond
+  ---
+  duration_ms: 60028.54600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-settings-unsolicited-ack.js
+not ok 188 parallel/test-http2-server-startup
+  ---
+  duration_ms: 60028.67100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-short-stream-client-server.js
+not ok 189 parallel/test-http2-server-timeout
+  ---
+  duration_ms: 60028.63300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-single-headers-validation-disabled.js
+not ok 190 parallel/test-http2-session-settings
+  ---
+  duration_ms: 60064.36400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-socket-proxy-destroy.js
+not ok 191 parallel/test-http2-session-stream-state
+  ---
+  duration_ms: 60066.76700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-status-code.js
+not ok 192 parallel/test-http2-session-reuse-different-authority
+  ---
+  duration_ms: 60072.58000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 193 parallel/test-http2-session-timeout
+  ---
+  duration_ms: 60063.92100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 194 parallel/test-http2-session-graceful-close
+  ---
+  duration_ms: 60077.74200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-status-code-invalid.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-stream-client.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-stream-destroy-event-order.js
+ok 195 parallel/test-http2-status-code
+  ---
+  duration_ms: 185.74900
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-timeouts.js
+not ok 196 parallel/test-http2-settings-unsolicited-ack
+  ---
+  duration_ms: 60027.58200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-too-large-headers.js
+not ok 197 parallel/test-http2-short-stream-client-server
+  ---
+  duration_ms: 60029.87300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-too-many-headers.js
+not ok 198 parallel/test-http2-single-headers-validation-disabled
+  ---
+  duration_ms: 60027.12200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-too-many-streams.js
+not ok 199 parallel/test-http2-socket-proxy-destroy
+  ---
+  duration_ms: 60035.06600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-trailers.js
+not ok 200 parallel/test-http2-stream-destroy-event-order
+  ---
+  duration_ms: 60047.13600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-trailers-after-session-close.js
+not ok 201 parallel/test-http2-stream-client
+  ---
+  duration_ms: 60051.53100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 202 parallel/test-http2-status-code-invalid
+  ---
+  duration_ms: 60052.70500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-window-size.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-unbound-socket-proxy.js
+not ok 203 parallel/test-http2-timeouts
+  ---
+  duration_ms: 60028.52000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-write-callbacks.js
+not ok 204 parallel/test-http2-too-large-headers
+  ---
+  duration_ms: 60028.55600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:250656) Warning: settings.maxHeaderSize overwrite settings.maxHeaderListSize
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-write-empty-string.js
+not ok 205 parallel/test-http2-too-many-headers
+  ---
+  duration_ms: 60026.68900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-zero-length-write.js
+not ok 206 parallel/test-http2-too-many-streams
+  ---
+  duration_ms: 60026.93300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-https-eof-for-eom.js
+not ok 207 parallel/test-http2-unbound-socket-proxy
+  ---
+  duration_ms: 60041.40100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-after-close.js
+not ok 208 parallel/test-http2-window-size
+  ---
+  duration_ms: 60044.94100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 209 parallel/test-http2-trailers
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-allow-half-open.js
+  duration_ms: 60071.05900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-autoselectfamily-default.js
+not ok 210 parallel/test-http2-trailers-after-session-close
+  ---
+  duration_ms: 60056.28600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-bytes-written-large.js
+not ok 211 parallel/test-http2-write-callbacks
+  ---
+  duration_ms: 60027.69500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-connect-options-allowhalfopen.js
+not ok 212 parallel/test-http2-write-empty-string
+  ---
+  duration_ms: 60028.07200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-connect-options-port.js
+not ok 213 parallel/test-http2-zero-length-write
+  ---
+  duration_ms: 60026.19300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-dns-lookup.js
+not ok 214 parallel/test-https-eof-for-eom
+  ---
+  duration_ms: 60026.77700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    1) Making Request
+    2) Server got request
+    3) Client got response headers.
+    4) Server finished response
+    5) Client got "end" event.
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-keepalive.js
+not ok 215 parallel/test-net-autoselectfamily-default
+  ---
+  duration_ms: 60042.25700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 216 parallel/test-net-allow-half-open
+  ---
+  duration_ms: 60046.21900
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-listen-after-destroying-stdin.js
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-normalize-args.js
+not ok 217 parallel/test-net-after-close
+  ---
+  duration_ms: 60056.33200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    SERVER: got connection
+    connection closed
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-onread-static-buffer.js
+not ok 218 parallel/test-net-bytes-written-large
+  ---
+  duration_ms: 60072.65500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-pause-resume-connecting.js
+not ok 219 parallel/test-net-connect-options-allowhalfopen
+  ---
+  duration_ms: 60029.01600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    Server started listening at 127.0.0.1:63797
+    'connection' 1 emitted on server
+    Server has sent 1 FIN
+    'connect' emitted on Client 1
+    'connect' emitted on Client 2
+    'connect' emitted on Client 3
+    'connect' emitted on Client 4
+    'connect' emitted on Client 5
+    'connect' emitted on Client 6
+    'connection' 2 emitted on server
+    Server has sent 2 FIN
+    'connection' 3 emitted on server
+    Server has sent 3 FIN
+    'connection' 4 emitted on server
+    Server has sent 4 FIN
+    'connection' 5 emitted on server
+    Server has sent 5 FIN
+    'connection' 6 emitted on server
+    Server has sent 6 FIN
+    client 1 received FIN
+    client 1 sent FIN, 1 have been sent
+    client 2 received FIN
+    client 2 sent FIN, 2 have been sent
+    server connection 2 is started by client 2
+    server connection 1 is started by client 1
+    connection 2 has been closed by both sides, 1 clients have closed
+    connection 1 has been closed by both sides, 2 clients have closed
+    client 3 received FIN
+    client 3 sent FIN, 3 have been sent
+    client 4 received FIN
+    client 4 sent FIN, 4 have been sent
+    client 5 received FIN
+    client 5 sent FIN, 5 have been sent
+    client 6 received FIN
+    client 6 sent FIN, 6 have been sent
+    server connection 3 is started by client 3
+    server connection 4 is started by client 4
+    server connection 5 is started by client 5
+    server connection 6 is started by client 6
+    connection 6 has been closed by both sides, 3 clients have closed
+    connection 5 has been closed by both sides, 4 clients have closed
+    connection 4 has been closed by both sides, 5 clients have closed
+    connection 3 has been closed by both sides, 6 clients have closed
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-persistent-keepalive.js
+not ok 220 parallel/test-net-connect-options-port
+  ---
+  duration_ms: 60028.66200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-persistent-nodelay.js
+not ok 221 parallel/test-net-dns-lookup
+  ---
+  duration_ms: 60028.81000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-persistent-ref-unref.js
+not ok 222 parallel/test-net-keepalive
+  ---
+  duration_ms: 60025.82400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-server-max-connections.js
+not ok 223 parallel/test-net-normalize-args
+  ---
+  duration_ms: 60046.64700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 224 parallel/test-net-onread-static-buffer
+  ---
+  duration_ms: 60040.76900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-server-pause-on-connect.js
+not ok 225 parallel/test-net-listen-after-destroying-stdin
+  ---
+  duration_ms: 60048.84900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    listening...
+    accepted...
+    finished...
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-close-after-end.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-byteswritten.js
+not ok 226 parallel/test-net-pause-resume-connecting
+  ---
+  duration_ms: 60027.51300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-connect-without-cb.js
+not ok 227 parallel/test-net-persistent-keepalive
+  ---
+  duration_ms: 60031.59700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-connecting.js
+not ok 228 parallel/test-net-persistent-nodelay
+  ---
+  duration_ms: 60029.28100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:251043) internal/test/binding: These APIs are for internal testing only. Do not use them.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-local-address.js
+not ok 229 parallel/test-net-persistent-ref-unref
+  ---
+  duration_ms: 60030.09300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (node:251044) internal/test/binding: These APIs are for internal testing only. Do not use them.
+    (Use `node --trace-warnings ...` to show where the warning was created)
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-ready-without-cb.js
+not ok 230 parallel/test-net-server-max-connections
+  ---
+  duration_ms: 60026.82300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    closed 10
+    closed 11
+    closed 12
+    closed 13
+    closed 14
+    closed 15
+    closed 16
+    closed 17
+    closed 18
+    closed 19
+    calling wait callback.
+    closed 9
+    closed 8
+    closed 7
+    closed 6
+    closed 5
+    closed 4
+    closed 3
+    closed 2
+    closed 1
+    closed 0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-tos.js
+not ok 231 parallel/test-net-socket-connect-without-cb
+  ---
+  duration_ms: 60042.07700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-throttle.js
+not ok 232 parallel/test-net-server-pause-on-connect
+  ---
+  duration_ms: 60059.64300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-writable.js
+not ok 233 parallel/test-net-socket-close-after-end
+  ---
+  duration_ms: 60061.31500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 234 parallel/test-net-socket-byteswritten
+  ---
+  duration_ms: 60062.36500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-write-after-end-nt.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-write-slow.js
+not ok 235 parallel/test-net-socket-connecting
+  ---
+  duration_ms: 60026.78900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-client-cert-resumption.js
+not ok 236 parallel/test-net-socket-local-address
+  ---
+  duration_ms: 60030.00400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-client-mindhsize.js
+not ok 237 parallel/test-net-socket-ready-without-cb
+  ---
+  duration_ms: 60031.28900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-env-extra-ca.js
+not ok 238 parallel/test-net-socket-tos
+  ---
+  duration_ms: 60026.46200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-env-extra-ca-with-options.js
+not ok 239 parallel/test-net-write-after-end-nt
+  ---
+  duration_ms: 60048.88200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-inception.js
+not ok 240 parallel/test-net-throttle
+  ---
+  duration_ms: 60060.65800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 241 parallel/test-net-write-slow
+  ---
+  duration_ms: 60054.65900
+  severity: fail
+  exitcode: -15
+  stack: |-
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-max-send-fragment.js
+    timeout
+  ...
+not ok 242 parallel/test-net-writable
+  ---
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-on-empty-socket.js
+  duration_ms: 60058.97200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-session-reuse-different-servername.js
+not ok 243 parallel/test-tls-client-cert-resumption
+  ---
+  duration_ms: 60027.31200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-wrap-econnreset.js
+not ok 244 parallel/test-tls-client-mindhsize
+  ---
+  duration_ms: 60027.77300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-wrap-econnreset-localaddress.js
+not ok 245 parallel/test-tls-env-extra-ca
+  ---
+  duration_ms: 60027.89300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-wrap-econnreset-socket.js
+not ok 246 parallel/test-tls-env-extra-ca-with-options
+  ---
+  duration_ms: 60029.87300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 247 parallel/test-tls-inception
+  ---
+  duration_ms: 60036.63700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-http2-large-file.js
+not ok 248 parallel/test-tls-session-reuse-different-servername
+  ---
+  duration_ms: 60045.66500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 249 parallel/test-tls-max-send-fragment
+  ---
+  duration_ms: 60051.29200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 250 parallel/test-tls-on-empty-socket
+  ---
+  duration_ms: 60050.75000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 251 parallel/test-tls-wrap-econnreset
+  ---
+  duration_ms: 60025.94800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 252 parallel/test-tls-wrap-econnreset-localaddress
+  ---
+  duration_ms: 60027.97900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 253 parallel/test-tls-wrap-econnreset-socket
+  ---
+  duration_ms: 60028.57100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 254 sequential/test-http2-large-file
+  ---
+  duration_ms: 60044.79800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-localport.js
+not ok 255 sequential/test-net-localport
+  ---
+  duration_ms: 60024.40300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-tls-psk-client.js
+not ok 256 sequential/test-tls-psk-client
+  ---
+  duration_ms: 60025.86300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    Failed: Timed out
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-single-string.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-created.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-finish.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-client-stream-start.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-close-error.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-created.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-finish.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-created-start-timing.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-start.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-diagnostics-channel-http2-server-stream-error.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-client-parse-error.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-h2-large-header-cause-client-to-hangup.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-extra-response.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-multi-line-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-no-content-length.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-response-status-message.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-max-http-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-response-no-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-should-keep-alive.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-upgrade-advertise.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-socket-encoding-error.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-async-local-storage.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-autoselect-protocol.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-upgrade-server.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-buffersize.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-altsvc.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-capture-rejection.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-clean-output.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-byteswritten-server.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-destroy.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-promisify-connect.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-onconnect-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-priority-before-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-proxy-over-http2.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-request-listeners-warning.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-rststream-before-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-set-priority.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-setLocalWindowSize.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-settings-before-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-stream-destroy-before-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-setNextStreamID-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-unescaped-path.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-upload.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-upload-reject.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-write-before-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-expect-continue.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-client-write-empty-string.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-client-upload-reject.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-expect-continue-check.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-expect-handling.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-method-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-end.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-host.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-pause.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-pipe.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-settimeout.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverrequest-trailers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-drain.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-destroy.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-createpushresponse.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-end.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-end-after-statuses-without-body.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-finished.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-flushheaders.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-headers-after-destroy.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statuscode.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-headers-send-date.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-settimeout.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statusmessage.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statusmessage-property.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-statusmessage-property-set.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-trailers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-writehead.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-writehead-array.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-serverresponse-write.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-short-stream-client-server.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-socket.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-socket-destroy-delayed.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-socket-set.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-early-hints.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-head-destroyed.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-head-after-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-information.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect-method.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-compat-write-early-hints-invalid-header.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect-method-extended.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect-method-extended-cant-turn-off.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-cookies.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-debug.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-date-header.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-create-client-secure-session.js
+/boot/system/bin/node --expose-gc /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-createwritereq.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-create-client-session.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-destroy-after-write.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-dont-override.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-empty-frame-without-eof.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-goaway-opaquedata.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-exceeds-server-trailer-size.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-graceful-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-endafterheaders.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-forget-closed-streams.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-head-request.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-info-headers.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-info-headers-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-invalidheaderfield.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-invalidargtypes-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-invalidheaderfields-client.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-large-write-multiple-requests.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-concurrent-streams.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-session-memory-leak.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-max-session-memory-stalled-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-methods.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multi-content-length.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multiheaders.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-misused-pseudoheaders.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multiheaders-raw.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-multiplex.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-no-more-streams.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-no-wanttrailers-listener.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-onping.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-origin.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-max-headers-block-length.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-max-reserved-streams.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-server-response.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-options-server-request.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-pack-end-stream-flag.js
+/boot/system/bin/node --no-warnings /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-perf_hooks.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-ping.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-pipe.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-priority-cycle-.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-raw-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-priority-event.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-raw-headers-defaults.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-removed-header-stays-removed.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-request-remove-connect-listener.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-res-corked.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-res-writable-properties.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-304.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-204.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-404.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-compat.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-error-dir.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-error-pipe-offset.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-invalid.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-leak.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-fd-range.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-filehandle.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-push.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-with-pipe.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-no-data.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-file-range.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-nghttperrors.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-respond-with-fd-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-response-splitting.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-sent-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-disabled.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-close-callback.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-close-idle-connection.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream-errors.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream-errors-args.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-push-stream-head.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-setLocalWindowSize.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-rst-before-respond.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-set-header.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-session-destroy.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-rst-stream.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-shutdown-before-respond.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-startup.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-server-timeout.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-settings.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-stream-state.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-reuse-different-authority.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-timeout.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-session-graceful-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-settings-unsolicited-ack.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-short-stream-client-server.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-single-headers-validation-disabled.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-socket-proxy-destroy.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-stream-destroy-event-order.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-stream-client.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-status-code-invalid.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-timeouts.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-too-large-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-too-many-headers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-too-many-streams.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-unbound-socket-proxy.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-window-size.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-trailers.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-trailers-after-session-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-write-callbacks.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-write-empty-string.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-zero-length-write.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-https-eof-for-eom.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-autoselectfamily-default.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-allow-half-open.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-after-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-bytes-written-large.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-connect-options-allowhalfopen.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-connect-options-port.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-dns-lookup.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-keepalive.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-normalize-args.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-onread-static-buffer.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-listen-after-destroying-stdin.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-pause-resume-connecting.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-persistent-keepalive.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-persistent-nodelay.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-persistent-ref-unref.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-server-max-connections.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-connect-without-cb.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-server-pause-on-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-close-after-end.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-byteswritten.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-connecting.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-local-address.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-ready-without-cb.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-socket-tos.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-write-after-end-nt.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-throttle.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-write-slow.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-writable.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-client-cert-resumption.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-client-mindhsize.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-env-extra-ca.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-env-extra-ca-with-options.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-inception.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-session-reuse-different-servername.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-max-send-fragment.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-on-empty-socket.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-wrap-econnreset.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-wrap-econnreset-localaddress.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-wrap-econnreset-socket.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-http2-large-file.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-localport.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-tls-psk-client.js

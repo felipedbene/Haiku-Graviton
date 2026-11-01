@@ -1,0 +1,14 @@
+# evidence: me-ps
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063125Z   end: 20261101T063147Z   rc: 0
+# script sha256: 39e6029b3518b31bf2e59a7545ff1763e8f301d6f1b590bca891589f0363d142
+# ---- script ----
+# | ps | grep -E "test.py|ccrun" | grep -v grep | cut -c1-200
+# ---- raw output ----
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T055659Z-7649 199560        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T055659Z-76491.sh 199561        1    0    0 
+/boot/home/config/non-packaged/bin/python3 tools/test.py --shel 199578        8    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T060315Z-8460 203747        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T060315Z-84609.sh 203748        1    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261101T063125Z-9908 245703        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261101T063125Z-9908.sh 245704        1    0    0 

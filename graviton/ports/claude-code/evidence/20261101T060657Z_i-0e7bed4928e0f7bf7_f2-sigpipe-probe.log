@@ -1,0 +1,49 @@
+# evidence: f2-sigpipe-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060657Z   end: 20261101T060718Z   rc: 0
+# script sha256: c6a949bbae189621b6bf7b920cc6c57a1c481766b160f5faca389610a1e44909
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "== node.cc SIGPIPE handling:"; grep -n "SIGPIPE\|kMaxSignal\|SIGKILLTHR\|__HAIKU__" src/node.cc | head -20
+# | grep -n "SIGPIPE" -B3 -A3 ../../../patches/nodejs-24.21.0.patchset | head -30
+# | cd /tmp
+# | cat > pp.c <<'C'
+# | #include <signal.h>
+# | #include <stdio.h>
+# | #include <string.h>
+# | #include <errno.h>
+# | #include <unistd.h>
+# | #include <stdlib.h>
+# | #include <sys/socket.h>
+# | #include <sys/wait.h>
+# | static void t(const char*what,int sock,int ign){
+# |  pid_t p=fork(); if(!p){ if(ign) signal(SIGPIPE,SIG_IGN); int fd[2];
+# |   if(sock) socketpair(AF_UNIX,SOCK_STREAM,0,fd); else pipe(fd);
+# |   close(fd[0]); ssize_t r=write(fd[1],"x",1); fprintf(stderr,"  %s: write rc=%zd errno=%s\n",what,r,r<0?strerror(errno):"-"); _exit(0);}
+# |  int st; waitpid(p,&st,0); printf("%-40s -> %s %d\n",what,WIFSIGNALED(st)?"KILLED by signal":"exited",WIFSIGNALED(st)?WTERMSIG(st):WEXITSTATUS(st)); fflush(stdout);}
+# | int main(){ t("pipe, SIGPIPE default",0,0); t("pipe, SIGPIPE ignored",0,1); t("socketpair, SIGPIPE default",1,0); t("socketpair, SIGPIPE ignored",1,1);
+# |  /* peer closes its end via shutdown? also: blocked */
+# |  return 0;}
+# | C
+# | gcc -o pp pp.c && ./pp 2>&1
+# | echo "== node writing to a closed pipe (bash pipeline):"
+# | bash -c 'node -e "setInterval(()=>process.stdout.write(\"x\".repeat(1000)),1)" | head -c 1 >/dev/null; echo "PIPESTATUS=${PIPESTATUS[*]}"'
+# | echo "== node writing to a closed socketpair stdio (spawn, stdout destroyed):"
+# | node -e 'const c=require("child_process").spawn(process.execPath,["-e","setTimeout(()=>{process.stdout.on(\"error\",e=>{console.error(\"child got\",e.code);process.exit(0)});process.stdout.write(\"x\".repeat(100000))},200)"],{stdio:["ignore","pipe","inherit"]});c.stdout.destroy();c.on("exit",(code,sig)=>console.log("child exit",code,sig))'
+# | echo "== stdout-close-catch pipeline status:"
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | bash -c "node test/fixtures/catch-stdout-error.js 2>/tmp/lhs.err | node -e \"process.stdin.on('data', () => process.exit(1))\"; echo \"PIPESTATUS=\${PIPESTATUS[*]}\"; echo lhs-stderr:; cat /tmp/lhs.err"
+# ---- raw output ----
+== node.cc SIGPIPE handling:
+503:  for (unsigned nr = 1; nr < kMaxSignal; nr += 1) {
+506:    act.sa_handler = (nr == SIGPIPE || nr == SIGXFSZ) ? SIG_IGN : SIG_DFL;
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: /tmp//ccmi6LWd.o: in function `t':
+pp.c:(.text+0x64): undefined reference to `socketpair'
+collect2: error: ld returned 1 exit status
+== node writing to a closed pipe (bash pipeline):
+PIPESTATUS=135 0
+== node writing to a closed socketpair stdio (spawn, stdout destroyed):
+child exit null SIGPIPE
+== stdout-close-catch pipeline status:
+PIPESTATUS=135 1
+lhs-stderr:

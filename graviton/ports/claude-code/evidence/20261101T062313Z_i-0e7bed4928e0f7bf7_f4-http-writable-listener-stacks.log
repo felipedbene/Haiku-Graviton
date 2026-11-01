@@ -1,0 +1,25 @@
+# evidence: f4-http-writable-listener-stacks
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062313Z   end: 20261101T062334Z   rc: 0
+# script sha256: be3b326af6b5c50a2a76034441424373bcee43c9a029e9e9d1fb77d432058de6
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd /tmp/f4
+# | # Copy of the test with absolute require paths and one log line per listener call (test file itself untouched)
+# | sed -e "s#require('../common')#require('$N/test/common')#" \
+# |     -e "s#const listener = common.mustCall(() => {#const listener = common.mustCall((...a) => { console.log(Date.now() % 100000, 'listener called; this=', this === undefined ? 'n/a' : '', new Error().stack.split('\\\\n').slice(1,4).join(' | '));#" \
+# |     $N/test/parallel/test-http-writable-true-after-close.js > wtcopy.js
+# | grep -n "listener = " wtcopy.js
+# | node wtcopy.js 2>&1 | head -30; echo "rc=$?"
+# ---- raw output ----
+15:  const listener = common.mustCall((...a) => { console.log(Date.now() % 100000, 'listener called; this=', this === undefined ? 'n/a' : '', new Error().stack.split('\n').slice(1,4).join(' | '));
+99431 listener called; this=      at ServerResponse.<anonymous> (/boot/system/cache/tmp/f4/wtcopy.js:15:140) |     at ServerResponse.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15) |     at ServerResponse.emit (node:events:526:24)
+99432 listener called; this=      at ServerResponse.<anonymous> (/boot/system/cache/tmp/f4/wtcopy.js:15:140) |     at ServerResponse.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15) |     at ServerResponse.emit (node:events:514:28)
+Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+    at Proxy.mustCall (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:439:10)
+    at Server.<anonymous> (/boot/system/cache/tmp/f4/wtcopy.js:15:27)
+    at Server.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+    at Server.emit (node:events:514:28)
+    at parserOnIncoming (node:_http_server:1293:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+rc=0

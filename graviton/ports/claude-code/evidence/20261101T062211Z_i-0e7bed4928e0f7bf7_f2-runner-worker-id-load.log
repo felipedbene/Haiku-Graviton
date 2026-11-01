@@ -1,0 +1,66 @@
+# evidence: f2-runner-worker-id-load
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062211Z   end: 20261101T062311Z   rc: 0
+# script sha256: 180714290fc507dbee0624780917b3a93b89c55372abd48a7992f1810e2a5d8f
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | sed -n 100,140p test/parallel/test-runner-worker-id.js
+# | echo "== -j 1 --repeat 10:"; : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 --repeat 10 -p tap parallel/test-runner-worker-id 2>&1 | grep -E "^(not )?ok " | sort | uniq -c | awk '{print $1, $2, $3}' | sort | uniq -c
+# | echo "== -j 16 --repeat 32 (16 concurrent copies, like the suite's -j 16):"; : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 --repeat 32 -p tap -v parallel/test-runner-worker-id > /tmp/rw.tap 2>&1; grep -c "^ok " /tmp/rw.tap; grep -c "^not ok " /tmp/rw.tap; grep -m3 "should be used" /tmp/rw.tap
+# ---- raw output ----
+      testFile,
+      `import { test } from 'node:test';
+import { appendFileSync } from 'node:fs';
+
+test('track worker ${i}', () => {
+  const workerId = process.env.NODE_TEST_WORKER_ID;
+  const usageFile = process.env.WORKER_USAGE_FILE;
+  appendFileSync(usageFile, workerId + '\\n');
+});
+`,
+    );
+    testFiles.push(testFile);
+  }
+
+  const args = ['--test', '--test-concurrency=3', ...testFiles];
+  const result = spawnSync(process.execPath, args, {
+    env: { ...process.env, WORKER_USAGE_FILE: usageFile }
+  });
+
+  assert.strictEqual(result.status, 0, `Test failed: ${result.stderr.toString()}`);
+
+  // Read and analyze worker IDs used
+  const { readFileSync } = require('node:fs');
+  const workerIds = readFileSync(usageFile, 'utf8').trim().split('\n');
+
+  // Count occurrences of each worker ID
+  const workerCounts = {};
+  workerIds.forEach((id) => {
+    workerCounts[id] = (workerCounts[id] || 0) + 1;
+  });
+
+  const uniqueWorkers = Object.keys(workerCounts);
+  assert.strictEqual(
+    uniqueWorkers.length,
+    3,
+    `Should have exactly 3 unique worker IDs, got ${uniqueWorkers.length}: ${uniqueWorkers.join(', ')}`
+  );
+
+  Object.entries(workerCounts).forEach(([id, count]) => {
+    assert.strictEqual(count, 3, `Worker ID ${id} should be used 3 times, got ${count}`);
+  });
+== -j 1 --repeat 10:
+      1 1 ok 1
+      1 1 ok 10
+      1 1 ok 2
+      1 1 ok 3
+      1 1 ok 4
+      1 1 ok 5
+      1 1 ok 6
+      1 1 ok 7
+      1 1 ok 8
+      1 1 ok 9
+== -j 16 --repeat 32 (16 concurrent copies, like the suite's -j 16):
+31
+1
+    AssertionError [ERR_ASSERTION]: Worker ID 2 should be used 3 times, got 2

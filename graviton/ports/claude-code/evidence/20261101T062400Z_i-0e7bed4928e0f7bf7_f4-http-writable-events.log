@@ -1,0 +1,39 @@
+# evidence: f4-http-writable-events
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062400Z   end: 20261101T062422Z   rc: 0
+# script sha256: a22aac69a38ef6b06892f45d0fd20e37cc5616323bb21de0a74ddbb2427dd860
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd /tmp/f4
+# | # Copy of the test (absolute require paths) with named event logging added; the test file itself is untouched.
+# | sed -e "s#require('../common')#require('$N/test/common')#" \
+# |     -e "s#^  res.on('finish', listener);#  const t0 = Date.now(); const L = (s) => console.log(Date.now() - t0, s);\n  req.socket.on('end', () => L('outer accepted socket: end (peer FIN)')); req.socket.on('close', () => L('outer accepted socket: close'));\n  res.on('finish', () => L('res finish')); res.on('close', () => L('res close'));\n  res.on('finish', listener);#" \
+# |     -e "s#inner.pipe(res);#L('inner response arrives, piping'); inner.pipe(res);#" \
+# |     -e "s#external.abort();#L('external.abort()'); external.abort();#" \
+# |     $N/test/parallel/test-http-writable-true-after-close.js > wtcopy2.js
+# | for i in 1 2 3; do echo "--- run $i"; node wtcopy2.js 2>&1 | grep -v "^    at "; done
+# ---- raw output ----
+--- run 1
+/boot/system/cache/tmp/f4/wtcopy2.js:35
+      L('external.abort()'); external.abort();
+      ^
+
+ReferenceError: L is not defined
+
+Node.js v24.21.0
+--- run 2
+/boot/system/cache/tmp/f4/wtcopy2.js:35
+      L('external.abort()'); external.abort();
+      ^
+
+ReferenceError: L is not defined
+
+Node.js v24.21.0
+--- run 3
+/boot/system/cache/tmp/f4/wtcopy2.js:35
+      L('external.abort()'); external.abort();
+      ^
+
+ReferenceError: L is not defined
+
+Node.js v24.21.0

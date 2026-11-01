@@ -1,0 +1,17 @@
+# evidence: f4-ps
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061956Z   end: 20261101T062018Z   rc: 0
+# script sha256: 0763da6ab9443bc0d2a40ccc36c5ef275afbeb46e27644d86e72fd372ef9289d
+# ---- script ----
+# | ps | grep -i -E "python|Team" | head; ps -h 2>&1 | head -5
+# ---- raw output ----
+Team                                                  Id #Threads  Gid  Uid 
+kernel_team                                            1       46    0    0 
+/boot/home/config/non-packaged/bin/python3 tools/test.py --shel 199265        1    0    0 
+/boot/home/config/non-packaged/bin/python3 tools/test.py --shel 199578        8    0    0 
+/boot/system/bin/grep -i -E python|Team            230515        1    0    0 
+usage: ps [-hais] [-o columns list] [team]
+-h : show help
+-i : show system info
+-s : show semaphore info
+-o : display team info associated with the list

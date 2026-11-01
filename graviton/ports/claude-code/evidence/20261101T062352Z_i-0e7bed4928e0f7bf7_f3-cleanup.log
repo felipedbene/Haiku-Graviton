@@ -1,0 +1,9 @@
+# evidence: f3-cleanup
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062352Z   end: 20261101T062412Z   rc: 2
+# script sha256: a53dd063afcfcb48fd5f1cd61c16b3d282b7b355382d51eddb1b1c524dafb4aa
+# ---- script ----
+# | rm -rf /boot/home/f3uv /boot/home/f3uv2 /boot/home/f3-libuv-proctitle.patch /boot/home/f3-clean.patch /boot/home/f3-append.txt /boot/home/f3-append-c.txt
+# | ls -d /boot/home/f3* 2>&1
+# ---- raw output ----
+ls: cannot access '/boot/home/f3*': No such file or directory

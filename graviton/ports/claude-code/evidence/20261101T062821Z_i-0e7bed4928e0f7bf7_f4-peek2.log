@@ -1,0 +1,8 @@
+# evidence: f4-peek2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062821Z   end: 20261101T062843Z   rc: 0
+# script sha256: 3c44877775ee94e1fc56646431e25ef4cfecffb3259b7c04b625b997216d66b2
+# ---- script ----
+# | f=/tmp/ccrun/$(ls -t /tmp/ccrun | grep -l . /dev/null; grep -l "timeout=10" /tmp/ccrun/*.sh | head -1 | xargs basename); grep -c "^ok\|^not ok" ${f%.sh}.log
+# ---- raw output ----
+26

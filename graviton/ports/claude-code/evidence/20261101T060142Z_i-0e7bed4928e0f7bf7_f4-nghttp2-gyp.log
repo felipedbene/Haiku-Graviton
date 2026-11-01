@@ -1,0 +1,162 @@
+# evidence: f4-nghttp2-gyp
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060142Z   end: 20261101T060204Z   rc: 2
+# script sha256: da5e6fdbd23bc20b45f8e20051227974cf9170d8ecb4a70133b923d8c0e51619
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cat $N/deps/nghttp2/nghttp2.gyp
+# | ls $N/deps/nghttp2/lib $N/deps/nghttp2/lib/includes/ 
+# | ls /boot/home/haikuports/net-libs/nghttp2/work-1.63.0/sources/
+# ---- raw output ----
+{
+  'variables': {
+    'nghttp2_sources': [
+      'lib/nghttp2_buf.c',
+      'lib/nghttp2_callbacks.c',
+      'lib/nghttp2_debug.c',
+      'lib/nghttp2_extpri.c',
+      'lib/nghttp2_frame.c',
+      'lib/nghttp2_hd.c',
+      'lib/nghttp2_hd_huffman.c',
+      'lib/nghttp2_hd_huffman_data.c',
+      'lib/nghttp2_helper.c',
+      'lib/nghttp2_http.c',
+      'lib/nghttp2_map.c',
+      'lib/nghttp2_mem.c',
+      'lib/nghttp2_alpn.c',
+      'lib/nghttp2_option.c',
+      'lib/nghttp2_outbound_item.c',
+      'lib/nghttp2_pq.c',
+      'lib/nghttp2_priority_spec.c',
+      'lib/nghttp2_queue.c',
+      'lib/nghttp2_ratelim.c',
+      'lib/nghttp2_rcbuf.c',
+      'lib/nghttp2_session.c',
+      'lib/nghttp2_stream.c',
+      'lib/nghttp2_submit.c',
+      'lib/nghttp2_time.c',
+      'lib/nghttp2_version.c',
+      'lib/sfparse.c',
+    ]
+  },
+  'target_defaults': {
+    'defines': [
+      '_U_='
+    ]
+  },
+  'targets': [
+    {
+      'target_name': 'nghttp2',
+      'type': 'static_library',
+      'include_dirs': ['lib/includes'],
+      'defines': [
+        'BUILDING_NGHTTP2',
+        'NGHTTP2_STATICLIB',
+        'HAVE_CONFIG_H',
+      ],
+      'conditions': [
+        ['OS=="win"', {
+          'defines': [
+            'WIN32',
+            '_WINDOWS',
+          ],
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'CompileAs': '1'
+            },
+          },
+        }],
+        ['debug_nghttp2 == 1', {
+          'defines': [ 'DEBUGBUILD=1' ]
+        }]
+      ],
+      'direct_dependent_settings': {
+        'defines': [ 'NGHTTP2_STATICLIB' ],
+        'include_dirs': [ 'lib/includes' ]
+      },
+      'sources': [
+        '<@(nghttp2_sources)',
+      ]
+    },
+    {
+      'target_name': 'sfparse',
+      'type': 'static_library',
+      'include_dirs': ['lib'],
+      'sources': [
+        'lib/sfparse.c',
+      ],
+      'direct_dependent_settings': {
+        'include_dirs': [ 'lib/includes' ]
+      }
+    }
+  ]
+}
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/nghttp2/lib:
+CMakeLists.txt
+Makefile.am
+Makefile.in
+Makefile.msvc
+config.cmake.in
+includes
+libnghttp2.pc.in
+nghttp2_alpn.c
+nghttp2_alpn.h
+nghttp2_buf.c
+nghttp2_buf.h
+nghttp2_callbacks.c
+nghttp2_callbacks.h
+nghttp2_debug.c
+nghttp2_debug.h
+nghttp2_extpri.c
+nghttp2_extpri.h
+nghttp2_frame.c
+nghttp2_frame.h
+nghttp2_hd.c
+nghttp2_hd.h
+nghttp2_hd_huffman.c
+nghttp2_hd_huffman.h
+nghttp2_hd_huffman_data.c
+nghttp2_helper.c
+nghttp2_helper.h
+nghttp2_http.c
+nghttp2_http.h
+nghttp2_int.h
+nghttp2_map.c
+nghttp2_map.h
+nghttp2_mem.c
+nghttp2_mem.h
+nghttp2_net.h
+nghttp2_option.c
+nghttp2_option.h
+nghttp2_outbound_item.c
+nghttp2_outbound_item.h
+nghttp2_pq.c
+nghttp2_pq.h
+nghttp2_priority_spec.c
+nghttp2_priority_spec.h
+nghttp2_queue.c
+nghttp2_queue.h
+nghttp2_ratelim.c
+nghttp2_ratelim.h
+nghttp2_rcbuf.c
+nghttp2_rcbuf.h
+nghttp2_session.c
+nghttp2_session.h
+nghttp2_stream.c
+nghttp2_stream.h
+nghttp2_submit.c
+nghttp2_submit.h
+nghttp2_time.c
+nghttp2_time.h
+nghttp2_version.c
+sfparse.c
+sfparse.h
+version.rc.in
+
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/deps/nghttp2/lib/includes/:
+CMakeLists.txt
+Makefile.am
+Makefile.in
+config.h
+nghttp2
+ls: cannot access '/boot/home/haikuports/net-libs/nghttp2/work-1.63.0/sources/': No such file or directory

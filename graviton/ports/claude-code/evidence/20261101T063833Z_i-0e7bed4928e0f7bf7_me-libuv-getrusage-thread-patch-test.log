@@ -1,0 +1,77 @@
+# evidence: me-libuv-getrusage-thread-patch-test
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063833Z   end: 20261101T063855Z   rc: 1
+# script sha256: b4bb1dd4f54f66fe996c57088ee4fa41dd0e35e501dd3f9974af7568db485a4b
+# ---- script ----
+# | set -u
+# | SRC=/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1
+# | S=/tmp/me-uv; rm -rf $S; mkdir -p $S; cp -R $SRC $S/src
+# | cd $S/src || exit 1
+# | echo "== includes OS.h already?"; grep -n "OS.h\|__HAIKU__" src/unix/core.c src/unix/internal.h | head
+# | cat > $S/p.patch <<'PEOF'
+# | From: DeBeOS <noreply@debeos>
+# | Subject: [PATCH] unix,haiku: implement uv_getrusage_thread with get_thread_info
+# | 
+# | uv_getrusage_thread() has code for Apple, RUSAGE_LWP and RUSAGE_THREAD only;
+# | Haiku defines neither, so it always returned UV_ENOTSUP and Node's
+# | process.threadCpuUsage() and worker.cpuUsage() threw. Haiku's thread_info
+# | carries the calling thread's user and kernel time in microseconds.
+# | ---
+# |  src/unix/core.c | 19 +++++++++++++++++++
+# |  1 file changed, 19 insertions(+)
+# | 
+# | diff --git a/src/unix/core.c b/src/unix/core.c
+# | --- a/src/unix/core.c
+# | +++ b/src/unix/core.c
+# | @@ -28,3 +28,7 @@
+# |  #include <string.h> /* strerror */
+# |  #include <errno.h>
+# |  #include <assert.h>
+# | +
+# | +#if defined(__HAIKU__)
+# | +# include <OS.h>  /* get_thread_info */
+# | +#endif
+# | @@ -1175,6 +1179,21 @@ int uv_getrusage_thread(uv_rusage_t* rusage) {
+# |    return uv__getrusage(RUSAGE_LWP, rusage);
+# |  #elif defined(RUSAGE_THREAD)
+# |    return uv__getrusage(RUSAGE_THREAD, rusage);
+# | +#elif defined(__HAIKU__)
+# | +  thread_info info;
+# | +
+# | +  if (get_thread_info(find_thread(NULL), &info) != B_OK)
+# | +    return UV_EINVAL;
+# | +
+# | +  memset(rusage, 0, sizeof(*rusage));
+# | +
+# | +  /* user_time and kernel_time are bigtime_t microseconds. */
+# | +  rusage->ru_utime.tv_sec = info.user_time / 1000000;
+# | +  rusage->ru_utime.tv_usec = info.user_time % 1000000;
+# | +  rusage->ru_stime.tv_sec = info.kernel_time / 1000000;
+# | +  rusage->ru_stime.tv_usec = info.kernel_time % 1000000;
+# | +
+# | +  return 0;
+# |  #endif  /* defined(__APPLE__) */
+# |    return UV_ENOTSUP;
+# |  }
+# | PEOF
+# | patch -p1 < $S/p.patch || exit 1
+# | false && sed -i 's|^#include "internal.h"|#include "internal.h"\n#if defined(__HAIKU__)\n#include <OS.h>\n#endif|' src/unix/core.c
+# | grep -n -B1 -A2 "include <OS.h>" src/unix/core.c
+# | mkdir -p $S/b && cd $S/b && cmake -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release $S/src > cmake.log 2>&1 && make -j8 uv > make.log 2>&1; echo "build rc=$?"; tail -3 make.log; ls -l $S/b/libuv.so*
+# | echo "== node's libuv: "; listimage $$ >/dev/null 2>&1; /boot/system/bin/node -e 'console.log(process.versions.uv)'
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | echo "== probe system libuv:"; /boot/system/bin/node -e 'try{console.log(process.threadCpuUsage())}catch(e){console.log(e.code,e.message)}'
+# | echo "== probe patched libuv:"; LIBRARY_PATH=$S/b:${LIBRARY_PATH:-} /boot/system/bin/node -e 'let x=0;for(let i=0;i<5e7;i++)x+=i;console.log(process.threadCpuUsage(), process.cpuUsage())'
+# | echo "== proof the patched lib is the one loaded:"; LIBRARY_PATH=$S/b:${LIBRARY_PATH:-} /boot/system/bin/node -e 'require("child_process").execSync("listimage "+process.pid,{stdio:"inherit"})' 2>&1 | grep -i libuv
+# | echo "== tests, patched libuv"
+# | LIBRARY_PATH=$S/b:${LIBRARY_PATH:-}; export LIBRARY_PATH
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap -v parallel/test-process-threadCpuUsage-main-thread parallel/test-process-threadCpuUsage-worker-threads parallel/test-worker-cpu-usage 2>&1 | grep -E "^(not )?ok|Error|assert" | head -20
+# ---- raw output ----
+== includes OS.h already?
+src/unix/core.c:1109:#if !defined(__MVS__) && !defined(__HAIKU__)
+src/unix/internal.h:312:#if !defined(__sun__) && !defined(__HAIKU__)
+src/unix/internal.h:467:#if defined(__HAIKU__)
+src/unix/internal.h:472:#endif /* defined(__HAIKU__) */
+patching file src/unix/core.c
+Hunk #1 FAILED at 28.
+1 out of 2 hunks FAILED -- saving rejects to file src/unix/core.c.rej

@@ -1,0 +1,66 @@
+# evidence: f1-v8-sampler-patch-rebuild
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060243Z   end: 20261101T060304Z   rc: 0
+# script sha256: 5a00af3e1ea8cb6c7a212e4c3565c95fe54d3eed090b2d65f38b670d2db239f3
+# ---- script ----
+# | set -u
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N
+# | sed -n 436,438p deps/v8/src/libsampler/sampler.cc
+# | cp -p deps/v8/src/libsampler/sampler.cc /tmp/f1-sampler.cc.orig
+# | base64 -d > /tmp/f1.patch <<'B64'
+# | RnJvbTogRGVCZU9TIDxkZWJlb3NAbG9jYWxob3N0PgpTdWJqZWN0OiB2ODogbGlic2FtcGxlcjogZmlsbCB0aGUgcmVnaXN0ZXIgc3RhdGUgb24gSGFpa3UgYXJtNjQKClNpZ25hbEhhbmRsZXI6OkZpbGxSZWdpc3RlclN0YXRlKCkgaGFzIEhhaWt1IGJyYW5jaGVzIGZvciBpYTMyIGFuZCB4NjQKb25seSwgc28gb24gYXJtNjQgZXZlcnkgU0lHUFJPRiBzYW1wbGUgY2FycmllcyBwYyA9IHNwID0gZnAgPSBudWxscHRyLgpUaGUgc3RhY2sgd2FsayB0aGVuIGRlcmVmZXJlbmNlcyBmcCAtIDE2ICgweGZmZmZmZmZmZmZmZmZmZjApIGluc2lkZSB0aGUKc2lnbmFsIGhhbmRsZXIgYW5kIHRoZSBwcm9jZXNzIGNyYXNoZXMgdGhlIGZpcnN0IHRpbWUgdGhlIENQVSBwcm9maWxlciwKLS1jcHUtcHJvZiBvciAtLXByb2YgdGFrZXMgYSBzYW1wbGUuCgpIYWlrdSdzIGFybTY0IG1jb250ZXh0X3QgaXMgc3RydWN0IHZyZWdzIChoZWFkZXJzL3Bvc2l4L2FyY2gvYXJtNjQvCnNpZ25hbC5oKTogeFszMF0gKHgyOSA9IGZwKSwgbHIsIHNwLCBlbHIgKHRoZSBpbnRlcnJ1cHRlZCBwYyksIGZpbGxlZCBieQphcmNoX3NldHVwX3NpZ25hbF9mcmFtZSgpIGluIHRoZSBrZXJuZWwuCgpkaWZmIC0tZ2l0IGEvZGVwcy92OC9zcmMvbGlic2FtcGxlci9zYW1wbGVyLmNjIGIvZGVwcy92OC9zcmMvbGlic2FtcGxlci9zYW1wbGVyLmNjCi0tLSBhL2RlcHMvdjgvc3JjL2xpYnNhbXBsZXIvc2FtcGxlci5jYworKysgYi9kZXBzL3Y4L3NyYy9saWJzYW1wbGVyL3NhbXBsZXIuY2MKQEAgLTUzMCw2ICs1MzAsMTMgQEAgdm9pZCBTaWduYWxIYW5kbGVyOjpGaWxsUmVnaXN0ZXJTdGF0ZSh2b2lkKiBjb250ZXh0LCBSZWdpc3RlclN0YXRlKiBzdGF0ZSkgewogICBzdGF0ZS0+cGMgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5yaXApOwogICBzdGF0ZS0+c3AgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5yc3ApOwogICBzdGF0ZS0+ZnAgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5yYnApOworI2VsaWYgVjhfSE9TVF9BUkNIX0FSTTY0CisgIHN0YXRlLT5wYyA9IHJlaW50ZXJwcmV0X2Nhc3Q8dm9pZCo+KG1jb250ZXh0LmVscik7CisgIHN0YXRlLT5zcCA9IHJlaW50ZXJwcmV0X2Nhc3Q8dm9pZCo+KG1jb250ZXh0LnNwKTsKKyAgLy8gRlAgaXMgYW4gYWxpYXMgZm9yIHgyOS4KKyAgc3RhdGUtPmZwID0gcmVpbnRlcnByZXRfY2FzdDx2b2lkKj4obWNvbnRleHQueFsyOV0pOworICAvLyBMUiBpcyBhbiBhbGlhcyBmb3IgeDMwLgorICBzdGF0ZS0+bHIgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5scik7CiAjZW5kaWYgIC8vIFY4X0hPU1RfQVJDSF8qCiAjZWxpZiBWOF9PU19ORVRCU0QKICNpZiBWOF9IT1NUX0FSQ0hfSUEzMgo=
+# | B64
+# | patch -p1 --dry-run < /tmp/f1.patch && patch -p1 < /tmp/f1.patch || exit 1
+# | sed -n 520,542p deps/v8/src/libsampler/sampler.cc
+# | cp -p out/Release/node /tmp/f1-node.orig
+# | echo "== ninja"; time ninja -C out/Release node 2>&1 | tail -15
+# | ls -l out/Release/node
+# ---- raw output ----
+  // LR is an alias for x30.
+  state->lr = reinterpret_cast<void*>(mcontext.regs[30]);
+#elif V8_HOST_ARCH_MIPS64
+checking file deps/v8/src/libsampler/sampler.cc
+patching file deps/v8/src/libsampler/sampler.cc
+  state->pc = reinterpret_cast<void*>(mcontext.__gregs[_REG_PC]);
+  state->sp = reinterpret_cast<void*>(mcontext.__gregs[_REG_SP]);
+  state->fp = reinterpret_cast<void*>(mcontext.__gregs[_REG_FP]);
+#endif  // V8_HOST_ARCH_*
+#elif V8_OS_HAIKU
+#if V8_HOST_ARCH_IA32
+  state->pc = reinterpret_cast<void*>(mcontext.eip);
+  state->sp = reinterpret_cast<void*>(mcontext.esp);
+  state->fp = reinterpret_cast<void*>(mcontext.ebp);
+#elif V8_HOST_ARCH_X64
+  state->pc = reinterpret_cast<void*>(mcontext.rip);
+  state->sp = reinterpret_cast<void*>(mcontext.rsp);
+  state->fp = reinterpret_cast<void*>(mcontext.rbp);
+#elif V8_HOST_ARCH_ARM64
+  state->pc = reinterpret_cast<void*>(mcontext.elr);
+  state->sp = reinterpret_cast<void*>(mcontext.sp);
+  // FP is an alias for x29.
+  state->fp = reinterpret_cast<void*>(mcontext.x[29]);
+  // LR is an alias for x30.
+  state->lr = reinterpret_cast<void*>(mcontext.lr);
+#endif  // V8_HOST_ARCH_*
+#elif V8_OS_NETBSD
+#if V8_HOST_ARCH_IA32
+== ninja
+ninja: Entering directory `out/Release'
+[1/20] CXX obj/deps/v8/src/libsampler/v8_base_without_compiler.sampler.o
+[2/20] AR obj/tools/v8_gypfiles/libv8_base_without_compiler.a
+[3/20] STAMP obj/tools/v8_gypfiles/torque_generated_initializers.actions_depends.stamp
+[4/20] STAMP obj/tools/v8_gypfiles/v8_initializers.actions_depends.stamp
+[5/20] STAMP obj/tools/v8_gypfiles/mksnapshot.actions_depends.stamp
+[6/20] LINK mksnapshot
+[7/20] STAMP obj/tools/v8_gypfiles/v8_snapshot.actions_depends.stamp
+[8/20] ACTION generating: "obj/tools/v8_gypfiles/v8_snapshot.gen/snapshot.cc" "obj/tools/v8_gypfiles/v8_snapshot.gen/embedded.S"
+FAILED: [code=127] obj/tools/v8_gypfiles/v8_snapshot.gen/snapshot.cc obj/tools/v8_gypfiles/v8_snapshot.gen/embedded.S 
+cd ../../tools/v8_gypfiles; /sources/node-v24.21.0/out/Release/mksnapshot --turbo_instruction_scheduling --stress-turbo-late-spilling "--target_os=haiku" "--target_arch=arm64" --startup_src /sources/node-v24.21.0/out/Release/obj/tools/v8_gypfiles/v8_snapshot.gen/snapshot.cc --embedded_variant Default --embedded_src /sources/node-v24.21.0/out/Release/obj/tools/v8_gypfiles/v8_snapshot.gen/embedded.S --concurrent-builtin-generation "--concurrent-turbofan-max-threads=0" --no-native-code-counters
+/bin/sh: line 1: /sources/node-v24.21.0/out/Release/mksnapshot: No such file or directory
+ninja: build stopped: subcommand failed.
+
+real	0m4.868s
+user	0m2.891s
+sys	0m1.213s
+-rwxr-xr-x 1 baron root 67868440 Oct 31 04:08 out/Release/node

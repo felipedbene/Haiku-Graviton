@@ -1,0 +1,9 @@
+# evidence: me-kill-own-t871
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063203Z   end: 20261101T063225Z   rc: 2
+# script sha256: 53b78dfce5f73cb9067ac312d8aefb26ff65c7fc930cce7b8c0ce41d3376ca19
+# ---- script ----
+# | kill 199578 199561 && echo killed own t871 rerun (test.py 199578)
+# ---- raw output ----
+/tmp/ccrun/cc-20261101T063203Z-10233.sh: line 1: syntax error near unexpected token `('
+/tmp/ccrun/cc-20261101T063203Z-10233.sh: line 1: `kill 199578 199561 && echo killed own t871 rerun (test.py 199578)'

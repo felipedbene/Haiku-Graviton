@@ -1,0 +1,56 @@
+From: DeBeOS <noreply@debeos>
+Subject: [PATCH] unix,haiku: implement the process title (proctitle.c + rename_thread)
+
+Haiku built no-proctitle.c, so uv_set_process_title() was a no-op and
+uv_get_process_title() always returned "". Node's process.title, --title,
+the inspector's context name and the trace-events process_name all read it.
+Use the generic argv-overwriting proctitle.c (Haiku passes argv strings
+contiguously) and implement uv__set_process_title() by renaming the main
+thread, whose id is the team id; the kernel's team_info.args (what ps shows)
+cannot be changed from userland.
+---
+ CMakeLists.txt   | 2 +-
+ Makefile.am      | 2 +-
+ src/unix/haiku.c | 9 +++++++++
+ 3 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -417,7 +417,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
+ 	  src/unix/haiku.c
+ 	  src/unix/haiku-fsevents.c
+ 	  src/unix/bsd-ifaddrs.c
+-	  src/unix/no-proctitle.c
++	  src/unix/proctitle.c
+ 	  src/unix/posix-hrtime.c
+ 	  src/unix/posix-poll.c)
+ endif()
+diff --git a/Makefile.am b/Makefile.am
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -470,7 +470,7 @@ libuv_la_CFLAGS += -D_BSD_SOURCE
+ libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
+                     src/unix/haiku.c \
+                     src/unix/haiku-fsevents.c \
+-                    src/unix/no-proctitle.c \
++                    src/unix/proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c
+ test_run_tests_LDFLAGS += -lbsd
+diff --git a/src/unix/haiku.c b/src/unix/haiku.c
+--- a/src/unix/haiku.c
++++ b/src/unix/haiku.c
+@@ -170,3 +170,12 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+ 
+   return 0;
+ }
++
++
++void uv__set_process_title(const char* title) {
++  /* Haiku keeps a team's command line in the kernel (team_info.args), which
++   * userland cannot change; what can be renamed is the main thread, whose id
++   * is the team id. That is the name the Debugger, ProcessController and
++   * `ps -a` show for the main thread. */
++  rename_thread(getpid(), title);
++}

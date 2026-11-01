@@ -1,0 +1,10 @@
+# evidence: me-peek-t871b
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T064016Z   end: 20261101T064037Z   rc: 0
+# script sha256: 18871032cb6ca8d77a08b29ae487d887298299310cba737b8b1dc1e28af3f238
+# ---- script ----
+# | f=/tmp/rerun-t871b.tap; echo "$(grep -c "^ok " $f) ok, $(grep -c "^not ok " $f) not ok, $(grep -c "^    timeout$" $f) timeout"; grep "^ok " $f
+# ---- raw output ----
+2 ok, 48 not ok, 48 timeout
+ok 33 parallel/test-http2-client-data-end
+ok 37 parallel/test-http2-client-request-options-errors

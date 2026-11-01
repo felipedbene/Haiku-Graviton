@@ -1,0 +1,110 @@
+# evidence: f3-hardlink-only-cause
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062141Z   end: 20261101T062201Z   rc: 0
+# script sha256: fd073338e0a662bf5499648d5b18a93febf488d8eab9c30258a5a8ee9726b444
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | grep -n "tests\['\(fs.sync.\)\?link'\]" -A3 test/parallel/test-trace-events-fs-async.js test/parallel/test-trace-events-fs-sync.js
+# | sed -n 214,238p test/parallel/test-fs-error-messages.js
+# | echo "== diagnostic copies with only the hard-link cases removed (originals untouched)"
+# | python3 - <<'P'
+# | import re
+# | def drop_tests(src, key):
+# |     lines = src.split('\n'); out = []; skip = False
+# |     for l in lines:
+# |         if l.startswith("tests['%s']" % key): skip = True
+# |         if skip:
+# |             if l.rstrip().endswith(';') or l.rstrip().endswith('};'):
+# |                 skip = False
+# |             continue
+# |         out.append(l)
+# |     return '\n'.join(out)
+# | for name, key in (('test-trace-events-fs-async', 'link'), ('test-trace-events-fs-sync', 'fs.sync.link')):
+# |     s = open('test/parallel/%s.js' % name).read()
+# |     t = drop_tests(s, key)
+# |     print(name, 'removed lines:', s.count('\n') - t.count('\n'))
+# |     open('test/parallel/f3diag-%s.js' % name[5:], 'w').write(t)
+# | s = open('test/parallel/test-fs-error-messages.js').read()
+# | i = s.index('// link existing file'); j = s.index('{', i); depth = 0
+# | for k in range(j, len(s)):
+# |     if s[k] == '{': depth += 1
+# |     elif s[k] == '}':
+# |         depth -= 1
+# |         if depth == 0: break
+# | print('fs-error-messages removed:\n' + s[i:k+1])
+# | open('test/parallel/f3diag-fs-error-messages.js', 'w').write(s[:i] + s[k+1:])
+# | P
+# | for f in f3diag-trace-events-fs-async f3diag-trace-events-fs-sync f3diag-fs-error-messages; do /boot/system/bin/node test/parallel/$f.js > /tmp/$f.out 2>&1; echo "$f rc=$?"; tail -5 /tmp/$f.out; done
+# | rm -f test/parallel/f3diag-*.js
+# ---- raw output ----
+test/parallel/test-trace-events-fs-sync.js:62:tests['fs.sync.link'] = 'fs.writeFileSync("fs13.txt", "123", "utf8");' +
+test/parallel/test-trace-events-fs-sync.js-63-                        'fs.linkSync("fs13.txt", "fs14.txt");' +
+test/parallel/test-trace-events-fs-sync.js-64-                        'fs.unlinkSync("fs13.txt");' +
+test/parallel/test-trace-events-fs-sync.js-65-                        'fs.unlinkSync("fs14.txt")';
+}
+
+// link existing file
+{
+  const validateError = common.mustCall((err) => {
+    assert.strictEqual(existingFile, err.path);
+    assert.strictEqual(existingFile2, err.dest);
+    assert.strictEqual(
+      err.message,
+      `EEXIST: file already exists, link '${existingFile}' -> ` +
+      `'${existingFile2}'`);
+    assert.strictEqual(err.errno, UV_EEXIST);
+    assert.strictEqual(err.code, 'EEXIST');
+    assert.strictEqual(err.syscall, 'link');
+    return true;
+  }, 2);
+
+  fs.link(existingFile, existingFile2, common.mustCall(validateError));
+
+  assert.throws(
+    () => fs.linkSync(existingFile, existingFile2),
+    validateError
+  );
+}
+
+== diagnostic copies with only the hard-link cases removed (originals untouched)
+test-trace-events-fs-async removed lines: 0
+test-trace-events-fs-sync removed lines: 4
+fs-error-messages removed:
+// link existing file
+{
+  const validateError = common.mustCall((err) => {
+    assert.strictEqual(existingFile, err.path);
+    assert.strictEqual(existingFile2, err.dest);
+    assert.strictEqual(
+      err.message,
+      `EEXIST: file already exists, link '${existingFile}' -> ` +
+      `'${existingFile2}'`);
+    assert.strictEqual(err.errno, UV_EEXIST);
+    assert.strictEqual(err.code, 'EEXIST');
+    assert.strictEqual(err.syscall, 'link');
+    return true;
+  }, 2);
+
+  fs.link(existingFile, existingFile2, common.mustCall(validateError));
+
+  assert.throws(
+    () => fs.linkSync(existingFile, existingFile2),
+    validateError
+  );
+}
+f3diag-trace-events-fs-async rc=1
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.21.0
+f3diag-trace-events-fs-sync rc=1
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.21.0
+f3diag-fs-error-messages rc=0
+NOTE: The test started as a child_process using these flags: [ '--expose-internals' ] And these environment variables: {} Use NODE_SKIP_FLAG_CHECK to run the test with the original flags.
+(node:231538) internal/test/binding: These APIs are for internal testing only. Do not use them.
+(Use `node --trace-warnings ...` to show where the warning was created)

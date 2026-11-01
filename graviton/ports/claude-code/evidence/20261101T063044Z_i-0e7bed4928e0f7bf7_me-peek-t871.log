@@ -1,0 +1,9 @@
+# evidence: me-peek-t871
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063044Z   end: 20261101T063106Z   rc: 0
+# script sha256: 8ee1fee01164b9173d1e93e115e60633add6130f4a5457f5fb54fb70fe27e550
+# ---- script ----
+# | f=/tmp/rerun-t871.tap; echo "$(grep -c "^ok " $f) ok, $(grep -c "^not ok " $f) not ok, $(grep -c "^    timeout$" $f) timeout"; grep "^ok " $f | head -40
+# ---- raw output ----
+1 ok, 40 not ok, 40 timeout
+ok 33 parallel/test-http2-client-onconnect-errors

@@ -1,0 +1,33 @@
+# evidence: f3-libuv-proctitle-clean-patch
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061614Z   end: 20261101T061648Z   rc: 0
+# script sha256: 0c19f7059f1ba3f3f50b476c8f0dff2684520f1a215f24c3002dbee943763155
+# ---- script ----
+# | set -e
+# | echo 'RnJvbTogRGVCZU9TIDxub3JlcGx5QGRlYmVvcz4KU3ViamVjdDogW1BBVENIXSB1bml4LGhhaWt1OiBpbXBsZW1lbnQgdGhlIHByb2Nlc3MgdGl0bGUgKHByb2N0aXRsZS5jICsgcmVuYW1lX3RocmVhZCkKCkhhaWt1IGJ1aWx0IG5vLXByb2N0aXRsZS5jLCBzbyB1dl9zZXRfcHJvY2Vzc190aXRsZSgpIHdhcyBhIG5vLW9wIGFuZAp1dl9nZXRfcHJvY2Vzc190aXRsZSgpIGFsd2F5cyByZXR1cm5lZCAiIi4gTm9kZSdzIHByb2Nlc3MudGl0bGUsIC0tdGl0bGUsCnRoZSBpbnNwZWN0b3IncyBjb250ZXh0IG5hbWUgYW5kIHRoZSB0cmFjZS1ldmVudHMgcHJvY2Vzc19uYW1lIGFsbCByZWFkIGl0LgpVc2UgdGhlIGdlbmVyaWMgYXJndi1vdmVyd3JpdGluZyBwcm9jdGl0bGUuYyAoSGFpa3UgcGFzc2VzIGFyZ3Ygc3RyaW5ncwpjb250aWd1b3VzbHkpIGFuZCBpbXBsZW1lbnQgdXZfX3NldF9wcm9jZXNzX3RpdGxlKCkgYnkgcmVuYW1pbmcgdGhlIG1haW4KdGhyZWFkLCB3aG9zZSBpZCBpcyB0aGUgdGVhbSBpZDsgdGhlIGtlcm5lbCdzIHRlYW1faW5mby5hcmdzICh3aGF0IHBzIHNob3dzKQpjYW5ub3QgYmUgY2hhbmdlZCBmcm9tIHVzZXJsYW5kLgotLS0KIENNYWtlTGlzdHMudHh0ICAgfCAyICstCiBNYWtlZmlsZS5hbSAgICAgIHwgMiArLQogc3JjL3VuaXgvaGFpa3UuYyB8IDkgKysrKysrKysrCiAzIGZpbGVzIGNoYW5nZWQsIDExIGluc2VydGlvbnMoKyksIDIgZGVsZXRpb25zKC0pCgpkaWZmIC0tZ2l0IGEvQ01ha2VMaXN0cy50eHQgYi9DTWFrZUxpc3RzLnR4dAotLS0gYS9DTWFrZUxpc3RzLnR4dAorKysgYi9DTWFrZUxpc3RzLnR4dApAQCAtNDE3LDcgKzQxNyw3IEBAIGlmKENNQUtFX1NZU1RFTV9OQU1FIFNUUkVRVUFMICJIYWlrdSIpCiAJICBzcmMvdW5peC9oYWlrdS5jCiAJICBzcmMvdW5peC9oYWlrdS1mc2V2ZW50cy5jCiAJICBzcmMvdW5peC9ic2QtaWZhZGRycy5jCi0JICBzcmMvdW5peC9uby1wcm9jdGl0bGUuYworCSAgc3JjL3VuaXgvcHJvY3RpdGxlLmMKIAkgIHNyYy91bml4L3Bvc2l4LWhydGltZS5jCiAJICBzcmMvdW5peC9wb3NpeC1wb2xsLmMpCiBlbmRpZigpCmRpZmYgLS1naXQgYS9NYWtlZmlsZS5hbSBiL01ha2VmaWxlLmFtCi0tLSBhL01ha2VmaWxlLmFtCisrKyBiL01ha2VmaWxlLmFtCkBAIC00NzAsNyArNDcwLDcgQEAgbGlidXZfbGFfQ0ZMQUdTICs9IC1EX0JTRF9TT1VSQ0UKIGxpYnV2X2xhX1NPVVJDRVMgKz0gc3JjL3VuaXgvYnNkLWlmYWRkcnMuYyBcCiAgICAgICAgICAgICAgICAgICAgIHNyYy91bml4L2hhaWt1LmMgXAogICAgICAgICAgICAgICAgICAgICBzcmMvdW5peC9oYWlrdS1mc2V2ZW50cy5jIFwKLSAgICAgICAgICAgICAgICAgICAgc3JjL3VuaXgvbm8tcHJvY3RpdGxlLmMgXAorICAgICAgICAgICAgICAgICAgICBzcmMvdW5peC9wcm9jdGl0bGUuYyBcCiAgICAgICAgICAgICAgICAgICAgIHNyYy91bml4L3Bvc2l4LWhydGltZS5jIFwKICAgICAgICAgICAgICAgICAgICAgc3JjL3VuaXgvcG9zaXgtcG9sbC5jCiB0ZXN0X3J1bl90ZXN0c19MREZMQUdTICs9IC1sYnNkCmRpZmYgLS1naXQgYS9zcmMvdW5peC9oYWlrdS5jIGIvc3JjL3VuaXgvaGFpa3UuYwotLS0gYS9zcmMvdW5peC9oYWlrdS5jCisrKyBiL3NyYy91bml4L2hhaWt1LmMKQEAgLTE3MCwzICsxNzAsMTIgQEAgaW50IHV2X2NwdV9pbmZvKHV2X2NwdV9pbmZvX3QqKiBjcHVfaW5mb3MsIGludCogY291bnQpIHsKIAogICByZXR1cm4gMDsKIH0KKworCit2b2lkIHV2X19zZXRfcHJvY2Vzc190aXRsZShjb25zdCBjaGFyKiB0aXRsZSkgeworICAvKiBIYWlrdSBrZWVwcyBhIHRlYW0ncyBjb21tYW5kIGxpbmUgaW4gdGhlIGtlcm5lbCAodGVhbV9pbmZvLmFyZ3MpLCB3aGljaAorICAgKiB1c2VybGFuZCBjYW5ub3QgY2hhbmdlOyB3aGF0IGNhbiBiZSByZW5hbWVkIGlzIHRoZSBtYWluIHRocmVhZCwgd2hvc2UgaWQKKyAgICogaXMgdGhlIHRlYW0gaWQuIFRoYXQgaXMgdGhlIG5hbWUgdGhlIERlYnVnZ2VyLCBQcm9jZXNzQ29udHJvbGxlciBhbmQKKyAgICogYHBzIC1hYCBzaG93IGZvciB0aGUgbWFpbiB0aHJlYWQuICovCisgIHJlbmFtZV90aHJlYWQoZ2V0cGlkKCksIHRpdGxlKTsKK30K' | base64 -d > /boot/home/f3-clean.patch
+# | rm -rf /boot/home/f3uv2 && git clone -q /boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1 /boot/home/f3uv2 && cd /boot/home/f3uv2
+# | git apply --check -v /boot/home/f3-clean.patch && git apply /boot/home/f3-clean.patch && git diff --stat
+# | ./autogen.sh > /tmp/f3uv2.log 2>&1 && ./configure >> /tmp/f3uv2.log 2>&1 && make -j8 >> /tmp/f3uv2.log 2>&1 && make -j8 test/run-tests >> /tmp/f3uv2.log 2>&1 || { tail -30 /tmp/f3uv2.log; exit 1; }
+# | echo "== libuv's own process-title tests, patched build"
+# | for t in process_title process_title_big_argv process_title_threadsafe; do ./test/run-tests $t 2>&1 | tail -2; done
+# | echo "== unpatched build of the same tree for comparison"
+# | git stash -q && make -j8 >> /tmp/f3uv2.log 2>&1 && make -j8 test/run-tests >> /tmp/f3uv2.log 2>&1
+# | for t in process_title process_title_big_argv process_title_threadsafe; do ./test/run-tests $t 2>&1 | tail -2; done
+# ---- raw output ----
+Checking patch CMakeLists.txt...
+Checking patch Makefile.am...
+Checking patch src/unix/haiku.c...
+ CMakeLists.txt   | 2 +-
+ Makefile.am      | 2 +-
+ src/unix/haiku.c | 9 +++++++++
+ 3 files changed, 11 insertions(+), 2 deletions(-)
+== libuv's own process-title tests, patched build
+ok 1 - process_title
+ok 1 - process_title_big_argv
+ok 1 - process_title_threadsafe
+== unpatched build of the same tree for comparison
+# Assertion failed in test/test-process-title.c on line 40: `strcmp(buffer, title)` okay (error: -37)
+# Abort
+ok 1 - process_title_big_argv
+# Assertion failed in test/test-process-title-threadsafe.c on line 56: `len > 0` (0 > 0)
+# Abort

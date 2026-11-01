@@ -1,0 +1,9 @@
+# evidence: me-kill-own-t871b
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T063244Z   end: 20261101T063306Z   rc: 0
+# script sha256: 58d46b231343654536723ed7eac1d29f215b58e0605399e252a1daba216b736a
+# ---- script ----
+# | kill 199578 199561 && echo "killed own t871 rerun: test.py 199578"; sleep 3; ps | grep -c "bin/node"
+# ---- raw output ----
+killed own t871 rerun: test.py 199578
+70

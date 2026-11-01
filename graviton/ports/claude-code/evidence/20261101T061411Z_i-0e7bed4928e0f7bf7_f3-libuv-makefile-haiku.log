@@ -1,0 +1,48 @@
+# evidence: f3-libuv-makefile-haiku
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061411Z   end: 20261101T061432Z   rc: 0
+# script sha256: aa7645480068af4583b4e8edcb51ce263a2b7b6f598edc126535f6469a25e9bd
+# ---- script ----
+# | U=/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1
+# | grep -n -B2 -A12 "HAIKU" $U/Makefile.am
+# | grep -n -i haiku $U/configure.ac
+# | sed -n 1,60p $U/src/unix/haiku.c | grep -n "include"
+# ---- raw output ----
+357-endif
+358-
+359:if HAIKU
+360-test_run_tests_CFLAGS += -D_BSD_SOURCE
+361-endif
+362-
+363-if LINUX
+364-test_run_tests_CFLAGS += -D_GNU_SOURCE
+365-endif
+366-
+367-if SUNOS
+368-test_run_tests_CFLAGS += -D__EXTENSIONS__ \
+369-                         -D_XOPEN_SOURCE=500 \
+370-                         -D_REENTRANT
+371-endif
+--
+465-endif
+466-
+467:if HAIKU
+468-uvinclude_HEADERS += include/uv/posix.h
+469-libuv_la_CFLAGS += -D_BSD_SOURCE
+470-libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
+471-                    src/unix/haiku.c \
+472-                    src/unix/haiku-fsevents.c \
+473-                    src/unix/no-proctitle.c \
+474-                    src/unix/posix-hrtime.c \
+475-                    src/unix/posix-poll.c
+476-test_run_tests_LDFLAGS += -lbsd
+477-endif
+478-
+479-if HURD
+66:AM_CONDITIONAL([HAIKU],    [AS_CASE([$host_os],[haiku],         [true], [false])])
+83:AS_CASE([$host_os], [haiku], [
+10: * The above copyright notice and this permission notice shall be included in
+22:#include "uv.h"
+23:#include "internal.h"
+25:#include <FindDirectory.h> /* find_path() */
+26:#include <OS.h>

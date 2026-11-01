@@ -1,0 +1,142 @@
+# evidence: me-timeouts-racy-and-psk
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T071827Z   end: 20261101T073230Z   rc: 1
+# script sha256: 5b5a8dae81e38c6ab1e64029c143cf1422b60094fbca8b37f4456aebf9bf1f15
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | B=/tmp/me871; rm -rf $B; mkdir -p $B
+# | cat > $B/hang.js <<'JEOF'
+# | // Preload: 12 s after start, dump this process's libuv handles to $HANG_DIR/<pid>.json. Unref'd.
+# | const fs = require('fs');
+# | setTimeout(() => {
+# |   const r = process.report.getReport();
+# |   const h = r.libuv.filter((x) => x.type === 'tcp' || x.type === 'pipe' || x.type === 'udp').map((x) => ({
+# |     type: x.type, active: x.is_active, fd: x.fd, local: x.localEndpoint && x.localEndpoint.port,
+# |     remote: x.remoteEndpoint && x.remoteEndpoint.port, r: x.readable, w: x.writable }));
+# |   fs.writeFileSync(`${process.env.HANG_DIR}/${process.pid}.json`, JSON.stringify({ pid: process.pid, handles: h }));
+# | }, 12000).unref();
+# | JEOF
+# | cat > $B/summ.js <<'JEOF'
+# | // summ.js <dir> <netstat-file>: match each open tcp handle (local,remote port) against the kernel's TCP state
+# | const fs = require('fs'); const [dir, ns] = process.argv.slice(2);
+# | const rows = fs.readFileSync(ns, 'utf8').split('\n').filter((l) => l.startsWith('tcp'));
+# | const st = new Map();
+# | for (const l of rows) { const f = l.trim().split(/\s+/); const lp = f[3].split(':').pop(), rp = f[4].split(':').pop(); st.set(`${lp}:${rp}`, f[5]); }
+# | let open = 0, dead = [], states = {};
+# | for (const j of fs.readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+# |   const d = JSON.parse(fs.readFileSync(`${dir}/${j}`, 'utf8'));
+# |   for (const h of d.handles) if (h.type === 'tcp' && h.remote) {
+# |     open++; const s = st.get(`${h.local}:${h.remote}`) || 'absent';
+# |     states[s] = (states[s] || 0) + 1;
+# |     if (/time-wait|closed|close-wait|absent/.test(s) && h.r) dead.push(s);
+# |   }
+# | }
+# | console.log(`open-connected-tcp-handles=${open} kernel-states=${JSON.stringify(states)} readable-handles-whose-kernel-socket-is-finished=${dead.length} => ${dead.length ? '871-SIGNATURE' : 'no-871-signature'}`);
+# | JEOF
+# | cd $N
+# | # Each test: run it with the handle-dump preload; at 16 s, if still running, snapshot netstat and
+# | # compare every connected tcp handle that libuv still holds open+readable with the kernel's TCP state.
+# | one() { t=$1; d=$B/$(echo $t | tr / _); mkdir -p $d
+# |   HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero &
+# |   p=$!; s=$(date +%s)
+# |   while kill -0 $p 2>/dev/null && [ $(( $(date +%s) - s )) -lt 16 ]; do sleep 1; done
+# |   if kill -0 $p 2>/dev/null; then netstat -n > $d/netstat.txt 2>&1
+# |     echo "$t | still running at 16 s | $(/boot/system/bin/node $B/summ.js $d $d/netstat.txt)"
+# |     for f in $d/*.json; do q=$(basename $f .json); kill -9 $q 2>/dev/null; done; kill -9 $p 2>/dev/null
+# |   else wait $p; echo "$t | exited rc=$? in $(( $(date +%s) - s )) s"; fi; }
+# | for t in parallel/test-http2-respond-file-with-pipe parallel/test-http2-server-setLocalWindowSize parallel/test-http2-client-data-end parallel/test-http2-client-request-options-errors parallel/test-http2-status-code; do for k in 1 2 3 4 5 6 7 8 9 10; do one $t; done; done > $B/rep.txt
+# | sed -E 's/ in [0-9]+ s//; s/still running at 16 s .*=> /hang: /' $B/rep.txt | sort | uniq -c
+# | echo "== tls-psk-client: test source (server side) and a direct run"
+# | grep -n -E "opensslCli|spawn|s_server|connect|listen" test/sequential/test-tls-psk-client.js | head -20
+# | B2=$B/psk; rm -rf $B2; mkdir -p $B2; one sequential/test-tls-psk-client; d=$B/sequential_test-tls-psk-client; tail -30 $d/out.txt; echo "-- netstat rows near the s_server port"; grep -E "tcp" $d/netstat.txt | head -20
+# | ps | grep -i openssl | grep -v grep
+# ---- raw output ----
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267392 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267460 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267532 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267601 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267682 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267754 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267830 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267901 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 267981 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268062 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268140 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268206 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268278 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268357 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268426 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268500 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268572 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268652 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268728 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268806 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268880 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 268952 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269024 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269094 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269164 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269240 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269313 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269390 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269468 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269542 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269623 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269695 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269766 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269834 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269909 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 269985 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270058 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270130 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270207 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270284 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270366 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270436 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270501 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270574 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270643 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270717 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270794 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270872 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 37: 270945 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+     10 parallel/test-http2-client-data-end | hang: 871-SIGNATURE
+     10 parallel/test-http2-client-request-options-errors | hang: 871-SIGNATURE
+     10 parallel/test-http2-respond-file-with-pipe | hang: 871-SIGNATURE
+     10 parallel/test-http2-server-setLocalWindowSize | hang: 871-SIGNATURE
+     10 parallel/test-http2-status-code | hang: 871-SIGNATURE
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 44: 271023 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero
+== tls-psk-client: test source (server side) and a direct run
+13:const { opensslCli } = require('../common/crypto');
+15:if (!opensslCli) {
+22:const { spawn } = require('child_process');
+26:const IDENTITY = 'Client_identity';  // Hardcoded by `openssl s_server`
+29:const server = spawn(opensslCli, [
+30:  's_server',
+47:                     `'${server.spawnfile} ${server.spawnargs.join(' ')}' unexpected exited with output:\n${serverOut}\n${serverErr}`);
+62:  const socket = net.connect(common.PORT, () => {
+94:  const s = tls.connect(common.PORT, {
+sequential/test-tls-psk-client | still running at 16 s | open-connected-tcp-handles=0 kernel-states={} readable-handles-whose-kernel-socket-is-finished=0 => no-871-signature
+Failed: Timed out
+-- netstat rows near the s_server port
+tcp         0      0 *:10902               *:0                   listen       59/remote_broker
+tcp         0      0 *:22                  *:0                   listen       81/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       155/app_server
+tcp         0      0 *:37958               *:0                   listen       27158/node
+tcp         0      0 [127.0.0.1]:37958     [127.0.0.1]:37973     time-wait    27158/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38296     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38307     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38337     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38344     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38375     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38383     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38391     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38423     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38446     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38472     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38504     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38274     [127.0.0.1]:38527     time-wait    27842/node
+tcp         0      0 [127.0.0.1]:38620     [127.0.0.1]:38644     time-wait    27884/node
+tcp         0      0 [127.0.0.1]:38721     [127.0.0.1]:38737     time-wait    28241/node
+tcp         0      0 [127.0.0.1]:39001     [127.0.0.1]:39025     time-wait    30552/node
+/tmp/ccrun/cc-20261101T071827Z-24814.sh: line 47: 271108 Killed (by death)          HANG_DIR=$d NODE_OPTIONS="-r $B/hang.js" /boot/system/bin/node test/$t.js > $d/out.txt 2>&1 < /dev/zero

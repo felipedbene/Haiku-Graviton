@@ -1,0 +1,231 @@
+# evidence: f4-timeout-handle-dump
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060403Z   end: 20261101T060858Z   rc: 0
+# script sha256: 63661c0ad62301528b55eabf2190b59adc9099cf92cc4bb383d4596a1cda6a9f
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | mkdir -p /tmp/f4 && echo 'Ly8gUHJlbG9hZCAodmlhIE5PREVfT1BUSU9OUz0tcik6IDE1IHMgYWZ0ZXIgc3RhcnQsIGR1bXAgdGhpcyBwcm9jZXNzJ3MgbGlidXYgaGFuZGxlcwovLyAodHlwZSwgYWN0aXZlLCBsb2NhbC9yZW1vdGUgZW5kcG9pbnRzLCBmZCkgdG8gL3RtcC9mNC9oYW5nLzxwaWQ+Lmpzb24uIFVucmVmJ2Q6IG5ldmVyIGtlZXBzIGEgdGVzdCBhbGl2ZS4KY29uc3QgZnMgPSByZXF1aXJlKCdmcycpOwpzZXRUaW1lb3V0KCgpID0+IHsKICBjb25zdCByID0gcHJvY2Vzcy5yZXBvcnQuZ2V0UmVwb3J0KCk7CiAgY29uc3QgaCA9IHIubGlidXYuZmlsdGVyKCh4KSA9PiB4LnR5cGUgIT09ICd0aW1lcicgfHwgeC5pc19hY3RpdmUpLm1hcCgoeCkgPT4gKHsKICAgIHR5cGU6IHgudHlwZSwgYWN0aXZlOiB4LmlzX2FjdGl2ZSwgcmVmOiB4LmlzX3JlZmVyZW5jZWQsIGZkOiB4LmZkLAogICAgbG9jYWw6IHgubG9jYWxFbmRwb2ludCwgcmVtb3RlOiB4LnJlbW90ZUVuZHBvaW50LCB3OiB4LndyaXRhYmxlLCByOiB4LnJlYWRhYmxlIH0pKTsKICBmcy53cml0ZUZpbGVTeW5jKGAvdG1wL2Y0L2hhbmcvJHtwcm9jZXNzLnBpZH0uanNvbmAsCiAgICBKU09OLnN0cmluZ2lmeSh7IHBpZDogcHJvY2Vzcy5waWQsIHBwaWQ6IHByb2Nlc3MucHBpZCwgYXJndjogcHJvY2Vzcy5hcmd2LnNsaWNlKDEpLCBoYW5kbGVzOiBoIH0pKTsKfSwgMTUwMDApLnVucmVmKCk7Cg==' | base64 -d > /tmp/f4/hang.js
+# | cd $N
+# | for t in parallel/test-child-process-disconnect parallel/test-child-process-fork-net parallel/test-child-process-fork-net-socket parallel/test-child-process-send-keep-open parallel/test-cluster-dgram-1 parallel/test-cluster-disconnect parallel/test-cluster-shared-leak parallel/test-process-getactivehandles parallel/test-process-getactiveresources-track-active-handles parallel/test-timers-socket-timeout-removes-other-socket-unref-timer parallel/test-set-http-max-http-headers parallel/test-dgram-connect-send-empty-array parallel/test-dgram-send-empty-array parallel/test-dgram-send-empty-buffer; do
+# |   rm -rf /tmp/f4/hang; mkdir -p /tmp/f4/hang
+# |   echo "################ $t"
+# |   start=$(date +%s)
+# |   NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1 &
+# |   p=$!
+# |   while kill -0 $p 2>/dev/null && [ $(( $(date +%s) - start )) -lt 20 ]; do sleep 1; done
+# |   if kill -0 $p 2>/dev/null; then
+# |     echo "still running after 20 s (parent pid $p)"
+# |     echo "-- netstat (tcp/udp/unix rows owned by this test's node processes)"
+# |     pids=$(ls /tmp/f4/hang/*.json 2>/dev/null | sed 's#.*/##; s#\.json##')
+# |     for q in $pids; do netstat -n 2>/dev/null | grep " $q/" ; done | sort -u
+# |     echo "-- libuv handles at t=15 s"
+# |     for f in /tmp/f4/hang/*.json; do cat $f; echo; done
+# |     for q in $pids; do kill -9 $q 2>/dev/null; done; kill -9 $p 2>/dev/null
+# |   else
+# |     wait $p; echo "exited rc=$? after $(( $(date +%s) - start )) s"
+# |   fi
+# |   echo "-- output (last 25 lines)"; tail -25 /tmp/f4/hang/out.txt
+# | done
+# ---- raw output ----
+################ parallel/test-child-process-disconnect
+still running after 20 s (parent pid 204034)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+tcp         0      0 *:41415               *:0                   listen       204043/node
+tcp         0      0 [127.0.0.1]:41415     [127.0.0.1]:41419     time-wait    204043/node
+-- libuv handles at t=15 s
+{"pid":204034,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-disconnect.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"process","active":true,"ref":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204043,"ppid":204034,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-disconnect.js","child"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"tcp","active":true,"ref":true,"fd":19,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":41415},"remote":null,"w":false,"r":false},{"type":"tcp","active":true,"ref":true,"fd":20,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41415},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41419},"w":false,"r":true},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-child-process-fork-net
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 204034 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 204165)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+ip          0      0 -                     -                                  204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41494     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41506     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41530     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41562     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41586     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41615     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41639     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41649     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41653     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41659     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41660     time-wait    204165/node
+tcp         0      0 [127.0.0.1]:41482     [127.0.0.1]:41680     time-wait    204165/node
+-- libuv handles at t=15 s
+{"pid":204165,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":false,"fd":18,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"pipe","active":true,"ref":false,"fd":19,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"process","active":true,"ref":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204175,"ppid":204165,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net.js","child","1"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"tcp","active":true,"ref":true,"fd":19,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41494},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":20,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41506},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41639},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":22,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41649},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204176,"ppid":204165,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net.js","child","2"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"tcp","active":true,"ref":true,"fd":19,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41530},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":20,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41562},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41653},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":22,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41659},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204177,"ppid":204165,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net.js","child","3"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"tcp","active":true,"ref":true,"fd":19,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41586},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":20,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41615},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41660},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":22,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41482},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41680},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-child-process-fork-net-socket
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 204165 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 204387)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+ip          0      0 -                     -                                  204387/node
+tcp         0      0 [127.0.0.1]:41701     [127.0.0.1]:41722     time-wait    204387/node
+-- libuv handles at t=15 s
+{"pid":204387,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net-socket.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":false,"fd":18,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204398,"ppid":204387,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-fork-net-socket.js","child"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":false,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"tcp","active":true,"ref":true,"fd":19,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41701},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":41722},"w":false,"r":true},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-child-process-send-keep-open
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 204387 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 204559)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+tcp         0      0 [127.0.0.1]:42083     [127.0.0.1]:42104     time-wait    204559/node
+-- libuv handles at t=15 s
+{"pid":204559,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-send-keep-open.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"process","active":true,"ref":true},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42083},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42104},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204568,"ppid":204559,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-send-keep-open.js","child"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"tcp","active":true,"ref":true,"fd":19,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42083},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42104},"w":true,"r":true},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-cluster-dgram-1
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 204559 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 204782)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+ip          0      0 -                     -                                  204782/node
+udp         0      0 *:50403               -                                  204782/node
+-- libuv handles at t=15 s
+{"pid":204782,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-dgram-1.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":false,"fd":18,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"pipe","active":true,"ref":false,"fd":19,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"pipe","active":true,"ref":false,"fd":20,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"pipe","active":true,"ref":false,"fd":21,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"udp","active":false,"ref":true,"fd":22,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":50403},"remote":null},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204791,"ppid":204782,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-dgram-1.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"udp","active":true,"ref":true,"fd":19,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":50403},"remote":null},{"type":"loop","active":true}]}
+{"pid":204792,"ppid":204782,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-dgram-1.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"udp","active":true,"ref":true,"fd":19,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":50403},"remote":null},{"type":"loop","active":true}]}
+{"pid":204793,"ppid":204782,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-dgram-1.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"udp","active":true,"ref":true,"fd":19,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":50403},"remote":null},{"type":"loop","active":true}]}
+{"pid":204794,"ppid":204782,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-dgram-1.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"udp","active":true,"ref":true,"fd":19,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":50403},"remote":null},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-cluster-disconnect
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 204782 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 204982)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+ip          0      0 -                     -                                  204982/node
+tcp         0      0 [127.0.0.1]:42172     [127.0.0.1]:42186     time-wait    204982/node
+tcp         0      0 [127.0.0.1]:42174     [127.0.0.1]:42198     time-wait    204982/node
+tcp         0      0 [127.0.0.1]:42206     [127.0.0.1]:42259     time-wait    204982/node
+tcp         0      0 [127.0.0.1]:42237     [127.0.0.1]:42286     time-wait    204982/node
+-- libuv handles at t=15 s
+{"pid":204982,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-disconnect.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":false,"fd":18,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"pipe","active":true,"ref":false,"fd":19,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":204991,"ppid":204982,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-disconnect.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"tcp","active":true,"ref":true,"fd":20,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42172},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42186},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42174},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42198},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":205053,"ppid":204982,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-disconnect.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"tcp","active":true,"ref":true,"fd":20,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42206},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42259},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42237},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42286},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-cluster-shared-leak
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 204982 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 205269)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+ip          0      0 -                     -                                  205269/node
+tcp         0      0 [127.0.0.1]:42294     [127.0.0.1]:42324     time-wait    205269/node
+-- libuv handles at t=15 s
+{"pid":205269,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-shared-leak.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":false,"fd":18,"local":null,"remote":null,"w":true,"r":true},{"type":"process","active":true,"ref":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":205278,"ppid":205269,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-shared-leak.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"pipe","active":true,"ref":true,"fd":3,"local":null,"remote":null,"w":true,"r":true},{"type":"tcp","active":true,"ref":true,"fd":20,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42294},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42324},"w":false,"r":true},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-process-getactivehandles
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 205269 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 205516)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42398     closed       205516/node
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42423     closed       205516/node
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42429     closed       205516/node
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42432     closed       205516/node
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42448     closed       205516/node
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42465     closed       205516/node
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42483     closed       205516/node
+tcp         0      0 [127.0.0.1]:42380     [127.0.0.1]:42501     closed       205516/node
+tcp         0      0 [127.0.0.1]:42398     [127.0.0.1]:42380     time-wait    205516/node
+tcp         0      0 [127.0.0.1]:42423     [127.0.0.1]:42380     time-wait    205516/node
+tcp         0      0 [127.0.0.1]:42429     [127.0.0.1]:42380     time-wait    205516/node
+tcp         0      0 [127.0.0.1]:42432     [127.0.0.1]:42380     time-wait    205516/node
+tcp         0      0 [127.0.0.1]:42448     [127.0.0.1]:42380     time-wait    205516/node
+tcp         0      0 [127.0.0.1]:42465     [127.0.0.1]:42380     time-wait    205516/node
+tcp         0      0 [127.0.0.1]:42483     [127.0.0.1]:42380     time-wait    205516/node
+tcp         0      0 [127.0.0.1]:42501     [127.0.0.1]:42380     time-wait    205516/node
+-- libuv handles at t=15 s
+{"pid":205516,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-getactivehandles.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42398},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":23,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42423},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":25,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42429},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":27,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42432},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":29,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42448},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":31,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42465},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":33,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42483},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":35,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42380},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42501},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-process-getactiveresources-track-active-handles
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 205516 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 205687)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42521     closed       205687/node
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42538     closed       205687/node
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42549     closed       205687/node
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42567     closed       205687/node
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42587     closed       205687/node
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42606     closed       205687/node
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42621     closed       205687/node
+tcp         0      0 [127.0.0.1]:42519     [127.0.0.1]:42630     closed       205687/node
+tcp         0      0 [127.0.0.1]:42521     [127.0.0.1]:42519     time-wait    205687/node
+tcp         0      0 [127.0.0.1]:42538     [127.0.0.1]:42519     time-wait    205687/node
+tcp         0      0 [127.0.0.1]:42549     [127.0.0.1]:42519     time-wait    205687/node
+tcp         0      0 [127.0.0.1]:42567     [127.0.0.1]:42519     time-wait    205687/node
+tcp         0      0 [127.0.0.1]:42587     [127.0.0.1]:42519     time-wait    205687/node
+tcp         0      0 [127.0.0.1]:42606     [127.0.0.1]:42519     time-wait    205687/node
+tcp         0      0 [127.0.0.1]:42621     [127.0.0.1]:42519     time-wait    205687/node
+tcp         0      0 [127.0.0.1]:42630     [127.0.0.1]:42519     time-wait    205687/node
+-- libuv handles at t=15 s
+{"pid":205687,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-getactiveresources-track-active-handles.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42521},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":23,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42538},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":25,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42549},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":27,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42567},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":29,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42587},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":31,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42606},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":33,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42621},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":35,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42519},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42630},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 205687 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 205887)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+tcp         0      0 [127.0.0.1]:42650     [127.0.0.1]:42663     time-wait    205887/node
+tcp         0      0 [127.0.0.1]:42650     [127.0.0.1]:42672     time-wait    205887/node
+-- libuv handles at t=15 s
+{"pid":205887,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"tcp","active":true,"ref":true,"fd":22,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42650},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42663},"w":false,"r":true},{"type":"tcp","active":true,"ref":true,"fd":23,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42650},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42672},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-set-http-max-http-headers
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 205887 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 206042)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+tcp         0      0 [127.0.0.1]:42852     [127.0.0.1]:42876     time-wait    206051/node
+-- libuv handles at t=15 s
+{"pid":206042,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-set-http-max-http-headers.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"process","active":true,"ref":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+{"pid":206051,"ppid":206042,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-max-http-headers.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"tcp","active":true,"ref":true,"fd":21,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42852},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":42876},"w":false,"r":true},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 100
+writing chunk of size 9
+################ parallel/test-dgram-connect-send-empty-array
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 206042 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 206188)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+udp         0      0 [127.0.0.1]:50414     [127.0.0.1]:50414                  206188/node
+-- libuv handles at t=15 s
+{"pid":206188,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-array.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"udp","active":true,"ref":true,"fd":17,"local":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":50414},"remote":{"host":"localhost.localdomain","ip4":"127.0.0.1","port":50414}},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-dgram-send-empty-array
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 206188 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 206355)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+udp         0      0 *:50415               -                                  206355/node
+-- libuv handles at t=15 s
+{"pid":206355,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-send-empty-array.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"udp","active":true,"ref":true,"fd":17,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":50415},"remote":null},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+################ parallel/test-dgram-send-empty-buffer
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 8: 206355 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1
+still running after 20 s (parent pid 206476)
+-- netstat (tcp/udp/unix rows owned by this test's node processes)
+udp         0      0 *:50418               -                                  206476/node
+-- libuv handles at t=15 s
+{"pid":206476,"ppid":204027,"argv":["/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-dgram-send-empty-buffer.js"],"handles":[{"type":"async","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"idle","active":false,"ref":true},{"type":"prepare","active":true,"ref":false},{"type":"check","active":true,"ref":false},{"type":"async","active":true,"ref":false},{"type":"udp","active":true,"ref":true,"fd":17,"local":{"host":"0.0.0.0","ip4":"0.0.0.0","port":50418},"remote":null},{"type":"timer","active":true,"ref":false},{"type":"loop","active":true}]}
+-- output (last 25 lines)
+/tmp/ccrun/cc-20261101T060403Z-85439.sh: line 24: 206476 Killed (by death)          NODE_OPTIONS="-r /tmp/f4/hang.js" /boot/system/bin/node test/$t.js > /tmp/f4/hang/out.txt 2>&1

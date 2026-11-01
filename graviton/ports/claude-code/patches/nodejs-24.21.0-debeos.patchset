@@ -1,0 +1,94 @@
+From: DeBeOS <debeos@localhost>
+Subject: v8: libsampler: fill the register state on Haiku arm64
+
+SignalHandler::FillRegisterState() has Haiku branches for ia32 and x64
+only, so on arm64 every SIGPROF sample carries pc = sp = fp = nullptr.
+The stack walk then dereferences fp - 16 (0xfffffffffffffff0) inside the
+signal handler and the process crashes the first time the CPU profiler,
+--cpu-prof or --prof takes a sample.
+
+Haiku's arm64 mcontext_t is struct vregs (headers/posix/arch/arm64/
+signal.h): x[30] (x29 = fp), lr, sp, elr (the interrupted pc), filled by
+arch_setup_signal_frame() in the kernel.
+
+diff --git a/deps/v8/src/libsampler/sampler.cc b/deps/v8/src/libsampler/sampler.cc
+--- a/deps/v8/src/libsampler/sampler.cc
++++ b/deps/v8/src/libsampler/sampler.cc
+@@ -530,6 +530,13 @@ void SignalHandler::FillRegisterState(void* context, RegisterState* state) {
+   state->pc = reinterpret_cast<void*>(mcontext.rip);
+   state->sp = reinterpret_cast<void*>(mcontext.rsp);
+   state->fp = reinterpret_cast<void*>(mcontext.rbp);
++#elif V8_HOST_ARCH_ARM64
++  state->pc = reinterpret_cast<void*>(mcontext.elr);
++  state->sp = reinterpret_cast<void*>(mcontext.sp);
++  // FP is an alias for x29.
++  state->fp = reinterpret_cast<void*>(mcontext.x[29]);
++  // LR is an alias for x30.
++  state->lr = reinterpret_cast<void*>(mcontext.lr);
+ #endif  // V8_HOST_ARCH_*
+ #elif V8_OS_NETBSD
+ #if V8_HOST_ARCH_IA32
+From: DeBeOS <noreply@debeos>
+Subject: [PATCH] haiku: restore ResetSignalHandlers, skipping SIGKILLTHR
+
+The HaikuPorts patchset commented out both sigaction() calls in
+ResetSignalHandlers() because sigaction(SIGKILLTHR) fails with EINVAL on Haiku
+and tripped the CHECK. That disabled the loop altogether: node never sets
+SIGPIPE (and SIGXFSZ) to SIG_IGN, so a write to a closed pipe or socket kills
+the process with SIGPIPE instead of failing with EPIPE. Skip SIGKILLTHR the way
+libuv's uv__process_child_init does, and keep the checks.
+
+Applies on top of nodejs-24.21.0.patchset.
+
+diff --git a/src/node.cc b/src/node.cc
+--- a/src/node.cc
++++ b/src/node.cc
+@@ -503,6 +503,10 @@
+   for (unsigned nr = 1; nr < kMaxSignal; nr += 1) {
+     if (nr == SIGKILL || nr == SIGSTOP)
+       continue;
++#ifdef SIGKILLTHR
++    if (nr == SIGKILLTHR)
++      continue;  // Haiku: cannot be caught or ignored; sigaction() rejects it.
++#endif
+     act.sa_handler = (nr == SIGPIPE || nr == SIGXFSZ) ? SIG_IGN : SIG_DFL;
+     if (act.sa_handler == SIG_DFL) {
+       // The only bad handler value we can inherit from before exec is SIG_IGN
+@@ -512,10 +516,10 @@
+       // library) has set up own signal handler for own purposes
+       // (e.g. profiling). If that's the case, we want to keep it intact.
+       struct sigaction old;
+-      // CHECK_EQ(0, sigaction(nr, nullptr, &old));
++      CHECK_EQ(0, sigaction(nr, nullptr, &old));
+       if ((old.sa_flags & SA_SIGINFO) || old.sa_handler != SIG_IGN) continue;
+     }
+-    // CHECK_EQ(0, sigaction(nr, &act, nullptr));
++    CHECK_EQ(0, sigaction(nr, &act, nullptr));
+   }
+ #endif  // __POSIX__
+ }
+From: DeBeOS <noreply@debeos>
+Subject: [PATCH] haiku: name SIGKILLTHR so a child killed by it is not reported as exit 0
+
+Haiku reports crashed and aborted teams as killed by SIGKILLTHR (21) (DeBeOS
+issue 876). signo_string() had no case for it and returned "", and ChildProcess
+onexit only records a truthy signalCode (lib/internal/child_process.js:272), so
+such a child emitted exit(0, null) -- a crash looked like success. With this,
+the exit event reports (null, 'SIGKILLTHR').
+
+Applies on top of nodejs-24.21.0.patchset.
+
+diff --git a/src/api/utils.cc b/src/api/utils.cc
+--- a/src/api/utils.cc
++++ b/src/api/utils.cc
+@@ -157,6 +157,10 @@
+ #endif
+ #endif
+ 
++#ifdef SIGKILLTHR
++    SIGNO_CASE(SIGKILLTHR);
++#endif
++
+ #ifdef SIGSYS
+     SIGNO_CASE(SIGSYS);
+ #endif

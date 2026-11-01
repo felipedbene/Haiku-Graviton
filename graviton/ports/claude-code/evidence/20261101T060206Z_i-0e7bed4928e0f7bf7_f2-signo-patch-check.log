@@ -1,0 +1,78 @@
+# evidence: f2-signo-patch-check
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060206Z   end: 20261101T060227Z   rc: 0
+# script sha256: 8ff071de15bb43ecd219c66fa0eba4946b03f7f22e9cc5fbf53e939ac37d0952
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | sed -n 155,165p src/api/utils.cc; sed -n 808,820p src/node_constants.cc
+# | cat > /tmp/f2p.patch <<'P'
+# | diff --git a/src/api/utils.cc b/src/api/utils.cc
+# | --- a/src/api/utils.cc
+# | +++ b/src/api/utils.cc
+# | @@ -157,6 +157,10 @@ const char* signo_string(int signo) {
+# |  #endif
+# |  #endif
+# |  
+# | +#ifdef SIGKILLTHR
+# | +    SIGNO_CASE(SIGKILLTHR);
+# | +#endif
+# | +
+# |  #ifdef SIGSYS
+# |      SIGNO_CASE(SIGSYS);
+# |  #endif
+# | diff --git a/src/node_constants.cc b/src/node_constants.cc
+# | --- a/src/node_constants.cc
+# | +++ b/src/node_constants.cc
+# | @@ -812,6 +812,10 @@ void DefineSignalConstants(Local<Object> target) {
+# |    NODE_DEFINE_CONSTANT(target, SIGPWR);
+# |  #endif
+# |  
+# | +#ifdef SIGKILLTHR
+# | +  NODE_DEFINE_CONSTANT(target, SIGKILLTHR);
+# | +#endif
+# | +
+# |  #ifdef SIGSYS
+# |    NODE_DEFINE_CONSTANT(target, SIGSYS);
+# |  #endif
+# | P
+# | git apply --check -v /tmp/f2p.patch 2>&1 || patch --dry-run -p1 < /tmp/f2p.patch
+# ---- raw output ----
+#if !defined(SIGPWR) || SIGINFO != SIGPWR
+    SIGNO_CASE(SIGINFO);
+#endif
+#endif
+
+#ifdef SIGSYS
+    SIGNO_CASE(SIGSYS);
+#endif
+
+    default:
+      return "";
+#endif
+
+#ifdef SIGPWR
+  NODE_DEFINE_CONSTANT(target, SIGPWR);
+#endif
+
+#ifdef SIGINFO
+  NODE_DEFINE_CONSTANT(target, SIGINFO);
+#endif
+
+#ifdef SIGSYS
+  NODE_DEFINE_CONSTANT(target, SIGSYS);
+#endif
+Checking patch src/api/utils.cc...
+Checking patch src/node_constants.cc...
+error: while searching for:
+  NODE_DEFINE_CONSTANT(target, SIGPWR);
+#endif
+
+#ifdef SIGSYS
+  NODE_DEFINE_CONSTANT(target, SIGSYS);
+#endif
+
+error: patch failed: src/node_constants.cc:812
+error: src/node_constants.cc: patch does not apply
+checking file src/api/utils.cc
+checking file src/node_constants.cc
+Hunk #1 succeeded at 815 with fuzz 1 (offset 3 lines).

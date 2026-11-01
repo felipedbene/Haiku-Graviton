@@ -1,0 +1,38 @@
+# evidence: f3-keylog-events-vs-lines
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061953Z   end: 20261101T062015Z   rc: 0
+# script sha256: 9298a6c2980123d7d4dd98d615ff523176dd3fd29fdc5eec0cc3bb9a4f3da198
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | N=/boot/system/bin/node
+# | cp test/parallel/test-tls-enable-keylog-cli.js test/parallel/f3diag-keylog.js
+# | # diagnostic copy only: count the keylog events the child emits, and print the file's lines
+# | python3 - <<'P'
+# | p='test/parallel/f3diag-keylog.js'; s=open(p).read()
+# | s=s.replace("function test() {", "function test() {\n  const tls = require('tls'); let ev = 0; const e = tls.TLSSocket.prototype.emit;\n  tls.TLSSocket.prototype.emit = function(n, ...a) { if (n === 'keylog') ev++; return e.call(this, n, ...a); };\n  process.on('exit', () => console.error('CHILD keylog events emitted:', ev));",1)
+# | s=s.replace("  assert.strictEqual(log.length, 2);","  console.error('PARENT keylog file lines:', log.length);\n  assert.strictEqual(log.length, 2);",1)
+# | open(p,'w').write(s)
+# | P
+# | for i in 1 2 3 4 5 6 7 8 9 10; do $N test/parallel/f3diag-keylog.js 2>&1 | grep -E "CHILD|PARENT"; done
+# | rm -f test/parallel/f3diag-keylog.js
+# ---- raw output ----
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 1
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 2
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 2
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 2
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 2
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 1
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 2
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 2
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 1
+CHILD keylog events emitted: 2
+PARENT keylog file lines: 2

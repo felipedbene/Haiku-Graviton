@@ -1,0 +1,41 @@
+# evidence: f3-link-sites-in-tests
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T062057Z   end: 20261101T062119Z   rc: 0
+# script sha256: 4eb4c8d4fc4c63ef29452111f3f5b0486edfc41e5297863f295b5d1f97a2328e
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | grep -n "link" test/parallel/test-trace-events-fs-async.js | grep -v symlink | head; grep -n "link" test/parallel/test-trace-events-fs-sync.js | grep -v symlink | head
+# | grep -n "link" test/parallel/test-fs-error-messages.js | grep -iv "symlink\|unlink\|readlink" | head -20
+# | grep -n "link" test/parallel/test-permission-fs-symlink-target-write.js | head -30
+# ---- raw output ----
+26:    fs.unlinkSync('fs0.txt');
+34:    fs.unlinkSync('fs1.txt');
+42:    fs.unlinkSync('fs2.txt');
+49:    fs.unlinkSync('fs3.txt');
+57:    fs.unlinkSync('fs4.txt');
+58:    fs.unlinkSync('a.txt');
+67:    fs.unlinkSync('fs5.txt');
+76:    fs.unlinkSync('fs6.txt');
+85:    fs.unlinkSync('fs7.txt');
+93:    fs.unlinkSync('fs8.txt');
+20:                          'fs.unlinkSync("fs0.txt")';
+23:                         'fs.unlinkSync("fs1.txt")';
+26:                         'fs.unlinkSync("fs2.txt")';
+28:                         'fs.unlinkSync("fs3.txt")';
+31:                            'fs.unlinkSync("fs4.txt")';
+35:                          'fs.unlinkSync("fs5.txt")';
+39:                          'fs.unlinkSync("fs6.txt")';
+43:                             'fs.unlinkSync("fs7.txt")';
+46:                         'fs.unlinkSync("fs8.txt")';
+50:                         'fs.unlinkSync("fs9.txt")';
+199:    const regexp = new RegExp('^ENOENT: no such file or directory, link ' +
+204:    assert.strictEqual(err.syscall, 'link');
+208:  fs.link(nonexistentFile, 'foo', common.mustCall(validateError));
+211:    () => fs.linkSync(nonexistentFile, 'foo'),
+216:// link existing file
+223:      `EEXIST: file already exists, link '${existingFile}' -> ` +
+227:    assert.strictEqual(err.syscall, 'link');
+231:  fs.link(existingFile, existingFile2, common.mustCall(validateError));
+234:    () => fs.linkSync(existingFile, existingFile2),
+324:        `EXDEV: cross-device link not permitted, rename '${existingDir}' -> ` +
+31:const file = fixtures.path('permission', 'fs-symlink-target-write.js');

@@ -1,0 +1,25 @@
+# evidence: f1-v8-sampler-patch-rebuild2
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060428Z   end: 20261101T060647Z   rc: 0
+# script sha256: 83ba221f89a28d084fb6d92cc15a033b76926405472ed0a45cd393d53f1ca68b
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N
+# | grep -c "V8_HOST_ARCH_ARM64" deps/v8/src/libsampler/sampler.cc
+# | time ninja -C out/Release node 2>&1 | tail -8
+# | ls -l out/Release/node
+# ---- raw output ----
+5
+[6/13] AR obj/tools/v8_gypfiles/libv8_snapshot.a
+[7/13] STAMP obj/node_mksnapshot.actions_depends.stamp
+[8/13] LINK node_mksnapshot
+[9/13] ACTION libnode: node_mksnapshot_eb3cbee0fcebcc806d978ea5ec6c9763c0d78ba60b52cbe278ced2acd663d785
+[10/13] CXX obj/gen/libnode.node_snapshot.o
+[11/13] AR obj/libnode.a
+[12/13] STAMP obj/node.actions_depends.stamp
+[13/13] LINK node
+
+real	2m8.820s
+user	2m2.284s
+sys	0m6.987s
+-rwxr-xr-x 1 baron root 67868440 Nov  1 06:06 out/Release/node

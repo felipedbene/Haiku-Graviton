@@ -1,0 +1,71 @@
+# evidence: f2-hup-order-and-worker-rss
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T061219Z   end: 20261101T061240Z   rc: 0
+# script sha256: ba7647a01704aa7cd2832ccc2b94f3bfb5302fc48693facbbb997d17b1ef1b7c
+# ---- script ----
+# | cd /tmp
+# | cat > hup.c <<'C'
+# | #include <poll.h>
+# | #include <signal.h>
+# | #include <stdio.h>
+# | #include <unistd.h>
+# | #include <sys/socket.h>
+# | #include <sys/wait.h>
+# | int main(){ int notready=0, N=50;
+# |  for(int i=0;i<N;i++){ int sv[2]; socketpair(AF_UNIX,SOCK_STREAM,0,sv);
+# |   pid_t p=fork(); if(!p){ close(sv[0]); pause(); _exit(0);} close(sv[1]);
+# |   kill(p,SIGKILL); int st; waitpid(p,&st,0);   /* child reaped: all its fds must be closed by now */
+# |   struct pollfd pf={sv[0],POLLIN,0}; int r=poll(&pf,1,0);
+# |   if(r!=1){ notready++; r=poll(&pf,1,1000); if(i<5) printf("iter %d: not readable right after waitpid; after <=1s poll rc=%d revents=0x%x\n",i,r,pf.revents);} close(sv[0]); }
+# |  printf("socketpair peer end NOT readable/HUP immediately after waitpid() reaped the killed child: %d of %d\n",notready,N);
+# |  return 0;}
+# | C
+# | gcc -o hup hup.c -lnetwork && ./hup
+# | echo "== worker-memory: rss and areas"
+# | cat > /tmp/wm.js <<'J'
+# | const {Worker}=require('worker_threads');const {execSync}=require('child_process');
+# | const areas=()=>{const o=execSync('listarea '+process.pid).toString().split('\n');return o;};
+# | const s=process.memoryUsage().rss; const a0=areas();
+# | let n=0,done=0; const N=16, per=60/N;
+# | function run(k,cb){ if(k<=0) return cb(); const w=new Worker('require("worker_threads").parentPort.postMessage(4)',{eval:true}); w.on('exit',()=>run(k-1,cb)); }
+# | for(let i=0;i<N;i++) run(per,()=>{ if(++done===N){ const f=process.memoryUsage().rss; console.log('rss start',s,'end',f,'ratio',(f/s).toFixed(2));
+# |   global.gc&&gc(); setTimeout(()=>{console.log('rss after gc+1s',process.memoryUsage().rss); const a1=areas(); console.log('areas start',a0.length,'end',a1.length); console.log(a1.filter(l=>/stack|heap|rw|malloc/i.test(l)).slice(0,0).join('\n')); require('fs').writeFileSync('/tmp/wm-a0.txt',a0.join('\n')); require('fs').writeFileSync('/tmp/wm-a1.txt',a1.join('\n'));},1000);} });
+# | J
+# | node --expose-gc /tmp/wm.js
+# | head -5 /tmp/wm-a1.txt
+# | echo "-- biggest areas at end (by ram):"; awk 'NR>2{print}' /tmp/wm-a1.txt | sort -k6 -n -r 2>/dev/null | head -0
+# | python3 - <<'P'
+# | import re
+# | def parse(f):
+# |     out=[]
+# |     for l in open(f):
+# |         m=re.match(r'\s*(\d+)\s+(.+?)\s+([0-9a-f]{8,16})\s+([0-9a-f]+)\s+([0-9a-f]+)\s',l)
+# |         if m: out.append((m.group(2).strip(),int(m.group(4),16),int(m.group(5),16)))
+# |     return out
+# | a0,a1=parse('/tmp/wm-a0.txt'),parse('/tmp/wm-a1.txt')
+# | from collections import defaultdict
+# | def agg(a):
+# |     d=defaultdict(lambda:[0,0,0])
+# |     for n,sz,ram in a:
+# |         k=re.sub(r'\d+','#',n); d[k][0]+=1; d[k][1]+=sz; d[k][2]+=ram
+# |     return d
+# | d0,d1=agg(a0),agg(a1)
+# | print('ram sum start %.1f MB end %.1f MB'%(sum(x[2] for x in a0)/1e6,sum(x[2] for x in a1)/1e6))
+# | rows=sorted(d1.items(),key=lambda kv:-(kv[1][2]-d0.get(kv[0],[0,0,0])[2]))[:12]
+# | for k,v in rows: print('%-40s count %3d->%3d ram %8.1f MB -> %8.1f MB'%(k,d0.get(k,[0,0,0])[0],v[0],d0.get(k,[0,0,0])[2]/1e6,v[2]/1e6))
+# | P
+# ---- raw output ----
+socketpair peer end NOT readable/HUP immediately after waitpid() reaped the killed child: 0 of 50
+== worker-memory: rss and areas
+rss start 12664832 end 132435968 ratio 10.46
+rss after gc+1s 132435968
+areas start 99 end 412
+
+memory: total: 32992320KB, used: 3149108KB, left: 29843212KB
+
+/boot/system/bin/node --expose-gc /tmp/wm.js (team 208522)
+   ID                             name          address     size   alloc. #-cow  #-in #-out lock prot
+-----------------------------------------------------------------------------------------------------
+-- biggest areas at end (by ram):
+ram sum start 0.0 MB end 0.0 MB
+node mmap area   #x#a#bd#                count   1->  1 ram      0.0 MB ->      0.0 MB

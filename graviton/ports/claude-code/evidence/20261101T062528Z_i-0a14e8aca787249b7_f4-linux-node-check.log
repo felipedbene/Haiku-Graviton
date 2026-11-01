@@ -1,0 +1,36 @@
+# evidence: f4-linux-node-check
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 89f9a197-273c-4eba-a5b2-de000a86a058 (agent status: Success)
+# start: 20261101T062528Z   end: 20261101T062543Z   rc: 0   log bytes: 611
+# script sha256: 5ba399c6952da283ecda1cbf71d546daadfa167fda8a6cff8a76d81e4cf1d8d6
+# ---- script ----
+# | which node; node --version; ls -d /home/*/node-v24* /opt/*node* /tmp/*node* /root/*node* 2>/dev/null; find / -name "test-http-writable-true-after-close.js" -not -path "/proc/*" 2>/dev/null | head -3
+# ---- raw output ----
+/usr/local/bin/node
+v22.23.4
+/opt/node-v22.23.4-linux-arm64
+/opt/node-v24.22.2-linux-arm64
+/opt/node22
+/opt/node24
+/tmp/compact-home-node1
+/tmp/compact-home-node2
+/tmp/compact-home-node3
+/tmp/compact-home-node4
+/tmp/compact-home-node5
+/tmp/compact-home-nodecompat
+/tmp/compact-node1
+/tmp/compact-node1.err
+/tmp/compact-node2
+/tmp/compact-node2.err
+/tmp/compact-node3
+/tmp/compact-node3.err
+/tmp/compact-node4
+/tmp/compact-node4.err
+/tmp/compact-node5
+/tmp/compact-node5.err
+/tmp/compact-nodecompat
+/tmp/compact-nodecompat.err
+/tmp/node-compile-cache
+/tmp/wk-node.json
+/tmp/ws-home-nodecompat
+/tmp/ws-nodecompat
