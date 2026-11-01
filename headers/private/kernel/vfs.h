@@ -60,6 +60,8 @@ typedef struct io_context {
 	struct list node_monitors;
 	uint32		num_monitors;
 	uint32		max_monitors;
+	uint32		table_size_hard_limit;		// RLIMIT_NOFILE hard limit
+	uint32		max_monitors_hard_limit;	// RLIMIT_NOVMON hard limit
 } io_context;
 
 
