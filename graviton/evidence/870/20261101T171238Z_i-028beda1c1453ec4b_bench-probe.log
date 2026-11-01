@@ -1,0 +1,126 @@
+# evidence: bench-probe
+# instance: i-028beda1c1453ec4b   region: us-west-2
+# ssm command: 700e215d-96fe-4faa-91c3-25668ccfa4ec (agent status: Success)
+# start: 20261101T171238Z   end: 20261101T171347Z   rc: 0   log bytes: 5770
+# script sha256: 2698244935412776c7a54e1a99e84200df4e482b41489285a87cfed039c5f461
+# ---- script ----
+# | uname -a
+# | id
+# | df -k /boot | tail -1
+# | ls -la /boot/system/packages/ | grep -i "haiku-\|haiku\.hpkg"
+# | cat /boot/system/packages/administrative/activated-packages 2>/dev/null | grep -i "^haiku" 
+# | sha256sum /boot/system/kernel_arm64
+# | find /boot/system/add-ons/kernel -name bfs -o -name null | xargs ls -la
+# | for f in /boot/system/add-ons/kernel/file_systems/bfs /boot/system/add-ons/kernel/drivers/bin/null; do sha256sum $f; done
+# | ls -la /boot/system/add-ons/kernel/boot/ | head -30
+# | ls -la /boot/home/config/non-packaged/add-ons/kernel 2>&1 | head
+# | which gcc cc python3 node pkgman package
+# | gcc --version 2>&1 | head -1
+# | package list /boot/system/packages/haiku-*.hpkg 2>/dev/null | grep -E "kernel_arm64|file_systems/bfs$|drivers/bin/null" | head
+# | listimage 1 2>/dev/null | grep -iE "bfs|kernel_arm64|null" | head
+# | mount 2>/dev/null | head; df 2>/dev/null | head
+# | ls /dev; ls /tmp -la | head -3; df /tmp 2>/dev/null
+# ---- raw output ----
+Haiku ip-10-128-7-24.us-west-2.comput R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+uid=0(baron) gid=0(root) groups=0(root)
+   Root Inode: 524288
+-rw-r--r-- 1 baron root 20644552 Oct 19 21:14 haiku-r1~beta6_hrev59996-1-arm64.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+lr-xr-xr-x 1 baron root     40 Oct 19 21:13 /boot/system/add-ons/kernel/boot/bfs -> ../../../add-ons/kernel/file_systems/bfs
+-r-xr-xr-x 1 baron root  10467 Oct 19 21:10 /boot/system/add-ons/kernel/drivers/bin/null
+lr-xr-xr-x 1 baron root     11 Oct 19 21:13 /boot/system/add-ons/kernel/drivers/dev/null -> ../bin/null
+-r-xr-xr-x 1 baron root 276779 Oct 19 21:10 /boot/system/add-ons/kernel/file_systems/bfs
+4fde601af2da0fb6c3a198479832dbd85831eb9d0130fae2f663dd7aacabe99a  /boot/system/add-ons/kernel/file_systems/bfs
+eaf8f36b04c434f4fe1b2504ed92064010d07e40146cdad9cdfaffe521513a13  /boot/system/add-ons/kernel/drivers/bin/null
+total 18
+dr-xr-xr-x 1 baron root  0 Oct 19 21:13 .
+dr-xr-xr-x 1 baron root  0 Oct 19 21:13 ..
+lr-xr-xr-x 1 baron root 41 Oct 19 21:13 acpi -> ../../../add-ons/kernel/bus_managers/acpi
+lr-xr-xr-x 1 baron root 40 Oct 19 21:13 ahci -> ../../../add-ons/kernel/busses/scsi/ahci
+lr-xr-xr-x 1 baron root 40 Oct 19 21:13 ata -> ../../../add-ons/kernel/bus_managers/ata
+lr-xr-xr-x 1 baron root 43 Oct 19 21:13 ata_adapter -> ../../../add-ons/kernel/generic/ata_adapter
+lr-xr-xr-x 1 baron root 40 Oct 19 21:13 bfs -> ../../../add-ons/kernel/file_systems/bfs
+lr-xr-xr-x 1 baron root 35 Oct 19 21:13 dpc -> ../../../add-ons/kernel/generic/dpc
+lr-xr-xr-x 1 baron root 39 Oct 19 21:13 ecam -> ../../../add-ons/kernel/busses/pci/ecam
+lr-xr-xr-x 1 baron root 52 Oct 19 21:13 efi_gpt -> ../../../add-ons/kernel/partitioning_systems/efi_gpt
+lr-xr-xr-x 1 baron root 39 Oct 19 21:13 ehci -> ../../../add-ons/kernel/busses/usb/ehci
+lr-xr-xr-x 1 baron root 40 Oct 19 21:13 fdt -> ../../../add-ons/kernel/bus_managers/fdt
+lr-xr-xr-x 1 baron root 50 Oct 19 21:13 generic_ide_pci -> ../../../add-ons/kernel/busses/ata/generic_ide_pci
+lr-xr-xr-x 1 baron root 52 Oct 19 21:13 highpoint_ide_pci -> ../../../add-ons/kernel/busses/ata/highpoint_ide_pci
+lr-xr-xr-x 1 baron root 50 Oct 19 21:13 intel -> ../../../add-ons/kernel/partitioning_systems/intel
+lr-xr-xr-x 1 baron root 41 Oct 19 21:13 it8211 -> ../../../add-ons/kernel/busses/ata/it8211
+lr-xr-xr-x 1 baron root 46 Oct 19 21:13 legacy_sata -> ../../../add-ons/kernel/busses/ata/legacy_sata
+lr-xr-xr-x 1 baron root 40 Oct 19 21:13 mmc -> ../../../add-ons/kernel/bus_managers/mmc
+lr-xr-xr-x 1 baron root 49 Oct 19 21:13 mmc_disk -> ../../../add-ons/kernel/drivers/disk/mmc/mmc_disk
+lr-xr-xr-x 1 baron root 46 Oct 19 21:13 nvme_disk -> ../../../add-ons/kernel/drivers/disk/nvme_disk
+lr-xr-xr-x 1 baron root 39 Oct 19 21:13 ohci -> ../../../add-ons/kernel/busses/usb/ohci
+lr-xr-xr-x 1 baron root 46 Oct 19 21:13 packagefs -> ../../../add-ons/kernel/file_systems/packagefs
+lr-xr-xr-x 1 baron root 40 Oct 19 21:13 pci -> ../../../add-ons/kernel/bus_managers/pci
+lr-xr-xr-x 1 baron root 41 Oct 19 21:13 scsi -> ../../../add-ons/kernel/bus_managers/scsi
+lr-xr-xr-x 1 baron root 49 Oct 19 21:13 scsi_cd -> ../../../add-ons/kernel/drivers/disk/scsi/scsi_cd
+lr-xr-xr-x 1 baron root 51 Oct 19 21:13 scsi_disk -> ../../../add-ons/kernel/drivers/disk/scsi/scsi_disk
+lr-xr-xr-x 1 baron root 43 Oct 19 21:13 scsi_periph -> ../../../add-ons/kernel/generic/scsi_periph
+lr-xr-xr-x 1 baron root 40 Oct 19 21:13 sdhci -> ../../../add-ons/kernel/busses/mmc/sdhci
+lr-xr-xr-x 1 baron root 53 Oct 19 21:13 silicon_image_3112 -> ../../../add-ons/kernel/busses/ata/silicon_image_3112
+total 12
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 .
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 ..
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 drivers
+/tmp/ccrun/cc-20261101T171238Z-61606.sh: line 11: which: command not found
+/tmp/ccrun/cc-20261101T171238Z-61606.sh: line 12: gcc: command not found
+      bfs                                0  2026-10-19 21:13:05  lrwxrwxrwx  -> ../../../add-ons/kernel/file_systems/bfs
+kernel_arm64                       2539425  2026-10-19 21:10:12  -rwxr-xr-x
+    1 0xffff000000000000 0xffff0000001da000     0          0 kernel_arm64
+   47 0xffff00000215d000 0xffff000002190000     0          0 bfs
+   97 0xffff000002155000 0xffff000002156000     0          0 /boot/system/add-ons/kernel/drivers/dev/null
+usage: mount [-ro] [-t fstype] [-p parameter] [device] directory
+	-ro	mounts the volume read-only
+	-t	specifies the file system to use (defaults to automatic recognition)
+	-p	specifies parameters to pass to the file system (-o also accepted)
+	if device is not specified, NULL is passed (for in-memory filesystems)
+[1mVolume[0m
+ Type        Total      Free      Flags   Used%  Device
+----------- ---------- --------- ------- ------ -------------------
+[1m/boot             [0m
+        bfs   40.0 GiB  29.8 GiB QAM-P-W    25% /dev/disk/nvme/0/1      
+[1m/boot/system      [0m
+  packagefs          0         0 QAM-P--   100%                         
+[1m/boot/home/config [0m
+  packagefs          0         0 QAM-P--   100%                         
+acpi
+bus
+disk
+dprintf
+dvb
+full
+graphics
+input
+misc
+net
+null
+ports
+power
+pt
+ptmx
+random
+tt
+tty
+urandom
+zero
+lrwxrwxrwx 1 baron root 22 Nov  1 17:05 /tmp -> /boot/system/cache/tmp
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:   40.0 GiB (20953079 blocks)
+  Used Blocks:   10.1 GiB (5305807 blocks)
+  Free Blocks:   29.8 GiB (15647272 blocks)
+      Usage %:   25.3 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288
