@@ -1,0 +1,5 @@
+# evidence: after-889-ssm-check   instance: i-0fd3c8d74d579cec8   (from the workstation)
+i-0fd3c8d74d579cec8	Online	Haiku	3.3.0.0
+Haiku ip-10-128-13-55.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+ssm-ok
+ssm-run rc=0

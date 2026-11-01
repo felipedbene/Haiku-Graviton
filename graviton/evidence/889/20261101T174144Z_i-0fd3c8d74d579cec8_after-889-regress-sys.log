@@ -1,0 +1,114 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-889-regress-sys
+# instance: i-0fd3c8d74d579cec8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T174144Z   end: 20261101T180144Z   rc: 124
+# script sha256: 8547ffeb4c1ddb3558362d9ee7a0cc42e7dd5204f1b0a228f680f2c9af1bee67
+# ---- script ----
+# | cd /boot/home/tnet
+# | echo "--- loaded modules / kernel"
+# | sha256sum /boot/system/kernel_arm64 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/* 2>/dev/null
+# | listimage 1 2>/dev/null | grep -E 'protocols/(unix|udp|ipv6|tcp)' | awk '{print $NF}' | sort -u
+# | echo "--- sshd: this session is ssh; peer: $SSH_CONNECTION"
+# | ps 2>/dev/null | grep -E 'sshd|ssm' | grep -v grep | awk '{print $1}' | sort -u
+# | echo "--- HTTPS + DNS (python urllib) and curl"
+# | python3 -I - <<'PY'
+# | import time, urllib.request
+# | for u in ("https://nodejs.org/dist/index.json", "https://packages.debene.dev/", "https://www.haiku-os.org/", "https://github.com/"):
+# |     t = time.time()
+# |     try:
+# |         r = urllib.request.urlopen(u, timeout=30); n = len(r.read())
+# |         print(f"{u}: {r.status} {n} bytes {time.time()-t:.2f}s")
+# |     except Exception as e:
+# |         print(f"{u}: ERROR {e!r}")
+# | PY
+# | command -v curl && curl -sS -o /dev/null -w 'curl nodejs.org %{http_code} %{size_download}B %{time_total}s\n' https://nodejs.org/dist/index.json
+# | echo "--- pkgman over HTTPS"
+# | pkgman refresh 2>&1 | tail -2
+# | pkgman search -a nodejs24 2>&1 | tail -2
+# | echo "--- loopback TCP bulk, 512 MiB through an accepted socket, both directions, ipv4 and ipv6"
+# | python3 -I - <<'PY'
+# | import socket, threading, time
+# | N = 512 << 20
+# | def bulk(family, host, direction):
+# |     l = socket.socket(family); l.bind((host, 0)); l.listen(1)
+# |     port = l.getsockname()[1]
+# |     res = {}
+# |     def server():
+# |         s, _ = l.accept()
+# |         if direction == "up":
+# |             got = 0
+# |             while True:
+# |                 b = s.recv(1 << 20)
+# |                 if not b: break
+# |                 got += len(b)
+# |             res["got"] = got
+# |         else:
+# |             buf = b"x" * (1 << 20)
+# |             for _ in range(N >> 20): s.sendall(buf)
+# |         s.close()
+# |     t = threading.Thread(target=server); t.start()
+# |     c = socket.socket(family); c.connect((host, port))
+# |     start = time.time()
+# |     if direction == "up":
+# |         buf = b"x" * (1 << 20)
+# |         for _ in range(N >> 20): c.sendall(buf)
+# |         c.shutdown(socket.SHUT_WR)
+# |         t.join(); got = res["got"]
+# |     else:
+# |         got = 0
+# |         while True:
+# |             b = c.recv(1 << 20)
+# |             if not b: break
+# |             got += len(b)
+# |         t.join()
+# |     dt = time.time() - start
+# |     c.close(); l.close()
+# |     print(f"{host} {direction}: {got} bytes ok={got == N} {got / dt / (1 << 20):.0f} MiB/s")
+# | for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+# |     for d in ("up", "down"):
+# |         bulk(fam, host, d)
+# | PY
+# | echo "--- reset/abort: refused port, close with unread data"
+# | python3 -I - <<'PY'
+# | import socket, time
+# | s = socket.socket()
+# | try:
+# |     s.connect(("127.0.0.1", 1)); print("connect to closed port: connected?!")
+# | except OSError as e:
+# |     print("connect to closed port:", e.strerror)
+# | l = socket.socket(); l.bind(("127.0.0.1", 0)); l.listen(1)
+# | c = socket.socket(); c.connect(l.getsockname()); a, _ = l.accept()
+# | c.sendall(b"unread"); time.sleep(0.1); a.close(); time.sleep(0.1)
+# | try:
+# |     c.sendall(b"x"); time.sleep(0.1); print("recv after peer closed with unread data:", c.recv(10))
+# | except OSError as e:
+# |     print("after peer closed with unread data:", e.strerror)
+# | PY
+# | echo "--- kernel log: panics/asserts"
+# | grep -ciE 'panic|assert|kernel debugger|KDL' /var/log/syslog 2>/dev/null; grep -iE 'panic|assert' /var/log/syslog 2>/dev/null | tail -3
+# | uptime
+# ---- raw output ----
+--- loaded modules / kernel
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+853d90878cf8bbce36e98b04257a6b6e1e28d7ab66c80bbb6495637358cea8cc  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+--- sshd: this session is ssh; peer: 10.128.7.248 56841 10.128.13.55 22
+/boot/system/bin/amazon-ssm-agent
+/boot/system/bin/sshd
+/boot/system/bin/ssm-agent-worker
+/boot/system/lib/openssh/sshd-session
+--- HTTPS + DNS (python urllib) and curl
+https://nodejs.org/dist/index.json: 200 336201 bytes 0.09s
+https://packages.debene.dev/: 200 23747 bytes 0.25s
+https://www.haiku-os.org/: 200 27700 bytes 0.24s
+https://github.com/: 200 530167 bytes 0.14s
+--- pkgman over HTTPS
+Fetching repository checksum from http://packages.debene.dev/arm64 ...
+Validating checksum for DeBeOS ...
+        zziplib_doc                              The zziplib extract data from archives in a single zip (documentation)                              
+        zziplib_tools                            The zziplib extract data from archives in a single zip                                              
+--- loopback TCP bulk, 512 MiB through an accepted socket, both directions, ipv4 and ipv6
