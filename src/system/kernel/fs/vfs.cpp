@@ -8922,7 +8922,8 @@ _kern_write_stat(int fd, const char* path, bool traverseLeafLink,
 		if (descriptor->ops->fd_write_stat)
 			status = descriptor->ops->fd_write_stat(descriptor.Get(), stat, statMask);
 		else
-			status = B_UNSUPPORTED;
+			status = B_BAD_VALUE;
+				// see _user_write_stat()
 	}
 
 	return status;
@@ -9943,8 +9944,14 @@ _user_write_stat(int fd, const char* userPath, bool traverseLeafLink,
 		if (descriptor->ops->fd_write_stat) {
 			status = descriptor->ops->fd_write_stat(descriptor.Get(), &stat,
 				statMask);
-		} else
-			status = B_UNSUPPORTED;
+		} else {
+			// The descriptor is not a node whose stat can be written, e.g. a
+			// socket. Answer EINVAL, as the BSDs do for fchmod() on a socket:
+			// callers such as libuv's uv_pipe_chmod() recognize it and fall
+			// back to chmod() on the socket's path, while B_UNSUPPORTED is no
+			// POSIX errno at all.
+			status = B_BAD_VALUE;
+		}
 	}
 
 	return status;
