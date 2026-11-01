@@ -1,0 +1,314 @@
+# evidence: after-slice
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T154735Z   end: 20261101T154904Z   rc: 0
+# script sha256: 0bdcf804bc9ec82d5a7ef763a7509332d8be4270a0809b0d9634e94035907e40
+# ---- script ----
+# | cd /boot/home/t871/node-v24.21.0
+# | uname -v; listimage 1 | grep 'protocols/tcp'
+# | T="parallel/test-debugger-unavailable-port parallel/test-inspector-network-websocket parallel/test-http-writable-true-after-close parallel/test-child-process-disconnect parallel/test-child-process-fork-net parallel/test-child-process-fork-net-socket parallel/test-child-process-send-keep-open parallel/test-cluster-disconnect parallel/test-cluster-shared-leak parallel/test-process-getactivehandles parallel/test-process-getactiveresources-track-active-handles parallel/test-timers-socket-timeout-removes-other-socket-unref-timer parallel/test-set-http-max-http-headers parallel/test-https-eof-for-eom parallel/test-net-after-close parallel/test-net-allow-half-open parallel/test-net-autoselectfamily-default parallel/test-net-bytes-written-large parallel/test-net-connect-options-allowhalfopen parallel/test-net-connect-options-port parallel/test-net-dns-lookup parallel/test-net-keepalive parallel/test-net-listen-after-destroying-stdin parallel/test-net-normalize-args parallel/test-net-onread-static-buffer parallel/test-net-pause-resume-connecting parallel/test-net-persistent-keepalive parallel/test-net-persistent-nodelay parallel/test-net-persistent-ref-unref parallel/test-net-server-max-connections parallel/test-net-server-pause-on-connect parallel/test-net-socket-byteswritten parallel/test-net-socket-close-after-end parallel/test-net-socket-connect-without-cb parallel/test-net-socket-connecting parallel/test-net-socket-local-address parallel/test-net-socket-ready-without-cb parallel/test-net-socket-tos parallel/test-net-throttle parallel/test-net-writable parallel/test-net-write-after-end-nt parallel/test-net-write-slow parallel/test-tls-client-cert-resumption parallel/test-tls-client-mindhsize parallel/test-tls-env-extra-ca parallel/test-tls-env-extra-ca-with-options parallel/test-tls-inception parallel/test-tls-max-send-fragment parallel/test-tls-on-empty-socket parallel/test-tls-session-reuse-different-servername parallel/test-tls-wrap-econnreset parallel/test-tls-wrap-econnreset-localaddress parallel/test-tls-wrap-econnreset-socket sequential/test-net-localport sequential/test-tls-psk-client "
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 20 -p tap $T > /tmp/tap-slice.txt 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -cE '^ok ' /tmp/tap-slice.txt) notok=$(grep -cE '^not ok ' /tmp/tap-slice.txt)"
+# | grep -E '^(not )?ok ' /tmp/tap-slice.txt
+# | echo "== full tap"; cat /tmp/tap-slice.txt
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+ 2160 0xffff00000239c000 0xffff0000023ad000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+test.py rc=1 wall=72s ok=53 notok=2
+not ok 1 parallel/test-http-writable-true-after-close
+ok 2 parallel/test-child-process-disconnect
+ok 3 parallel/test-inspector-network-websocket
+ok 4 parallel/test-child-process-fork-net-socket
+ok 5 parallel/test-child-process-send-keep-open
+ok 6 parallel/test-child-process-fork-net
+ok 7 parallel/test-process-getactivehandles
+ok 8 parallel/test-cluster-shared-leak
+ok 9 parallel/test-process-getactiveresources-track-active-handles
+ok 10 parallel/test-cluster-disconnect
+ok 11 parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+ok 12 parallel/test-net-after-close
+ok 13 parallel/test-net-allow-half-open
+ok 14 parallel/test-https-eof-for-eom
+ok 15 parallel/test-net-autoselectfamily-default
+ok 16 parallel/test-net-bytes-written-large
+ok 17 parallel/test-net-connect-options-allowhalfopen
+ok 18 parallel/test-set-http-max-http-headers
+ok 19 parallel/test-net-dns-lookup
+ok 20 parallel/test-net-connect-options-port
+ok 21 parallel/test-debugger-unavailable-port
+ok 22 parallel/test-net-listen-after-destroying-stdin
+ok 23 parallel/test-net-normalize-args
+ok 24 parallel/test-net-keepalive
+ok 25 parallel/test-net-persistent-nodelay
+ok 26 parallel/test-net-pause-resume-connecting
+ok 27 parallel/test-net-persistent-ref-unref
+ok 28 parallel/test-net-onread-static-buffer
+ok 29 parallel/test-net-server-max-connections
+ok 30 parallel/test-net-server-pause-on-connect
+ok 31 parallel/test-net-socket-byteswritten
+ok 32 parallel/test-net-socket-connect-without-cb
+ok 33 parallel/test-net-socket-connecting
+ok 34 parallel/test-net-socket-close-after-end
+ok 35 parallel/test-net-socket-local-address
+ok 36 parallel/test-net-socket-ready-without-cb
+ok 37 parallel/test-net-persistent-keepalive
+ok 38 parallel/test-net-socket-tos
+ok 39 parallel/test-net-writable
+ok 40 parallel/test-net-write-after-end-nt
+ok 41 parallel/test-tls-client-cert-resumption
+ok 42 parallel/test-tls-client-mindhsize
+ok 43 parallel/test-tls-env-extra-ca
+ok 44 parallel/test-net-throttle
+ok 45 parallel/test-net-write-slow
+ok 46 parallel/test-tls-env-extra-ca-with-options
+ok 47 parallel/test-tls-inception
+ok 48 parallel/test-tls-max-send-fragment
+ok 49 parallel/test-tls-on-empty-socket
+ok 50 parallel/test-tls-wrap-econnreset
+ok 51 parallel/test-tls-wrap-econnreset-localaddress
+ok 52 parallel/test-tls-wrap-econnreset-socket
+ok 53 parallel/test-tls-session-reuse-different-servername
+ok 54 sequential/test-net-localport
+not ok 55 sequential/test-tls-psk-client
+== full tap
+TAP version 13
+1..55
+not ok 1 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 181.33700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/t871/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/t871/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/t871/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...
+ok 2 parallel/test-child-process-disconnect
+  ---
+  duration_ms: 273.64300
+  ...
+ok 3 parallel/test-inspector-network-websocket
+  ---
+  duration_ms: 425.02700
+  ...
+ok 4 parallel/test-child-process-fork-net-socket
+  ---
+  duration_ms: 267.84000
+  ...
+ok 5 parallel/test-child-process-send-keep-open
+  ---
+  duration_ms: 212.87500
+  ...
+ok 6 parallel/test-child-process-fork-net
+  ---
+  duration_ms: 511.75100
+  ...
+ok 7 parallel/test-process-getactivehandles
+  ---
+  duration_ms: 334.86700
+  ...
+ok 8 parallel/test-cluster-shared-leak
+  ---
+  duration_ms: 619.88100
+  ...
+ok 9 parallel/test-process-getactiveresources-track-active-handles
+  ---
+  duration_ms: 267.06900
+  ...
+ok 10 parallel/test-cluster-disconnect
+  ---
+  duration_ms: 815.82500
+  ...
+ok 11 parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+  ---
+  duration_ms: 112.31800
+  ...
+ok 12 parallel/test-net-after-close
+  ---
+  duration_ms: 112.21700
+  ...
+ok 13 parallel/test-net-allow-half-open
+  ---
+  duration_ms: 139.71800
+  ...
+ok 14 parallel/test-https-eof-for-eom
+  ---
+  duration_ms: 332.32300
+  ...
+ok 15 parallel/test-net-autoselectfamily-default
+  ---
+  duration_ms: 138.28600
+  ...
+ok 16 parallel/test-net-bytes-written-large
+  ---
+  duration_ms: 329.26500
+  ...
+ok 17 parallel/test-net-connect-options-allowhalfopen
+  ---
+  duration_ms: 268.30100
+  ...
+ok 18 parallel/test-set-http-max-http-headers
+  ---
+  duration_ms: 811.59000
+  ...
+ok 19 parallel/test-net-dns-lookup
+  ---
+  duration_ms: 5935.63400
+  ...
+ok 20 parallel/test-net-connect-options-port
+  ---
+  duration_ms: 5946.63300
+  ...
+ok 21 parallel/test-debugger-unavailable-port
+  ---
+  duration_ms: 8049.05000
+  ...
+ok 22 parallel/test-net-listen-after-destroying-stdin
+  ---
+  duration_ms: 117.11100
+  ...
+ok 23 parallel/test-net-normalize-args
+  ---
+  duration_ms: 116.95900
+  ...
+ok 24 parallel/test-net-keepalive
+  ---
+  duration_ms: 263.81500
+  ...
+ok 25 parallel/test-net-persistent-nodelay
+  ---
+  duration_ms: 113.37300
+  ...
+ok 26 parallel/test-net-pause-resume-connecting
+  ---
+  duration_ms: 268.74800
+  ...
+ok 27 parallel/test-net-persistent-ref-unref
+  ---
+  duration_ms: 119.87800
+  ...
+ok 28 parallel/test-net-onread-static-buffer
+  ---
+  duration_ms: 412.56900
+  ...
+ok 29 parallel/test-net-server-max-connections
+  ---
+  duration_ms: 138.42200
+  ...
+ok 30 parallel/test-net-server-pause-on-connect
+  ---
+  duration_ms: 124.71200
+  ...
+ok 31 parallel/test-net-socket-byteswritten
+  ---
+  duration_ms: 121.26900
+  ...
+ok 32 parallel/test-net-socket-connect-without-cb
+  ---
+  duration_ms: 114.24500
+  ...
+ok 33 parallel/test-net-socket-connecting
+  ---
+  duration_ms: 113.62800
+  ...
+ok 34 parallel/test-net-socket-close-after-end
+  ---
+  duration_ms: 272.60200
+  ...
+ok 35 parallel/test-net-socket-local-address
+  ---
+  duration_ms: 121.90100
+  ...
+ok 36 parallel/test-net-socket-ready-without-cb
+  ---
+  duration_ms: 116.87100
+  ...
+ok 37 parallel/test-net-persistent-keepalive
+  ---
+  duration_ms: 816.27500
+  ...
+ok 38 parallel/test-net-socket-tos
+  ---
+  duration_ms: 145.61100
+  ...
+ok 39 parallel/test-net-writable
+  ---
+  duration_ms: 111.94100
+  ...
+ok 40 parallel/test-net-write-after-end-nt
+  ---
+  duration_ms: 118.41300
+  ...
+ok 41 parallel/test-tls-client-cert-resumption
+  ---
+  duration_ms: 329.14900
+  ...
+ok 42 parallel/test-tls-client-mindhsize
+  ---
+  duration_ms: 509.94500
+  ...
+ok 43 parallel/test-tls-env-extra-ca
+  ---
+  duration_ms: 329.09500
+  ...
+ok 44 parallel/test-net-throttle
+  ---
+  duration_ms: 923.15000
+  ...
+ok 45 parallel/test-net-write-slow
+  ---
+  duration_ms: 823.64200
+  ...
+ok 46 parallel/test-tls-env-extra-ca-with-options
+  ---
+  duration_ms: 334.03100
+  ...
+ok 47 parallel/test-tls-inception
+  ---
+  duration_ms: 329.59300
+  ...
+ok 48 parallel/test-tls-max-send-fragment
+  ---
+  duration_ms: 189.27700
+  ...
+ok 49 parallel/test-tls-on-empty-socket
+  ---
+  duration_ms: 214.26100
+  ...
+ok 50 parallel/test-tls-wrap-econnreset
+  ---
+  duration_ms: 147.45700
+  ...
+ok 51 parallel/test-tls-wrap-econnreset-localaddress
+  ---
+  duration_ms: 148.59700
+  ...
+ok 52 parallel/test-tls-wrap-econnreset-socket
+  ---
+  duration_ms: 145.77300
+  ...
+ok 53 parallel/test-tls-session-reuse-different-servername
+  ---
+  duration_ms: 267.55700
+  ...
+ok 54 sequential/test-net-localport
+  ---
+  duration_ms: 111.22500
+  ...
+not ok 55 sequential/test-tls-psk-client
+  ---
+  duration_ms: 60028.70000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    Failed: Timed out
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t871/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js
+/boot/system/bin/node /boot/home/t871/node-v24.21.0/test/sequential/test-tls-psk-client.js

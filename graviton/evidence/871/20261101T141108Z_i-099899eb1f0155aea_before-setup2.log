@@ -1,0 +1,32 @@
+# evidence: before-setup2
+# instance: i-099899eb1f0155aea   region: us-west-2
+# ssm command: 2880e674-cb26-4d8b-ac97-c7cf9b6d127e (agent status: detached)
+# start: 20261101T141108Z   end: 20261101T141351Z   rc: 0   log bytes: 630
+# script sha256: d8a02dc3e81263f494a106b9e7041ebfe631cb2075717ca51a1dd5558c886511
+# ---- script ----
+# | cd /boot/home/t871
+# | pkgman install -y haiku_devel 2>&1 | tail -2
+# | gcc -O2 -Wall -o tcp871 tcp871.c 2>&1 && ls -l tcp871 && sha256sum tcp871
+# | python3 -I - <<'PY'
+# | import hashlib, tarfile, urllib.request
+# | u = "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
+# | urllib.request.urlretrieve(u, "node-v24.21.0.tar.gz")
+# | h = hashlib.sha256(open("node-v24.21.0.tar.gz", "rb").read()).hexdigest()
+# | print("sha256", h, "OK" if h == "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777" else "MISMATCH")
+# | assert h == "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777"
+# | with tarfile.open("node-v24.21.0.tar.gz") as t:
+# |     m = [x for x in t.getmembers() if x.name.split("/")[1:2] in (["test"], ["tools"])]
+# |     t.extractall(".", members=m, filter="data")
+# | print("extracted", len(m))
+# | PY
+# | ls node-v24.21.0 | head; ls node-v24.21.0/test | head -40 | tr '\n' ' '
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+gcc: fatal error: cannot execute 'as': posix_spawnp: No such file or directory
+compilation terminated.
+sha256 622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777 OK
+extracted 12111
+test
+tools
+README.md abort addons async-hooks benchmark cctest client-proxy common doctool embedding es-module ffi fixtures fuzzers internet js-native-api known_issues message module-hooks node-api node_trace.1.log nop overlapped-checker parallel pseudo-tty pummel report root.status sea sequential sqlite system-ca test-runner test426 testpy tick-processor tools v8-updates wasi wasm-allocation 

@@ -1,0 +1,16 @@
+# evidence: before-probe
+# instance: i-099899eb1f0155aea   region: us-west-2
+# ssm command: 70d50000-9474-4392-8485-a01a5dfcc8ec (agent status: Success)
+# start: 20261101T135411Z   end: 20261101T135521Z   rc: 0   log bytes: 315
+# script sha256: 1d4814724fd8cd8f67dc3eb6d5c5514e5240c262750f1a94da79f7f8e2b3473f
+# ---- script ----
+# | uname -a
+# | which gcc cc node python3 netstat curl iperf3 2>&1
+# | pkgman list-installed 2>/dev/null | grep -iE 'node|python|gcc' | head
+# | df -k /boot | tail -1
+# | listimage 1 2>/dev/null | grep -i "tcp" | head
+# ---- raw output ----
+Haiku ip-10-128-10-60.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+/tmp/ccrun/cc-20261101T135411Z-24621.sh: line 2: which: command not found
+   Root Inode: 524288
+ 2059 0xffff0000023d4000 0xffff0000023e5000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp

@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+ssm-run: command 281704b6-0f2d-43f1-ad95-54da2d236730 on i-021b962b0cd766a2e (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-48655-61f332)
+Linux 7.0.0-1014-aws
+70d62d27013e637e7b4e14655c0c24ab217078f23d8cbf77e04ea0ab85d9f5f5  tcp871.c
+ipv4 srvfin     PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-  pollout=1 revents=0x14
+ipv4 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv4 peerfin    PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x1  read=0 errno=-
+ipv4 simul      PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv4 reset      PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+ipv4 srvfin-rst PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+ipv6 srvfin     PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-  pollout=1 revents=0x14
+ipv6 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv6 peerfin    PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x1  read=0 errno=-
+ipv6 simul      PASS  wait=1 revents=0x11 wake=0.0ms  late-poll=1 revents=0x11  read=0 errno=-
+ipv6 reset      PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+ipv6 srvfin-rst PASS  wait=1 revents=0x19 wake=0.0ms  late-poll=1 revents=0x19  read=-1 errno=Connection reset by peer
+tcp871: 0 failed
+rc=0
+ssm-run: Success

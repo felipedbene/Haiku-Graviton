@@ -1,0 +1,98 @@
+# evidence: after-extra
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T151454Z   end: 20261101T151517Z   rc: 0
+# script sha256: dfba6788138a4c83e2166fb86f867247878e3205461e49fce835278c10e57f32
+# ---- script ----
+# | cd /boot/home/t871/node-v24.21.0
+# | uname -v; listimage 1 | grep 'protocols/tcp'
+# | T="parallel/test-debugger-unavailable-port parallel/test-inspector-network-websocket parallel/test-http-writable-true-after-close parallel/test-child-process-disconnect parallel/test-child-process-fork-net parallel/test-child-process-fork-net-socket parallel/test-child-process-send-keep-open parallel/test-cluster-disconnect parallel/test-cluster-shared-leak parallel/test-process-getactivehandles parallel/test-process-getactiveresources-track-active-handles parallel/test-timers-socket-timeout-removes-other-socket-unref-timer parallel/test-set-http-max-http-headers"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 60 -p tap $T > /tmp/tap-extra.txt 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -cE '^ok ' /tmp/tap-extra.txt) notok=$(grep -cE '^not ok ' /tmp/tap-extra.txt)"
+# | grep -E '^(not )?ok ' /tmp/tap-extra.txt
+# | echo "== full tap"; cat /tmp/tap-extra.txt
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+ 2160 0xffff00000239c000 0xffff0000023ad000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+test.py rc=1 wall=9s ok=12 notok=1
+not ok 1 parallel/test-http-writable-true-after-close
+ok 2 parallel/test-child-process-disconnect
+ok 3 parallel/test-inspector-network-websocket
+ok 4 parallel/test-child-process-fork-net-socket
+ok 5 parallel/test-child-process-fork-net
+ok 6 parallel/test-child-process-send-keep-open
+ok 7 parallel/test-process-getactivehandles
+ok 8 parallel/test-cluster-shared-leak
+ok 9 parallel/test-process-getactiveresources-track-active-handles
+ok 10 parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+ok 11 parallel/test-cluster-disconnect
+ok 12 parallel/test-set-http-max-http-headers
+ok 13 parallel/test-debugger-unavailable-port
+== full tap
+TAP version 13
+1..13
+not ok 1 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 191.16700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/t871/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/t871/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/t871/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...
+ok 2 parallel/test-child-process-disconnect
+  ---
+  duration_ms: 278.71800
+  ...
+ok 3 parallel/test-inspector-network-websocket
+  ---
+  duration_ms: 426.24500
+  ...
+ok 4 parallel/test-child-process-fork-net-socket
+  ---
+  duration_ms: 266.28400
+  ...
+ok 5 parallel/test-child-process-fork-net
+  ---
+  duration_ms: 415.08800
+  ...
+ok 6 parallel/test-child-process-send-keep-open
+  ---
+  duration_ms: 213.98700
+  ...
+ok 7 parallel/test-process-getactivehandles
+  ---
+  duration_ms: 427.03000
+  ...
+ok 8 parallel/test-cluster-shared-leak
+  ---
+  duration_ms: 719.39200
+  ...
+ok 9 parallel/test-process-getactiveresources-track-active-handles
+  ---
+  duration_ms: 267.92400
+  ...
+ok 10 parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+  ---
+  duration_ms: 115.17200
+  ...
+ok 11 parallel/test-cluster-disconnect
+  ---
+  duration_ms: 910.61400
+  ...
+ok 12 parallel/test-set-http-max-http-headers
+  ---
+  duration_ms: 810.88200
+  ...
+ok 13 parallel/test-debugger-unavailable-port
+  ---
+  duration_ms: 8082.46900
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t871/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js

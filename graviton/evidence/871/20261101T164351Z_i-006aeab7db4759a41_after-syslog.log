@@ -1,0 +1,13 @@
+# evidence: after-syslog
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T164351Z   end: 20261101T164414Z   rc: 0
+# script sha256: ee970a9be74898a351576e1c8a78b2fc3d7ac7affe4f7985ca7ee355c004b71e
+# ---- script ----
+# | uptime; grep -ciE "panic|assert|kernel debugger" /var/log/syslog; grep -iE "panic|assert" /var/log/syslog | tail -5; grep -i "tcp" /var/log/syslog | tail -5
+# ---- raw output ----
+/tmp/ccrun/cc-20261101T164351Z-46156.sh: line 1: uptime: command not found
+10
+KERN: debug_server: Killing team 688 (/boot/system/bin/jam -q -j32 tcp)
+KERN: debug_server: Killing team 716 (/boot/system/bin/jam -q -j32 tcp)
+KERN: debug_server: Killing team 772 (/boot/system/bin/jam -q -n tcp)
+KERN: debug_server: Killing team 776 (/boot/system/bin/jam -d1 -q tcp)

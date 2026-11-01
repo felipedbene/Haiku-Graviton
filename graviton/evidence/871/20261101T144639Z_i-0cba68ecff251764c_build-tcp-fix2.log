@@ -1,0 +1,51 @@
+# evidence: build-tcp-fix2
+# instance: i-0cba68ecff251764c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T144639Z   end: 20261101T144714Z   rc: 0
+# script sha256: fe3a361524947ce25ef4ab63a833f91a156f46201288bc9ebce968d8c08da935
+# ---- script ----
+# | set -x
+# | pkgman install -y nasm 2>&1 | tail -1
+# | cd /boot/home/hg/generated
+# | ../configure --target-arch arm64 2>&1 | tail -15
+# | s=$(date +%s); jam -q -j32 tcp > jam-tcp.log 2>&1; echo "JAM_TCP_RC=$? wall=$(( $(date +%s) - s ))s"
+# | grep -cE '\.\.\.failed' jam-tcp.log
+# | tail -20 jam-tcp.log
+# | find objects -name tcp -type f -path '*protocols/tcp*' -exec ls -l {} \; -exec sha256sum {} \;
+# ---- raw output ----
++ pkgman install -y nasm
++ tail -1
+[system] Done.
++ cd /boot/home/hg/generated
++ ../configure --target-arch arm64
++ tail -15
+Configured successfully!
+++ date +%s
++ s=1793544407
++ jam -q -j32 tcp
+++ date +%s
++ echo 'JAM_TCP_RC=1 wall=17s'
+JAM_TCP_RC=1 wall=17s
++ grep -cE '\.\.\.failed' jam-tcp.log
+5
++ tail -20 jam-tcp.log
+C++ objects/haiku_host/release/build/libpackage/SolverProblem.o 
+C++ objects/haiku_host/release/build/libpackage/SolverProblemSolution.o 
+C++ objects/haiku_host/release/build/libpackage/SolverRepository.o 
+C++ objects/haiku_host/release/build/libpackage/SolverResult.o 
+C++ objects/haiku_host/release/build/libroot/fs_attr.o 
+C++ objects/haiku_host/release/build/libroot/fs_descriptors.o 
+C++ objects/haiku_host/release/build/libroot/misc.o 
+C++ objects/haiku_host/release/build/libroot/sem.o 
+C++ objects/haiku_host/release/build/libroot/thread.o 
+C++ objects/haiku_host/release/build/libroot/SHA256.o 
+C++ objects/haiku_host/release/build/libroot/driver_settings.o 
+Cc objects/haiku_host/release/build/libroot/strnlen.o 
+C++ objects/haiku_host/release/build/libroot/KMessage.o 
+Link /boot/home/hg/generated/objects/haiku_host/lib/libroot_build.so 
+Chmod1 /boot/home/hg/generated/objects/haiku_host/lib/libroot_build.so 
+
+BUILD FAILURE:
+...failed updating 4 target(s)...
+...skipped 514 target(s)...
+...updated 340 target(s)...
++ find objects -name tcp -type f -path '*protocols/tcp*' -exec ls -l '{}' ';' -exec sha256sum '{}' ';'

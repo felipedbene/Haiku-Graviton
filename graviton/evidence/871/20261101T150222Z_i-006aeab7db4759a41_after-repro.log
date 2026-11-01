@@ -1,0 +1,74 @@
+# evidence: after-repro
+# instance: i-006aeab7db4759a41   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T150222Z   end: 20261101T150245Z   rc: 0
+# script sha256: 5ad82a4faa328deffa8f8439f7a0f434d53314223b873817220b39f5f2f6838a
+# ---- script ----
+# | cd /boot/home/t871
+# | uname -v; listimage 1 | grep 'protocols/tcp'; sha256sum $(listimage 1 | grep -o '/boot/.*protocols/tcp')
+# | echo "== tcp871.c sha256"; sha256sum tcp871.c half-close.mjs
+# | for i in 1 2 3; do echo "== tcp871 run $i"; ./tcp871 2000; echo "rc=$?"; done
+# | for i in 1 2 3; do echo "== half-close.mjs run $i"; /boot/system/bin/node half-close.mjs 5000; echo "rc=$?"; done
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+ 2160 0xffff00000239c000 0xffff0000023ad000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+56f0a5b9df64ad08ca00398635f987457561948c7cfc6cd9455209880b064221  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+== tcp871.c sha256
+06dac3486123b26e794b07753716624184c8afe8cad25eee6bac52a9920ddb30  tcp871.c
+3c5e5f27b06bbd1709cd84f1c910cc3ff69ddba5b1821ffecb437b9b37871a0b  half-close.mjs
+== tcp871 run 1
+ipv4 srvfin     PASS  wait=1 revents=0x81 wake=0.1ms  late-poll=1 revents=0x81  read=0 errno=-  pollout=1 revents=0x82
+ipv4 srvfin-sel PASS  wait=1 revents=0x1 wake=0.1ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 peerfin    PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 simul      PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 reset      PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv4 srvfin-rst PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv6 srvfin     PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-  pollout=1 revents=0x82
+ipv6 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 peerfin    PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 simul      PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 reset      PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv6 srvfin-rst PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+tcp871: 0 failed
+rc=0
+== tcp871 run 2
+ipv4 srvfin     PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-  pollout=1 revents=0x82
+ipv4 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 peerfin    PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 simul      PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 reset      PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv4 srvfin-rst PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv6 srvfin     PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-  pollout=1 revents=0x82
+ipv6 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 peerfin    PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 simul      PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 reset      PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv6 srvfin-rst PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+tcp871: 0 failed
+rc=0
+== tcp871 run 3
+ipv4 srvfin     PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-  pollout=1 revents=0x82
+ipv4 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 peerfin    PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 simul      PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv4 reset      PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv4 srvfin-rst PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv6 srvfin     PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-  pollout=1 revents=0x82
+ipv6 srvfin-sel PASS  wait=1 revents=0x1 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 peerfin    PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 simul      PASS  wait=1 revents=0x81 wake=0.0ms  late-poll=1 revents=0x81  read=0 errno=-
+ipv6 reset      PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+ipv6 srvfin-rst PASS  wait=1 revents=0x85 wake=0.0ms  late-poll=1 revents=0x85  read=-1 errno=Connection reset by peer
+tcp871: 0 failed
+rc=0
+== half-close.mjs run 1
+{"host":"127.0.0.1","log":["16ms server: connection","18ms client: data hi","18ms client: end","20ms client: close","20ms server: end","20ms server: close"]}
+{"host":"::1","log":["3ms server: connection","3ms client: data hi","4ms client: end","4ms client: close","4ms server: end","4ms server: close"]}
+rc=0
+== half-close.mjs run 2
+{"host":"127.0.0.1","log":["9ms server: connection","11ms client: data hi","11ms client: end","12ms client: close","12ms server: end","12ms server: close"]}
+{"host":"::1","log":["3ms server: connection","3ms client: data hi","3ms client: end","3ms client: close","3ms server: end","3ms server: close"]}
+rc=0
+== half-close.mjs run 3
+{"host":"127.0.0.1","log":["9ms server: connection","11ms client: data hi","11ms client: end","12ms client: close","12ms server: end","12ms server: close"]}
+{"host":"::1","log":["3ms server: connection","3ms client: data hi","3ms client: end","4ms client: close","4ms server: end","4ms server: close"]}
+rc=0

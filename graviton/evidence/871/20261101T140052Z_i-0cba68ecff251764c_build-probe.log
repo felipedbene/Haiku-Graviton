@@ -1,0 +1,24 @@
+# evidence: build-probe
+# instance: i-0cba68ecff251764c   region: us-west-2
+# ssm command: d4fb63fa-ebff-427f-8e61-9af01dbe797f (agent status: Success)
+# start: 20261101T140052Z   end: 20261101T140055Z   rc: 0   log bytes: 203
+# script sha256: da12969fc5abec2d8717d8955836ccf6cdc37428d878f4175d5e6cbc617c3bf2
+# ---- script ----
+# | for t in gcc g++ jam git python3 bison flex mkisofs xorriso ld; do printf '%s: ' $t; command -v $t || echo missing; done
+# | gcc --version | head -1
+# | pkgman list-installed 2>/dev/null | grep -iE '^ *(jam|gcc|binutils|haiku_devel|bison|flex|git)' | head
+# | df -k /boot | tail -1
+# | sysinfo 2>/dev/null | grep -i "cpu\|memory" | head -3
+# ---- raw output ----
+gcc: /bin/gcc
+g++: /bin/g++
+jam: missing
+git: /bin/git
+python3: /bin/python3
+bison: /bin/bison
+flex: /bin/flex
+mkisofs: missing
+xorriso: missing
+ld: /bin/ld
+gcc (2026_03_29) 13.3.0
+   Root Inode: 524288

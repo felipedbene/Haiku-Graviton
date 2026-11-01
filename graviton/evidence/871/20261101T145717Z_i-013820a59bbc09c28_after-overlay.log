@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-overlay
+# instance: i-013820a59bbc09c28   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T145717Z   end: 20261101T145818Z   rc: 0
+# script sha256: 8985b0d637bae915741c8d93109c7e00b7bda4b19ca5cabc3aa2e927f09a7f29
+# ---- script ----
+# | U='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t871/tcp.fix?<PRESIGNED>'
+# | cd /boot/home/t871
+# | rm -rf /boot/home/hg
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "tcp.fix")' "$U"
+# | sha256sum tcp.fix
+# | echo "56f0a5b9df64ad08ca00398635f987457561948c7cfc6cd9455209880b064221  tcp.fix" | sha256sum -c || exit 5
+# | python3 -I - <<'PY'
+# | import hashlib, tarfile, urllib.request
+# | u = "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
+# | urllib.request.urlretrieve(u, "node-v24.21.0.tar.gz")
+# | h = hashlib.sha256(open("node-v24.21.0.tar.gz", "rb").read()).hexdigest()
+# | assert h == "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777", h
+# | with tarfile.open("node-v24.21.0.tar.gz") as t:
+# |     m = [x for x in t.getmembers() if x.name.split("/")[1:2] in (["test"], ["tools"])]
+# |     t.extractall(".", members=m, filter="data")
+# | print("node tarball sha256 OK, extracted", len(m))
+# | PY
+# | rm -f node-v24.21.0.tar.gz
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network/protocols
+# | mkdir -p $D && cp tcp.fix $D/tcp.new && mv $D/tcp.new $D/tcp && sha256sum $D/tcp
+# | ls -la /boot/home/t871
+# | sync
+# ---- raw output ----
+56f0a5b9df64ad08ca00398635f987457561948c7cfc6cd9455209880b064221  tcp.fix
+tcp.fix: OK
+node tarball sha256 OK, extracted 12111
+56f0a5b9df64ad08ca00398635f987457561948c7cfc6cd9455209880b064221  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+total 272
+drwxr-xr-x 1 baron root   2048 Nov  1 14:58 .
+drwxr-xr-x 1 baron root   2048 Nov  1 14:57 ..
+-rw-r--r-- 1 baron root   2238 Nov  1 14:49 half-close.mjs
+drwxr-xr-x 1 baron root   2048 Nov  1 14:51 mod
+drwxr-xr-x 1 baron root   2048 Nov  1 14:57 node-v24.21.0
+-rw-r--r-- 1 baron root  96179 Nov  1 14:57 tcp.fix
+-rwxr-xr-x 1 baron root 137280 Nov  1 14:50 tcp871
+-rw-r--r-- 1 baron root   7924 Nov  1 14:49 tcp871.c

@@ -1,0 +1,57 @@
+# evidence: before-repro
+# instance: i-099899eb1f0155aea   region: us-west-2
+# ssm command: e35b73bb-98b9-4cbd-8e6b-d12b5dfdd890 (agent status: Success)
+# start: 20261101T141735Z   end: 20261101T141916Z   rc: 0   log bytes: 5346
+# script sha256: bd45e6217494ce913af1af2248fc25f6733465290ec9063e6585b72a93292868
+# ---- script ----
+# | cd /boot/home/t871; pkgman install -y binutils 2>&1 | tail -1; gcc -O2 -Wall -o tcp871 tcp871.c && sha256sum tcp871
+# | cd /boot/home/t871
+# | uname -v; listimage 1 | grep 'protocols/tcp'; sha256sum $(listimage 1 | grep -o '/boot/.*protocols/tcp')
+# | echo "== tcp871.c sha256"; sha256sum tcp871.c half-close.mjs
+# | for i in 1 2 3; do echo "== tcp871 run $i"; ./tcp871 2000; echo "rc=$?"; done
+# | for i in 1 2 3; do echo "== half-close.mjs run $i"; /boot/system/bin/node half-close.mjs 5000; echo "rc=$?"; done
+# ---- raw output ----
+[system] Done.
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: /tmp//cchHlEY8.o: in function `main':
+tcp871.c:(.text.startup+0x58): undefined reference to `in6addr_loopback'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x5c): undefined reference to `in6addr_loopback'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0xc4): undefined reference to `socket'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0xd8): undefined reference to `bind'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0xe8): undefined reference to `listen'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x100): undefined reference to `getsockname'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x114): undefined reference to `socket'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x128): undefined reference to `connect'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x13c): undefined reference to `accept'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x1d4): undefined reference to `shutdown'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x250): undefined reference to `setsockopt'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x568): undefined reference to `shutdown'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x574): undefined reference to `shutdown'
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: tcp871.c:(.text.startup+0x5a8): undefined reference to `shutdown'
+collect2: error: ld returned 1 exit status
+hrev59996 Oct 19 2026 21:09:42
+ 2059 0xffff0000023d4000 0xffff0000023e5000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+a275262053d51bd688c6315ccb3e1f22e08f6d473094a7ad21bc18fd0c59ce38  /boot/system/add-ons/kernel/network/protocols/tcp
+== tcp871.c sha256
+06dac3486123b26e794b07753716624184c8afe8cad25eee6bac52a9920ddb30  tcp871.c
+3c5e5f27b06bbd1709cd84f1c910cc3ff69ddba5b1821ffecb437b9b37871a0b  half-close.mjs
+== tcp871 run 1
+/tmp/ccrun/cc-20261101T141735Z-33111.sh: line 5: ./tcp871: No such file or directory
+rc=127
+== tcp871 run 2
+/tmp/ccrun/cc-20261101T141735Z-33111.sh: line 5: ./tcp871: No such file or directory
+rc=127
+== tcp871 run 3
+/tmp/ccrun/cc-20261101T141735Z-33111.sh: line 5: ./tcp871: No such file or directory
+rc=127
+== half-close.mjs run 1
+{"host":"127.0.0.1","log":["15ms server: connection","16ms client: data hi","17ms client: end","18ms client: close","133ms tcp table 100ms after client close: [\"tcp 0 0 [127.0.0.1]:44838 *:0 listen 884/node\",\"tcp 0 0 [127.0.0.1]:44838 [127.0.0.1]:44870 time-wait 884/node\"]","5004ms TIMEOUT: no server close after 5000 ms"]}
+{"host":"::1","log":["4ms server: connection","4ms client: data hi","4ms client: end","5ms client: close","114ms tcp table 100ms after client close: [\"tcp 0 0 [::1]:40034 [::]:0 listen 884/node\",\"tcp 0 0 [::1]:40034 [::1]:40036 time-wait 884/node\"]","5003ms TIMEOUT: no server close after 5000 ms"]}
+rc=0
+== half-close.mjs run 2
+{"host":"127.0.0.1","log":["9ms server: connection","10ms client: data hi","11ms client: end","12ms client: close","122ms tcp table 100ms after client close: [\"tcp 0 0 [127.0.0.1]:44929 *:0 listen 897/node\",\"tcp 0 0 [127.0.0.1]:44929 [127.0.0.1]:44933 time-wait 897/node\"]","5002ms TIMEOUT: no server close after 5000 ms"]}
+{"host":"::1","log":["4ms server: connection","4ms client: data hi","4ms client: end","4ms client: close","113ms tcp table 100ms after client close: [\"tcp 0 0 [::1]:40050 [::]:0 listen 897/node\",\"tcp 0 0 [::1]:40050 [::1]:40051 time-wait 897/node\"]","5003ms TIMEOUT: no server close after 5000 ms"]}
+rc=0
+== half-close.mjs run 3
+{"host":"127.0.0.1","log":["9ms server: connection","11ms client: data hi","11ms client: end","12ms client: close","123ms tcp table 100ms after client close: [\"tcp 0 0 [127.0.0.1]:44956 *:0 listen 906/node\",\"tcp 0 0 [127.0.0.1]:44956 [127.0.0.1]:44960 time-wait 906/node\"]","5002ms TIMEOUT: no server close after 5000 ms"]}
+{"host":"::1","log":["3ms server: connection","4ms client: data hi","4ms client: end","4ms client: close","113ms tcp table 100ms after client close: [\"tcp 0 0 [::1]:40054 [::]:0 listen 906/node\",\"tcp 0 0 [::1]:40054 [::1]:40074 time-wait 906/node\"]","5003ms TIMEOUT: no server close after 5000 ms"]}
+rc=0
