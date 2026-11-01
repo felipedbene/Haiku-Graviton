@@ -6724,6 +6724,15 @@ common_create_link(int pathFD, char* path, int toFD, char* toPath,
 	if (status != B_OK)
 		return status;
 
+	// POSIX wants EEXIST for a new name that already exists, ahead of the
+	// cross-device and "not supported" errors -- and a file system without
+	// hard links (BFS) would otherwise answer EPERM even then.
+	struct vnode* existing;
+	if (lookup_dir_entry(directory.Get(), name, &existing) == B_OK) {
+		put_vnode(existing);
+		return B_FILE_EXISTS;
+	}
+
 	if (directory->mount != vnode->mount)
 		return B_CROSS_DEVICE_LINK;
 
