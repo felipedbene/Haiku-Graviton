@@ -513,6 +513,10 @@ struct Team : TeamThreadIteratorEntry<team_id>, KernelReferenceable,
 		uid_t		signaling_user;	// real UID of the signal sender
 		status_t	status;			// exit status, if normal team exit
 		bool		initialized;	// true when the state has been initialized
+		uint16		crash_signal;	// signal of the fatal event (fault, deadly
+									// signal, abort()) a thread of the team
+									// is in the debugger for, 0 if none; may
+									// change before the state is initialized
 	} exit;
 
 	spinlock		signal_lock;

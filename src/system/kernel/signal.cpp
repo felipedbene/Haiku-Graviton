@@ -842,6 +842,50 @@ notify_debugger(Thread* thread, Signal* signal, struct sigaction& handler,
 }
 
 
+/*!	Records that the calling thread is about to take a fatal event -- one that
+	ends \a team with \a signal unless the debugger lets the thread go on --
+	to the debugger.
+
+	A debugger that does not let the team go on kills it, which ends the team
+	with a SIGKILLTHR. debug_server does that whenever it cannot start a
+	debugger, i.e. for every crash on a system without one. The team's exit
+	state is still taken from the recorded signal then (cf. handle_signals()),
+	so that the parent sees the team killed by the signal that actually ended
+	it -- SIGSEGV for a crash, SIGABRT for abort() -- as POSIX requires.
+
+	Only the first of several concurrent fatal events is recorded.
+	The caller must not hold any locks. Interrupts must be enabled.
+
+	\param team The current team.
+	\param signal The signal the event ends the team with.
+	\return \c true, if the signal was recorded. The caller must then call
+		team_clear_crash_signal() if the debugger lets the thread go on.
+*/
+bool
+team_set_crash_signal(Team* team, int signal)
+{
+	TeamLocker teamLocker(team);
+
+	if (team->exit.initialized || team->exit.crash_signal != 0)
+		return false;
+
+	team->exit.crash_signal = signal;
+	return true;
+}
+
+
+/*!	Forgets the signal recorded by team_set_crash_signal(), when the debugger
+	has let the thread go on after all.
+	The caller must not hold any locks. Interrupts must be enabled.
+*/
+void
+team_clear_crash_signal(Team* team)
+{
+	TeamLocker teamLocker(team);
+	team->exit.crash_signal = 0;
+}
+
+
 /*!	Removes and returns a signal with the highest priority in \a nonBlocked that
 	is pending in the given thread or its team.
 	After dequeuing the signal the Thread::flags field of the affected threads
@@ -1201,9 +1245,14 @@ handle_signals(Thread* thread)
 				case SIGKILLTHR:
 					// notify the debugger
 					if (debugSignal && signal->Number() != SIGKILL
-						&& signal->Number() != SIGKILLTHR
-						&& !notify_debugger(thread, signal, handler, true)) {
-						continue;
+						&& signal->Number() != SIGKILLTHR) {
+						bool recorded
+							= team_set_crash_signal(team, signal->Number());
+						if (!notify_debugger(thread, signal, handler, true)) {
+							if (recorded)
+								team_clear_crash_signal(team);
+							continue;
+						}
 					}
 
 					if (killTeam || thread == team->main_thread) {
@@ -1213,8 +1262,18 @@ handle_signals(Thread* thread)
 						teamLocker.Lock();
 
 						if (!team->exit.initialized) {
+							// A SIGKILLTHR while a thread is in the debugger for
+							// a fatal event is the debugger carrying the event
+							// out (see team_set_crash_signal()): the team dies
+							// of the event's signal.
+							int exitSignal = signal->Number();
+							if (exitSignal == SIGKILLTHR
+								&& team->exit.crash_signal != 0) {
+								exitSignal = team->exit.crash_signal;
+							}
+
 							team->exit.reason = CLD_KILLED;
-							team->exit.signal = signal->Number();
+							team->exit.signal = exitSignal;
 							team->exit.signaling_user = signal->SendingUser();
 							team->exit.status = 0;
 							team->exit.initialized = true;
@@ -1651,8 +1710,18 @@ send_fault_signal(const Signal& signal, debug_exception_type exception)
 		hasHandler = action.sa_handler != SIG_DFL;
 	}
 
-	if (hasHandler || user_debug_exception_occurred(exception, number))
+	if (hasHandler) {
 		send_signal_to_thread(thread, signal, 0);
+		return;
+	}
+
+	// Unhandled, the fault ends the team with this signal -- also if the
+	// debugger kills the team instead of letting the signal be delivered.
+	bool recorded = team_set_crash_signal(team, number);
+	if (user_debug_exception_occurred(exception, number))
+		send_signal_to_thread(thread, signal, 0);
+	else if (recorded)
+		team_clear_crash_signal(team);
 }
 
 
