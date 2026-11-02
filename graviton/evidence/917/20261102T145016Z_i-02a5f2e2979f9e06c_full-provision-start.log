@@ -1,0 +1,16 @@
+# evidence: full-provision-start
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: 1bbacaa7-e647-458f-972a-e4b62198e994 (agent status: Success)
+# start: 20261102T145016Z   end: 20261102T145044Z   rc: 0
+# ---- script ----
+# | cd /boot/home/stage
+# | nohup sh -c 'DOWNLOAD_MIRROR=https://sources.debene.dev sh /boot/home/stage/prov.sh > /boot/home/prov.log 2>&1; echo "exit $?" >> /boot/home/prov.log' > /dev/null 2>&1 &
+# | sleep 20; tail -5 /boot/home/prov.log
+# ---- raw output ----
+provision: python3 -> python3.14 symlink: /boot/home/config/non-packaged/bin/python3
+provision: #171 overlay: gnu/sched.h+crypt.h already C89-safe; skipping
+provision: #329 overlay: neither AUXV_OVERLAY_URL nor AUXV_OVERLAY_S3 set; skipping
+provision: cloning ports tree (shallow) -> /boot/home/haikuports
+Cloning into '/boot/home/haikuports'...
+
+

@@ -1,0 +1,506 @@
+# evidence: full-libuv5-build
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: 049136a8-2aa6-4593-af44-250aead30fce (agent status: Success)
+# start: 20261102T145257Z   end: 20261102T145635Z   rc: 0
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo y; }
+# | for r in haiku_devel cmd:awk cmd:autoconf cmd:automake cmd:gcc cmd:ld cmd:libtoolize cmd:make cmd:pkg_config; do echo "== $r"; feed | pkgman install "$r" 2>&1 | grep -E "Nothing to do|already installed|Done|nothing provides|rror" | head -2; done
+# | cd /boot/home/haikuports && : | haikuporter -y -j32 libuv > /boot/home/uv5.log 2>&1; echo "haikuporter exit $?"
+# | cut -c1-300 /boot/home/uv5.log
+# | ls -l /boot/home/haikuports/packages/
+# ---- raw output ----
+== haiku_devel
+haiku_devel-r1~beta6_hrev59996-1 from repository system is already installed.
+Nothing to do.
+== cmd:awk
+gawk-3.1.8_bootstrap-2 from repository system is already installed.
+Nothing to do.
+== cmd:autoconf
+autoconf-2.72-1 from repository system is already installed.
+Nothing to do.
+== cmd:automake
+automake-1.18.1-1 from repository system is already installed.
+Nothing to do.
+== cmd:gcc
+gcc-13.3.0_2026_03_29_bootstrap-1 from repository system is already installed.
+Nothing to do.
+== cmd:ld
+binutils-2.41_2026_03_10_bootstrap-2 from repository system is already installed.
+Nothing to do.
+== cmd:libtoolize
+libtool-2.5.4-1 from repository system is already installed.
+Nothing to do.
+== cmd:make
+make-4.4.1_bootstrap-1 from repository system is already installed.
+Nothing to do.
+== cmd:pkg_config
+pkgconf-1.5.3-2 from repository system is already installed.
+Nothing to do.
+haikuporter exit 0
+Warning: Found old repository format - repopulating the repository ...
+Populating repository ...
+	updating dependency infos of 0ad-0.28.0
+	updating dependency infos of 0ad_data-0.28.0
+	updating dependency infos of 1oom-1.0
+	updating dependency infos of 2048-1.1.1
+	updating dependency infos of 2048_libretro-1.0_20251213
+	recipe for 2cdt-2016.10.16 is still broken:
+	Error: package 2cdt-2016.10.16 cannot be built for architecture arm64
+	recipe for 2dphysicsdemo-22.5.98 is still broken:
+	Error: No match found for license unknown
+	Error: Valid license filenames included with Haiku are:
+	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU 
+	Error: (in /boot/home/haikuports/sci-physics/2dphysicsdemo/2dphysicsdemo-22.5.98.recipe)
+	updating dependency infos of 2pow-1.2.2
+	updating dependency infos of 3dengine_libretro-1.0_20250304
+	updating dependency infos of 3dmov-0.2
+	updating dependency infos of 54321-1.0.2001.11.16
+	updating dependency infos of 64tass-1.60.3243
+	updating dependency infos of 7kaa-2.15.7
+	updating dependency infos of 7kaa_music-2.15
+	updating dependency infos of 81_libretro-1.0a_20241021
+	updating dependency infos of 8dock-0.9.5~git
+	updating dependency infos of a2ps-4.15.8
+	updating dependency infos of a52dec-0.8.0
+	updating dependency infos of a_book-1.1
+	updating dependency infos of aaaa-1.1
+	updating dependency infos of aalib-1.4~rc5
+	updating dependency infos of aalibtranslator-0.0.1
+	updating dependency infos of abaddon-0.2.4
+	updating dependency infos of abcl-1.10.0
+	updating dependency infos of abduco-0.6
+	updating dependency infos of abe-1.1
+	updating dependency infos of abi_compliance_checker-2.3
+	updating dependency infos of abiword-3.0.8
+	updating dependency infos of abrick-1.12
+	updating dependency infos of abseil_cpp-20230125.3
+	updating dependency infos of abseil_cpp.2022-20220623.1
+	updating dependency infos of abseil_cpp.2025-20250127.0
+	updating dependency infos of abstrakt-0.0.1~20180515
+	updating dependency infos of abuse-0.8
+	updating dependency infos of accounts_qml-0.7
+	updating dependency infos of aceofwands-1.0.4
+	updating dependency infos of ack-3.9.0
+	updating dependency infos of acme-0.96.5
+	updating dependency infos of acr-2.1.4
+	updating dependency infos of ada-2.9.2
+	updating dependency infos of admesh-0.98.5
+	updating dependency infos of ads_qt6-4.4.0
+	updating dependency infos of advancemame-3.10
+	updating dependency infos of adwaita_icon_theme-49.0
+	updating dependency infos of adwaita_icon_theme_legacy-46.2
+	recipe for aesaddon-0.3.1 is still broken:
+	Error: package aesaddon-0.3.1 cannot be built for architecture arm64
+	updating dependency infos of aflplusplus-3.12c
+	updating dependency infos of agar-1.7.0
+	updating dependency infos of agg-2.7.0~r139
+	updating dependency infos of ahem-1.0
+	recipe for aika-0.0.4 is still broken:
+	Error: package aika-0.0.4 cannot be built for architecture arm64
+	updating dependency infos of aiksaurus-1.2.2~git
+	updating dependency infos of aiodns-3.5.0
+	updating dependency infos of aiohttp-3.8.1
+	updating dependency infos of aiosignal-1.2.0
+	updating dependency infos of airstrike-0.99.6
+	updating dependency infos of akonadi-23.08.5
+	updating dependency infos of akonadi_calendar-23.08.5
+	updating dependency infos of akonadi_contacts-23.08.5
+	updating dependency infos of akonadi_mime-23.08.5
+	updating dependency infos of akonadi_notes-23.08.5
+	updating dependency infos of akonadi_search-23.08.5
+	updating dependency infos of akregator-23.08.5
+	updating dependency infos of al_anvar-0.5.0
+	updating dependency infos of alabaster-0.7.13
+	updating dependency infos of album-0.9.4
+	updating dependency infos of ale-0.9.2~git
+	updating dependency infos of alembic-1.8.3
+	updating dependency infos of alembic_py-1.13.2
+	alex4-1.0 is still marked as broken on target architecture
+	updating dependency infos of alglib-4.00.0
+	updating dependency infos of algol68g-2.8.4
+	updating dependency infos of algorithm_diff-1.201
+	updating dependency infos of alien_build-2.84
+	updating dependency infos of alien_build_plugin_download_gitlab-0.01
+	updating dependency infos of alien_libxml2-0.20
+	updating dependency infos of alien_sdl-1.446
+	updating dependency infos of alienblaster-1.1.0
+	updating dependency infos of alivejournal-1.61
+	updating dependency infos of allegro-4.4.3.1
+	updating dependency infos of alligator-26.04.0
+	updating dependency infos of almp3-2.0.4
+	updating dependency infos of amarok-3.2.2
+	updating dependency infos of amath-1.8.5
+	recipe for amc-1.14.0 is still broken:
+	Error: package amc-1.14.0 cannot be built for architecture arm64
+	updating dependency infos of amd_microcode-20240116
+	updating dependency infos of amoebax-0.2.1
+	updating dependency infos of amule-2.3.3
+	updating dependency infos of an-1.2~git
+	updating dependency infos of anagramarama-0.7
+	updating dependency infos of analitza-23.08.5
+	updating dependency infos of analitza_kf6-26.08.0
+	updating dependency infos of ancestris-13
+	updating dependency infos of ancient-2.3.0
+	updating dependency infos of android_file_transfer-4.3~git
+	updating dependency infos of angband-4.2.4
+	updating dependency infos of angelscript-2.35.1
+	recipe for animator-1.0 is still broken:
+	Error: No match found for license Unknown
+	Error: Valid license filenames included with Haiku are:
+	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU 
+	Error: (in /boot/home/haikuports/haiku-apps/animator/animator-1.0.recipe)
+	updating dependency infos of anonymous_pro-1.002.001
+	updating dependency infos of another_world-0.0.1
+	updating dependency infos of ansiweather-1.19.1
+	updating dependency infos of ant_core-1.10.13
+	updating dependency infos of anthy-9100h
+	updating dependency infos of antigravitaattori-0.3.0
+	updating dependency infos of antiword-0.37
+	updating dependency infos of antlr_cpp-4.13.2
+	updating dependency infos of antlr_runtime-4.13.2
+	updating dependency infos of antlr_tool-4.13.2
+	updating dependency infos of anura-4.0.2
+	updating dependency infos of aobook-1.0.3_4
+	updating dependency infos of aom-3.12.1
+	updating dependency infos of apache-2.4.66
+	updating dependency infos of apitrace-7.1
+	updating dependency infos of aplayer-4.0_svn
+	updating dependency infos of apng2gif-1.8
+	updating dependency infos of apngopt-1.4
+	updating dependency infos of app2png-1.0.0
+	updating dependency infos of appstream-1.1.3
+	updating dependency infos of appstream_glib-0.8.3
+	updating dependency infos of apr-1.7.6
+	updating dependency infos of apr_util-1.6.5
+	updating dependency infos of apsw-3.36.0~r1
+	updating dependency infos of aqbanking-6.9.1
+	updating dependency infos of aqemu-0.9.2
+	updating dependency infos of aquaria-1.1.3~git06072020
+	updating dependency infos of aquaskk-4.7.0.2
+	updating dependency infos of arabeyes_fonts-1.1
+	updating dependency infos of aranym-1.1.0
+	updating dependency infos of arc-5.21q
+	updating dependency infos of archive_extract-0.88
+	updating dependency infos of archive_zip-1.68
+	archiver-1.0.0 is still marked as broken on target architecture
+	updating dependency infos of arduino-1.6.1
+	updating dependency infos of argon2-20200709
+	updating dependency infos of argon2_cffi_bindings-21.2.0
+	updating dependency infos of argp_standalone-1.5.0
+	updating dependency infos of argparse_manpage-4.6
+	updating dependency infos of argtable2-13
+	updating dependency infos of aria2-1.36.0
+	updating dependency infos of arianna-23.08.5
+	updating dependency infos of arj-3.10.22
+	updating dependency infos of ark-23.08.5
+	updating dependency infos of ark_kf6-26.08.0
+	updating dependency infos of arm_none_eabi_binutils-2.40
+	updating dependency infos of arm_none_eabi_gcc-13.1.0
+	updating dependency infos of arm_none_eabi_gcc_nolibc-13.1.0
+	recipe for arm_none_eabi_gdb-7.7 is still broken:
+	Error: package arm_none_eabi_gdb-7.7 cannot be built for architecture arm64
+	updating dependency infos of arm_none_eabi_newlib-4.3.0
+	updating dependency infos of armadillo-15.0.3
+	updating dependency infos of armagetronad-0.2.9.3.0
+	updating dependency infos of armyknife-5.1.2
+	updating dependency infos of arpack-3.9.1
+	updating dependency infos of artpaint-2.8
+	updating dependency infos of arx_libertatis-1.2.1
+	updating dependency infos of asciidoc-10.2.1
+	updating dependency infos of asciinema-2.2.0
+	updating dependency infos of asio-1.38.0
+	updating dependency infos of asn1crypto-1.5.1
+	updating dependency infos of aspell-0.60.8.2
+	updating dependency infos of aspell6_cs-20040614_1
+	updating dependency infos of aspell_be-0.01
+	updating dependency infos of aspell_bg-4.1~0
+	updating dependency infos of aspell_ca-2.5.0
+	updating dependency infos of aspell_de-20161207_7_0
+	updating dependency infos of aspell_en-2026.02.25~0
+	updating dependency infos of aspell_eo-2.1.20000225a~2
+	updating dependency infos of aspell_es-1.11~2
+	updating dependency infos of aspell_fi-0.7~0
+	updating dependency infos of aspell_fr-0.50~3
+	updating dependency infos of aspell_hr-0.51~0
+	updating dependency infos of aspell_hu-0.99.4.2~0
+	updating dependency infos of aspell_it-2.4_20070901_0
+	updating dependency infos of aspell_lt-1.2.1~0
+	updating dependency infos of aspell_nl-0.50~2
+	updating dependency infos of aspell_pl-6.0_20260901~0
+	updating dependency infos of aspell_pt_br-20131030_12_0
+	updating dependency infos of aspell_pt_pt-20070510~0
+	updating dependency infos of aspell_ro-3.3~2
+	updating dependency infos of aspell_ru-0.99f7~1
+	updating dependency infos of aspell_sk-2.02~0
+	updating dependency infos of aspell_sl-0.50~0
+	updating dependency infos of aspell_sr-0.02
+	updating dependency infos of aspell_sv-0.51~0
+	updating dependency infos of aspell_uk-1.4.0~0
+	updating dependency infos of assaultcube-1.3.0.2
+	updating dependency infos of assimp-6.0.5
+	updating dependency infos of assimp5-5.4.3
+	updating dependency infos of assimp_docs-6.0.2
+	updating dependency infos of astroid-2.15.5
+	updating dependency infos of astromenace-1.4.3
+	updating dependency infos of asttokens-2.2.1
+	updating dependency infos of astyle-3.4.8
+	updating dependency infos of asylum-0.3.2
+	updating dependency infos of asymptote-3.15
+	updating dependency infos of async_timeout-4.0.2
+	updating dependency infos of at-3.2.5
+	updating dependency infos of atari++-1.81
+	updating dependency infos of atari800_libretro-3.1.0_20260130
+	updating dependency infos of atf-0.23
+	updating dependency infos of atftp-0.8.0
+	updating dependency infos of atk-2.38.0
+	updating dependency infos of atkmm-2.28.2
+	updating dependency infos of atkmm_2.36-2.36.4
+	updating dependency infos of atlas-3.10.3
+	updating dependency infos of atool-0.39.0
+	updating dependency infos of attica-5.115.0
+	updating dependency infos of attica6-6.29.0
+	updating dependency infos of attr-2.5.1
+	updating dependency infos of attrify-1.0.2
+	updating dependency infos of attrs-22.1.0
+	updating dependency infos of aubio-0.4.9
+	updating dependency infos of audacious-4.4.2
+	updating dependency infos of audacious_plugins-4.4.2
+	updating dependency infos of audacity-3.7.1
+	updating dependency infos of audiofile-0.3.6
+	recipe for auralillusion-4.0 is still broken:
+	Error: package auralillusion-4.0 cannot be built for architecture arm64
+	updating dependency infos of autoconf-2.72
+	updating dependency infos of autoconf2.71-2.71
+	updating dependency infos of autoconf213-2.13
+	updating dependency infos of autoconf264-2.64
+	updating dependency infos of autoconf269-2.69
+	updating dependency infos of autoconf_archive-2024.10.16
+	updating dependency infos of automake-1.18.1
+	updating dependency infos of automake113-1.13.1
+	updating dependency infos of autosp-2025_10_26
+	updating dependency infos of autossh-1.4g
+	updating dependency infos of autotrace-0.40.0_20230301
+	updating dependency infos of autovivification-0.18
+	updating dependency infos of avahi-0.8
+	updating dependency infos of avidemux-2.8.1
+	updating dependency infos of avisynthplus-3.7.5
+	updating dependency infos of avr_binutils-2.46.0
+	updating dependency infos of avr_gcc-13.3.0
+	updating dependency infos of avr_libc-2.3.1
+	updating dependency infos of avra-1.4.2
+	updating dependency infos of avrdude-7.0
+	updating dependency infos of axel-2.17.11
+	updating dependency infos of ayat_recit_ghamadi-0.0.1
+	updating dependency infos of ayat_tafasir_data-0.0.1
+	updating dependency infos of ayat_tarajem_data-0.0.1
+	updating dependency infos of azpainter-3.0.4
+	updating dependency infos of b2-5.5.3
+	updating dependency infos of b43_fwcutter-019
+	updating dependency infos of b612-1.008
+	updating dependency infos of b_cow-0.007
+	updating dependency infos of b_hooks_endofscope-0.28
+	updating dependency infos of babel-2.12.1
+	updating dependency infos of babl-0.1.120
+	updating dependency infos of babybe-2.2~git
+	backup-0.0.1 is still marked as broken on target architecture
+	updating dependency infos of bacon-5.0.3
+	updating dependency infos of bacon_gtk4-5.0.1
+	updating dependency infos of bafx-0.2.3
+	updating dependency infos of ballsmacker-1.0.0
+	updating dependency infos of baloo-5.115.0
+	updating dependency infos of baloo6-6.29.0
+	updating dependency infos of baloo_widgets_kf6-26.08.0
+	updating dependency infos of balsa-2.6.4
+	updating dependency infos of bam-0.5.1
+	bamkeys-1.0.0 is still marked as broken on target architecture
+	updating dependency infos of barrage-1.0.5
+	updating dependency infos of barrier_haiku-1.0~git
+	updating dependency infos of bash-5.3.015
+	updating dependency infos of bash_completion-2.14.0
+	recipe for basiliskii-1.0.0 is still broken:
+	Error: package basiliskii-1.0.0 cannot be built for architecture arm64
+	updating dependency infos of basisu-2.10
+	updating dependency infos of bat-0.12.1
+	updating dependency infos of batchrename-0.2.0
+	updating dependency infos of bc-1.07.1
+	updating dependency infos of bchunk-1.2.2
+	updating dependency infos of bcrypt-3.2.0
+	updating dependency infos of bcunit-3.0.2
+	updating dependency infos of bdhcalc-1.1
+	updating dependency infos of bdirectconnect-0.5.0~git
+	updating dependency infos of be_book-2008_10_26
+	updating dependency infos of beaccessible-1.0.0
+	updating dependency infos of beacon-27
+	updating dependency infos of beae-1.2
+	updating dependency infos of beam-1.2.3~git
+	updating dependency infos of bear-3.1.5
+	updating dependency infos of beautifulsoup4-4.12.3
+	updating dependency infos of bebattle-1.0.0
+	updating dependency infos of bebuilder-0.5.2~git
+	updating dependency infos of becasso-2.0
+	updating dependency infos of becheckers-1.0.1
+	updating dependency infos of becjk-1.0.1
+	updating dependency infos of beecrypt-4.2.1
+	updating dependency infos of beezer-0.99
+	updating dependency infos of befar-4.2_beta
+	beget-1.2.3 is still marked as broken on target architecture
+	updating dependency infos of behappy-1.06e~git
+	beindexed-0.2.0_alpha is still marked as broken on target architecture
+	recipe for belife-1.0.0 is still broken:
+	Error: package belife-1.0.0 cannot be built for architecture arm64
+	updating dependency infos of bemines-1.2.1
+	bemobile-0.9 is still marked as broken on target architecture
+	updating dependency infos of benchmark-1.9.4
+	updating dependency infos of bencode_tools-20110315
+	updating dependency infos of benettris-0.2
+	updating dependency infos of benormal-1.0
+	updating dependency infos of beohms-0.1~git
+	recipe for beostilink-0~git is still broken:
+	Error: package beostilink-0~git cannot be built for architecture arm64
+	updating dependency infos of bepdf-2.1.4
+	recipe for bephonebook-1.2 is still broken:
+	Error: No match found for license Unknown
+	Error: Valid license filenames included with Haiku are:
+	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU 
+	Error: (in /boot/home/haikuports/haiku-apps/bephonebook/bephonebook-1.2.recipe)
+	updating dependency infos of bephotomagic-0.62_git
+	updating dependency infos of bepodder-1.5.0
+	updating dependency infos of berdp-1
+	updating dependency infos of bescreencapture-3.0
+	updating dependency infos of beshare-3.04
+	updating dependency infos of besol-2.0.5
+	updating dependency infos of bespider-0.1.1
+	recipe for betex-20220223 is still broken:
+	Error: package betex-20220223 cannot be built for architecture arm64
+	updating dependency infos of beton-1.2.0
+	updating dependency infos of betterspades-0.1.6~git
+	updating dependency infos of bevexed-20141224
+	updating dependency infos of bezilla-2.0.0.22
+	updating dependency infos of bghostview-1.0.0
+	updating dependency infos of bgswitch-0.1.0
+	updating dependency infos of biber-2.21
+	bic-1.0~git is still marked as broken on target architecture
+	updating dependency infos of billardgl-1.75
+	updating dependency infos of bin86-0.16.21
+	binaryclock-20141223 is still marked as broken on target architecture
+	updating dependency infos of bind_utils-9.16.50
+	bindgen-0.72.1 is still marked as broken on target architecture
+	updating dependency infos of biniax2-1.30
+	updating dependency infos of binutils-2.46.1
+	updating dependency infos of binwalk-2.4.0
+	updating dependency infos of bison-3.8.2
+	updating dependency infos of bitchx-1.2.1
+	updating dependency infos of bitlbee-3.5.1
+	updating dependency infos of bk_libretro-1.0_20241021
+	updating dependency infos of blake3-1.4.1
+	updating dependency infos of blastem_libretro-0.6.3_20220726
+	updating dependency infos of blaze-3.8.2
+	blender3-3.3.21 is still marked as broken on target architecture
+	updating dependency infos of blink-1.1.0~git
+	updating dependency infos of blinken-26.08.0
+	updating dependency infos of blis-0.9.0
+	updating dependency infos of blis8-0.8.0
+	updating dependency infos of blobbyvolley2-1.1~git
+	updating dependency infos of blobwars-2.00
+	updating dependency infos of blockout2-2.5
+	updating dependency infos of blogpositive-0.4.0
+	updating dependency infos of bluefish-2.4.2
+	updating dependency infos of bluemsx_libretro-2.9.0_20251104
+	updating dependency infos of blueprint_compiler-0.22.2
+	updating dependency infos of bluez_qt6-6.29.0
+	updating dependency infos of bmake-20230723
+	updating dependency infos of boca-1.0.7
+	updating dependency infos of bochs-2.6.11
+	updating dependency infos of boehm_gc-8.2.12
+	updating dependency infos of bomber-26.08.0
+	updating dependency infos of bong-1.4~git
+	updating dependency infos of bonnie++-2.00a
+	updating dependency infos of bookmarkconverter-0.4.3
+	updating dependency infos of booksorg-0.3
+	updating dependency infos of boost1.83-1.83.0
+	updating dependency infos of boost1.88-1.88.0
+	updating dependency infos of boost1.90-1.90.0
+	updating dependency infos of boost1.91-1.91.0
+	updating dependency infos of borgbackup-1.4.5
+	updating dependency infos of boswars-2.8
+	updating dependency infos of botan-2.19.4
+	updating dependency infos of botan3-3.12.0
+	updating dependency infos of bottle-0.12.25
+	updating dependency infos of bovo-26.08.0
+	updating dependency infos of box2d-2.4.1
+	updating dependency infos of boxedwine-21.0.1
+	brainwash-1.0.0 is still marked as broken on target architecture
+	updating dependency infos of breathe-4.35.0
+	updating dependency infos of breeze6-6.6.5
+	updating dependency infos of breeze_gtk-6.6.5
+	updating dependency infos of breeze_icons-6.29.0
+	updating dependency infos of brexx-1.3.2
+	updating dependency infos of brie-0.4
+	updating dependency infos of brotli-1.2.1
+	recipe for bs2b-2.1.0 is still broken:
+	Error: package bs2b-2.1.0 cannot be built for architecture arm64
+	updating dependency infos of bsap-0.8
+	bshisen-1.2 is still marked as broken on target architecture
+	updating dependency infos of bsnes_libretro-115.1_20260109
+	updating dependency infos of bsnow-1.0.0
+	updating dependency infos of btanks-0.9.8083
+	updating dependency infos of bugdom-1.3.4
+	updating dependency infos of build-1.5.0
+	recipe for buildcpr-2014 is still broken:
+	Error: package buildcpr-2014 cannot be built for architecture arm64
+	updating dependency infos of bullet-3.17
+	updating dependency infos of bumprace-1.5.6
+	updating dependency infos of burgerspace-1.9.4
+	updating dependency infos of burnitnow-1.2.1
+	updating dependency infos of burp-3.1.4
+	updating dependency infos of business_isbn-3.012
+	updating dependency infos of business_isbn_data-20251223.001
+	updating dependency infos of business_ismn-1.205
+	updating dependency infos of business_issn-1.008
+	updating dependency infos of butterfly-1.6.2
+	updating dependency infos of byacc-20230219
+	updating dependency infos of bzflag-2.4.26
+	updating dependency infos of bzip2-1.0.8
+	updating dependency infos of bzip3-1.5.1
+	updating dependency infos of c_ares-1.34.8
+	updating dependency infos of c_blosc-1.18.1
+	updating dependency infos of ca_root_certificates-2026_10_20
+	updating dependency infos of ca_root_certificates_java-2026_10_20
+	cabal-3.2.1.0 is still marked as broken on target architecture
+	updating dependency infos of cabextract-1.11
+	updating dependency infos of cadaver-0.26
+	updating dependency infos of cairo-1.18.4
+	updating dependency infos of cairomm-1.13.1
+	updating dependency infos of cairomm1.18-1.18.1
+	updating dependency infos of cal-4.1
+	updating dependency infos of cal3d-0.120
+	updating dependency infos of caladea-20130214
+	updating dependency infos of calc-2.12.7.2
+	updating dependency infos of calcurse-4.8.0
+	updating dependency infos of calendar-0.1
+	updating dependency infos of calendarsupport-23.08.5
+	updating dependency infos of calibre-5.44.0
+	updating dependency infos of caligula-1.0
+	updating dependency infos of calligra-26.08.0
+	updating dependency infos of calligraplan-4.0.1
+	updating dependency infos of camlp5-7.05
+	updating dependency infos of canna-1.0.3~git
+	updating dependency infos of cannonball_libretro-0.34_20241021
+	updating dependency infos of cantarell-0.303.1
+	updating dependency infos of cantata-2.5.0
+	updating dependency infos of cantor-26.08.0
+	updating dependency infos of cantus-v1.2.0
+	updating dependency infos of cap32_libretro-4.2.0_20260101
+	updating dependency infos of capitalbe-2.3.2
+	updating dependency infos of capnproto-1.4.0
+	updating dependency infos of capstone-4.0.2
+	updating dependency infos of capstone5-5.0.1
+	updating dependency infos of capture_tiny-0.50
+	updating dependency infos of cardo-1.04
+	recipe for cargo_c-0.10.18 is still broken:
+	Error: package cargo_c-0.10.18 cannot be built for architecture arm64
+	cargo_c-0.10.3 is still marked as broken on target architecture
+	updating dependency infos of carlito-20130920
+	updating dependency infos of cascadia_code-2--output truncated--
+

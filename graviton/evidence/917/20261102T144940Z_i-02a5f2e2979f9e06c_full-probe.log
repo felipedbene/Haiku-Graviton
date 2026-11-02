@@ -1,0 +1,23 @@
+# evidence: full-probe
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: da8888b7-b14d-478b-b581-64ba8f6b9a4b (agent status: Failed)
+# start: 20261102T144940Z   end: 20261102T144942Z   rc: 1
+# ---- script ----
+# | uname -a; df -k /boot | grep -i total; sysinfo -cpu | head -1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | C=/boot/system/bin/curl; ls -l $C || exit 1
+# | mkdir -p /boot/home/stage && cd /boot/home/stage && $C -sSfo stage.tgz 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.us-west-2.amazonaws.com/agent-917-build/stage.tgz?<PRESIGNED>' || exit 1
+# | echo '073f69fb5a5849996be5b8f3db52931684bbad8bf54eba2bb613a4ebd210871c  stage.tgz' | sha256sum -c - || exit 1
+# | gunzip -c stage.tgz > stage.tar 2>/dev/null || python3 -c 1
+# | ls /boot/system/bin/tar /boot/system/bin/gzip 2>&1
+# ---- raw output ----
+Haiku ip-10-128-12-181.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+ Total Blocks:  100.0 GiB (52410359 blocks)
+  Total Nodes: 0
+32 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+
+---- stderr ----
+ls: cannot access '/boot/system/bin/curl': No such file or directory
+failed to run commands: exit status 1

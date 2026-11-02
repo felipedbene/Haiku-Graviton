@@ -1,0 +1,73 @@
+# evidence: full-stage
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: 5c139934-6caf-4a17-8c94-a5793863d6b4 (agent status: Success)
+# start: 20261102T144952Z   end: 20261102T145000Z   rc: 0
+# ---- script ----
+# | uname -a; df -k /boot | grep -i total; sysinfo -cpu | head -1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo y; }; feed | pkgman install cmd:curl cmd:tar cmd:gzip 2>&1 | tail -1; C=curl
+# | mkdir -p /boot/home/stage && cd /boot/home/stage && $C -sSfo stage.tgz 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.us-west-2.amazonaws.com/agent-917-build/stage.tgz?<PRESIGNED>' || exit 1
+# | echo '073f69fb5a5849996be5b8f3db52931684bbad8bf54eba2bb613a4ebd210871c  stage.tgz' | sha256sum -c - || exit 1
+# | tar xzf stage.tgz && ls -R . && cut -c1-200 /dev/null
+# | cat > sums <<"S"
+# | c3fcfe0a5bf46a5f1d3bfb97f1f3f30122f5756bd1513b7906897a825f6ff2f9  ./n/nodejs-24.21.0-debeos.patchset
+# | 4960b7bed0db2e6f68ebf5b490b08fcecd6e86a21d45e8af73793856f5f8cefd  ./n/nodejs-24.21.0.patchset
+# | f72d8ab253c438cdb13ae540f833fc0533848b16766bac174e76225534ea4221  ./n/nodejs24-24.21.0.recipe
+# | daf7d327574e48ea75ca8fe879a49e7faffcb681770255149a398b4f1c76fea9  ./prov.sh
+# | 4d26000185b22c3b04f338823d9a4546dfbdb1fb70fc71dbffb2ef39af064c34  ./u/libuv-1.52.1-haiku-cpu-model.patch
+# | cc1f35ace98e420eefe1e67752e3ad0a7930aea5c4aa59bb33ff783f479e3b33  ./u/libuv-1.52.1-haiku-getrusage-thread.patch
+# | 31a8268cb3f439b7fbf97471b69aeb87b4da080fd4de6acbf52dfbe2648b973e  ./u/libuv-1.52.1-haiku-proctitle.patch
+# | 933f6dbb7f113129be6093c2f1827458190984eb17f51cdde401e599518561c8  ./u/libuv-1.52.1.patchset
+# | 8a209a87798af1db3ef9e81e3b5ffee3764673d42eab239130c975a0c6434d94  ./u/libuv-1.52.1.recipe
+# | S
+# | sha256sum -c sums || exit 1
+# ---- raw output ----
+Haiku ip-10-128-12-181.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+ Total Blocks:  100.0 GiB (52410359 blocks)
+  Total Nodes: 0
+32 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+[system] Done.
+stage.tgz: OK
+.:
+n
+prov.sh
+stage.tgz
+u
+
+./n:
+nodejs-24.21.0-debeos.patchset
+nodejs-24.21.0.patchset
+nodejs24-24.21.0.recipe
+
+./u:
+libuv-1.52.1-haiku-cpu-model.patch
+libuv-1.52.1-haiku-getrusage-thread.patch
+libuv-1.52.1-haiku-proctitle.patch
+libuv-1.52.1.patchset
+libuv-1.52.1.recipe
+./n/nodejs-24.21.0-debeos.patchset: OK
+./n/nodejs-24.21.0.patchset: OK
+./n/nodejs24-24.21.0.recipe: OK
+./prov.sh: OK
+./u/libuv-1.52.1-haiku-cpu-model.patch: OK
+./u/libuv-1.52.1-haiku-getrusage-thread.patch: OK
+./u/libuv-1.52.1-haiku-proctitle.patch: OK
+./u/libuv-1.52.1.patchset: OK
+./u/libuv-1.52.1.recipe: OK
+
+---- stderr ----
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+

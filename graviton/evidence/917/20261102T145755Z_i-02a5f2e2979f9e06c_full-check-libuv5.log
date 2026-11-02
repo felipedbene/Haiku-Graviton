@@ -1,0 +1,110 @@
+# evidence: full-check-libuv5
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: 53e10b4e-010e-4a6f-b683-8995d2e30350 (agent status: Success)
+# start: 20261102T145755Z   end: 20261102T145803Z   rc: 0
+# ---- script ----
+# | cd /boot/home/haikuports/packages
+# | for p in libuv-1.52.1-5-arm64.hpkg libuv_devel-1.52.1-5-arm64.hpkg libuv_debuginfo-1.52.1-5-arm64.hpkg; do
+# |   echo "######## $p"; sha256sum $p
+# |   package list -i $p 2>&1
+# |   echo "-- contents:"; package list -p $p 2>&1 | head -40; echo "-- entry count: $(package list -p $p 2>/dev/null | wc -l)"
+# | done
+# | echo "== the cpu-model patch is in the built library"
+# | mkdir -p /tmp/x && cd /tmp/x && rm -rf * && package extract /boot/home/haikuports/packages/libuv-1.52.1-5-arm64.hpkg && grep -a -c "Neoverse-V2" lib/libuv.so.1.0.0
+# ---- raw output ----
+######## libuv-1.52.1-5-arm64.hpkg
+6dedc02755b3a42c6b95c1b80699373acfbbf082c387354cf7a83f14fdad4cbe  libuv-1.52.1-5-arm64.hpkg
+package-attributes:
+	name: libuv
+	summary: Cross-platform asynchronous I/O
+	description: libuv is a multi-platform support library with a focus on asynchronous I/O. It was primarily developed for use by Node.js, but it's also used by Luvit, Julia, pyuv, and others.
+
+DeBeOS build: uv_fs_event_t (fs.watch in Node.js) is implemented on the Haiku node monitor instead of failing with ENOSYS.
+	vendor: Haiku Project
+	packager: DeBeOS <debeos@example.invalid>
+	architecture: arm64
+	version: 1.52.1-5
+	copyright: 2015-present libuv project contributors
+	license: MIT
+	URL: https://libuv.org/
+	source URL: https://github.com/libuv/libuv/archive/v1.52.1/libuv-1.52.1.tar.gz
+	source URL: https://sources.debene.dev/libuv/libuv-1.52.1.tar.gz
+	provides: libuv = 1.52.1
+	provides: lib:libuv = 1.0.0 (compatible >= 1)
+	provides: libuv_fs_event = 1.52.1
+	requires: haiku>=r1~beta6_hrev59996-1
+-- contents:
+lib
+lib/libuv.so.1
+lib/libuv.so.1.0.0
+.PackageInfo
+-- entry count: 4
+######## libuv_devel-1.52.1-5-arm64.hpkg
+e2e4dcb0c0a4158798bca0e0b607ce36f84b8110785a8184fc0dfeb7d712926d  libuv_devel-1.52.1-5-arm64.hpkg
+package-attributes:
+	name: libuv_devel
+	summary: Cross-platform asynchronous I/O (development files)
+	description: libuv is a multi-platform support library with a focus on asynchronous I/O. It was primarily developed for use by Node.js, but it's also used by Luvit, Julia, pyuv, and others.
+
+DeBeOS build: uv_fs_event_t (fs.watch in Node.js) is implemented on the Haiku node monitor instead of failing with ENOSYS.
+	vendor: Haiku Project
+	packager: DeBeOS <debeos@example.invalid>
+	architecture: arm64
+	version: 1.52.1-5
+	copyright: 2015-present libuv project contributors
+	license: MIT
+	URL: https://libuv.org/
+	source URL: https://github.com/libuv/libuv/archive/v1.52.1/libuv-1.52.1.tar.gz
+	source URL: https://sources.debene.dev/libuv/libuv-1.52.1.tar.gz
+	provides: libuv_devel = 1.52.1
+	provides: devel:libuv = 1.0.0 (compatible >= 1)
+	requires: libuv==1.52.1
+-- contents:
+develop
+develop/headers
+develop/headers/uv
+develop/headers/uv/errno.h
+develop/headers/uv/posix.h
+develop/headers/uv/threadpool.h
+develop/headers/uv/unix.h
+develop/headers/uv/version.h
+develop/headers/uv.h
+develop/lib
+develop/lib/libuv.so
+develop/lib/libuv.so.1
+develop/lib/libuv.so.1.0.0
+develop/lib/pkgconfig
+develop/lib/pkgconfig/libuv.pc
+.PackageInfo
+-- entry count: 16
+######## libuv_debuginfo-1.52.1-5-arm64.hpkg
+16700208d554ffb83d77f2a2cdc04883dae494c3fa5a34a448f6593bd2989df0  libuv_debuginfo-1.52.1-5-arm64.hpkg
+package-attributes:
+	name: libuv_debuginfo
+	summary: Cross-platform asynchronous I/O (debug info)
+	description: libuv is a multi-platform support library with a focus on asynchronous I/O. It was primarily developed for use by Node.js, but it's also used by Luvit, Julia, pyuv, and others.
+
+DeBeOS build: uv_fs_event_t (fs.watch in Node.js) is implemented on the Haiku node monitor instead of failing with ENOSYS.
+	vendor: Haiku Project
+	packager: DeBeOS <debeos@example.invalid>
+	base package: libuv
+	architecture: arm64
+	version: 1.52.1-5
+	copyright: 2015-present libuv project contributors
+	license: MIT
+	URL: https://libuv.org/
+	source URL: https://github.com/libuv/libuv/archive/v1.52.1/libuv-1.52.1.tar.gz
+	source URL: https://sources.debene.dev/libuv/libuv-1.52.1.tar.gz
+	provides: libuv_debuginfo = 1.52.1
+	provides: debuginfo:libuv.so.1.0.0(libuv) = 1.52.1
+	requires: libuv==1.52.1
+-- contents:
+develop
+develop/debug
+develop/debug/libuv.so.1.0.0(libuv-1.52.1-5).debuginfo
+.PackageInfo
+-- entry count: 4
+== the cpu-model patch is in the built library
+1
+
+

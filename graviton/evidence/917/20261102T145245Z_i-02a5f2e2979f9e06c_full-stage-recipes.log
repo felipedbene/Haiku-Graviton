@@ -1,0 +1,56 @@
+# evidence: full-stage-recipes
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: f5eb8caa-bfe1-494b-8142-faf9fe993974 (agent status: Success)
+# start: 20261102T145245Z   end: 20261102T145247Z   rc: 0
+# ---- script ----
+# | set -u
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports
+# | cd /boot/home/haikuporter && git log --oneline -1
+# | cd $HP && git log --oneline -1
+# | ls $HP/dev-libs/libuv $HP/net-libs/nodejs $HP/dev-libs/libuv/patches $HP/net-libs/nodejs/patches 2>&1
+# | S=/boot/home/stage
+# | cp $S/u/libuv-1.52.1.recipe $HP/dev-libs/libuv/ && mkdir -p $HP/dev-libs/libuv/patches && cp $S/u/libuv-1.52.1.patchset $S/u/libuv-1.52.1-haiku-*.patch $HP/dev-libs/libuv/patches/
+# | cp $S/n/nodejs24-24.21.0.recipe $HP/net-libs/nodejs/ && cp $S/n/nodejs-24.21.0.patchset $S/n/nodejs-24.21.0-debeos.patchset $HP/net-libs/nodejs/patches/
+# | cd $HP && sha256sum dev-libs/libuv/libuv-1.52.1.recipe dev-libs/libuv/patches/libuv-1.52.1* net-libs/nodejs/nodejs24-24.21.0.recipe net-libs/nodejs/patches/nodejs-24.21.0*
+# | ls dev-libs/libuv/*.recipe net-libs/nodejs/*.recipe
+# | rm -rf dev-libs/libuv/work-* net-libs/nodejs/work-*
+# | ls $HP/packages 2>&1 | head
+# | type haikuporter
+# ---- raw output ----
+faa3076 Don't do policy checks for source packages.
+1d23c3a kirigami_addons_kf6, bump to version 1.16.0 (#15027)
+/boot/home/haikuports/dev-libs/libuv:
+libuv-1.52.1.recipe
+patches
+
+/boot/home/haikuports/dev-libs/libuv/patches:
+libuv-1.52.1.patchset
+
+/boot/home/haikuports/net-libs/nodejs:
+nodejs20-20.15.1.recipe
+nodejs22-22.23.3.recipe
+nodejs24-24.21.0.recipe
+patches
+
+/boot/home/haikuports/net-libs/nodejs/patches:
+nodejs-20.15.1.patchset
+nodejs-22.23.3.patchset
+nodejs-24.21.0.patchset
+nodejs_x86-20.15.1.patchset
+8a209a87798af1db3ef9e81e3b5ffee3764673d42eab239130c975a0c6434d94  dev-libs/libuv/libuv-1.52.1.recipe
+4d26000185b22c3b04f338823d9a4546dfbdb1fb70fc71dbffb2ef39af064c34  dev-libs/libuv/patches/libuv-1.52.1-haiku-cpu-model.patch
+cc1f35ace98e420eefe1e67752e3ad0a7930aea5c4aa59bb33ff783f479e3b33  dev-libs/libuv/patches/libuv-1.52.1-haiku-getrusage-thread.patch
+31a8268cb3f439b7fbf97471b69aeb87b4da080fd4de6acbf52dfbe2648b973e  dev-libs/libuv/patches/libuv-1.52.1-haiku-proctitle.patch
+933f6dbb7f113129be6093c2f1827458190984eb17f51cdde401e599518561c8  dev-libs/libuv/patches/libuv-1.52.1.patchset
+f72d8ab253c438cdb13ae540f833fc0533848b16766bac174e76225534ea4221  net-libs/nodejs/nodejs24-24.21.0.recipe
+c3fcfe0a5bf46a5f1d3bfb97f1f3f30122f5756bd1513b7906897a825f6ff2f9  net-libs/nodejs/patches/nodejs-24.21.0-debeos.patchset
+4960b7bed0db2e6f68ebf5b490b08fcecd6e86a21d45e8af73793856f5f8cefd  net-libs/nodejs/patches/nodejs-24.21.0.patchset
+dev-libs/libuv/libuv-1.52.1.recipe
+net-libs/nodejs/nodejs20-20.15.1.recipe
+net-libs/nodejs/nodejs22-22.23.3.recipe
+net-libs/nodejs/nodejs24-24.21.0.recipe
+ls: cannot access '/boot/home/haikuports/packages': No such file or directory
+haikuporter is /boot/home/config/non-packaged/bin/haikuporter
+
+

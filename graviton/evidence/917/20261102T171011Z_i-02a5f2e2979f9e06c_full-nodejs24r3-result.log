@@ -1,0 +1,136 @@
+# evidence: full-nodejs24r3-result
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: f0346a7d-d872-48c1-8f49-13c99df0829e (agent status: Success)
+# start: 20261102T171011Z   end: 20261102T171019Z   rc: 0
+# ---- script ----
+# | L=/boot/home/n24r3.log
+# | grep -a -n "^exit \|Validating checksum\|Applying patch\|grabbing\|libuv" $L | grep -v "removing\|updating dependency" | cut -c1-250 | head -30
+# | echo "== packages"; ls -l /boot/home/haikuports/packages/
+# | cd /boot/home/haikuports/packages
+# | for p in nodejs24-24.21.0-3-arm64.hpkg nodejs24_devel-24.21.0-3-arm64.hpkg; do
+# |   echo "######## $p"; sha256sum $p
+# |   package list -i $p 2>&1
+# |   echo "-- contents:"; package list -p $p 2>&1 | head -25; echo "-- entry count: $(package list -p $p 2>/dev/null | wc -l)"
+# | done
+# | echo "== node binary from the package, linked against libuv rev 5"
+# | mkdir -p /tmp/xn && cd /tmp/xn && rm -rf * && package extract /boot/home/haikuports/packages/nodejs24-24.21.0-3-arm64.hpkg && ls -l bin/node
+# | pkgman search -i -D libuv 2>&1 | tail -3
+# | ./bin/node --version; ./bin/node -p 'process.versions.uv'; ./bin/node -p 'JSON.stringify(require("os").cpus().slice(0,2))'; ./bin/node -p 'require("os").cpus().length'
+# ---- raw output ----
+7:Validating checksum of node-v24.21.0.tar.gz
+10:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0.patchset" ...
+17:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0-debeos.patchset" ...
+20:	/boot/home/haikuports/packages/libuv-1.52.1-5-arm64.hpkg
+21:	/boot/home/haikuports/packages/libuv_devel-1.52.1-5-arm64.hpkg
+369:[262/2019] AR obj/deps/uvwasi/libuvwasi.a
+2669:	lib:libuv >= 1.0.0
+2731:grabbing nodejs24-24.21.0-3-arm64.hpkg and moving it to /boot/home/haikuports/packages/nodejs24-24.21.0-3-arm64.hpkg
+2732:grabbing nodejs24_devel-24.21.0-3-arm64.hpkg and moving it to /boot/home/haikuports/packages/nodejs24_devel-24.21.0-3-arm64.hpkg
+2740:exit 0
+== packages
+total 18456
+-rw-r--r-- 1 baron root    74787 Nov  2 14:56 libuv-1.52.1-5-arm64.hpkg
+-rw-r--r-- 1 baron root   213066 Nov  2 14:56 libuv_debuginfo-1.52.1-5-arm64.hpkg
+-rw-r--r-- 1 baron root    21820 Nov  2 14:56 libuv_devel-1.52.1-5-arm64.hpkg
+-rw-r--r-- 1 baron root 18308064 Nov  2 17:08 nodejs24-24.21.0-3-arm64.hpkg
+-rw-r--r-- 1 baron root   264372 Nov  2 17:09 nodejs24_devel-24.21.0-3-arm64.hpkg
+######## nodejs24-24.21.0-3-arm64.hpkg
+cd16ddb5b9e788d3e5ca83144d1db23c79331f478a5f469853ac7bf6ab203575  nodejs24-24.21.0-3-arm64.hpkg
+package-attributes:
+	name: nodejs24
+	summary: A JavaScript runtime built on Chrome's V8 Engine
+	description: Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine. As an asynchronous event driven JavaScript runtime, Node is designed to build scalable network applications. In the following "hello world" example, many connections can be handled concurrently. Upon each connection the callback is fired, but if there is no work to be done, Node will sleep.
+	vendor: Haiku Project
+	packager: DeBeOS <debeos@example.invalid>
+	architecture: arm64
+	version: 24.21.0-3
+	copyright: 2006-2019 The Node.js Foundation
+	license: BSD (2-clause)
+	URL: https://nodejs.org/
+	source URL: https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+	provides: nodejs24 = 24.21.0
+	provides: cmd:node = 24.21.0 (compatible >= 24)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libbrotlidec>=1.2.0
+	requires: lib:libbrotlienc>=1.2.0
+	requires: lib:libcares>=2.19.7
+	requires: lib:libcrypto>=3
+	requires: lib:libexecinfo>=1.1
+	requires: lib:libicudata>=78.3
+	requires: lib:libicui18n>=78.3
+	requires: lib:libicuuc>=78.3
+	requires: lib:libnghttp2>=14.28.2
+	requires: lib:libssl>=3
+	requires: lib:libuv>=1.0.0
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32
+-- contents:
+bin
+bin/node
+documentation
+documentation/man
+documentation/man/man1
+documentation/man/man1/node.1
+documentation/packages
+documentation/packages/nodejs24
+documentation/packages/nodejs24/node
+documentation/packages/nodejs24/node/gdbinit
+documentation/packages/nodejs24/node/lldb_commands.py
+.PackageInfo
+-- entry count: 12
+######## nodejs24_devel-24.21.0-3-arm64.hpkg
+a69f1c560f267b8d62e50422daceb34edc339029ef0555dc3d7e5af3df128048  nodejs24_devel-24.21.0-3-arm64.hpkg
+package-attributes:
+	name: nodejs24_devel
+	summary: A JavaScript runtime built on Chrome's V8 Engine (development files)
+	description: Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine. As an asynchronous event driven JavaScript runtime, Node is designed to build scalable network applications. In the following "hello world" example, many connections can be handled concurrently. Upon each connection the callback is fired, but if there is no work to be done, Node will sleep.
+	vendor: Haiku Project
+	packager: DeBeOS <debeos@example.invalid>
+	base package: nodejs24
+	architecture: arm64
+	version: 24.21.0-3
+	copyright: 2006-2019 The Node.js Foundation
+	license: BSD (2-clause)
+	URL: https://nodejs.org/
+	source URL: https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+	source URL: https://sources.debene.dev/nodejs/node-v24.21.0.tar.gz
+	provides: nodejs24_devel
+	requires: nodejs24==24.21.0
+-- contents:
+develop
+develop/headers
+develop/headers/node
+develop/headers/node/common.gypi
+develop/headers/node/config.gypi
+develop/headers/node/cppgc
+develop/headers/node/cppgc/allocation.h
+develop/headers/node/cppgc/common.h
+develop/headers/node/cppgc/cross-thread-persistent.h
+develop/headers/node/cppgc/custom-space.h
+develop/headers/node/cppgc/default-platform.h
+develop/headers/node/cppgc/explicit-management.h
+develop/headers/node/cppgc/garbage-collected.h
+develop/headers/node/cppgc/heap-consistency.h
+develop/headers/node/cppgc/heap-handle.h
+develop/headers/node/cppgc/heap-state.h
+develop/headers/node/cppgc/heap-statistics.h
+develop/headers/node/cppgc/heap.h
+develop/headers/node/cppgc/internal
+develop/headers/node/cppgc/internal/api-constants.h
+develop/headers/node/cppgc/internal/atomic-entry-flag.h
+develop/headers/node/cppgc/internal/base-page-handle.h
+develop/headers/node/cppgc/internal/caged-heap-local-data.h
+develop/headers/node/cppgc/internal/caged-heap.h
+develop/headers/node/cppgc/internal/compiler-specific.h
+-- entry count: 115
+== node binary from the package, linked against libuv rev 5
+-rwxr-xr-x 1 baron root 53933048 Nov  2 17:08 bin/node
+----------------------------------------
+<system>    libuv        1.52.1-5  arm64
+<system>    libuv_devel  1.52.1-5  arm64
+v24.21.0
+1.52.1
+[{"model":"unknown","speed":2597,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2597,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}}]
+32
+
+

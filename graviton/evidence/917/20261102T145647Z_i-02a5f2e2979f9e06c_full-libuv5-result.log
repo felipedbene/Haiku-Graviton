@@ -1,0 +1,30 @@
+# evidence: full-libuv5-result
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: 9e37a14d-539d-40d4-a959-96bd0b6c3115 (agent status: Success)
+# start: 20261102T145647Z   end: 20261102T145649Z   rc: 0
+# ---- script ----
+# | grep -a -n "Applying patch\|grabbing\|BUILD\|Error: Build" /boot/home/uv5.log | cut -c1-200
+# | tail -8 /boot/home/uv5.log
+# | ls -l /boot/home/haikuports/packages/
+# ---- raw output ----
+2560:Applying patchset "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1.patchset" ...
+2565:Applying patch "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1-haiku-proctitle.patch" ...
+2566:Applying patch "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1-haiku-getrusage-thread.patch" ...
+2567:Applying patch "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1-haiku-cpu-model.patch" ...
+2970:grabbing libuv-1.52.1-5-arm64.hpkg and moving it to /boot/home/haikuports/packages/libuv-1.52.1-5-arm64.hpkg
+2971:grabbing libuv_debuginfo-1.52.1-5-arm64.hpkg and moving it to /boot/home/haikuports/packages/libuv_debuginfo-1.52.1-5-arm64.hpkg
+2972:grabbing libuv_devel-1.52.1-5-arm64.hpkg and moving it to /boot/home/haikuports/packages/libuv_devel-1.52.1-5-arm64.hpkg
+	removing yab-1.8.2-arm64
+	removing yt_dlp_ejs-0.8.0-arm64
+	removing z26-2.16.00s-arm64
+	removing zaz-1.0.0-arm64
+----------------------------------------------------------------------
+dev-libs::libuv-1.52.1
+	/boot/home/haikuports/dev-libs/libuv/libuv-1.52.1.recipe
+----------------------------------------------------------------------
+total 312
+-rw-r--r-- 1 baron root  74787 Nov  2 14:56 libuv-1.52.1-5-arm64.hpkg
+-rw-r--r-- 1 baron root 213066 Nov  2 14:56 libuv_debuginfo-1.52.1-5-arm64.hpkg
+-rw-r--r-- 1 baron root  21820 Nov  2 14:56 libuv_devel-1.52.1-5-arm64.hpkg
+
+

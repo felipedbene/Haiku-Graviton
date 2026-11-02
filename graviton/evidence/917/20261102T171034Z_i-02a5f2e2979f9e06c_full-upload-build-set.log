@@ -1,0 +1,27 @@
+# evidence: full-upload-build-set
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: 3373e170-bc3e-44c1-b725-375c646d2d56 (agent status: Success)
+# start: 20261102T171034Z   end: 20261102T171042Z   rc: 0
+# ---- script ----
+# | cd /boot/home/haikuports/packages || exit 1
+# | sha256sum libuv-1.52.1-5-arm64.hpkg libuv_devel-1.52.1-5-arm64.hpkg libuv_debuginfo-1.52.1-5-arm64.hpkg nodejs24-24.21.0-3-arm64.hpkg nodejs24_devel-24.21.0-3-arm64.hpkg | tee SHA256SUMS
+# | curl -sSf -T libuv-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917-build/set/libuv-1.52.1-5-arm64.hpkg?<PRESIGNED>' && echo up libuv-1.52.1-5-arm64.hpkg
+# | curl -sSf -T libuv_devel-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917-build/set/libuv_devel-1.52.1-5-arm64.hpkg?<PRESIGNED>' && echo up libuv_devel-1.52.1-5-arm64.hpkg
+# | curl -sSf -T libuv_debuginfo-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917-build/set/libuv_debuginfo-1.52.1-5-arm64.hpkg?<PRESIGNED>' && echo up libuv_debuginfo-1.52.1-5-arm64.hpkg
+# | curl -sSf -T nodejs24-24.21.0-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917-build/set/nodejs24-24.21.0-3-arm64.hpkg?<PRESIGNED>' && echo up nodejs24-24.21.0-3-arm64.hpkg
+# | curl -sSf -T nodejs24_devel-24.21.0-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917-build/set/nodejs24_devel-24.21.0-3-arm64.hpkg?<PRESIGNED>' && echo up nodejs24_devel-24.21.0-3-arm64.hpkg
+# | curl -sSf -T SHA256SUMS 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917-build/set/SHA256SUMS?<PRESIGNED>' && echo up SHA256SUMS
+# ---- raw output ----
+6dedc02755b3a42c6b95c1b80699373acfbbf082c387354cf7a83f14fdad4cbe  libuv-1.52.1-5-arm64.hpkg
+e2e4dcb0c0a4158798bca0e0b607ce36f84b8110785a8184fc0dfeb7d712926d  libuv_devel-1.52.1-5-arm64.hpkg
+16700208d554ffb83d77f2a2cdc04883dae494c3fa5a34a448f6593bd2989df0  libuv_debuginfo-1.52.1-5-arm64.hpkg
+cd16ddb5b9e788d3e5ca83144d1db23c79331f478a5f469853ac7bf6ab203575  nodejs24-24.21.0-3-arm64.hpkg
+a69f1c560f267b8d62e50422daceb34edc339029ef0555dc3d7e5af3df128048  nodejs24_devel-24.21.0-3-arm64.hpkg
+up libuv-1.52.1-5-arm64.hpkg
+up libuv_devel-1.52.1-5-arm64.hpkg
+up libuv_debuginfo-1.52.1-5-arm64.hpkg
+up nodejs24-24.21.0-3-arm64.hpkg
+up nodejs24_devel-24.21.0-3-arm64.hpkg
+up SHA256SUMS
+
+

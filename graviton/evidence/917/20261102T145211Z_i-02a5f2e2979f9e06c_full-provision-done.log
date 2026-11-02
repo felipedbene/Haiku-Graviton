@@ -1,0 +1,13 @@
+# evidence: poll
+# instance: i-02a5f2e2979f9e06c   region: us-west-2
+# ssm command: 9da88e02-5290-42c8-9f03-b2e80918dfe7 (agent status: Success)
+# start: 20261102T145211Z   end: 20261102T145213Z   rc: 0
+# ---- script ----
+# | grep -a "^exit " /boot/home/prov.log; tail -3 /boot/home/prov.log
+# ---- raw output ----
+exit 0
+Publish the resulting .hpkg to the DeBeOS repo from a Haiku host:
+  graviton/scripts/haiku-repo-add   (see its header for HG_* env)
+exit 0
+
+
