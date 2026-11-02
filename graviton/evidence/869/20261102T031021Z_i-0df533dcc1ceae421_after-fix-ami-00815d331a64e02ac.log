@@ -1,0 +1,100 @@
+# evidence: after-fix-ami-00815d331a64e02ac
+# instance: i-0df533dcc1ceae421   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T031021Z   end: 20261102T031039Z   rc: 0
+# script sha256: 23e6947bd3d927f44aedaf9c0fe346d33e2fcbb67e9d96111e43895deb723129
+# ---- script ----
+# | set -u
+# | NODEP='const tls=require("tls");for(const s of ["default","bundled","system"]){console.log(s, tls.getCACertificates(s).length)}'
+# | echo "== image"; uname -v; openssl version; openssl version -d
+# | echo "== 1. user-additions dir vs its non-packaged siblings (ls -ld, stat uid:gid mode)"
+# | for d in /boot/system/non-packaged/data/ssl/certs /boot/system/non-packaged/data/ssl /boot/system/non-packaged/data /boot/system/non-packaged/data/fonts /boot/system/non-packaged/lib /boot/system/non-packaged/bin; do
+# |   ls -ld "$d" 2>&1; stat -c '   %u:%g %a %F' "$d" 2>&1; done
+# | echo "entries: $(ls -A /boot/system/non-packaged/data/ssl/certs 2>/dev/null | wc -l)"
+# | echo "== install nodejs24"
+# | { for i in $(seq 60); do echo 1; done; echo yes; } | pkgman install nodejs24 2>&1 | tail -3
+# | echo "pkgman rc=${PIPESTATUS[1]}"
+# | node --version
+# | echo "== 2. node system-CA probe (stderr included)"
+# | node -e "$NODEP" 2>&1; echo "node rc=$?"
+# | echo "== 3. HTTPS with the system store only"
+# | node -e 'require("https").get("https://example.com/",{ca:require("tls").getCACertificates("system")},r=>{console.log("status",r.statusCode,"authorized",r.socket.authorized);r.resume()}).on("error",e=>{console.log("ERR",e.code);process.exit(1)})' 2>&1; echo "rc=$?"
+# | echo "== 4. s_client, no -CApath/-CAfile"
+# | echo | openssl s_client -connect example.com:443 -servername example.com -verify_return_error 2>&1 | grep -E 'Verification|Verify return code|verify error'
+# | echo "s_client rc=${PIPESTATUS[1]}"
+# | echo "== 5. user cert in the default dir, s_client -no-CAfile (default dir only)"
+# | echo "-- 5a. before dropping a cert: expect 20"
+# | echo | openssl s_client -connect example.com:443 -servername example.com -verify_return_error -no-CAfile 2>&1 | grep -E 'Verify return code'
+# | echo "-- issuer root of example.com's chain, taken from the system bundle"
+# | ROOTCN=$(echo | openssl s_client -connect example.com:443 -servername example.com -showcerts 2>/dev/null | grep -E '^ *[0-9] s:' | tail -1 | sed 's/.*i:\(.*\)/\1/')
+# | echo | openssl s_client -connect example.com:443 -servername example.com 2>&1 | grep -E '^depth='
+# | awk -v d=/tmp/split '/BEGIN CERTIFICATE/{n++; f=sprintf("%s-%03d.pem",d,n)} f{print > f} /END CERTIFICATE/{close(f); f=""}' /boot/system/data/ssl/CARootCertificates.pem
+# | ROOT=$(echo | openssl s_client -connect example.com:443 -servername example.com 2>&1 | grep -E '^depth=' | sort | tail -1 | sed 's/^depth=[0-9]* //')
+# | echo "chain top subject: $ROOT"
+# | for f in /tmp/split-*.pem; do s=$(openssl x509 -in $f -noout -subject | sed 's/^subject=//'); [ "$s" = "$ROOT" ] && { echo "match: $f"; cp $f /boot/system/non-packaged/data/ssl/certs/user-root.pem; break; }; done
+# | ls -l /boot/system/non-packaged/data/ssl/certs
+# | openssl rehash /boot/system/non-packaged/data/ssl/certs; echo "rehash rc=$?"
+# | ls -l /boot/system/non-packaged/data/ssl/certs
+# | echo "-- 5b. after: expect 0"
+# | echo | openssl s_client -connect example.com:443 -servername example.com -verify_return_error -no-CAfile 2>&1 | grep -E 'Verification|Verify return code|verify error'
+# | echo "-- node with the user cert present"
+# | node -e "$NODEP" 2>&1
+# ---- raw output ----
+== image
+hrev59996 Nov  2 2026 02:27:53
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+OPENSSLDIR: "/packages/openssl3-3.5.9-2/.self/data/ssl"
+== 1. user-additions dir vs its non-packaged siblings (ls -ld, stat uid:gid mode)
+drwxr-xr-x 1 baron root 2048 Nov  2 02:31 /boot/system/non-packaged/data/ssl/certs
+   0:0 755 directory
+drwxr-xr-x 1 baron root 2048 Nov  2 02:31 /boot/system/non-packaged/data/ssl
+   0:0 755 directory
+drwxr-xr-x 1 baron root 2048 Nov  2 02:31 /boot/system/non-packaged/data
+   0:0 755 directory
+drwxr-xr-x 1 baron root 2048 Nov  2 02:31 /boot/system/non-packaged/data/fonts
+   0:0 755 directory
+drwxr-xr-x 1 baron root 2048 Nov  2 02:31 /boot/system/non-packaged/lib
+   0:0 755 directory
+drwxr-xr-x 1 baron root 2048 Nov  2 02:31 /boot/system/non-packaged/bin
+   0:0 755 directory
+entries: 0
+== install nodejs24
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_03:10:29"
+[system] Cleaning up ...
+[system] Done.
+pkgman rc=0
+v24.21.0
+== 2. node system-CA probe (stderr included)
+default 121
+bundled 121
+system 119
+node rc=0
+== 3. HTTPS with the system store only
+status 200 authorized true
+rc=0
+== 4. s_client, no -CApath/-CAfile
+Verification: OK
+Verify return code: 0 (ok)
+s_client rc=0
+== 5. user cert in the default dir, s_client -no-CAfile (default dir only)
+-- 5a. before dropping a cert: expect 20
+Verify return code: 20 (unable to get local issuer certificate)
+-- issuer root of example.com's chain, taken from the system bundle
+depth=3 C=US, O=SSL Corporation, CN=SSL.com TLS ECC Root CA 2022
+depth=2 C=US, O=SSL Corporation, CN=SSL.com TLS Transit ECC CA R2
+depth=1 C=US, O=SSL Corporation, CN=Cloudflare TLS Issuing ECC CA 3
+depth=0 CN=example.com
+chain top subject: C=US, O=SSL Corporation, CN=SSL.com TLS ECC Root CA 2022
+match: /tmp/split-102.pem
+total 4
+-rw-r--r-- 1 baron root 833 Nov  2 03:10 user-root.pem
+rehash rc=0
+total 6
+lrwxrwxrwx 1 baron root  13 Nov  2 03:10 865fbdf9.0 -> user-root.pem
+-rw-r--r-- 1 baron root 833 Nov  2 03:10 user-root.pem
+-- 5b. after: expect 0
+Verification: OK
+Verify return code: 0 (ok)
+-- node with the user cert present
+default 121
+bundled 121
+system 121
