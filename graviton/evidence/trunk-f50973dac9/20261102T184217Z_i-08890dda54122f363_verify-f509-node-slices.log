@@ -1,0 +1,79 @@
+# evidence: verify-f509-node-slices
+# instance: i-08890dda54122f363   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T184217Z   end: 20261102T184317Z   rc: 0
+# script sha256: dfa807088f34f2af69c03fbc7c13bbf2ca683c93894092d8096bfc8f773c7ac1
+# ---- script ----
+# | # Node 24 regression slices the #947/#899/#946/#951/#952 PRs ran, on the unmodified baked
+# | # image (no non-packaged overrides), stdin a pipe (#870), packages from the DeBeOS repo.
+# | cd /boot/home/node-src/node-v24.21.0 || exit 7
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- non-packaged overrides (expect none)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f 2>/dev/null | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/)' | awk '{print $NF}' | sort -u
+# | node --version; ls /boot/system/packages | grep -E '^(nodejs24|libuv|python3\.14|openssl3)'
+# | run() {
+# | 	local name=$1; shift
+# | 	local s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap "$@" > /boot/home/slice-$name.tap 2>&1
+# | 	echo "=== $name: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /boot/home/slice-$name.tap) notok=$(grep -c '^not ok ' /boot/home/slice-$name.tap) plan=$(grep -E '^1\.\.' /boot/home/slice-$name.tap)"
+# | 	grep -E '^not ok ' /boot/home/slice-$name.tap | sed -E 's/^not ok [0-9]+ /not ok /' | sed 's/^/  /' | sort -k3
+# | }
+# | run dgram 'parallel/test-dgram-*' 'sequential/test-dgram-*'
+# | run net 'parallel/test-net*'
+# | run http 'parallel/test-http-*'
+# | run tls 'parallel/test-tls-*'
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 180 -p tap --repeat 64 parallel/test-net-connect-abort-controller > /boot/home/node946.tap 2>&1
+# | echo "=== abort-controller x64: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /boot/home/node946.tap) notok=$(grep -c '^not ok ' /boot/home/node946.tap)"
+# | grep -A12 '^not ok ' /boot/home/node946.tap | head -60
+# | for n in http; do echo "=== $n failure detail"; awk '/^not ok /{p=1} /^ok /{p=0} p' /boot/home/slice-$n.tap | head -80; done
+# | echo "--- syslog: panics / KDL / page faults"
+# | grep -iE "panic|kernel debugger|page fault|vm_page_fault" /var/log/syslog | cut -c1-200
+# | echo NODE_SLICES_DONE
+# ---- raw output ----
+Haiku ip-10-128-12-127.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 18:07:55 arm64 other Haiku
+830e8f13b85124244e4ef20acb7f53e1c8232c6bfcb9b1dc74626fbda955cef7  /boot/system/kernel_arm64
+--- non-packaged overrides (expect none)
+--- loaded network images
+/boot/system/add-ons/kernel/network/protocols/ipv4
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+/boot/system/add-ons/kernel/network/stack
+v24.21.0
+libuv-1.52.1-5-arm64.hpkg
+nodejs24-24.21.0-3-arm64.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg
+python3.14-3.14.7-1-arm64.hpkg
+=== dgram: rc=0 wall=6s ok=84 notok=0 plan=1..84
+=== net: rc=0 wall=6s ok=159 notok=0 plan=1..159
+=== http: rc=1 wall=30s ok=401 notok=1 plan=1..402
+  not ok parallel/test-http-writable-true-after-close
+=== tls: rc=0 wall=7s ok=222 notok=0 plan=1..222
+=== abort-controller x64: rc=0 wall=2s ok=64 notok=0
+=== http failure detail
+not ok 380 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 141.54200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/node-src/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/node-src/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/node-src/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...
+--- syslog: panics / KDL / page faults
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+NODE_SLICES_DONE

@@ -1,0 +1,407 @@
+# evidence: verify-f509-atime933
+# instance: i-06f92e935077c4223   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T184920Z   end: 20261102T184943Z   rc: 0
+# script sha256: e6daad0cb5b70767fbc901d49f9197a8bf7c5136ed2d94aa4f98ecc913136bd0
+# ---- script ----
+# | # Issue 933 re-run on a FRESH launch of the unmodified trunk bake ami-0d9d8bc80a314ef9e (f50973dac9),
+# | # with the NTFS EBS volume (snapshot snap-0c7cc92b87bbbb0ef of the mkntfs-formatted vol-02e7288272ac6cbbd)
+# | # attached at boot. The ntfs bound to it is the boot-preloaded packaged one; its sha256 is printed.
+# | set -x
+# | uname -a; date -u
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | ls /boot/home/config/non-packaged/add-ons/kernel/file_systems /boot/system/non-packaged/add-ons/kernel/file_systems 2>&1
+# | P=$(ls /boot/system/packages/haiku-r1~beta6_*-arm64.hpkg); echo "$P"
+# | cd /boot/home/vf || exit 1
+# | sha256sum atime93?.c atime898.c
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ntfs
+# | mkdir -p /ntfs; D=""; for n in 1 2; do mount -t ntfs /dev/disk/nvme/$n/0 /ntfs && { D=/dev/disk/nvme/$n/0; break; }; done; echo "ntfs device: $D"; [ -n "$D" ] || exit 1
+# | df /ntfs | grep -E "Mounted|Device No|Volume Name"
+# | echo "--- loaded ntfs image"; listimage 1 | grep -E " ntfs$|file_systems/ntfs"
+# | [ "$(listimage 1 | grep -cE ' ntfs$|file_systems/ntfs')" = 1 ] || { echo "not exactly one ntfs image"; exit 1; }
+# | listimage 1 | grep -q " ntfs$" || { echo "ntfs is not the preloaded image"; exit 1; }
+# | mkdir -p /ntfs/a933 && ls -ld /ntfs/a933 || exit 1
+# | mkdir -p /boot/home/a933 && chmod 0777 /boot/home/a933
+# | echo "=== atime898 ntfs (trunk, unmodified)"
+# | ./atime898 /ntfs/a933; echo "atime898 ntfs rc=$?"
+# | echo "=== atime933 ntfs"
+# | ./atime933 /ntfs/a933; echo "atime933 ntfs rc=$?"
+# | echo "=== atime933 bfs (control: trunk kernel, shared check)"
+# | ./atime933 /boot/home/a933; echo "atime933 bfs rc=$?"
+# | echo "=== atime898 bfs (control)"
+# | ./atime898 /boot/home/a933; echo "atime898 bfs rc=$?"
+# | echo "=== direct: coreutils on ntfs"
+# | f=/ntfs/a933/demo; rm -f $f; echo x > $f; ls -l $f
+# | touch -d @1000000000 $f
+# | truncate -s 10 $f; echo "root truncate -s 10 rc=$? size=$(stat -c %s $f) mtime=$(stat -c %Y $f) ctime=$(stat -c %Z $f) now=$(date +%s)"
+# | ./atime898 --as 1002 1002 truncate -s 20 $f; echo "size=$(stat -c %s $f)"
+# | touch -d @1000000000 $f
+# | ./atime898 --as 1002 1002 touch $f; echo "uid1002 touch (now): $(stat -c '%X %Y' $f)"
+# | touch -d @1000000000 $f
+# | ./atime898 --as 1002 1002 touch -d @1234567890 $f; echo "uid1002 touch -d (explicit): $(stat -c '%X %Y' $f)"
+# | ./atime898 --as 1002 1002 touch -a -d @1234567890 $f; echo "uid1002 touch -a -d (explicit atime): $(stat -c '%X %Y' $f)"
+# | ./atime898 --as 1002 1002 chmod 0644 $f; echo "mode=$(stat -c %a $f)"
+# | chmod 0666 $f; echo "root chmod 0666 (same mode) rc=$?"
+# | rm -f $f
+# | echo "--- syslog"; grep -aiE "ntfs|panic|assert" /var/log/syslog | tail -12
+# ---- raw output ----
++ uname -a
+Haiku ip-10-128-14-149.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 18:07:55 arm64 other Haiku
++ date -u
+Mon Nov  2 18:49:28 GMT 2026
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+830e8f13b85124244e4ef20acb7f53e1c8232c6bfcb9b1dc74626fbda955cef7  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
++ ls /boot/home/config/non-packaged/add-ons/kernel/file_systems /boot/system/non-packaged/add-ons/kernel/file_systems
+ls: cannot access '/boot/home/config/non-packaged/add-ons/kernel/file_systems': No such file or directory
+ls: cannot access '/boot/system/non-packaged/add-ons/kernel/file_systems': No such file or directory
+++ ls /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ P=/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ echo /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ cd /boot/home/vf
++ sha256sum atime933.c atime934.c atime898.c
+549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c
+dd5c022510958e26d110582060ea7510baac5213c40291f3796b0046c5d921c2  atime934.c
+ae6994728657c1ea1e060403d95de10d46e3aede523a34edcf3f447c7369a993  atime898.c
++ sha256sum /boot/system/add-ons/kernel/file_systems/ntfs
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  /boot/system/add-ons/kernel/file_systems/ntfs
++ mkdir -p /ntfs
++ D=
++ for n in 1 2
++ mount -t ntfs /dev/disk/nvme/1/0 /ntfs
++ D=/dev/disk/nvme/1/0
++ break
++ echo 'ntfs device: /dev/disk/nvme/1/0'
+ntfs device: /dev/disk/nvme/1/0
++ '[' -n /dev/disk/nvme/1/0 ']'
++ df /ntfs
++ grep -E 'Mounted|Device No|Volume Name'
+   Device No.: 8
+   Mounted at: /ntfs
+  Volume Name: "NTFS933"
++ echo '--- loaded ntfs image'
+--- loaded ntfs image
++ listimage 1
++ grep -E ' ntfs$|file_systems/ntfs'
+    7 0xffff000002435000 0xffff000002484000     0          0 ntfs
+++ listimage 1
+++ grep -cE ' ntfs$|file_systems/ntfs'
++ '[' 1 = 1 ']'
++ listimage 1
++ grep -q ' ntfs$'
++ mkdir -p /ntfs/a933
++ ls -ld /ntfs/a933
+drwxrwxrwx 1 baron root 0 Nov  2 18:49 /ntfs/a933
++ mkdir -p /boot/home/a933
++ chmod 0777 /boot/home/a933
++ echo '=== atime898 ntfs (trunk, unmodified)'
+=== atime898 ntfs (trunk, unmodified)
++ ./atime898 /ntfs/a933
+== /ntfs/a933
+FAIL root      utimensat(NULL)        setup: Operation not supported
+FAIL root      utimensat{NOW,NOW}     setup: Operation not supported
+FAIL root      utimensat{NOW,OMIT}    setup: Operation not supported
+FAIL root      utimensat{OMIT,NOW}    setup: Operation not supported
+FAIL root      utimensat{a,m}         setup: Operation not supported
+FAIL root      utimensat{a,OMIT}      setup: Operation not supported
+FAIL root      utimensat{OMIT,m}      setup: Operation not supported
+FAIL root      utimensat{NOW,m}       setup: Operation not supported
+FAIL root      utimensat{a,NOW}       setup: Operation not supported
+FAIL root      utimensat{OMIT,OMIT}   setup: Operation not supported
+FAIL root      futimens(NULL)         setup: Operation not supported
+FAIL root      futimens{a,OMIT}       setup: Operation not supported
+FAIL root      futimens{OMIT,OMIT}    setup: Operation not supported
+FAIL root      utimes(NULL)           setup: Operation not supported
+FAIL root      utimes{a,m}            setup: Operation not supported
+FAIL root      utime(NULL)            setup: Operation not supported
+FAIL root      utime{a,m}             setup: Operation not supported
+FAIL owner     utimensat(NULL)        setup: Operation not supported
+FAIL owner     utimensat{NOW,NOW}     setup: Operation not supported
+FAIL owner     utimensat{NOW,OMIT}    setup: Operation not supported
+FAIL owner     utimensat{OMIT,NOW}    setup: Operation not supported
+FAIL owner     utimensat{a,m}         setup: Operation not supported
+FAIL owner     utimensat{a,OMIT}      setup: Operation not supported
+FAIL owner     utimensat{OMIT,m}      setup: Operation not supported
+FAIL owner     utimensat{NOW,m}       setup: Operation not supported
+FAIL owner     utimensat{a,NOW}       setup: Operation not supported
+FAIL owner     utimensat{OMIT,OMIT}   setup: Operation not supported
+FAIL owner     futimens(NULL)         setup: Operation not supported
+FAIL owner     futimens{a,OMIT}       setup: Operation not supported
+FAIL owner     futimens{OMIT,OMIT}    setup: Operation not supported
+FAIL owner     utimes(NULL)           setup: Operation not supported
+FAIL owner     utimes{a,m}            setup: Operation not supported
+FAIL owner     utime(NULL)            setup: Operation not supported
+FAIL owner     utime{a,m}             setup: Operation not supported
+FAIL writer    utimensat(NULL)        setup: Operation not supported
+FAIL writer    utimensat{NOW,NOW}     setup: Operation not supported
+FAIL writer    utimensat{NOW,OMIT}    setup: Operation not supported
+FAIL writer    utimensat{OMIT,NOW}    setup: Operation not supported
+FAIL writer    utimensat{a,m}         setup: Operation not supported
+FAIL writer    utimensat{a,OMIT}      setup: Operation not supported
+FAIL writer    utimensat{OMIT,m}      setup: Operation not supported
+FAIL writer    utimensat{NOW,m}       setup: Operation not supported
+FAIL writer    utimensat{a,NOW}       setup: Operation not supported
+FAIL writer    utimensat{OMIT,OMIT}   setup: Operation not supported
+FAIL writer    futimens(NULL)         setup: Operation not supported
+FAIL writer    futimens{a,OMIT}       setup: Operation not supported
+FAIL writer    futimens{OMIT,OMIT}    setup: Operation not supported
+FAIL writer    utimes(NULL)           setup: Operation not supported
+FAIL writer    utimes{a,m}            setup: Operation not supported
+FAIL writer    utime(NULL)            setup: Operation not supported
+FAIL writer    utime{a,m}             setup: Operation not supported
+FAIL nonwriter utimensat(NULL)        setup: Operation not supported
+FAIL nonwriter utimensat{NOW,NOW}     setup: Operation not supported
+FAIL nonwriter utimensat{NOW,OMIT}    setup: Operation not supported
+FAIL nonwriter utimensat{OMIT,NOW}    setup: Operation not supported
+FAIL nonwriter utimensat{a,m}         setup: Operation not supported
+FAIL nonwriter utimensat{a,OMIT}      setup: Operation not supported
+FAIL nonwriter utimensat{OMIT,m}      setup: Operation not supported
+FAIL nonwriter utimensat{NOW,m}       setup: Operation not supported
+FAIL nonwriter utimensat{a,NOW}       setup: Operation not supported
+FAIL nonwriter utimensat{OMIT,OMIT}   setup: Operation not supported
+FAIL nonwriter futimens(NULL)         setup: Operation not supported
+FAIL nonwriter futimens{a,OMIT}       setup: Operation not supported
+FAIL nonwriter futimens{OMIT,OMIT}    setup: Operation not supported
+FAIL nonwriter utimes(NULL)           setup: Operation not supported
+FAIL nonwriter utimes{a,m}            setup: Operation not supported
+FAIL nonwriter utime(NULL)            setup: Operation not supported
+FAIL nonwriter utime{a,m}             setup: Operation not supported
+SUMMARY cases=0 failures=68 errno-notes=0
++ echo 'atime898 ntfs rc=68'
+atime898 ntfs rc=68
++ echo '=== atime933 ntfs'
+=== atime933 ntfs
++ ./atime933 /ntfs/a933
+== /ntfs/a933
+PASS root      utimensat(NULL)      -> ok      (expect ok    ) atime 1793645370.247828000 mtime 1793645370.247828000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{NOW,NOW}   -> ok      (expect ok    ) atime 1793645370.270116000 mtime 1793645370.270116000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{NOW,OMIT}  -> ok      (expect ok    ) atime 1793645370.292821000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{OMIT,NOW}  -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645370.315028000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{a,m}       -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1111111111.500000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{a,OMIT}    -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{OMIT,m}    -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1111111111.500000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{NOW,m}     -> ok      (expect ok    ) atime 1793645370.406607000 mtime 1111111111.500000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{a,NOW}     -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1793645370.431143000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimensat{OMIT,OMIT} -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      futimens(NULL)       -> ok      (expect ok    ) atime 1793645370.480226000 mtime 1793645370.480226000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      futimens{a,OMIT}     -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      futimens{OMIT,OMIT}  -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimes(NULL)         -> ok      (expect ok    ) atime 1793645370.554106000 mtime 1793645370.554106000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utimes{a,m}          -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1111111111.500000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utime(NULL)          -> ok      (expect ok    ) atime 1793645370.647343000 mtime 1793645370.647343000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      utime{a,m}           -> ok      (expect ok    ) atime 1234567890.000000000 mtime 1111111111.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      truncate(3)          -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645370.692285000 ctime 1793645370 size 3 mode 0666 uid 0
+PASS root      ftruncate(3)         -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645370.715642000 ctime 1793645370 size 3 mode 0666 uid 0
+FAIL root      chmod(same mode)     -> Operation not supported (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS root      chmod(other mode)    -> Operation not supported (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0  [unsupported by the file system]
+PASS root      chown(1002)          -> Operation not supported (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0  [unsupported by the file system]
+PASS writer    utimensat(NULL)      -> ok      (expect ok    ) atime 1793645370.801497000 mtime 1793645370.801497000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{NOW,NOW}   -> ok      (expect ok    ) atime 1793645370.824320000 mtime 1793645370.824320000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{NOW,OMIT}  -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{OMIT,NOW}  -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{a,m}       -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{a,OMIT}    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{OMIT,m}    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{NOW,m}     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{a,NOW}     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    utimensat{OMIT,OMIT} -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645370 size 1 mode 0666 uid 0
+PASS writer    futimens(NULL)       -> ok      (expect ok    ) atime 1793645371.022668000 mtime 1793645371.022668000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    futimens{a,OMIT}     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    futimens{OMIT,OMIT}  -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    utimes(NULL)         -> ok      (expect ok    ) atime 1793645371.126434000 mtime 1793645371.126434000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    utimes{a,m}          -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    utime(NULL)          -> ok      (expect ok    ) atime 1793645371.170125000 mtime 1793645371.170125000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    utime{a,m}           -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    truncate(3)          -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645371.217510000 ctime 1793645371 size 3 mode 0666 uid 0
+PASS writer    ftruncate(3)         -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645371.241690000 ctime 1793645371 size 3 mode 0666 uid 0
+PASS writer    chmod(same mode)     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    chmod(other mode)    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0666 uid 0
+PASS writer    chown(1002)          -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0666 uid 0
+SUMMARY cases=44 failures=1 errno-notes=0 unsupported=2
++ echo 'atime933 ntfs rc=1'
+atime933 ntfs rc=1
++ echo '=== atime933 bfs (control: trunk kernel, shared check)'
+=== atime933 bfs (control: trunk kernel, shared check)
++ ./atime933 /boot/home/a933
+== /boot/home/a933
+PASS root      utimensat(NULL)      -> ok      (expect ok    ) atime 1793645371.319429000 mtime 1793645371.319291392 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{NOW,NOW}   -> ok      (expect ok    ) atime 1793645371.320065000 mtime 1793645371.320077824 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{NOW,OMIT}  -> ok      (expect ok    ) atime 1793645371.320626000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{OMIT,NOW}  -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645371.321126400 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{a,m}       -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1111111111.499908608 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{a,OMIT}    -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{OMIT,m}    -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1111111111.499908608 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{NOW,m}     -> ok      (expect ok    ) atime 1793645371.323386000 mtime 1111111111.499908608 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{a,NOW}     -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1793645371.323747840 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimensat{OMIT,OMIT} -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      futimens(NULL)       -> ok      (expect ok    ) atime 1793645371.324989000 mtime 1793645371.324796416 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      futimens{a,OMIT}     -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      futimens{OMIT,OMIT}  -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimes(NULL)         -> ok      (expect ok    ) atime 1793645371.326606000 mtime 1793645371.326369280 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utimes{a,m}          -> ok      (expect ok    ) atime 1234567890.500000000 mtime 1111111111.499908608 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utime(NULL)          -> ok      (expect ok    ) atime 1793645371.327684000 mtime 1793645371.327680000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      utime{a,m}           -> ok      (expect ok    ) atime 1234567890.000000000 mtime 1111111111.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      truncate(3)          -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645371.328728576 ctime 1793645371 size 3 mode 0644 uid 0
+PASS root      ftruncate(3)         -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1793645371.329252864 ctime 1793645371 size 3 mode 0644 uid 0
+PASS root      chmod(same mode)     -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS root      chmod(other mode)    -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0646 uid 0
+PASS root      chown(1002)          -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 1002
+PASS nonwriter utimensat(NULL)      -> EPERM   (expect EACCES) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0  [errno note: POSIX says EACCES]
+PASS nonwriter utimensat{NOW,NOW}   -> EPERM   (expect EACCES) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0  [errno note: POSIX says EACCES]
+PASS nonwriter utimensat{NOW,OMIT}  -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimensat{OMIT,NOW}  -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimensat{a,m}       -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimensat{a,OMIT}    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimensat{OMIT,m}    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimensat{NOW,m}     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimensat{a,NOW}     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimensat{OMIT,OMIT} -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter futimens(NULL)       -> EPERM   (expect EACCES) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0  [errno note: POSIX says EACCES]
+PASS nonwriter futimens{a,OMIT}     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter futimens{OMIT,OMIT}  -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utimes(NULL)         -> EPERM   (expect EACCES) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0  [errno note: POSIX says EACCES]
+PASS nonwriter utimes{a,m}          -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter utime(NULL)          -> EPERM   (expect EACCES) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0  [errno note: POSIX says EACCES]
+PASS nonwriter utime{a,m}           -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter truncate(3)          -> EPERM   (expect EACCES) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0  [errno note: POSIX says EACCES]
+PASS nonwriter ftruncate(3)         -> EACCES  (expect EACCES) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter chmod(same mode)     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter chmod(other mode)    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+PASS nonwriter chown(1002)          -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793645371 size 1 mode 0644 uid 0
+SUMMARY cases=44 failures=0 errno-notes=6 unsupported=0
++ echo 'atime933 bfs rc=0'
+atime933 bfs rc=0
++ echo '=== atime898 bfs (control)'
+=== atime898 bfs (control)
++ ./atime898 /boot/home/a933
+== /boot/home/a933
+PASS root      utimensat(NULL)        -> ok      (expect ok     ) atime 1793645371.344867000 mtime 1793645371.344719360
+PASS root      utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793645371.345442000 mtime 1793645371.345243648
+PASS root      utimensat{NOW,OMIT}    -> ok      (expect ok     ) atime 1793645371.345992000 mtime 1000000000.000000000
+PASS root      utimensat{OMIT,NOW}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1793645371.346292224
+PASS root      utimensat{a,m}         -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS root      utimensat{a,OMIT}      -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS root      utimensat{OMIT,m}      -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1111111111.499908608
+PASS root      utimensat{NOW,m}       -> ok      (expect ok     ) atime 1793645371.348638000 mtime 1111111111.499908608
+PASS root      utimensat{a,NOW}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1793645371.349175808
+PASS root      utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS root      futimens(NULL)         -> ok      (expect ok     ) atime 1793645371.350249000 mtime 1793645371.350224384
+PASS root      futimens{a,OMIT}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS root      futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS root      utimes(NULL)           -> ok      (expect ok     ) atime 1793645371.351837000 mtime 1793645371.351797248
+PASS root      utimes{a,m}            -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS root      utime(NULL)            -> ok      (expect ok     ) atime 1793645371.352882000 mtime 1793645371.352845824
+PASS root      utime{a,m}             -> ok      (expect ok     ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS owner     utimensat(NULL)        -> ok      (expect ok     ) atime 1793645371.353942000 mtime 1793645371.353894400
+PASS owner     utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793645371.354480000 mtime 1793645371.354418688
+PASS owner     utimensat{NOW,OMIT}    -> ok      (expect ok     ) atime 1793645371.355013000 mtime 1000000000.000000000
+PASS owner     utimensat{OMIT,NOW}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1793645371.355467264
+PASS owner     utimensat{a,m}         -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS owner     utimensat{a,OMIT}      -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS owner     utimensat{OMIT,m}      -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1111111111.499908608
+PASS owner     utimensat{NOW,m}       -> ok      (expect ok     ) atime 1793645371.357632000 mtime 1111111111.499908608
+PASS owner     utimensat{a,NOW}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1793645371.358088704
+PASS owner     utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS owner     futimens(NULL)         -> ok      (expect ok     ) atime 1793645371.359304000 mtime 1793645371.359137280
+PASS owner     futimens{a,OMIT}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS owner     futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS owner     utimes(NULL)           -> ok      (expect ok     ) atime 1793645371.360854000 mtime 1793645371.360710144
+PASS owner     utimes{a,m}            -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS owner     utime(NULL)            -> ok      (expect ok     ) atime 1793645371.361905000 mtime 1793645371.361758720
+PASS owner     utime{a,m}             -> ok      (expect ok     ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS writer    utimensat(NULL)        -> ok      (expect ok     ) atime 1793645371.362945000 mtime 1793645371.362807296
+PASS writer    utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793645371.363483000 mtime 1793645371.363331584
+PASS writer    utimensat{NOW,OMIT}    -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimensat{OMIT,NOW}    -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimensat{a,m}         -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimensat{a,OMIT}      -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimensat{OMIT,m}      -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimensat{NOW,m}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimensat{a,NOW}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    futimens(NULL)         -> ok      (expect ok     ) atime 1793645371.368253000 mtime 1793645371.368050176
+PASS writer    futimens{a,OMIT}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimes(NULL)           -> ok      (expect ok     ) atime 1793645371.369814000 mtime 1793645371.369623040
+PASS writer    utimes{a,m}            -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utime(NULL)            -> ok      (expect ok     ) atime 1793645371.370841000 mtime 1793645371.370671616
+PASS writer    utime{a,m}             -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat(NULL)        -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utimensat{NOW,NOW}     -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utimensat{NOW,OMIT}    -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,NOW}    -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{a,m}         -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{a,OMIT}      -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,m}      -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{NOW,m}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{a,NOW}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter futimens(NULL)         -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter futimens{a,OMIT}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimes(NULL)           -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utimes{a,m}            -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utime(NULL)            -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utime{a,m}             -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+SUMMARY cases=68 failures=0 errno-notes=5
++ echo 'atime898 bfs rc=0'
+atime898 bfs rc=0
++ echo '=== direct: coreutils on ntfs'
+=== direct: coreutils on ntfs
++ f=/ntfs/a933/demo
++ rm -f /ntfs/a933/demo
++ echo x
++ ls -l /ntfs/a933/demo
+-rw-rw-rw- 1 baron root 2 Nov  2 18:49 /ntfs/a933/demo
++ touch -d @1000000000 /ntfs/a933/demo
++ truncate -s 10 /ntfs/a933/demo
+++ stat -c %s /ntfs/a933/demo
+++ stat -c %Y /ntfs/a933/demo
+++ stat -c %Z /ntfs/a933/demo
+++ date +%s
++ echo 'root truncate -s 10 rc=0 size=10 mtime=1793645371 ctime=1793645371 now=1793645371'
+root truncate -s 10 rc=0 size=10 mtime=1793645371 ctime=1793645371 now=1793645371
++ ./atime898 --as 1002 1002 truncate -s 20 /ntfs/a933/demo
+as 1002:1002: truncate -> exit 0
+++ stat -c %s /ntfs/a933/demo
++ echo size=20
+size=20
++ touch -d @1000000000 /ntfs/a933/demo
++ ./atime898 --as 1002 1002 touch /ntfs/a933/demo
+as 1002:1002: touch -> exit 0
+++ stat -c '%X %Y' /ntfs/a933/demo
++ echo 'uid1002 touch (now): 1793645371 1793645371'
+uid1002 touch (now): 1793645371 1793645371
++ touch -d @1000000000 /ntfs/a933/demo
++ ./atime898 --as 1002 1002 touch -d @1234567890 /ntfs/a933/demo
+touch: setting times of '/ntfs/a933/demo': Operation not allowed
+as 1002:1002: touch -> exit 1
+++ stat -c '%X %Y' /ntfs/a933/demo
++ echo 'uid1002 touch -d (explicit): 1000000000 1000000000'
+uid1002 touch -d (explicit): 1000000000 1000000000
++ ./atime898 --as 1002 1002 touch -a -d @1234567890 /ntfs/a933/demo
+touch: setting times of '/ntfs/a933/demo': Operation not allowed
+as 1002:1002: touch -> exit 1
+++ stat -c '%X %Y' /ntfs/a933/demo
++ echo 'uid1002 touch -a -d (explicit atime): 1000000000 1000000000'
+uid1002 touch -a -d (explicit atime): 1000000000 1000000000
++ ./atime898 --as 1002 1002 chmod 0644 /ntfs/a933/demo
+chmod: changing permissions of '/ntfs/a933/demo': Operation not allowed
+as 1002:1002: chmod -> exit 1
+++ stat -c %a /ntfs/a933/demo
++ echo mode=666
+mode=666
++ chmod 0666 /ntfs/a933/demo
+chmod: changing permissions of '/ntfs/a933/demo': Operation not supported
++ echo 'root chmod 0666 (same mode) rc=1'
+root chmod 0666 (same mode) rc=1
++ rm -f /ntfs/a933/demo
++ echo '--- syslog'
+--- syslog
++ grep -aiE 'ntfs|panic|assert' /var/log/syslog
++ tail -12
+KERN: add_partitions_for(0x000000007842a578, mountFS = no)
+KERN: add_partitions_for(fd = 0, mountFS = no)
+KERN:     disk system:       file_systems/ntfs/v1
+KERN:     content name:      NTFS933
+KERN: module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ed50, "ntfs"

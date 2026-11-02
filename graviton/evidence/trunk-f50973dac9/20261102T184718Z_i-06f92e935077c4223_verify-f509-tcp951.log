@@ -1,0 +1,60 @@
+# evidence: verify-f509-tcp951
+# instance: i-06f92e935077c4223   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T184718Z   end: 20261102T184740Z   rc: 0
+# script sha256: 195a59104bbe3889680a226a800a0e22d4dcf3b0c90e646695544095881d40f6
+# ---- script ----
+# | set -u
+# | cd /boot/home/vf || exit 3
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- non-packaged overrides (expect none)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n "s/.*inet addr: \([0-9.]*\).*/\1/p" | head -1)
+# | echo "own address: $OWN"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | sha256sum tcp951.c tcp951
+# | ifconfig loop | grep MTU
+# | echo "=== mtu: loop MTU 65536 -> 1500 mid-transfer"
+# | ./tcp951 127.0.0.1 mtu "ifconfig loop mtu 1500" "ifconfig loop mtu 65536"; echo "exit=$?"
+# | ifconfig loop | grep MTU
+# | echo "=== down: loop down for 2 s mid-transfer"
+# | ./tcp951 127.0.0.1 down "ifconfig loop down; sleep 2; ifconfig loop up" "ifconfig loop up"; echo "exit=$?"
+# | ifconfig loop | grep -E 'MTU|inet'
+# ---- raw output ----
+Haiku ip-10-128-14-149.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 18:07:55 arm64 other Haiku
+830e8f13b85124244e4ef20acb7f53e1c8232c6bfcb9b1dc74626fbda955cef7  /boot/system/kernel_arm64
+--- non-packaged overrides (expect none)
+own address: 10.128.14.149
+ 2259 0xffff000002392000 0xffff0000023b4000     0          0 /boot/system/add-ons/kernel/network/stack
+ 2273 0xffff000002360000 0xffff000002368000     0          0 /boot/system/add-ons/kernel/network/protocols/udp
+ 2275 0xffff000002369000 0xffff000002374000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv4
+ 2279 0xffff000002376000 0xffff000002381000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv6
+ 2341 0xffff0000022e2000 0xffff0000022f4000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+ 2348 0xffff0000022f5000 0xffff000002303000     0          0 /boot/system/add-ons/kernel/network/protocols/unix
+04452874c4cfb98fa44bd86ce92df6e498917d1161c80aadfa92ae5a805f96dd  tcp951.c
+22e111720374323e151e80b23dffa386fd60bfab7213a9626364ce7b8595a424  tcp951
+	MTU: 65536, Metric: 0, up loopback link
+=== mtu: loop MTU 65536 -> 1500 mid-transfer
+127.0.0.1 mtu: TCP_MAXSEG 65495
+warm-up 1 MiB                        PASS  1048576/1048576 in 0.002 s, corrupt 0
+  [0.025 s] ran 'ifconfig loop mtu 1500' (status 0) at 262144 sent, 64687 received
+8 MiB across 'mtu'                   PASS  8388608/8388608 in 0.155 s, corrupt 0, SO_ERROR 0/0
+  after: sender TCP_MAXSEG 65495
+  ran 'ifconfig loop mtu 65536' (status 0)
+fresh connection 1 MiB               PASS  1048576/1048576 in 0.002 s
+FAILS 0
+exit=0
+	MTU: 65536, Metric: 0, up loopback link
+=== down: loop down for 2 s mid-transfer
+127.0.0.1 down: TCP_MAXSEG 65495
+warm-up 1 MiB                        PASS  1048576/1048576 in 0.002 s, corrupt 0
+  [2.050 s] ran 'ifconfig loop down; sleep 2; ifconfig loop up' (status 0) at 262144 sent, 64687 received
+8 MiB across 'down'                  PASS  8388608/8388608 in 2.065 s, corrupt 0, SO_ERROR 0/0
+  after: sender TCP_MAXSEG 65495
+  ran 'ifconfig loop up' (status 0)
+fresh connection 1 MiB               PASS  1048576/1048576 in 0.002 s
+FAILS 0
+exit=0
+	inet addr: 127.0.0.1, Mask: 255.0.0.0
+	inet6 addr: ::1, Prefix Length: 128
+	MTU: 65536, Metric: 0, up loopback link

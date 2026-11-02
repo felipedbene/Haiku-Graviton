@@ -1,0 +1,161 @@
+# evidence: verify-f509-tcp900
+# instance: i-06f92e935077c4223   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T184747Z   end: 20261102T184822Z   rc: 0
+# script sha256: fd604ca1fa820d94ab6b746f6c5138081d5eab76132d4af4eecb215f76176d65
+# ---- script ----
+# | set -u
+# | cd /boot/home/vf || exit 3
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- non-packaged overrides (expect none)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n "s/.*inet addr: \([0-9.]*\).*/\1/p" | head -1)
+# | echo "own address: $OWN"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | sha256sum tcp900.c tcp900
+# | echo "--- interface counters before"; ifconfig loop | grep -E 'Receive|Transmit|MTU'; ifconfig /dev/net/ena/0 | grep -E 'Receive|Transmit|MTU'
+# | for i in 1 2 3; do echo "=== tcp900 run $i (+ own address)"; ./tcp900 $OWN | grep -E "^tcp ($OWN|127\.0\.0\.1) |total"; echo "exit=${PIPESTATUS[0]}"; done
+# | echo "--- interface counters after"; ifconfig loop | grep -E 'Receive|Transmit|MTU'; ifconfig /dev/net/ena/0 | grep -E 'Receive|Transmit|MTU'
+# | echo "=== loopback MTU set to 9001, the ENA's"
+# | ifconfig loop mtu 9001; ifconfig loop | grep MTU
+# | echo "=== tcp900 run 1, loop mtu 9001"; ./tcp900 | grep -E "^tcp 127\.0\.0\.1 |total"
+# | ifconfig loop mtu 65536; ifconfig loop | grep MTU
+# ---- raw output ----
+Haiku ip-10-128-14-149.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 18:07:55 arm64 other Haiku
+830e8f13b85124244e4ef20acb7f53e1c8232c6bfcb9b1dc74626fbda955cef7  /boot/system/kernel_arm64
+--- non-packaged overrides (expect none)
+own address: 10.128.14.149
+ 2259 0xffff000002392000 0xffff0000023b4000     0          0 /boot/system/add-ons/kernel/network/stack
+ 2273 0xffff000002360000 0xffff000002368000     0          0 /boot/system/add-ons/kernel/network/protocols/udp
+ 2275 0xffff000002369000 0xffff000002374000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv4
+ 2279 0xffff000002376000 0xffff000002381000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv6
+ 2341 0xffff0000022e2000 0xffff0000022f4000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+ 2348 0xffff0000022f5000 0xffff000002303000     0          0 /boot/system/add-ons/kernel/network/protocols/unix
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+--- interface counters before
+	MTU: 65536, Metric: 0, up loopback link
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 9873 packets, 0 errors, 21477547 bytes, 0 mcasts, 0 dropped
+	MTU: 9001, Metric: 0, up broadcast link auto-configured
+	Receive: 75608 packets, 0 errors, 107200896 bytes, 0 mcasts, 0 dropped
+	Transmit: 42112 packets, 0 errors, 3134656 bytes, 0 mcasts, 0 dropped
+=== tcp900 run 1 (+ own address)
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 313.8 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 321.9 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 318.7 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 26.4 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 325.5 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 325.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 316.0 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 320.1 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.198s, 323.1 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.199s, 320.9 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.163s, 393.7 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.162s, 395.8 MiB/s, eof
+tcp 10.128.14.149     TCP_MAXSEG 8961
+tcp 10.128.14.149     s2c     8948 in    8948 writes       PASS  delivered 8948/8948 in 0.000s, 139.9 MiB/s, eof
+tcp 10.128.14.149     s2c     8949 in    8949 writes       PASS  delivered 8949/8949 in 0.000s, 152.4 MiB/s, eof
+tcp 10.128.14.149     s2c     8961 in    8961 writes       PASS  delivered 8961/8961 in 0.000s, 149.9 MiB/s, eof
+tcp 10.128.14.149     s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 10.128.14.149     c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 10.128.14.149     s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 297.6 MiB/s, eof
+tcp 10.128.14.149     c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 299.0 MiB/s, eof
+tcp 10.128.14.149     s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 280.9 MiB/s, eof
+tcp 10.128.14.149     c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 280.0 MiB/s, eof
+tcp 10.128.14.149     s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.224s, 286.0 MiB/s, eof
+tcp 10.128.14.149     c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.224s, 285.5 MiB/s, eof
+tcp 10.128.14.149     s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.183s, 350.7 MiB/s, eof
+tcp 10.128.14.149     c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.183s, 350.4 MiB/s, eof
+total 3.0s, 0 FAIL
+exit=0
+=== tcp900 run 2 (+ own address)
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 264.6 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 313.8 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 310.8 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 322.2 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 322.2 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 312.0 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 316.4 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.0 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 391.1 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.163s, 392.6 MiB/s, eof
+tcp 10.128.14.149     TCP_MAXSEG 8961
+tcp 10.128.14.149     s2c     8948 in    8948 writes       PASS  delivered 8948/8948 in 0.000s, 139.9 MiB/s, eof
+tcp 10.128.14.149     s2c     8949 in    8949 writes       PASS  delivered 8949/8949 in 0.000s, 149.7 MiB/s, eof
+tcp 10.128.14.149     s2c     8961 in    8961 writes       PASS  delivered 8961/8961 in 0.000s, 147.3 MiB/s, eof
+tcp 10.128.14.149     s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 10.128.14.149     c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 28.7 MiB/s, eof
+tcp 10.128.14.149     s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 257.2 MiB/s, eof
+tcp 10.128.14.149     c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 300.5 MiB/s, eof
+tcp 10.128.14.149     s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 273.8 MiB/s, eof
+tcp 10.128.14.149     c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 286.4 MiB/s, eof
+tcp 10.128.14.149     s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.227s, 281.9 MiB/s, eof
+tcp 10.128.14.149     c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.227s, 281.9 MiB/s, eof
+tcp 10.128.14.149     s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.184s, 348.5 MiB/s, eof
+tcp 10.128.14.149     c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.184s, 347.6 MiB/s, eof
+total 3.0s, 0 FAIL
+exit=0
+=== tcp900 run 3 (+ own address)
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 313.8 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 315.4 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 313.9 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 28.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 322.2 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 323.8 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 314.9 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 315.2 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.199s, 321.2 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.199s, 321.1 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.163s, 393.5 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.163s, 393.6 MiB/s, eof
+tcp 10.128.14.149     TCP_MAXSEG 8961
+tcp 10.128.14.149     s2c     8948 in    8948 writes       PASS  delivered 8948/8948 in 0.000s, 142.2 MiB/s, eof
+tcp 10.128.14.149     s2c     8949 in    8949 writes       PASS  delivered 8949/8949 in 0.000s, 152.4 MiB/s, eof
+tcp 10.128.14.149     s2c     8961 in    8961 writes       PASS  delivered 8961/8961 in 0.000s, 149.9 MiB/s, eof
+tcp 10.128.14.149     s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 10.128.14.149     c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 28.7 MiB/s, eof
+tcp 10.128.14.149     s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 240.4 MiB/s, eof
+tcp 10.128.14.149     c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 299.0 MiB/s, eof
+tcp 10.128.14.149     s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 269.3 MiB/s, eof
+tcp 10.128.14.149     c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 280.4 MiB/s, eof
+tcp 10.128.14.149     s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.226s, 283.3 MiB/s, eof
+tcp 10.128.14.149     c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.227s, 281.8 MiB/s, eof
+tcp 10.128.14.149     s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.185s, 346.2 MiB/s, eof
+tcp 10.128.14.149     c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.184s, 347.7 MiB/s, eof
+total 3.0s, 0 FAIL
+exit=0
+--- interface counters after
+	MTU: 65536, Metric: 0, up loopback link
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 85278 packets, 0 errors, 2464252294 bytes, 0 mcasts, 0 dropped
+	MTU: 9001, Metric: 0, up broadcast link auto-configured
+	Receive: 75608 packets, 0 errors, 107200896 bytes, 0 mcasts, 0 dropped
+	Transmit: 185017 packets, 0 errors, 822644146 bytes, 0 mcasts, 0 dropped
+=== loopback MTU set to 9001, the ENA's
+	MTU: 9001, Metric: 0, up loopback link
+=== tcp900 run 1, loop mtu 9001
+tcp 127.0.0.1         TCP_MAXSEG 8961
+tcp 127.0.0.1         s2c     8948 in    8948 writes       PASS  delivered 8948/8948 in 0.000s, 149.7 MiB/s, eof
+tcp 127.0.0.1         s2c     8949 in    8949 writes       PASS  delivered 8949/8949 in 0.000s, 155.2 MiB/s, eof
+tcp 127.0.0.1         s2c     8961 in    8961 writes       PASS  delivered 8961/8961 in 0.000s, 149.9 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 299.0 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 300.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 268.0 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 275.8 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.226s, 283.1 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.224s, 285.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.182s, 351.1 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.183s, 349.9 MiB/s, eof
+total 8.5s, 0 FAIL
+	MTU: 65536, Metric: 0, up loopback link

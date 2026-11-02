@@ -1,0 +1,93 @@
+# evidence: verify-f509-udp947
+# instance: i-06f92e935077c4223   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T184444Z   end: 20261102T184506Z   rc: 0
+# script sha256: 381206a38f464623efb2c5bbec3317d0287fe22a19827683ac0306aa0a2739f1
+# ---- script ----
+# | set -u
+# | cd /boot/home/vf || exit 3
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- non-packaged overrides (expect none)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n "s/.*inet addr: \([0-9.]*\).*/\1/p" | head -1)
+# | echo "own address: $OWN"
+# | sha256sum udp947.c udp947
+# | echo "--- network modules loaded by the kernel (team 1)"
+# | listimage 1 2>/dev/null | grep -E 'add-ons/kernel/network/' | awk '{print $NF}' | sort -u
+# | for run in 1 2 3; do
+# | 	echo "=== run $run"
+# | 	./udp947 > run-udp947-$run.out
+# | 	echo "exit=$?"
+# | 	grep -E 'FAIL|udp947:' run-udp947-$run.out
+# | done
+# | echo "=== run 1 full output"
+# | cat run-udp947-1.out
+# | echo "=== -t (a requested control message that does not fit)"; ./udp947 -t; echo "exit=$?"
+# ---- raw output ----
+Haiku ip-10-128-14-149.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 18:07:55 arm64 other Haiku
+830e8f13b85124244e4ef20acb7f53e1c8232c6bfcb9b1dc74626fbda955cef7  /boot/system/kernel_arm64
+--- non-packaged overrides (expect none)
+own address: 10.128.14.149
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+--- network modules loaded by the kernel (team 1)
+/boot/system/add-ons/kernel/network/datalink_protocols/arp
+/boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+/boot/system/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+/boot/system/add-ons/kernel/network/datalink_protocols/loopback_frame
+/boot/system/add-ons/kernel/network/devices/ethernet
+/boot/system/add-ons/kernel/network/devices/loopback
+/boot/system/add-ons/kernel/network/notifications
+/boot/system/add-ons/kernel/network/protocols/ipv4
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+/boot/system/add-ons/kernel/network/stack
+=== run 1
+exit=4
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+udp947: 14 passed, 4 failed
+=== run 2
+exit=4
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+udp947: 14 passed, 4 failed
+=== run 3
+exit=4
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+udp947: 14 passed, 4 failed
+=== run 1 full output
+ipv4 none                                                  PASS  controllen=0 flags=0x0
+ipv4 IP_RECVDSTADDR                                        PASS  controllen=24 flags=0x0 [IP_RECVDSTADDR 127.0.0.1]
+ipv4 IP_RECVDSTADDR set+cleared                            PASS  controllen=0 flags=0x0
+ipv4 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+ipv6 none                                                  PASS  controllen=0 flags=0x0
+ipv6 IPV6_RECVPKTINFO                                      PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVPKTINFO set+cleared                          PASS  controllen=0 flags=0x0
+ipv6 both set+cleared                                      PASS  controllen=0 flags=0x0
+ipv6 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+v4-to-dual none                                            PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO                                PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVPKTINFO set+cleared                    PASS  controllen=0 flags=0x0
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 14 passed, 4 failed
+=== -t (a requested control message that does not fit)
+ipv4 IP_RECVDSTADDR, 4-byte control buffer                 FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+ipv6 IPV6_RECVPKTINFO, 4-byte control buffer               FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+udp947 -t: 0 passed, 3 failed
+exit=3

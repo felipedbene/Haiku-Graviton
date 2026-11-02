@@ -1,0 +1,89 @@
+# evidence: verify-f509-listen946
+# instance: i-06f92e935077c4223   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T184650Z   end: 20261102T184712Z   rc: 0
+# script sha256: ac86131e2fd0a0b852828ee398f42c14369434aed8363c414c15a0aaabc4e0f2
+# ---- script ----
+# | set -u
+# | cd /boot/home/vf || exit 3
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- non-packaged overrides (expect none)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n "s/.*inet addr: \([0-9.]*\).*/\1/p" | head -1)
+# | echo "own address: $OWN"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | sha256sum listen946.c listen946
+# | for i in 1 2 3; do echo "=== run $i"; ./listen946; echo "exit=$?"; done
+# ---- raw output ----
+Haiku ip-10-128-14-149.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 18:07:55 arm64 other Haiku
+830e8f13b85124244e4ef20acb7f53e1c8232c6bfcb9b1dc74626fbda955cef7  /boot/system/kernel_arm64
+--- non-packaged overrides (expect none)
+own address: 10.128.14.149
+ 2259 0xffff000002392000 0xffff0000023b4000     0          0 /boot/system/add-ons/kernel/network/stack
+ 2273 0xffff000002360000 0xffff000002368000     0          0 /boot/system/add-ons/kernel/network/protocols/udp
+ 2275 0xffff000002369000 0xffff000002374000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv4
+ 2279 0xffff000002376000 0xffff000002381000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv6
+ 2341 0xffff0000022e2000 0xffff0000022f4000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+ 2348 0xffff0000022f5000 0xffff000002303000     0          0 /boot/system/add-ons/kernel/network/protocols/unix
+9f111028f110188f2b235f2a5ed6c513513122302448cf3f98c1abbc4fce1d4e  listen946.c
+7271a0601336265e5b79ae8349d0d22b9b12e28a35be93634e73592b18ba473f  listen946
+=== run 1
+127.0.0.1 unaccepted 1/1                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/1 +data               PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 2/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 3/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 4/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/1                           PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 2/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.14.149 unaccepted 1/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.14.149 unaccepted 2/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted sibling                 PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 accepted still works               PASS  ping/pong after the listener closed
+127.0.0.1 accepted close is EOF              PASS  poll revents=0x81 recv=0 (EOF)
+::1 unaccepted sibling                       PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 accepted still works                     PASS  ping/pong after the listener closed
+::1 accepted close is EOF                    PASS  poll revents=0x81 recv=0 (EOF)
+FAILS 0
+exit=0
+=== run 2
+127.0.0.1 unaccepted 1/1                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/1 +data               PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 2/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 3/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 4/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/1                           PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 2/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.14.149 unaccepted 1/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.14.149 unaccepted 2/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted sibling                 PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 accepted still works               PASS  ping/pong after the listener closed
+127.0.0.1 accepted close is EOF              PASS  poll revents=0x81 recv=0 (EOF)
+::1 unaccepted sibling                       PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 accepted still works                     PASS  ping/pong after the listener closed
+::1 accepted close is EOF                    PASS  poll revents=0x81 recv=0 (EOF)
+FAILS 0
+exit=0
+=== run 3
+127.0.0.1 unaccepted 1/1                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/1 +data               PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 2/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 3/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 4/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/1                           PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 2/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.14.149 unaccepted 1/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.14.149 unaccepted 2/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted sibling                 PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 accepted still works               PASS  ping/pong after the listener closed
+127.0.0.1 accepted close is EOF              PASS  poll revents=0x81 recv=0 (EOF)
+::1 unaccepted sibling                       PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 accepted still works                     PASS  ping/pong after the listener closed
+::1 accepted close is EOF                    PASS  poll revents=0x81 recv=0 (EOF)
+FAILS 0
+exit=0

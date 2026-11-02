@@ -1,0 +1,25 @@
+# evidence: verify-f509-cleanup (workstation)
+# start: 20261102T185048Z
+$ aws ec2 terminate-instances --instance-ids i-06f92e935077c4223
+i-06f92e935077c4223	shutting-down
+$ aws ec2 terminate-instances --instance-ids i-08890dda54122f363
+i-08890dda54122f363	shutting-down
+$ aws ec2 terminate-instances --instance-ids i-03808abf0d54fbd30
+i-03808abf0d54fbd30	terminated
+$ aws ec2 terminate-instances --instance-ids i-048d7c46b3b303b50
+i-048d7c46b3b303b50	terminated
+all four instances terminated
+i-03808abf0d54fbd30	terminated
+i-08890dda54122f363	terminated
+i-06f92e935077c4223	terminated
+i-048d7c46b3b303b50	terminated
+$ aws ec2 delete-snapshot --snapshot-id snap-0c7cc92b87bbbb0ef
+deleted
+$ aws ec2 delete-snapshot --snapshot-id snap-0d5d2708a7a1710a8
+deleted
+$ aws ec2 delete-volume --volume-id vol-02e7288272ac6cbbd
+deleted
+$ aws ec2 delete-volume --volume-id vol-090f694572ee53ce8
+deleted
+--- remaining volumes named verify-f509-* (expect none once the root/boot-mapped ones finish deleting)
+--- remaining snapshots named verify-f509-* (expect none)
