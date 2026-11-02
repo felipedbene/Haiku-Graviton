@@ -3674,6 +3674,124 @@ test('867: an s3-transfer outcome re-queues the port without counting an attempt
   expect(r.values[0][':o']).toBe('s3-transfer-requeued');
 });
 
+// ---------------------------------------------------------------------------
+// Issue 867, part 3: the builder bake installs debeos-aws and refuses an AMI with no
+// usable S3 client. haiku-builder-s3-client is driven here offline: ssm-run is a stub
+// that runs the remote script locally, and `aws` is a stub over a directory standing
+// in for the work bucket.
+// ---------------------------------------------------------------------------
+
+function runClientCheck(client: 'none' | 'ok' | 'corrupt' | 'phantom'):
+    { rc: number; out: string; store: string[] } {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'chk867-'));
+  const store = path.join(tmp, 'bucket');
+  const bin = path.join(tmp, 'bin');
+  fs.mkdirSync(store); fs.mkdirSync(bin);
+  // s3://<bucket>/<key> -> $STORE/<key>
+  const s3path = `p=\${1#s3://*/}; echo "${store}/$p"`;
+  fs.writeFileSync(path.join(bin, 'aws'),
+    `#!/bin/sh\nloc() { ${s3path}; }\n` +
+    `case "$1 $2" in\n` +
+    `  "s3 cp") [ "$4" = - ] || exit 9; cat "$(loc "$3")" ;;\n` +
+    `  "s3 ls") [ -e "$(loc "$3")" ] ;;\n` +
+    `  "s3 rm") rm "$(loc "$3")" ;;\n` +
+    `  *) echo "aws stub: unexpected $*" >&2; exit 9 ;;\n` +
+    `esac\n`);
+  fs.writeFileSync(path.join(tmp, 'ssm-run'), '#!/bin/sh\nexec sh -s\n');
+  const c = path.join(tmp, 'debeos-aws');
+  const up = client === 'corrupt' ? `mkdir -p "$(dirname "$(loc "$4")")"; echo corrupted > "$(loc "$4")"`
+    : client === 'phantom' ? `cp "$3" ${tmp}/phantom` : `mkdir -p "$(dirname "$(loc "$4")")"; cp "$3" "$(loc "$4")"`;
+  const down = client === 'phantom' ? `cp ${tmp}/phantom "$4"` : `cp "$(loc "$3")" "$4"`;
+  fs.writeFileSync(c,
+    `#!/bin/sh\nloc() { ${s3path}; }\n` +
+    `case "$3" in s3://*) ${down} ;; *) ${up} ;; esac\n`);
+  for (const f of ['aws', 'debeos-aws']) fs.chmodSync(path.join(f === 'aws' ? bin : tmp, f), 0o755);
+  fs.chmodSync(path.join(tmp, 'ssm-run'), 0o755);
+  const res = child_process.spawnSync('bash',
+    [path.join(GRAVITON_SCRIPTS, 'haiku-builder-s3-client'), 'check', 'i-0123456789abcdef0'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        AWS_PROFILE: 'stub',
+        HAIKU_GRAVITON_BUCKET: 'b',
+        HAIKU_SSM_RUN: path.join(tmp, 'ssm-run'),
+        S3_CLIENT_CANDIDATES: client === 'none' ? path.join(tmp, 'absent') : c,
+      },
+    });
+  const left: string[] = [];
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p); else left.push(path.relative(store, p));
+    }
+  };
+  walk(store);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return { rc: res.status ?? -1, out: (res.stdout || '') + (res.stderr || ''), store: left };
+}
+
+test('867: the bake client check passes a working client and leaves no probe behind', () => {
+  const r = runClientCheck('ok');
+  expect(r.out).toContain('round trip OK');
+  expect(r.out).toContain('S3 client OK on i-0123456789abcdef0');
+  expect(r.rc).toBe(0);
+  expect(r.store).toEqual([]);
+});
+
+test('867: the bake client check FAILS with no client, a corrupting one, or one that never reached S3', () => {
+  const none = runClientCheck('none');
+  expect(none.rc).not.toBe(0);
+  expect(none.out).toContain('NO S3 CLIENT');
+  const bad = runClientCheck('corrupt');
+  expect(bad.rc).not.toBe(0);
+  expect(bad.out).toContain('changed the bytes');
+  expect(bad.store).toEqual([]);   // cleaned up even on failure
+  // The box's own round trip "works" but nothing is in the bucket: only the
+  // workstation read-back can catch that.
+  const ghost = runClientCheck('phantom');
+  expect(ghost.rc).not.toBe(0);
+  expect(ghost.out).toContain('is not in S3');
+});
+
+test('867: the bake client check resolves the same candidates, in the same order, as run_ssm', () => {
+  const src = fs.readFileSync(path.join(GRAVITON_SCRIPTS, 'haiku-builder-s3-client'), 'utf8');
+  const m = src.match(/CANDIDATES="\$\{S3_CLIENT_CANDIDATES:-([^}]*)\}"/);
+  expect(m).not.toBeNull();
+  expect((m as RegExpMatchArray)[1].split(' ')).toEqual(s3ClientDefaults());
+});
+
+test('867: the bake installs debeos-aws and refuses to create an image when the check fails', () => {
+  const bake = fs.readFileSync(path.join(GRAVITON_SCRIPTS, 'haiku-bake-builder'), 'utf8');
+  const install = bake.indexOf('"$HERE/haiku-builder-s3-client" install "$IID"');
+  const check = bake.indexOf('"$HERE/haiku-builder-s3-client" check "$IID"; then');
+  const create = bake.indexOf('aws ec2 create-image');
+  expect(install).toBeGreaterThan(0);
+  expect(check).toBeGreaterThan(install);
+  expect(create).toBeGreaterThan(check);
+  // The failing branch exits before create-image, and nothing swallows it.
+  const branch = bake.slice(check, create);
+  expect(branch).toMatch(/REFUSING to create a builder AMI[\s\S]*exit 1\nfi/);
+  expect(bake.slice(install - 200, create)).not.toMatch(/haiku-builder-s3-client[^\n]*\|\|\s*true/);
+  // The bake also refuses a dirty debeos-aws source, since it now bakes it.
+  expect(bake).toContain('graviton/haikuports-patches graviton/go-arm64 2>/dev/null');
+});
+
+test('867: the debeos_aws package installs the client at the path run_ssm resolves first', () => {
+  const pkg = fs.readFileSync(path.join(__dirname, '..', '..', 'go-arm64', 'debeos-aws',
+    'package', 'build-hpkg.sh'), 'utf8');
+  expect(pkg).toContain('-o "$STAGING/bin/debeos-aws"');   // packagefs bin/ -> /boot/system/bin
+  expect(s3ClientDefaults()[0]).toBe('/boot/system/bin/debeos-aws');
+  // Reproducible from the tree only: no module may be fetched that go.sum does not pin.
+  expect(pkg).toContain('GOFLAGS=-mod=readonly');
+  const info = fs.readFileSync(path.join(__dirname, '..', '..', 'go-arm64', 'debeos-aws',
+    'package', 'debeos_aws.PackageInfo'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', '..', 'go-arm64', 'debeos-aws',
+    'main.go'), 'utf8');
+  const ver = (main.match(/^const version = "(.*)"$/m) as RegExpMatchArray)[1];
+  expect(info).toMatch(new RegExp(`^version\\t+${ver.replace(/\./g, '\\.')}-\\d+$`, 'm'));
+});
+
 // The pre-flight: one read before the first StartExecution, instead of 96 refusals on
 // 11 booted builders. Drives the real function against a stubbed boto3.
 function preflight(opts: {

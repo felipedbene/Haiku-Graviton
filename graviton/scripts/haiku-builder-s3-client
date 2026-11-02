@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+#
+# haiku-builder-s3-client -- put the build-wave's S3 client onto a builder, and
+# prove a builder has one. Issue 867.
+#
+#   haiku-builder-s3-client install <instance-id>
+#   haiku-builder-s3-client check   <instance-id>
+#
+# WHY. The build-wave wrapper (pipeline/ops-lambdas/run_ssm.py) stages the driver,
+# the recipe overlay and its log through an on-box S3 client, and haiku-nativebuild
+# harvests every built hpkg through the same one. Since the #302 migration a
+# canonical image carries only the real amazon-ssm-agent, which has no s3 verbs,
+# so a builder baked from it had no client at all: every wave build there died
+# (issue 867), and nothing in the bake noticed.
+#
+# install  builds go-arm64/debeos-aws FROM THIS CHECKOUT on the box, with the
+#          DeBeOS golang package, packages it as debeos_aws (build-hpkg.sh), and
+#          installs that package, so the binary lands at /boot/system/bin/debeos-aws
+#          -- the first path run_ssm.py resolves. No prebuilt binary is involved:
+#          the source is staged file by file and go.sum pins every dependency.
+# check    resolves the client exactly the way run_ssm.py does (same candidates,
+#          same order), then round-trips a fresh nonce through it to the work
+#          bucket and reads it back from the workstation. Exit 0 only if the
+#          object the box wrote really is in S3 with the right content. The probe
+#          object is always deleted afterwards (the builder role has no delete on
+#          the work bucket, so the workstation does it).
+#
+# haiku-bake-builder runs `install` and then `check` before create-image, so a
+# builder AMI with no usable S3 client is never created, tagged or promoted.
+#
+# Exit status: 0 ok; 1 the step failed (the message says which part); 2 usage.
+#
+# Env: HAIKU_GRAVITON_REGION, HAIKU_GRAVITON_BUCKET (defaults as haiku-bake-builder),
+#      S3_CLIENT_CANDIDATES (default: run_ssm.py's list; override only for tests),
+#      HAIKU_SSM_RUN (default: ./ssm-run beside this script; override only for tests).
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/haiku-aws-env.sh"
+
+REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+# Keep in step with S3_CLIENTS in pipeline/ops-lambdas/run_ssm.py; the jest suite
+# asserts the two lists are identical.
+CANDIDATES="${S3_CLIENT_CANDIDATES:-/boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent}"
+SSM_RUN="${HAIKU_SSM_RUN:-$HERE/ssm-run}"
+
+say() { printf 'haiku-builder-s3-client: %s\n' "$*" >&2; }
+usage() { sed -n '6,7p' "$0" >&2; exit 2; }
+
+[ $# -eq 2 ] || usage
+CMD="$1"; IID="$2"
+case "$IID" in i-*) ;; *) usage ;; esac
+
+if [ -z "${HAIKU_GRAVITON_BUCKET:-}" ]; then
+  ACCT=$(aws sts get-caller-identity --query Account --output text)
+  HAIKU_GRAVITON_BUCKET="haiku-graviton-${ACCT}-${REGION}"
+fi
+BUCKET="$HAIKU_GRAVITON_BUCKET"
+STAGE_PREFIX="s3://$BUCKET/bake-scripts/bake-staging"
+
+. "$HERE/haiku-bake-fetch.sh"
+
+# The in-tree inputs of the debeos_aws package, relative to the repo root. These
+# are exactly what build-hpkg.sh reads: the module, the packaging, and what
+# hpkg-source-manifest hashes for the provenance digest.
+TOP="$(cd "$HERE/../.." && pwd)"
+SRC_FILES="graviton/go-arm64/debeos-aws/main.go
+graviton/go-arm64/debeos-aws/go.mod
+graviton/go-arm64/debeos-aws/go.sum
+graviton/go-arm64/debeos-aws/package/build-hpkg.sh
+graviton/go-arm64/debeos-aws/package/debeos_aws.PackageInfo
+graviton/go-arm64/debeos-aws/package/Apache-2.0
+graviton/go-arm64/golang-1.26.1.recipe
+graviton/go-arm64/package/golang.PackageInfo
+graviton/scripts/hpkg-source-manifest
+$(cd "$TOP" && ls graviton/go-arm64/patches/0*.patch)"
+
+install_client() {
+  local f fetches="" rel
+  for rel in $SRC_FILES; do
+    f="$TOP/$rel"
+    [ -f "$f" ] || { say "missing $f"; exit 1; }
+    aws s3 cp "$f" "$STAGE_PREFIX/debeos-aws-src/$rel" --region "$REGION" --only-show-errors
+    fetches="${fetches}mkdir -p \"\$W/$(dirname "$rel")\"
+fetch '$(presign "$STAGE_PREFIX/debeos-aws-src/$rel")' \"\$W/$rel\"
+"
+  done
+  say "staged $(printf '%s\n' "$SRC_FILES" | wc -l | tr -d ' ') debeos-aws inputs to $STAGE_PREFIX/debeos-aws-src/"
+  say "building + installing debeos_aws on $IID (native go build, several minutes)"
+  "$SSM_RUN" "$IID" -t 2400 <<EOF
+set -eu
+export PATH=/boot/system/bin:\$PATH
+$REMOTE_FETCH_PRELUDE
+W=/boot/home/debeos-aws-src
+rm -rf "\$W"
+$fetches
+# The golang package is the toolchain build-hpkg.sh requires. Installed, not
+# assumed: a lean canonical does not carry it.
+if [ ! -x /boot/system/bin/go ]; then
+  _feed | pkgman install golang > /boot/home/debeos-aws-pkgman.log 2>&1 || {
+    echo "install: FATAL: pkgman install golang failed:" >&2
+    tail -20 /boot/home/debeos-aws-pkgman.log >&2; exit 1; }
+fi
+OUTDIR="\$W" TOP="\$W" sh "\$W/graviton/go-arm64/debeos-aws/package/build-hpkg.sh"
+set -- "\$W"/debeos_aws-*-arm64.hpkg
+[ \$# -eq 1 ] && [ -f "\$1" ] || { echo "install: FATAL: build produced no single hpkg" >&2; exit 1; }
+_feed | pkgman install "\$1" > /boot/home/debeos-aws-pkgman.log 2>&1 || {
+  echo "install: FATAL: pkgman install \$1 failed:" >&2
+  tail -20 /boot/home/debeos-aws-pkgman.log >&2; exit 1; }
+[ -x /boot/system/bin/debeos-aws ] || {
+  echo "install: FATAL: \$1 installed but /boot/system/bin/debeos-aws is absent" >&2; exit 1; }
+ls -l /boot/system/packages/debeos_aws-*.hpkg /boot/system/bin/debeos-aws
+/boot/system/bin/debeos-aws version
+EOF
+  say "installed /boot/system/bin/debeos-aws on $IID"
+}
+
+check_client() {
+  local nonce key got rc=0
+  nonce="debeos-s3-client-check $IID $(date -u +%Y%m%dT%H%M%SZ) $RANDOM$RANDOM"
+  key="$STAGE_PREFIX/s3-client-check/$IID-$(date -u +%Y%m%dT%H%M%SZ)"
+  # The probe object must not outlive the check, whatever happens to it.
+  cleanup_probe() {
+    if aws s3 ls "$key" --region "$REGION" >/dev/null 2>&1; then
+      aws s3 rm "$key" --region "$REGION" --only-show-errors \
+        || say "WARNING could not delete probe object $key"
+    fi
+  }
+  trap cleanup_probe RETURN
+  say "checking the S3 client on $IID (round trip via $key)"
+  "$SSM_RUN" "$IID" -t 600 <<EOF || rc=$?
+set -u
+S3C=""
+for _c in $CANDIDATES; do
+  if [ -x "\$_c" ]; then S3C="\$_c"; break; fi
+done
+if [ -z "\$S3C" ]; then
+  echo "check: FATAL: NO S3 CLIENT: none of [$CANDIDATES] is executable." >&2
+  echo "  A build wave on this image would refuse every port (VERDICT=NOS3CLIENT)." >&2
+  exit 3
+fi
+echo "check: S3 client resolved: \$S3C"
+T=\$(mktemp -d /tmp/s3check.XXXXXX)
+printf '%s\n' "$nonce" > "\$T/up"
+"\$S3C" s3 cp "\$T/up" "$key" || { echo "check: FATAL: upload through \$S3C failed" >&2; rm -rf "\$T"; exit 4; }
+"\$S3C" s3 cp "$key" "\$T/down" || { echo "check: FATAL: download through \$S3C failed" >&2; rm -rf "\$T"; exit 4; }
+# Compared in the shell: the lean image has no cmp.
+[ "\$(cat "\$T/up")" = "\$(cat "\$T/down")" ] || { echo "check: FATAL: round trip through \$S3C changed the bytes" >&2; rm -rf "\$T"; exit 4; }
+rm -rf "\$T"
+echo "check: round trip OK through \$S3C"
+EOF
+  if [ "$rc" != 0 ]; then
+    say "FAILED: the builder has no usable S3 client (remote exit $rc); see above"
+    return 1
+  fi
+  # Independent read-back with the workstation's credentials: the box's own
+  # download could in principle be served from anywhere; this proves the object is
+  # in the work bucket with the content the box wrote.
+  got=$(aws s3 cp "$key" - --region "$REGION") || { say "FAILED: $key is not in S3"; return 1; }
+  if [ "$got" != "$nonce" ]; then
+    say "FAILED: $key holds '$got', expected '$nonce'"
+    return 1
+  fi
+  say "S3 client OK on $IID: wrote and read back $key"
+}
+
+case "$CMD" in
+  install) install_client ;;
+  check) check_client ;;
+  *) usage ;;
+esac
