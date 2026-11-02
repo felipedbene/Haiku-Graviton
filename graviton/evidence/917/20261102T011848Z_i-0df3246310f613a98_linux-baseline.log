@@ -1,0 +1,127 @@
+# evidence: linux-baseline
+# instance: i-0df3246310f613a98   region: us-west-2
+# ssm command: b3310429-b3ab-4df1-9a18-14676ab43c59 (agent status: Success)
+# start: 20261102T011848Z   end: 20261102T011856Z   rc: 0
+# ---- script ----
+# | set -e
+# | uname -a; nproc
+# | curl -s -H "X-aws-ec2-metadata-token: $(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')" http://169.254.169.254/latest/meta-data/instance-type; echo
+# | echo "== /proc/cpuinfo (cpu 0)"; awk 'BEGIN{RS=""} NR==1' /proc/cpuinfo
+# | echo "== lscpu"; lscpu
+# | echo "== cpufreq"; ls /sys/devices/system/cpu/cpu0/cpufreq 2>&1 || true
+# | cd /tmp
+# | curl -sLO https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz
+# | curl -sL https://nodejs.org/dist/v24.21.0/SHASUMS256.txt | grep linux-arm64.tar.xz | sha256sum -c -
+# | tar xf node-v24.21.0-linux-arm64.tar.xz
+# | N=/tmp/node-v24.21.0-linux-arm64/bin/node
+# | $N --version; $N -p 'process.versions.uv'
+# | $N -p 'require("os").cpus()'
+# | $N -p 'require("os").cpus().length'
+# | $N -p 'require("os").availableParallelism()'
+# ---- raw output ----
+Linux ip-10-128-12-255 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+8
+c7g.2xlarge
+== /proc/cpuinfo (cpu 0)
+processor	: 0
+BogoMIPS	: 2100.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm paca pacg dcpodp svei8mm svebf16 i8mm bf16 dgh rng
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x1
+CPU part	: 0xd40
+CPU revision	: 1
+== lscpu
+Architecture:                            aarch64
+CPU op-mode(s):                          32-bit, 64-bit
+Byte Order:                              Little Endian
+CPU(s):                                  8
+On-line CPU(s) list:                     0-7
+Vendor ID:                               ARM
+BIOS Vendor ID:                          AWS
+Model name:                              Neoverse-V1
+BIOS Model name:                         AWS Graviton3 AWS Graviton3 CPU @ 2.6GHz
+BIOS CPU family:                         257
+Model:                                   1
+Thread(s) per core:                      1
+Core(s) per socket:                      8
+Socket(s):                               1
+Stepping:                                r1p1
+BogoMIPS:                                2100.00
+Flags:                                   fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm paca pacg dcpodp svei8mm svebf16 i8mm bf16 dgh rng
+L1d cache:                               512 KiB (8 instances)
+L1i cache:                               512 KiB (8 instances)
+L2 cache:                                8 MiB (8 instances)
+L3 cache:                                32 MiB (1 instance)
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0-7
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; CSV2, BHB
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Not affected
+== cpufreq
+ls: cannot access '/sys/devices/system/cpu/cpu0/cpufreq': No such file or directory
+node-v24.21.0-linux-arm64.tar.xz: OK
+v24.21.0
+1.52.1
+[
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 2380, nice: 0, sys: 550, idle: 714480, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 900, nice: 0, sys: 860, idle: 715880, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 760, nice: 0, sys: 610, idle: 716630, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 2890, nice: 0, sys: 430, idle: 714680, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 840, nice: 0, sys: 670, idle: 716160, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 530, nice: 0, sys: 1100, idle: 716150, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 750, nice: 0, sys: 480, idle: 716580, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 0,
+    times: { user: 680, nice: 0, sys: 890, idle: 716280, irq: 0 }
+  }
+]
+8
+8
+
+

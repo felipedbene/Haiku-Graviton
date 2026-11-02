@@ -1,0 +1,136 @@
+From: DeBeOS <noreply@debeos>
+Subject: [PATCH] unix,haiku: name the arm64 CPU model from MIDR_EL1
+
+uv_cpu_info() on Haiku reported every CPU's model as "unknown". The kernel
+does report the core: on arm64 the B_TOPOLOGY_CORE node's model is MIDR_EL1
+(DeBeOS arch_system_info.cpp). Name it from the part number with the same
+table src/unix/linux.c applies to /proc/cpuinfo's "CPU part", so Haiku and
+Linux give the same os.cpus()[i].model on the same instance type. Like Linux,
+a part not in the table, Graviton3's Neoverse-V1 (0xd40) included, stays
+"unknown". Other architectures are unchanged.
+---
+ src/unix/haiku.c | 85 ++++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 83 insertions(+), 2 deletions(-)
+
+diff --git a/src/unix/haiku.c b/src/unix/haiku.c
+index 5211107..587ed42 100644
+--- a/src/unix/haiku.c
++++ b/src/unix/haiku.c
+@@ -115,6 +115,82 @@ int uv_uptime(double* uptime) {
+ }
+ 
+ 
++static const char* uv__haiku_cpu_model(uint32 model) {
++#if defined(__aarch64__)
++  /* The same part-number table src/unix/linux.c applies to the "CPU part" line
++   * of /proc/cpuinfo, so that both give the same name on the same machine. */
++  static const struct {
++    uint16 part;
++    const char* name;
++  } parts[] = {
++    { 0x811, "ARM810" },
++    { 0x920, "ARM920" },
++    { 0x922, "ARM922" },
++    { 0x926, "ARM926" },
++    { 0x940, "ARM940" },
++    { 0x946, "ARM946" },
++    { 0x966, "ARM966" },
++    { 0xa20, "ARM1020" },
++    { 0xa22, "ARM1022" },
++    { 0xa26, "ARM1026" },
++    { 0xb02, "ARM11 MPCore" },
++    { 0xb36, "ARM1136" },
++    { 0xb56, "ARM1156" },
++    { 0xb76, "ARM1176" },
++    { 0xc05, "Cortex-A5" },
++    { 0xc07, "Cortex-A7" },
++    { 0xc08, "Cortex-A8" },
++    { 0xc09, "Cortex-A9" },
++    { 0xc0d, "Cortex-A17" },
++    { 0xc0f, "Cortex-A15" },
++    { 0xc0e, "Cortex-A17" },
++    { 0xc14, "Cortex-R4" },
++    { 0xc15, "Cortex-R5" },
++    { 0xc17, "Cortex-R7" },
++    { 0xc18, "Cortex-R8" },
++    { 0xc20, "Cortex-M0" },
++    { 0xc21, "Cortex-M1" },
++    { 0xc23, "Cortex-M3" },
++    { 0xc24, "Cortex-M4" },
++    { 0xc27, "Cortex-M7" },
++    { 0xc60, "Cortex-M0+" },
++    { 0xd01, "Cortex-A32" },
++    { 0xd03, "Cortex-A53" },
++    { 0xd04, "Cortex-A35" },
++    { 0xd05, "Cortex-A55" },
++    { 0xd06, "Cortex-A65" },
++    { 0xd07, "Cortex-A57" },
++    { 0xd08, "Cortex-A72" },
++    { 0xd09, "Cortex-A73" },
++    { 0xd0a, "Cortex-A75" },
++    { 0xd0b, "Cortex-A76" },
++    { 0xd0c, "Neoverse-N1" },
++    { 0xd0d, "Cortex-A77" },
++    { 0xd0e, "Cortex-A76AE" },
++    { 0xd13, "Cortex-R52" },
++    { 0xd20, "Cortex-M23" },
++    { 0xd21, "Cortex-M33" },
++    { 0xd41, "Cortex-A78" },
++    { 0xd42, "Cortex-A78AE" },
++    { 0xd4a, "Neoverse-E1" },
++    { 0xd4b, "Cortex-A78C" },
++    { 0xd4f, "Neoverse-V2" },
++  };
++  uint16 part;
++  size_t i;
++
++  /* On arm64 the core node's model is MIDR_EL1; PartNum is bits [15:4]. */
++  part = (model >> 4) & 0xfff;
++  for (i = 0; i < ARRAY_SIZE(parts); i++)
++    if (parts[i].part == part)
++      return parts[i].name;
++#endif
++
++  (void) model;
++  return "unknown";
++}
++
++
+ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+   cpu_topology_node_info* topology_infos;
+   int i;
+@@ -122,6 +198,8 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+   system_info system;
+   uint32 topology_count;  /* Haiku expects address of uint32, not uint32_t */
+   uint64_t cpuspeed;
++  uint32 cpumodel;
++  const char* model;
+   uv_cpu_info_t* cpu_info;
+ 
+   if (cpu_infos == NULL || count == NULL)
+@@ -142,9 +220,11 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+   }
+ 
+   cpuspeed = 0;
++  cpumodel = 0;
+   for (i = 0; i < (int)topology_count; i++) {
+     if (topology_infos[i].type == B_TOPOLOGY_CORE) {
+       cpuspeed = topology_infos[i].data.core.default_frequency;
++      cpumodel = topology_infos[i].data.core.model;
+       break;
+     }
+   }
+@@ -159,10 +239,11 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+   if (*cpu_infos == NULL)
+     return UV_ENOMEM;
+ 
+-  /* CPU time and model are not exposed by Haiku. */
++  /* CPU times stay zero (DeBeOS issue 939). */
++  model = uv__haiku_cpu_model(cpumodel);
+   cpu_info = *cpu_infos;
+   for (i = 0; i < (int)system.cpu_count; i++) {
+-    cpu_info->model = uv__strdup("unknown");
++    cpu_info->model = uv__strdup(model);
+     cpu_info->speed = (int)(cpuspeed / 1000000);
+     cpu_info++;
+   }

@@ -8,14 +8,15 @@ Haiku node monitor instead of failing with ENOSYS."
 HOMEPAGE="https://libuv.org/"
 COPYRIGHT="2015-present libuv project contributors"
 LICENSE="MIT"
-REVISION="4"
+REVISION="5"
 SOURCE_URI="https://github.com/libuv/libuv/archive/v$portVersion/libuv-$portVersion.tar.gz"
 CHECKSUM_SHA256="478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c"
-# DeBeOS additions after the fs-event patchset: process title (uv_set/get_process_title)
-# and per-thread rusage (uv_getrusage_thread) on Haiku.
+# DeBeOS additions after the fs-event patchset: process title (uv_set/get_process_title),
+# per-thread rusage (uv_getrusage_thread) and the arm64 CPU model in uv_cpu_info() on Haiku.
 PATCHES="libuv-$portVersion.patchset
 	libuv-$portVersion-haiku-proctitle.patch
-	libuv-$portVersion-haiku-getrusage-thread.patch"
+	libuv-$portVersion-haiku-getrusage-thread.patch
+	libuv-$portVersion-haiku-cpu-model.patch"
 
 ARCHITECTURES="all !x86_gcc2"
 SECONDARY_ARCHITECTURES="x86"
