@@ -30,6 +30,10 @@ AddDirectoryToHaikuImage system : system.rdef ;
 AddDirectoryToHaikuImage system cache tmp ;
 AddDirectoryToHaikuImage system non-packaged bin ;
 AddDirectoryToHaikuImage system non-packaged data fonts ;
+# OpenSSL's default cert dir on Haiku (X509_get_default_cert_dir() via
+# find_directory()): the place for user-added CAs. System roots come from
+# data/ssl/CARootCertificates.pem; without the dir, Node warns on every load.
+AddDirectoryToHaikuImage system non-packaged data ssl certs ;
 AddDirectoryToHaikuImage system non-packaged lib ;
 AddDirectoryToHaikuImage system non-packaged add-ons control_look ;
 AddDirectoryToHaikuImage system non-packaged add-ons decorators ;

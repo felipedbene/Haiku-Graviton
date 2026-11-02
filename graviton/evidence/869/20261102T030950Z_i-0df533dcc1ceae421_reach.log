@@ -1,0 +1,9 @@
+# evidence: reach
+# instance: i-0df533dcc1ceae421   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T030950Z   end: 20261102T031009Z   rc: 0
+# script sha256: 92ef945c316b010d022a0ce63daf33e5888d329134126cec79c143c655884c5f
+# ---- script ----
+# | uname -v; ls -ld /boot/system/non-packaged/data/ssl/certs
+# ---- raw output ----
+hrev59996 Nov  2 2026 02:27:53
+drwxr-xr-x 1 baron root 2048 Nov  2 02:31 /boot/system/non-packaged/data/ssl/certs

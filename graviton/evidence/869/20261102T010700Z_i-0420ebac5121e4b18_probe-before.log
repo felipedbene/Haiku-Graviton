@@ -1,0 +1,135 @@
+# evidence: probe-before
+# instance: i-0420ebac5121e4b18   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T010700Z   end: 20261102T010720Z   rc: 0
+# script sha256: c23deee4305d202267f1f73d7cf2421ae7ffec58fd3a3fe2968e3b2c3a7766ff
+# ---- script ----
+# | set -u
+# | echo "== uname"; uname -a
+# | echo "== packages"; ls /boot/system/packages | grep -Ei 'openssl|ca_root|nodejs' 
+# | echo "== openssl version -a"; openssl version -a
+# | echo "== dirs"
+# | for d in /boot/system/data/ssl /boot/system/data/ssl/certs /boot/system/non-packaged/data /boot/system/non-packaged/data/ssl /boot/system/non-packaged/data/ssl/certs; do
+# |   echo "-- $d"; ls -la "$d" 2>&1 | head -20; done
+# | echo "== ca_root_certificates contents"; package list /boot/system/packages/ca_root_certificates-*.hpkg 2>&1 | head -40
+# | echo "== openssl3 data entries"; package list /boot/system/packages/openssl3-[0-9]*.hpkg 2>&1 | grep -n "ssl" | head -30
+# | echo "== grep CARootCertificates count"; grep -c 'BEGIN CERTIFICATE' /boot/system/data/ssl/CARootCertificates.pem
+# | echo "== s_client example.com:443 (no -CApath/-CAfile)"
+# | echo | openssl s_client -connect example.com:443 -servername example.com -verify_return_error 2>&1 | grep -E 'Verification|Verify return code|verify error|CONNECTED|depth=' 
+# | echo "s_client rc=${PIPESTATUS[1]}"
+# | echo "== node"; which node; node --version
+# | node -e 'const tls=require("tls");for(const s of ["default","bundled","system"]){console.log(s, tls.getCACertificates(s).length)}'
+# | echo "node rc=$?"
+# ---- raw output ----
+== uname
+Haiku ip-10-128-8-223.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+== packages
+ca_root_certificates-2026_07_16-1-any.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg
+== openssl version -a
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+built on: Sat Oct 17 12:36:41 2026 UTC
+platform: haiku-x86
+options:  bn(64,32)
+compiler: cc -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wall -O2 -g -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+OPENSSLDIR: "/packages/openssl3-3.5.9-2/.self/data/ssl"
+ENGINESDIR: "/packages/openssl3-3.5.9-2/.self/lib/engines-3"
+MODULESDIR: "/packages/openssl3-3.5.9-2/.self/lib/ossl-modules"
+Seeding source: os-specific
+CPUINFO: N/A
+== dirs
+-- /boot/system/data/ssl
+total 209
+dr-xr-xr-x 1 baron root      0 Oct 17 12:41 .
+dr-xr-xr-x 1 baron root      0 Oct 19 21:13 ..
+-r--r--r-- 1 baron root 186446 Aug 24 04:18 CARootCertificates.pem
+dr-xr-xr-x 1 baron root      0 Oct 17 12:41 certs
+-r--r--r-- 1 baron root    412 Oct 17 12:41 ct_log_list.cnf
+-r--r--r-- 1 baron root    412 Oct 17 12:41 ct_log_list.cnf.dist
+dr-xr-xr-x 1 baron root      0 Oct 17 12:41 misc
+-r--r--r-- 1 baron root  12419 Oct 17 12:41 openssl.cnf
+-r--r--r-- 1 baron root  12419 Oct 17 12:41 openssl.cnf.dist
+dr-x------ 1 baron root      0 Oct 17 12:41 private
+-- /boot/system/data/ssl/certs
+total 0
+dr-xr-xr-x 1 baron root 0 Oct 17 12:41 .
+dr-xr-xr-x 1 baron root 0 Oct 17 12:41 ..
+-- /boot/system/non-packaged/data
+total 12
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 .
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 ..
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 fonts
+-- /boot/system/non-packaged/data/ssl
+ls: cannot access '/boot/system/non-packaged/data/ssl': No such file or directory
+-- /boot/system/non-packaged/data/ssl/certs
+ls: cannot access '/boot/system/non-packaged/data/ssl/certs': No such file or directory
+== ca_root_certificates contents
+package-attributes:
+	name: ca_root_certificates
+	summary: Bundle of CA root certificates
+	description: Certificate data from Mozilla.
+
+This is a bundle of X.509 certificates of public Certificate Authorities (CA). These were automatically extracted from Mozilla's root certificates file (certdata.txt). It contains the certificates in PEM format and therefore can be directly used with curl / libcurl / php_curl, or with an Apache+mod_ssl webserver for SSL client authentication.
+	vendor: Haiku Project
+	packager: Haiku Graviton <graviton@haiku-os.org>
+	architecture: any
+	version: 2026_07_16-1
+	copyright: 2008-2024 Mozilla
+	license: MPL v1.1
+	license: GNU GPL v2
+	license: GNU LGPL v2.1
+	URL: https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/
+	source URL: pkg:/boot/home/haikuports/input-source-packages/ca_root_certificates_source_rigged-2026_07_16-1-arm64.hpkg
+	source URL: https://ports-mirror.haiku-os.org/ca_root_certificates-2026_07_16-1/ca_root_certificates_source_rigged-2026_07_16-1-arm64.hpkg
+	provides: ca_root_certificates = 2026_07_16 (compatible >= 0)
+data                                     0  2026-08-24 04:18:15  drwxr-xr-x
+  ssl                                    0  2026-08-24 04:18:15  drwxr-xr-x
+    CARootCertificates.pem          186446  2026-08-24 04:18:15  -rw-r--r--
+.PackageInfo                          1102  2026-08-24 04:18:15  -rw-r--r--
+== openssl3 data entries
+2:	name: openssl3
+13:	URL: https://www.openssl.org/
+14:	source URL: https://www.openssl.org/source/openssl-3.5.9.tar.gz
+15:	provides: openssl3 = 3.5.9 (compatible >= 3)
+17:	provides: lib:libssl = 3 (compatible >= 3)
+19:	provides: cmd:openssl = 3.5.9 (compatible >= 3)
+26:  openssl                          1225688  2026-10-17 12:44:35  -rwxr-xr-x
+30:  ssl                                    0  2026-10-17 12:41:01  drwxr-xr-x
+38:    openssl.cnf                      12419  2026-10-17 12:41:01  -rw-r--r--
+39:    openssl.cnf.dist                 12419  2026-10-17 12:41:01  -rw-r--r--
+43:    openssl3                             0  2026-10-17 12:43:07  drwxr-xr-x
+47:          openssl-asn1parse.html      8716  2026-10-17 12:44:26  -rw-r--r--
+48:          openssl-ca.html            38213  2026-10-17 12:44:26  -rw-r--r--
+49:          openssl-ciphers.html       49715  2026-10-17 12:44:26  -rw-r--r--
+50:          openssl-cmds.html           5889  2026-10-17 12:44:26  -rw-r--r--
+51:          openssl-cmp.html           71782  2026-10-17 12:44:26  -rw-r--r--
+52:          openssl-cms.html           39856  2026-10-17 12:44:26  -rw-r--r--
+53:          openssl-crl.html            7231  2026-10-17 12:44:26  -rw-r--r--
+54:          openssl-crl2pkcs7.html      4950  2026-10-17 12:44:26  -rw-r--r--
+55:          openssl-dgst.html          12195  2026-10-17 12:44:26  -rw-r--r--
+56:          openssl-dhparam.html        6733  2026-10-17 12:44:26  -rw-r--r--
+57:          openssl-dsa.html            8178  2026-10-17 12:44:26  -rw-r--r--
+58:          openssl-dsaparam.html       6065  2026-10-17 12:44:26  -rw-r--r--
+59:          openssl-ec.html             9170  2026-10-17 12:44:26  -rw-r--r--
+60:          openssl-ecparam.html        8417  2026-10-17 12:44:26  -rw-r--r--
+61:          openssl-enc.html           22114  2026-10-17 12:44:26  -rw-r--r--
+62:          openssl-engine.html         4739  2026-10-17 12:44:26  -rw-r--r--
+63:          openssl-errstr.html         1967  2026-10-17 12:44:26  -rw-r--r--
+64:          openssl-fipsinstall.html     19884  2026-10-17 12:44:26  -rw-r--r--
+65:          openssl-format-options.html      5396  2026-10-17 12:44:26  -rw-r--r--
+== grep CARootCertificates count
+119
+== s_client example.com:443 (no -CApath/-CAfile)
+depth=3 C=US, O=SSL Corporation, CN=SSL.com TLS ECC Root CA 2022
+depth=2 C=US, O=SSL Corporation, CN=SSL.com TLS Transit ECC CA R2
+depth=1 C=US, O=SSL Corporation, CN=Cloudflare TLS Issuing ECC CA 3
+depth=0 CN=example.com
+CONNECTED(00000003)
+Verification: OK
+Verify return code: 0 (ok)
+s_client rc=0
+== node
+/tmp/ccrun/cc-20261102T010700Z-99614.sh: line 14: which: command not found
+/tmp/ccrun/cc-20261102T010700Z-99614.sh: line 14: node: command not found
+/tmp/ccrun/cc-20261102T010700Z-99614.sh: line 15: node: command not found
+node rc=127
