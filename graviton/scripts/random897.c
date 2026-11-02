@@ -10,8 +10,10 @@
  *
  * The driver must still reject what it does not implement, so the last
  * group checks that isatty(), ioctl(FIONREAD) and an unknown ioctl keep
- * failing. Their errno is printed for comparison but not counted: Linux and
- * Haiku spell "unsupported" differently.
+ * failing, with the platform's errno for "this device has no such request":
+ * ENOTTY on Haiku (B_DEV_INVALID_IOCTL, the driver convention) and EINVAL on
+ * Linux (what drivers/char/random.c returns). Elsewhere any failure counts.
+ * lseek(SEEK_DATA) is reported for information only.
  *
  * Build: cc -O2 -Wall -o random897 random897.c     Exit status: failures.
  */
@@ -25,6 +27,38 @@
 #include <unistd.h>
 
 static int sFailures;
+
+#if defined(__HAIKU__)
+#	define WANT_ERRNO ENOTTY
+#	define WANT_NAME "ENOTTY"
+#elif defined(__linux__)
+#	define WANT_ERRNO EINVAL
+#	define WANT_NAME "EINVAL"
+#endif
+
+/* An unimplemented request must fail, and with the platform's errno. */
+static int
+rejected(int r, int e)
+{
+	if (r == 0)
+		return 0;
+#ifdef WANT_ERRNO
+	return e == WANT_ERRNO;
+#else
+	(void)e;
+	return 1;
+#endif
+}
+
+static const char*
+want_name(void)
+{
+#ifdef WANT_NAME
+	return WANT_NAME;
+#else
+	return "any error";
+#endif
+}
 
 static void
 report(int ok, const char* label, const char* detail)
@@ -172,9 +206,9 @@ check_still_rejected(const char* path)
 	int r = ioctl(fd, FIONREAD, &avail);
 	e = errno;
 	snprintf(label, sizeof(label), "FIONREAD %s", path);
-	snprintf(detail, sizeof(detail), "r=%d errno=%d (%s)", r, e,
-		r == 0 ? "succeeded" : strerror(e));
-	report(r != 0, label, detail);
+	snprintf(detail, sizeof(detail), "r=%d errno=%d (%s) want %s", r, e,
+		r == 0 ? "succeeded" : strerror(e), want_name());
+	report(rejected(r, e), label, detail);
 
 	/* Not a request either system defines. */
 	unsigned long op = 0x7e5a1897UL;
@@ -182,9 +216,17 @@ check_still_rejected(const char* path)
 	r = ioctl(fd, op, arg);
 	e = errno;
 	snprintf(label, sizeof(label), "unknown ioctl %s", path);
-	snprintf(detail, sizeof(detail), "op=0x%lx r=%d errno=%d (%s)", op, r, e,
-		r == 0 ? "succeeded" : strerror(e));
-	report(r != 0, label, detail);
+	snprintf(detail, sizeof(detail), "op=0x%lx r=%d errno=%d (%s) want %s", op,
+		r, e, r == 0 ? "succeeded" : strerror(e), want_name());
+	report(rejected(r, e), label, detail);
+
+#ifdef SEEK_DATA
+	errno = 0;
+	off_t o = lseek(fd, 0, SEEK_DATA);
+	e = errno;
+	printf("INFO %-30s r=%lld errno=%d (%s)\n", "lseek(SEEK_DATA)", (long long)o,
+		e, o < 0 ? strerror(e) : "ok");
+#endif
 
 	close(fd);
 }
