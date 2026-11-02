@@ -1,0 +1,61 @@
+# evidence: probe
+# instance: i-0883c4567fc456d78   region: us-west-2
+# ssm command: 0b21df07-2392-4f7b-afc4-1d641f3dcdc1 (agent status: Success)
+# start: 20261102T151721Z   end: 20261102T151724Z   rc: 1   log bytes: 1241
+# script sha256: daf5f7c5cc949bb87827233ba49f8055eeff60e0e95f73d9f802618e9165c3de
+# ---- script ----
+# | # Probe a fresh Haiku instance before anything is installed: build, packaged
+# | # fs add-ons, whether ntfs/fat are loaded, what is mounted, the disks.
+# | uname -a
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ntfs /boot/system/add-ons/kernel/file_systems/fat
+# | ls -la /boot/home/config/non-packaged/add-ons/kernel/file_systems/ 2>&1
+# | echo "--- kernel images matching fs add-ons"; listimage 1 | grep -E "file_systems/(ntfs|fat)" || echo "(no ntfs/fat image loaded)"
+# | echo "--- df"; df 2>&1
+# | echo "--- disks"; find /dev/disk -type b -o -type c 2>/dev/null | sort; ls -R /dev/disk 2>&1 | head -30
+# | command -v gcc cc
+# ---- raw output ----
+Haiku ip-10-128-11-51.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+2dc15f09aed3104b6010e5bd875f0e8d13a3dea01d5bf9c4bb701fb6b281f99c  /boot/system/add-ons/kernel/file_systems/ntfs
+4d79f1cc98b758828971160b5fdd17a4a266044e38f8b44f45b6f7418bcc9b76  /boot/system/add-ons/kernel/file_systems/fat
+ls: cannot access '/boot/home/config/non-packaged/add-ons/kernel/file_systems/': No such file or directory
+--- kernel images matching fs add-ons
+(no ntfs/fat image loaded)
+--- df
+[1mVolume[0m
+ Type        Total      Free      Flags   Used%  Device
+----------- ---------- --------- ------- ------ -------------------
+[1m/boot             [0m
+        bfs   20.0 GiB  14.8 GiB QAM-P-W    26% /dev/disk/nvme/0/1      
+[1m/boot/system      [0m
+  packagefs          0         0 QAM-P--   100%                         
+[1m/boot/home/config [0m
+  packagefs          0         0 QAM-P--   100%                         
+--- disks
+/dev/disk/nvme/0/0
+/dev/disk/nvme/0/1
+/dev/disk/nvme/0/raw
+/dev/disk/nvme/1/0
+/dev/disk/nvme/1/raw
+/dev/disk/virtual/ram/control
+/dev/disk:
+nvme
+virtual
+
+/dev/disk/nvme:
+0
+1
+
+/dev/disk/nvme/0:
+0
+1
+raw
+
+/dev/disk/nvme/1:
+0
+raw
+
+/dev/disk/virtual:
+ram
+
+/dev/disk/virtual/ram:
+control

@@ -640,22 +640,23 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 	if ((volume->fs_info_flags & B_FS_IS_READONLY) != 0)
 		return B_READ_ONLY_DEVICE;
 
+	// The shared check applies the POSIX rules, including the one for times:
+	// explicit times need the owner, write access only lets a caller set both
+	// times to now (B_STAT_TIMES_NOW). It runs before anything is changed, so
+	// a caller without permission leaves the node as it was.
+	status_t status = check_write_stat_permissions(node->gid, node->uid,
+		node->mode, mask, stat);
+	if (status != B_OK)
+		return status;
+
 	ntfs_inode* ni = ntfs_inode_open(volume->ntfs, node->inode);
 	if (ni == NULL)
 		return B_IO_ERROR;
 	NtfsInodeCloser niCloser(ni);
 
-	bool updateTime = false;
-	const uid_t euid = geteuid();
-
-	const bool isOwnerOrRoot = (euid == 0 || euid == (uid_t)node->uid);
-	const bool hasWriteAccess = fs_access(_volume, _node, W_OK);
-
 	if ((mask & B_STAT_SIZE) != 0 && node->size != stat->st_size) {
 		if ((node->mode & S_IFDIR) != 0)
 			return B_IS_A_DIRECTORY;
-		if (!hasWriteAccess)
-			return B_NOT_ALLOWED;
 
 		ntfs_attr* na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
 		if (na == NULL)
@@ -667,70 +668,42 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 		node->size = na->data_size;
 		file_cache_set_size(node->file_cache, node->size);
 
-		updateTime = true;
+		// A size change is a change to the data: like a write, it updates the
+		// modification and change times. Neither is in the caller's stat, which
+		// for truncate() carries nothing but the size. An explicit time in the
+		// mask still wins, as it is applied below.
+		ntfs_inode_update_times(ni, (ntfs_time_update_flags)NTFS_UPDATE_MCTIME);
 	}
 
 	if ((mask & B_STAT_UID) != 0) {
-		// only root should be allowed
-		if (euid != 0)
-			return B_NOT_ALLOWED;
-
 		// We don't support this (yet.)
 		if (node->uid != stat->st_uid)
 			return B_UNSUPPORTED;
 	}
 
 	if ((mask & B_STAT_GID) != 0) {
-		// only the user or root can do that
-		if (!isOwnerOrRoot)
-			return B_NOT_ALLOWED;
-
 		// We don't support this (yet.)
 		if (node->gid != stat->st_gid)
 			return B_UNSUPPORTED;
 	}
 
 	if ((mask & B_STAT_MODE) != 0) {
-		// only the user or root can do that
-		if (!isOwnerOrRoot)
-			return B_NOT_ALLOWED;
-
 		// We don't support this (yet.)
 		if (node->mode != stat->st_mode)
 			return B_UNSUPPORTED;
 	}
 
-	if ((mask & B_STAT_CREATION_TIME) != 0) {
-		// the user or root can do that or any user with write access
-		if (!isOwnerOrRoot && !hasWriteAccess)
-			return B_NOT_ALLOWED;
-
+	if ((mask & B_STAT_CREATION_TIME) != 0)
 		ni->creation_time = timespec2ntfs(stat->st_crtim);
-	}
 
-	if ((mask & B_STAT_MODIFICATION_TIME) != 0) {
-		// the user or root can do that or any user with write access
-		if (!isOwnerOrRoot && !hasWriteAccess)
-			return B_NOT_ALLOWED;
-
+	if ((mask & B_STAT_MODIFICATION_TIME) != 0)
 		ni->last_data_change_time = timespec2ntfs(stat->st_mtim);
-	}
 
-	if ((mask & B_STAT_CHANGE_TIME) != 0 || updateTime) {
-		// the user or root can do that or any user with write access
-		if (!isOwnerOrRoot && !hasWriteAccess)
-			return B_NOT_ALLOWED;
-
+	if ((mask & B_STAT_CHANGE_TIME) != 0)
 		ni->last_mft_change_time = timespec2ntfs(stat->st_ctim);
-	}
 
-	if ((mask & B_STAT_ACCESS_TIME) != 0) {
-		// the user or root can do that or any user with write access
-		if (!isOwnerOrRoot && !hasWriteAccess)
-			return B_NOT_ALLOWED;
-
+	if ((mask & B_STAT_ACCESS_TIME) != 0)
 		ni->last_access_time = timespec2ntfs(stat->st_atim);
-	}
 
 	ntfs_inode_mark_dirty(ni);
 

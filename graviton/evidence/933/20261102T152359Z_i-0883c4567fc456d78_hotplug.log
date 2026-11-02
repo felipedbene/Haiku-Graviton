@@ -1,0 +1,37 @@
+# evidence: hotplug
+# instance: i-0883c4567fc456d78   region: us-west-2
+# ssm command: a272c03e-532a-4af0-a0ba-ba29143895c1 (agent status: Success)
+# start: 20261102T152359Z   end: 20261102T152402Z   rc: 0   log bytes: 895
+# script sha256: b086eabb74338a3ae0bd36ee04c4e82e9b41de356043ffcee99758963041835a
+# ---- script ----
+# | # Does Haiku see an EBS volume attached after boot? (vol-0cd68c447b9e193ef, FAT)
+# | ls -R /dev/disk/nvme; echo "--- syslog nvme/pci tail"; grep -aiE "nvme|hotplug|pci" /var/log/syslog | tail -15
+# ---- raw output ----
+/dev/disk/nvme:
+0
+1
+
+/dev/disk/nvme/0:
+0
+1
+raw
+
+/dev/disk/nvme/1:
+0
+raw
+--- syslog nvme/pci tail
+KERN: nvme_disk: 	io batch size: 8
+KERN: nvme_disk: namespace 0
+KERN: nvme_disk: 	block size: 512, stripe size: 0
+KERN: nvme_disk: using MSI-X
+KERN: device 0: /dev/disk/nvme/0/raw
+KERN:   partition 2: /dev/disk/nvme/0/0
+KERN:   partition 3: /dev/disk/nvme/0/1
+KERN: device 1: /dev/disk/nvme/1/raw
+KERN:   partition 4: /dev/disk/nvme/1/0
+KERN: bfs: mounted "Haiku" (root node at 524288, device = /dev/disk/nvme/0/1)
+KERN: Mounted boot partition: /dev/disk/nvme/0/1
+KERN: devfs: scanned "disk/nvme": mode 2 -> 2, latched 2, probe No error, legacy No error
+KERN: devfs: scanned "disk/nvme/0": mode 2 -> 2, latched 2, probe No error, legacy No error
+KERN: devfs: scanned "disk/nvme/1": mode 2 -> 2, latched 2, probe No error, legacy No error
+KERN: etherpci: init_driver init_driver: etherpci not found
