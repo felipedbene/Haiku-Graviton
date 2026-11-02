@@ -1,0 +1,25 @@
+name			debeos_aws
+version			0.1.0-1
+architecture		arm64
+summary			"Native AWS S3/CloudFront client for DeBeOS on Graviton"
+description		"debeos-aws (graviton/go-arm64/debeos-aws): a CGO-free Go client covering the S3 (ls, cp, sync, rm) and CloudFront invalidation verbs the DeBeOS build and publish tools call, authenticating with the EC2 instance role over IMDS. Built natively on DeBeOS with the golang package from the in-tree source; aws-sdk-go-v2 is pinned by go.sum. It is the S3 client the build-wave wrapper and haiku-nativebuild resolve first at /boot/system/bin/debeos-aws, since the real amazon-ssm-agent has no s3 verbs (issue 867)."
+packager		"DeBeOS <debeos@debene.dev>"
+vendor			"DeBeOS"
+licenses {
+	"MIT"
+	"Apache-2.0"
+}
+copyrights {
+	"DeBeOS contributors"
+	"Amazon.com, Inc. or its affiliates (aws-sdk-go-v2)"
+}
+provides {
+	debeos_aws = 0.1.0
+	cmd:debeos_aws = 0.1.0
+}
+requires {
+	haiku
+}
+urls {
+	"https://github.com/felipedbene/Haiku-Graviton"
+}
