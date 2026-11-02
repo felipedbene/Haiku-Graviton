@@ -1,0 +1,293 @@
+# evidence: verify-fe7f-node24-tests
+# instance: i-014dcab8a679c3516   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T011717Z   end: 20261102T012956Z   rc: 0
+# script sha256: 4642d134f369f685d1e1704ce0ab3eb1cfb0663f02bfab5fa66b3dac27fcaab4
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0 || exit 1
+# | echo "node $(node --version); $(ls /boot/system/packages | grep -E '^(nodejs24|libuv)-' | tr '\n' ' '); $(uname -v)"
+# | run() {	# run <label> <jobs> <tests...>: Node's own runner, stdin a pipe (#870)
+# | 	label=$1 j=$2; shift 2
+# | 	f=/boot/home/tap-$label.txt
+# | 	s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j $j -t 120 -p tap "$@" > $f 2>&1
+# | 	rc=$?
+# | 	echo "##### $label: test.py rc=$rc wall=$(( $(date +%s) - s ))s plan $(grep -am1 '^1\.\.' $f) pass=$(grep -ac '^ok ' $f) fail=$(grep -ac '^not ok ' $f) (timeout $(grep -ac '^    timeout$' $f))"
+# | 	echo "tests: $*"
+# | 	grep -aE "^(ok|not ok) " $f | sed -E 's/^(not ok|ok) [0-9]+ /\1 /' | sort -k2 | uniq
+# | }
+# | run 876 4 parallel/test-domain-no-error-handler-abort-on-uncaught-* parallel/test-domain-with-abort-on-uncaught-exception parallel/test-crypto-no-algorithm abort/test-abort-uncaught-exception abort/test-process-abort-exitcode abort/test-abort-fatal-error abort/test-abort-backtrace abort/test-worker-abort-uncaught-exception abort/test-signal-handler
+# | run 877 4 sequential/test-child-process-emfile parallel/test-worker-init-failure
+# | run 878 4 parallel/test-fs-write-sigxfsz
+# | run 893 4 parallel/test-cluster-worker-kill-signal
+# | run 880 4 parallel/test-process-umask-mask
+# | run 881 4 parallel/test-os-process-priority parallel/test-os
+# | run 872 4 parallel/test-child-process-spawnsync*
+# | run 896 4 parallel/test-fs-utimes parallel/test-fs-utimes-y2K38
+# | for i in 1 2 3; do run 891-http2-max-invalid-frames-$i 1 parallel/test-http2-max-invalid-frames; done
+# | run worker 16 parallel/test-worker* sequential/test-worker*
+# | echo "--- failure detail for every not-ok in the per-fix groups (first 40 lines each)"
+# | for l in 876 877 878 893 880 881 872 896; do
+# | 	awk '/^not ok /{p=1; print; next} /^(ok|not ok) /{p=0} p' /boot/home/tap-$l.txt | head -40
+# | done
+# ---- raw output ----
+node v24.21.0; libuv-1.52.1-4-arm64.hpkg nodejs24-24.21.0-2-arm64.hpkg ; hrev59996 Nov  2 2026 00:47:18
+##### 876: test.py rc=0 wall=5s plan 1..18 pass=18 fail=0 (timeout 0)
+tests: parallel/test-domain-no-error-handler-abort-on-uncaught-* parallel/test-domain-with-abort-on-uncaught-exception parallel/test-crypto-no-algorithm abort/test-abort-uncaught-exception abort/test-process-abort-exitcode abort/test-abort-fatal-error abort/test-abort-backtrace abort/test-worker-abort-uncaught-exception abort/test-signal-handler
+ok abort/test-abort-backtrace
+ok abort/test-abort-fatal-error
+ok abort/test-abort-uncaught-exception
+ok abort/test-process-abort-exitcode
+ok abort/test-signal-handler
+ok abort/test-worker-abort-uncaught-exception
+ok parallel/test-crypto-no-algorithm
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-0
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-1
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-2
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-3
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-4
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-5
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-6
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-7
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-8
+ok parallel/test-domain-no-error-handler-abort-on-uncaught-9
+ok parallel/test-domain-with-abort-on-uncaught-exception
+##### 877: test.py rc=1 wall=361s plan 1..2 pass=1 fail=1 (timeout 1)
+tests: sequential/test-child-process-emfile parallel/test-worker-init-failure
+not ok parallel/test-worker-init-failure
+ok sequential/test-child-process-emfile
+##### 878: test.py rc=0 wall=1s plan 1..1 pass=1 fail=0 (timeout 0)
+tests: parallel/test-fs-write-sigxfsz
+ok parallel/test-fs-write-sigxfsz
+##### 893: test.py rc=0 wall=1s plan 1..1 pass=1 fail=0 (timeout 0)
+tests: parallel/test-cluster-worker-kill-signal
+ok parallel/test-cluster-worker-kill-signal
+##### 880: test.py rc=0 wall=0s plan 1..1 pass=1 fail=0 (timeout 0)
+tests: parallel/test-process-umask-mask
+ok parallel/test-process-umask-mask
+##### 881: test.py rc=1 wall=1s plan 1..2 pass=1 fail=1 (timeout 0)
+tests: parallel/test-os-process-priority parallel/test-os
+not ok parallel/test-os
+ok parallel/test-os-process-priority
+##### 872: test.py rc=0 wall=2s plan 1..10 pass=10 fail=0 (timeout 0)
+tests: parallel/test-child-process-spawnsync*
+ok parallel/test-child-process-spawnsync
+ok parallel/test-child-process-spawnsync-args
+ok parallel/test-child-process-spawnsync-env
+ok parallel/test-child-process-spawnsync-input
+ok parallel/test-child-process-spawnsync-kill-signal
+ok parallel/test-child-process-spawnsync-maxbuf
+ok parallel/test-child-process-spawnsync-non-string-args
+ok parallel/test-child-process-spawnsync-shell
+ok parallel/test-child-process-spawnsync-timeout
+ok parallel/test-child-process-spawnsync-validation-errors
+##### 896: test.py rc=0 wall=1s plan 1..2 pass=2 fail=0 (timeout 0)
+tests: parallel/test-fs-utimes parallel/test-fs-utimes-y2K38
+ok parallel/test-fs-utimes
+ok parallel/test-fs-utimes-y2K38
+##### 891-http2-max-invalid-frames-1: test.py rc=0 wall=1s plan 1..1 pass=1 fail=0 (timeout 0)
+tests: parallel/test-http2-max-invalid-frames
+ok parallel/test-http2-max-invalid-frames
+##### 891-http2-max-invalid-frames-2: test.py rc=0 wall=1s plan 1..1 pass=1 fail=0 (timeout 0)
+tests: parallel/test-http2-max-invalid-frames
+ok parallel/test-http2-max-invalid-frames
+##### 891-http2-max-invalid-frames-3: test.py rc=0 wall=1s plan 1..1 pass=1 fail=0 (timeout 0)
+tests: parallel/test-http2-max-invalid-frames
+ok parallel/test-http2-max-invalid-frames
+##### worker: test.py rc=1 wall=363s plan 1..149 pass=147 fail=2 (timeout 1)
+tests: parallel/test-worker* sequential/test-worker*
+not ok parallel/test-worker-init-failure
+not ok parallel/test-worker-memory
+ok parallel/test-worker
+ok parallel/test-worker-abort-on-uncaught-exception
+ok parallel/test-worker-abort-on-uncaught-exception-terminate
+ok parallel/test-worker-arraybuffer-zerofill
+ok parallel/test-worker-beforeexit-throw-exit
+ok parallel/test-worker-broadcastchannel
+ok parallel/test-worker-broadcastchannel-wpt
+ok parallel/test-worker-cjs-workerdata
+ok parallel/test-worker-cleanexit-with-js
+ok parallel/test-worker-cleanexit-with-moduleload
+ok parallel/test-worker-cleanup-handles
+ok parallel/test-worker-cli-options
+ok parallel/test-worker-console-listeners
+ok parallel/test-worker-cpu-profile
+ok parallel/test-worker-cpu-usage
+ok parallel/test-worker-crypto-sign-transfer-result
+ok parallel/test-worker-cwd-race-condition
+ok parallel/test-worker-data-url
+ok parallel/test-worker-debug
+ok parallel/test-worker-dispose
+ok parallel/test-worker-dns-terminate
+ok parallel/test-worker-dns-terminate-during-query
+ok parallel/test-worker-environmentdata
+ok parallel/test-worker-error-primitive
+ok parallel/test-worker-error-stack-getter-throws
+ok parallel/test-worker-esm-exit
+ok parallel/test-worker-esm-missing-main
+ok parallel/test-worker-esmodule
+ok parallel/test-worker-eval-typescript
+ok parallel/test-worker-event
+ok parallel/test-worker-execargv
+ok parallel/test-worker-execargv-invalid
+ok parallel/test-worker-exit-code
+ok parallel/test-worker-exit-event-error
+ok parallel/test-worker-exit-from-uncaught-exception
+ok parallel/test-worker-exit-heapsnapshot
+ok parallel/test-worker-fs-stat-watcher
+ok parallel/test-worker-hasref
+ok parallel/test-worker-heap-profile
+ok parallel/test-worker-heap-snapshot
+ok parallel/test-worker-heap-statistics
+ok parallel/test-worker-heapdump-failure
+ok parallel/test-worker-http2-generic-streams-terminate
+ok parallel/test-worker-http2-stream-terminate
+ok parallel/test-worker-internal-modules
+ok parallel/test-worker-invalid-workerdata
+ok parallel/test-worker-load-file-with-extension-other-than-js
+ok parallel/test-worker-message-channel
+ok parallel/test-worker-message-channel-sharedarraybuffer
+ok parallel/test-worker-message-event
+ok parallel/test-worker-message-mark-as-uncloneable
+ok parallel/test-worker-message-not-serializable
+ok parallel/test-worker-message-port
+ok parallel/test-worker-message-port-arraybuffer
+ok parallel/test-worker-message-port-close
+ok parallel/test-worker-message-port-close-while-receiving
+ok parallel/test-worker-message-port-constructor
+ok parallel/test-worker-message-port-drain
+ok parallel/test-worker-message-port-infinite-message-loop
+ok parallel/test-worker-message-port-inspect-during-init-hook
+ok parallel/test-worker-message-port-jstransferable-nested-untransferable
+ok parallel/test-worker-message-port-message-before-close
+ok parallel/test-worker-message-port-message-port-transferring
+ok parallel/test-worker-message-port-move
+ok parallel/test-worker-message-port-multiple-sharedarraybuffers
+ok parallel/test-worker-message-port-receive-message
+ok parallel/test-worker-message-port-terminate-transfer-list
+ok parallel/test-worker-message-port-transfer-closed
+ok parallel/test-worker-message-port-transfer-duplicate
+ok parallel/test-worker-message-port-transfer-fake-js-transferable
+ok parallel/test-worker-message-port-transfer-fake-js-transferable-internal
+ok parallel/test-worker-message-port-transfer-filehandle
+ok parallel/test-worker-message-port-transfer-native
+ok parallel/test-worker-message-port-transfer-self
+ok parallel/test-worker-message-port-transfer-target
+ok parallel/test-worker-message-port-transfer-terminate
+ok parallel/test-worker-message-port-wasm-module
+ok parallel/test-worker-message-port-wasm-threads
+ok parallel/test-worker-message-transfer-port-mark-as-untransferable
+ok parallel/test-worker-message-type-unknown
+ok parallel/test-worker-messageport-hasref
+ok parallel/test-worker-messaging
+ok parallel/test-worker-messaging-errors-handler
+ok parallel/test-worker-messaging-errors-invalid
+ok parallel/test-worker-messaging-errors-timeout
+ok parallel/test-worker-mjs-workerdata
+ok parallel/test-worker-name
+ok parallel/test-worker-nearheaplimit-deadlock
+ok parallel/test-worker-nested-on-process-exit
+ok parallel/test-worker-nested-uncaught
+ok parallel/test-worker-nexttick-terminate
+ok parallel/test-worker-no-sab
+ok parallel/test-worker-no-stdin-stdout-interaction
+ok parallel/test-worker-node-options
+ok parallel/test-worker-non-fatal-uncaught-exception
+ok parallel/test-worker-on-process-exit
+ok parallel/test-worker-onmessage
+ok parallel/test-worker-onmessage-not-a-function
+ok parallel/test-worker-parent-port-ref
+ok parallel/test-worker-process-argv
+ok parallel/test-worker-process-cwd
+ok parallel/test-worker-process-env
+ok parallel/test-worker-process-env-shared
+ok parallel/test-worker-process-exit-async-module
+ok parallel/test-worker-ref
+ok parallel/test-worker-ref-onexit
+ok parallel/test-worker-relative-path
+ok parallel/test-worker-relative-path-double-dot
+ok parallel/test-worker-resource-limits
+ok parallel/test-worker-safe-getters
+ok parallel/test-worker-sharedarraybuffer-from-worker-thread
+ok parallel/test-worker-stack-overflow
+ok parallel/test-worker-stack-overflow-stack-size
+ok parallel/test-worker-stdio
+ok parallel/test-worker-stdio-flush
+ok parallel/test-worker-stdio-flush-inflight
+ok parallel/test-worker-stdio-from-preload-module
+ok parallel/test-worker-syntax-error
+ok parallel/test-worker-syntax-error-file
+ok parallel/test-worker-terminate-http2-respond-with-file
+ok parallel/test-worker-terminate-microtask-loop
+ok parallel/test-worker-terminate-nested
+ok parallel/test-worker-terminate-null-handler
+ok parallel/test-worker-terminate-ref-public-port
+ok parallel/test-worker-terminate-source-map
+ok parallel/test-worker-terminate-timers
+ok parallel/test-worker-terminate-unrefed
+ok parallel/test-worker-thread-name
+ok parallel/test-worker-track-unmanaged-fds
+ok parallel/test-worker-type-check
+ok parallel/test-worker-uncaught-exception
+ok parallel/test-worker-uncaught-exception-async
+ok parallel/test-worker-unref-from-message-during-exit
+ok parallel/test-worker-unsupported-eval-on-url
+ok parallel/test-worker-unsupported-path
+ok parallel/test-worker-unsupported-things
+ok parallel/test-worker-vm-context-terminate
+ok parallel/test-worker-voluntarily-exit-followed-by-addition
+ok parallel/test-worker-voluntarily-exit-followed-by-throw
+ok parallel/test-worker-workerdata-messageport
+ok parallel/test-worker-workerdata-sharedarraybuffer
+ok sequential/test-worker-eventlooputil
+ok sequential/test-worker-fshandles-error-on-termination
+ok sequential/test-worker-fshandles-open-close-on-termination
+ok sequential/test-worker-heapsnapshot-options
+ok sequential/test-worker-prof
+--- failure detail for every not-ok in the per-fix groups (first 40 lines each)
+not ok 2 parallel/test-worker-init-failure
+  ---
+  duration_ms: 360056.40500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/parallel/test-worker-init-failure.js
+not ok 2 parallel/test-os
+  ---
+  duration_ms: 127.45900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert.ok(cpus.length > 0)
+    
+        at Object.<anonymous> (/boot/home/node-src/node-v24.21.0/test/parallel/test-os.js:104:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/parallel/test-os.js

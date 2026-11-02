@@ -1,0 +1,27 @@
+# evidence: verify-fe7f-877-878-python-view
+# instance: i-014dcab8a679c3516   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T011631Z   end: 20261102T011652Z   rc: 0
+# script sha256: 586cfc81b72359faa86417658570382951b609d9caf570c64b93d3a58ecf3ec2
+# ---- script ----
+# | set -u
+# | cd /boot/home/td || exit 1
+# | echo "-- python3 resource module on this image: which RLIMIT_* it exposes"
+# | python3 -I -c 'import resource; print(sorted(n for n in dir(resource) if n.startswith("RLIMIT_")))'
+# | echo "-- exec child under ulimit -n 64 -f 8: NOFILE as python sees it, and enforced"
+# | bash -c 'ulimit -n 64 -f 8 || exit 1
+# | python3 -I -c "
+# | import os,resource
+# | print(\"python (exec child) sees NOFILE\", resource.getrlimit(resource.RLIMIT_NOFILE))
+# | fds=[]
+# | try:
+# |     while True: fds.append(os.open(\"/dev/null\", os.O_RDONLY))
+# | except OSError as e: print(\"opened\", len(fds), \"more fds, then\", e.strerror)
+# | "' 2>&1 | cat
+# | echo "pipeline rc=${PIPESTATUS[0]}"
+# ---- raw output ----
+-- python3 resource module on this image: which RLIMIT_* it exposes
+['RLIMIT_CORE', 'RLIMIT_NOFILE']
+-- exec child under ulimit -n 64 -f 8: NOFILE as python sees it, and enforced
+python (exec child) sees NOFILE (64, 64)
+opened 61 more fds, then Too many open files
+pipeline rc=0

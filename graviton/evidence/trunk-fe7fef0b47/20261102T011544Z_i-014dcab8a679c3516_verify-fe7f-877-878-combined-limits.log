@@ -1,0 +1,76 @@
+# evidence: verify-fe7f-877-878-combined-limits
+# instance: i-014dcab8a679c3516   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T011544Z   end: 20261102T011606Z   rc: 0
+# script sha256: 076c47b763614fec34b14a318fa496386d70f36c72e3dc2fa9dd51f15e34f2ce
+# ---- script ----
+# | set -u
+# | cd /boot/home/td || exit 1
+# | # 877 + 878 at once (the vfs.h/vfs.cpp conflict resolution keeps both io_context fields).
+# | # Output goes through a pipe to cat: the evidence log on disk is already larger than
+# | # the lowered RLIMIT_FSIZE, and a write to it would itself raise SIGXFSZ (see c-repros).
+# | echo "-- both lowered at once in one shell, read back, inherited through fork+exec, each enforced"
+# | bash -c 'ulimit -n 64 -f 8 || exit 1
+# | echo "parent: nofile $(ulimit -Sn)/$(ulimit -Hn) fsize $(ulimit -Sf)/$(ulimit -Hf)"
+# | bash -c "echo exec child: nofile \$(ulimit -Sn)/\$(ulimit -Hn) fsize \$(ulimit -Sf)/\$(ulimit -Hf)"
+# | rm -f both.dat; head -c 65536 /dev/zero > both.dat; echo "head 64 KiB to a file under -f 8 (8 KiB): rc=$? ($(( $? - 128 )) = signal), file $(wc -c < both.dat) bytes"
+# | python3 -I -c "
+# | import os,resource
+# | print(\"python (exec child) sees NOFILE\", resource.getrlimit(resource.RLIMIT_NOFILE), \"FSIZE\", resource.getrlimit(resource.RLIMIT_FSIZE))
+# | fds=[]
+# | try:
+# |     while True: fds.append(os.open(\"/dev/null\", os.O_RDONLY))
+# | except OSError as e: print(\"opened\", len(fds), \"more fds, then\", e.strerror)
+# | "
+# | echo "-- raise NOFILE back as root: FSIZE must stay"
+# | ulimit -Hn 4096 && ulimit -Sn 4096 && echo "after raise: nofile $(ulimit -Sn)/$(ulimit -Hn), fsize $(ulimit -Sf)/$(ulimit -Hf)"
+# | echo "-- raise FSIZE back as root: NOFILE must stay"
+# | ulimit -n 100 && ulimit -Hf unlimited && ulimit -Sf unlimited && echo "after raise: nofile $(ulimit -Sn)/$(ulimit -Hn), fsize $(ulimit -Sf)/$(ulimit -Hf)"
+# | head -c 65536 /dev/zero > both.dat; echo "head 64 KiB after raising FSIZE: rc=$?, file $(wc -c < both.dat) bytes"
+# | ' 2>&1 | cat
+# | echo "pipeline rc=${PIPESTATUS[0]}"
+# | rm -f both.dat
+# | echo "-- fsize878 and rlim877 run by a process whose NOFILE and FSIZE are both lowered"
+# | bash -c 'ulimit -n 128 -f 1000000 && echo "nofile $(ulimit -Sn)/$(ulimit -Hn) fsize $(ulimit -Sf)/$(ulimit -Hf)" && ./rlim877; echo "rlim877 rc=$?"' 2>&1 | cat
+# | echo "-- head 4096 bytes under ulimit -f 1, stdout a pipe (the shell-view case without the log file)"
+# | bash -c 'ulimit -f 1 && echo "ulimit -f 1: $(ulimit -f)" && head -c 4096 /dev/zero > f878.dat; echo "head rc=$?"; ls -l f878.dat' 2>&1 | cat
+# | rm -f f878.dat
+# ---- raw output ----
+-- both lowered at once in one shell, read back, inherited through fork+exec, each enforced
+parent: nofile 64/64 fsize 8/8
+exec child: nofile 64/64 fsize 8/8
+bash: line 4:  1861 File size limit exceeded   head -c 65536 /dev/zero > both.dat
+head 64 KiB to a file under -f 8 (8 KiB): rc=157 (29 = signal), file 8192 bytes
+Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+    print("python (exec child) sees NOFILE", resource.getrlimit(resource.RLIMIT_NOFILE), "FSIZE", resource.getrlimit(resource.RLIMIT_FSIZE))
+                                                                                                                     ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'resource' has no attribute 'RLIMIT_FSIZE'. Did you mean: 'RLIMIT_CORE'?
+-- raise NOFILE back as root: FSIZE must stay
+after raise: nofile 4096/4096, fsize 8/8
+-- raise FSIZE back as root: NOFILE must stay
+after raise: nofile 100/100, fsize unlimited/unlimited
+head 64 KiB after raising FSIZE: rc=0, file 65536 bytes
+pipeline rc=0
+-- fsize878 and rlim877 run by a process whose NOFILE and FSIZE are both lowered
+nofile 128/128 fsize 1000000/1000000
+NOFILE lower {64,64}         PASS  was {128,128} rc=0 now {64,64}
+NOFILE inherit fork          PASS  child sees {64,64}
+NOFILE cur>max {128,64}      PASS  rc=-1 Invalid Argument
+NOFILE enforced at 64        PASS  opened 59 more, then Too many open files
+NOFILE raise back as root    PASS  rc=0  now {128,128}
+NOFILE raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOFILE lower as uid 1001     PASS  {32,32}: rc=0 
+NOVMON lower {64,64}         PASS  was {4096,65536} rc=0 now {64,64}
+NOVMON inherit fork          PASS  child sees {64,64}
+NOVMON cur>max {128,64}      PASS  rc=-1 Invalid Argument
+NOVMON raise back as root    PASS  rc=0  now {4096,65536}
+NOVMON raise as uid 1001     PASS  {64,128}: rc=-1 Operation not allowed
+NOVMON lower as uid 1001     PASS  {32,32}: rc=0 
+NOFILE inherit exec          PASS  exec'd child sees "64 64"
+rlim877: 0 failed
+rlim877 rc=0
+-- head 4096 bytes under ulimit -f 1, stdout a pipe (the shell-view case without the log file)
+ulimit -f 1: 1
+bash: line 1:  1894 File size limit exceeded   head -c 4096 /dev/zero > f878.dat
+head rc=157
+-rw-r--r-- 1 baron root 1024 Nov  2 01:15 f878.dat
