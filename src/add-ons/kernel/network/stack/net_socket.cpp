@@ -32,6 +32,7 @@
 #include <net_protocol.h>
 #include <net_stack.h>
 #include <net_stat.h>
+#include <NetUtilities.h>
 
 #include "ancillary_data.h"
 #include "utility.h"
@@ -405,6 +406,25 @@ process_ancillary_data(net_socket* socket,
 }
 
 
+/*!	Returns \a address -- one of \a socket's own addresses, or the source of
+	something it received -- in the form the application must see it. A
+	dual-stack IPv6 socket carries IPv4 traffic with plain IPv4 addresses
+	inside the stack, so the protocols can route and demultiplex it in the
+	IPv4 domain; to the application those are IPv4-mapped IPv6 addresses, as
+	on Linux and the BSDs. \a mapped provides the storage for that form.
+*/
+static const sockaddr*
+application_address(const net_socket* socket, const sockaddr* address,
+	sockaddr_in6& mapped)
+{
+	if (socket->family != AF_INET6 || address->sa_family != AF_INET)
+		return address;
+
+	mapped_address_from_ipv4(address, &mapped);
+	return (const sockaddr*)&mapped;
+}
+
+
 static size_t
 calculate_total_length(msghdr* header, void* data, size_t length)
 {
@@ -766,6 +786,13 @@ socket_get_next_stat(uint32* _cookie, int family, struct net_stat* stat)
 	stat->state[0] = '\0';
 	memcpy(&stat->address, &socket->address, sizeof(struct sockaddr_storage));
 	memcpy(&stat->peer, &socket->peer, sizeof(struct sockaddr_storage));
+	sockaddr_in6 mapped;
+	if (application_address(socket, (sockaddr*)&socket->address, mapped)
+			== (sockaddr*)&mapped)
+		memcpy(&stat->address, &mapped, sizeof(mapped));
+	if (application_address(socket, (sockaddr*)&socket->peer, mapped)
+			== (sockaddr*)&mapped)
+		memcpy(&stat->peer, &mapped, sizeof(mapped));
 	stat->receive_queue_size = 0;
 	stat->send_queue_size = 0;
 
@@ -1151,9 +1178,12 @@ socket_accept(net_socket* socket, struct sockaddr* address,
 		return status;
 
 	if (address && *_addressLength > 0) {
-		memcpy(address, &accepted->peer, min_c(*_addressLength,
-			min_c(accepted->peer.ss_len, sizeof(sockaddr_storage))));
-		*_addressLength = accepted->peer.ss_len;
+		sockaddr_in6 mapped;
+		const sockaddr* peer = application_address(accepted,
+			(sockaddr*)&accepted->peer, mapped);
+		memcpy(address, peer, min_c(*_addressLength,
+			min_c(peer->sa_len, sizeof(sockaddr_storage))));
+		*_addressLength = peer->sa_len;
 	}
 
 	*_acceptedSocket = accepted;
@@ -1223,8 +1253,11 @@ socket_getpeername(net_socket* _socket, struct sockaddr* address,
 		return ENOTCONN;
 	}
 
-	memcpy(address, &socket->peer, min_c(*_addressLength, socket->peer.ss_len));
-	*_addressLength = socket->peer.ss_len;
+	sockaddr_in6 mapped;
+	const sockaddr* peer = application_address(socket,
+		(sockaddr*)&socket->peer, mapped);
+	memcpy(address, peer, min_c(*_addressLength, peer->sa_len));
+	*_addressLength = peer->sa_len;
 	return B_OK;
 }
 
@@ -1243,9 +1276,11 @@ socket_getsockname(net_socket* socket, struct sockaddr* address,
 		return B_OK;
 	}
 
-	memcpy(address, &socket->address, min_c(*_addressLength,
-		socket->address.ss_len));
-	*_addressLength = socket->address.ss_len;
+	sockaddr_in6 mapped;
+	const sockaddr* local = application_address(socket,
+		(sockaddr*)&socket->address, mapped);
+	memcpy(address, local, min_c(*_addressLength, local->sa_len));
+	*_addressLength = local->sa_len;
 	return B_OK;
 }
 
@@ -1472,8 +1507,11 @@ socket_receive(net_socket* socket, msghdr* header, void* data, size_t length,
 		}
 
 		if (header->msg_name != NULL) {
-			header->msg_namelen = min_c(nameLen, buffer->source->sa_len);
-			memcpy(header->msg_name, buffer->source, header->msg_namelen);
+			sockaddr_in6 mapped;
+			const sockaddr* source = application_address(socket,
+				buffer->source, mapped);
+			header->msg_namelen = min_c(nameLen, source->sa_len);
+			memcpy(header->msg_name, source, header->msg_namelen);
 		}
 	}
 
