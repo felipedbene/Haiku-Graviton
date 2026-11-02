@@ -1,0 +1,88 @@
+# evidence: format
+# instance: i-070374fe7e89618d5   region: us-west-2
+# ssm command: 8410c5f8-20b8-404a-b9d1-fbb73eef4895 (agent status: Success)
+# start: 20261102T151107Z   end: 20261102T151116Z   rc: 0   log bytes: 2138
+# script sha256: a942e35750f5fd5fce38a962c21a915257aa7284c3d7bf46023f066110f0fc39
+# ---- script ----
+# | # Format the two test volumes: vol-09b026274f82939bf -> MBR + NTFS (mkntfs),
+# | # vol-0cd68c447b9e193ef -> MBR + FAT32 (mkfs.vfat). Device found by EBS serial.
+# | set -x
+# | dev_of() { for d in /dev/nvme*n1; do nvme id-ctrl -o json "$d" 2>/dev/null | grep -q "\"sn\" *: *\"$1" && echo "$d"; done; }
+# | N=$(dev_of vol09b026274f82939bf); F=$(dev_of vol0cd68c447b9e193ef)
+# | echo "ntfs dev=$N fat dev=$F"; [ -n "$N" ] && [ -n "$F" ] || exit 1
+# | echo 'type=7' | sfdisk -q -X dos "$N" || exit 1
+# | echo 'type=c' | sfdisk -q -X dos "$F" || exit 1
+# | partprobe "$N" "$F" 2>/dev/null; sleep 2; lsblk -o NAME,SIZE,TYPE "$N" "$F"
+# | mkntfs -Q -L NTFS933 "${N}p1" || exit 1
+# | mkfs.vfat -F 32 -n FAT934 "${F}p1" || exit 1
+# | blkid "${N}p1" "${F}p1"
+# | mkdir -p /mnt/n /mnt/f
+# | mount -t ntfs3 "${N}p1" /mnt/n && ls -la /mnt/n && umount /mnt/n || exit 1
+# | mount -t vfat "${F}p1" /mnt/f && ls -la /mnt/f && umount /mnt/f || exit 1
+# | sync; echo FORMAT-OK
+# ---- raw output ----
+++ dev_of vol09b026274f82939bf
+++ for d in /dev/nvme*n1
+++ nvme id-ctrl -o json /dev/nvme0n1
+++ grep -q '"sn" *: *"vol09b026274f82939bf'
+++ for d in /dev/nvme*n1
+++ nvme id-ctrl -o json /dev/nvme1n1
+++ grep -q '"sn" *: *"vol09b026274f82939bf'
+++ echo /dev/nvme1n1
+++ for d in /dev/nvme*n1
+++ nvme id-ctrl -o json /dev/nvme2n1
+++ grep -q '"sn" *: *"vol09b026274f82939bf'
++ N=/dev/nvme1n1
+++ dev_of vol0cd68c447b9e193ef
+++ for d in /dev/nvme*n1
+++ nvme id-ctrl -o json /dev/nvme0n1
+++ grep -q '"sn" *: *"vol0cd68c447b9e193ef'
+++ for d in /dev/nvme*n1
+++ nvme id-ctrl -o json /dev/nvme1n1
+++ grep -q '"sn" *: *"vol0cd68c447b9e193ef'
+++ for d in /dev/nvme*n1
+++ nvme id-ctrl -o json /dev/nvme2n1
+++ grep -q '"sn" *: *"vol0cd68c447b9e193ef'
+++ echo /dev/nvme2n1
++ F=/dev/nvme2n1
++ echo 'ntfs dev=/dev/nvme1n1 fat dev=/dev/nvme2n1'
+ntfs dev=/dev/nvme1n1 fat dev=/dev/nvme2n1
++ '[' -n /dev/nvme1n1 ']'
++ '[' -n /dev/nvme2n1 ']'
++ echo type=7
++ sfdisk -q -X dos /dev/nvme1n1
++ echo type=c
++ sfdisk -q -X dos /dev/nvme2n1
++ partprobe /dev/nvme1n1 /dev/nvme2n1
++ sleep 2
++ lsblk -o NAME,SIZE,TYPE /dev/nvme1n1 /dev/nvme2n1
+NAME         SIZE TYPE
+nvme1n1        1G disk
+└─nvme1n1p1 1023M part
+nvme2n1        1G disk
+└─nvme2n1p1 1023M part
++ mkntfs -Q -L NTFS933 /dev/nvme1n1p1
+Cluster size has been automatically set to 4096 bytes.
+Creating NTFS volume structures.
+mkntfs completed successfully. Have a nice day.
++ mkfs.vfat -F 32 -n FAT934 /dev/nvme2n1p1
+mkfs.fat 4.2 (2021-01-31)
++ blkid /dev/nvme1n1p1 /dev/nvme2n1p1
+/dev/nvme1n1p1: LABEL="NTFS933" BLOCK_SIZE="512" UUID="6B6A909F26DFDB19" TYPE="ntfs" PARTUUID="540d30ee-01"
+/dev/nvme2n1p1: LABEL_FATBOOT="FAT934" LABEL="FAT934" UUID="80F5-C8EC" BLOCK_SIZE="512" TYPE="vfat" PARTUUID="001ff6bc-01"
++ mkdir -p /mnt/n /mnt/f
++ mount -t ntfs3 /dev/nvme1n1p1 /mnt/n
++ ls -la /mnt/n
+total 8
+drwxrwxrwx 1 root root 4096 Nov  2 15:11 .
+drwxr-xr-x 4 root root 4096 Nov  2 15:11 ..
++ umount /mnt/n
++ mount -t vfat /dev/nvme2n1p1 /mnt/f
++ ls -la /mnt/f
+total 8
+drwxr-xr-x 2 root root 4096 Jan  1  1970 .
+drwxr-xr-x 4 root root 4096 Nov  2 15:11 ..
++ umount /mnt/f
++ sync
++ echo FORMAT-OK
+FORMAT-OK

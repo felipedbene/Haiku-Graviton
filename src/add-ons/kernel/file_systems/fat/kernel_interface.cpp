@@ -1801,10 +1801,8 @@ dosfs_wstat(fs_volume* volume, fs_vnode* vnode, const struct stat* stat, uint32 
 
 	WriteLocker locker(bsdNode->v_vnlock->haikuRW);
 
-	bool hasWriteAccess = _dosfs_access(bsdVolume, bsdNode, W_OK) == B_OK;
-	uid_t uid = geteuid();
-	bool isOwnerOrRoot = uid == 0 || uid == fatVolume->pm_uid;
-	;
+	if (MOUNTED_READ_ONLY(fatVolume) != 0)
+		RETURN_ERROR(B_READ_ONLY_DEVICE);
 
 	// We don't allow setting attributes on the root directory. The special case for the root
 	// directory is because before FAT32, the root directory didn't have an entry for itself
@@ -1813,13 +1811,25 @@ dosfs_wstat(fs_volume* volume, fs_vnode* vnode, const struct stat* stat, uint32 
 	if (bsdNode->v_vflag & VV_ROOT)
 		RETURN_ERROR(B_BAD_VALUE);
 
+	// Every permission check happens here, before anything is changed, with the rules the other
+	// file systems share: the volume's uid is the owner of every node, and mode_bits() gives the
+	// mode that _dosfs_access() checks. That includes the POSIX rule for times: an explicit time
+	// needs the owner, write access only lets a caller set both times to now (B_STAT_TIMES_NOW).
+	mode_t fileMode = 0;
+	mode_bits(bsdNode, &fileMode);
+#ifdef USER
+	status_t status = check_write_stat_permissions_internal(fatVolume->pm_gid, fatVolume->pm_uid,
+		fileMode, statMask, stat);
+#else
+	status_t status = check_write_stat_permissions(fatVolume->pm_gid, fatVolume->pm_uid, fileMode,
+		statMask, stat);
+#endif
+	if (status != B_OK)
+		RETURN_ERROR(status);
+
 	off_t previousSize = fatNode->de_FileSize;
-	status_t status = B_OK;
 
 	if ((statMask & B_STAT_SIZE) != 0) {
-		if (!hasWriteAccess)
-			RETURN_ERROR(B_NOT_ALLOWED);
-
 		switch (bsdNode->v_type) {
 			case VDIR:
 				return B_IS_A_DIRECTORY;
@@ -1874,8 +1884,6 @@ dosfs_wstat(fs_volume* volume, fs_vnode* vnode, const struct stat* stat, uint32 
 	// DOS files only have the ability to have their writability attribute set, so we use the
 	// owner write bit to set the readonly attribute.
 	if ((statMask & B_STAT_MODE) != 0) {
-		if (!isOwnerOrRoot)
-			RETURN_ERROR(B_NOT_ALLOWED);
 		PRINT("setting file mode to %o\n", stat->st_mode);
 		if (bsdNode->v_type != VDIR) {
 			if ((stat->st_mode & S_IWUSR) == 0)
@@ -1914,9 +1922,6 @@ dosfs_wstat(fs_volume* volume, fs_vnode* vnode, const struct stat* stat, uint32 
 	}
 
 	if ((statMask & B_STAT_MODIFICATION_TIME) != 0) {
-		// the user or root can do that or any user with write access
-		if (!isOwnerOrRoot && !hasWriteAccess)
-			RETURN_ERROR(B_NOT_ALLOWED);
 		PRINT("setting modification time\n");
 		fatNode->de_flag &= ~DE_UPDATE;
 		struct timespec mtimGMT;
@@ -1928,9 +1933,6 @@ dosfs_wstat(fs_volume* volume, fs_vnode* vnode, const struct stat* stat, uint32 
 	}
 
 	if ((statMask & B_STAT_CREATION_TIME) != 0) {
-		// the user or root can do that or any user with write access
-		if (!isOwnerOrRoot && !hasWriteAccess)
-			RETURN_ERROR(B_NOT_ALLOWED);
 		PRINT("setting creation time\n");
 		struct timespec crtimGMT;
 		local_to_GMT(&stat->st_crtim, &crtimGMT);
