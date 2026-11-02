@@ -1,0 +1,64 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-setup
+# instance: i-06e34a5a8fda48608   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T150526Z   end: 20261102T150711Z   rc: 0
+# script sha256: 9be63acf99b0f594ed98b5c905959f3c8ac8d89808d7e9310996f35720ccd0cd
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq
+# | apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /dev/null
+# | echo "apt rc=$?"
+# | if ! command -v aws; then
+# | 	curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
+# | 	(cd /tmp && unzip -q a.zip && ./aws/install > /dev/null)
+# | fi
+# | set +x
+# | mkdir -p /opt/w947 && cd /opt/w947
+# | rm -rf hg buildtools
+# | git clone -q --depth 80 --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg || exit 3
+# | git -C hg log -1 --format='trunk %H %s'
+# | git clone -q --depth 1 https://github.com/felipedbene/buildtools.git buildtools || exit 3
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /dev/null 2>&1 && ./jam0 install > /dev/null 2>&1)
+# | command -v jam || exit 4
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 5
+# | tar --zstd -xf /tmp/ct.tar.zst -C .
+# | ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix /opt/w947/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32 2>&1 | tail -1
+# | echo SETUP-DONE
+# ---- raw output ----
+apt rc=0
+trunk 4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+SETUP-DONE
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ set +x

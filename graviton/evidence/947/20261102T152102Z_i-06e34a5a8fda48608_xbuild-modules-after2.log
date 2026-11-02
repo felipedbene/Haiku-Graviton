@@ -1,0 +1,74 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules-after2
+# instance: i-06e34a5a8fda48608   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T152102Z   end: 20261102T152131Z   rc: 0
+# script sha256: 03f8b189875b26ffa4d50cc848f040c91040933d385af1630eb8f8c72ca427f3
+# ---- script ----
+# | export HOME=/root
+# | OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w947
+# | cd /opt/w947/hg/generated || exit 1
+# | git -C .. fetch -q --depth 1 origin fe7fef0b47685471f94fce4af712632dc129f86a || exit 2
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | objdir_of() { dirname "$(path_of $1)"; }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		git -C .. apply --whitespace=nowarn "$patch" || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	sleep 3
+# | 	for t in "$@"; do rm -rf "$(objdir_of $t)"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'net_socket|link\.cpp|udp\.cpp|ipv4\.cpp|ipv6\.cpp|ProtocolUtilities|net_protocol' | grep -v multicast.h | head -20
+# | 	mkdir -p /opt/w947/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/w947/out/$label/$t && sha256sum /opt/w947/out/$label/$t | sed "s|/opt/w947/out/||"
+# | 	done
+# | 	return $rc
+# | }
+# | aws s3 cp --quiet $OUT/fix2.patch /opt/w947/fix2.patch && sha256sum /opt/w947/fix2.patch && cat /opt/w947/fix2.patch
+# | M="stack ipv4 ipv6 tcp udp icmp icmp6 unix"
+# | build after2 4ef344f5fa /opt/w947/fix2.patch $M || exit 1
+# | for d in after2; do
+# | 	for f in /opt/w947/out/$d/*; do aws s3 cp --quiet "$f" "$OUT/mod/$d/$(basename $f)" || exit 6; done
+# | done
+# | aws s3 ls --recursive $OUT/mod/ | wc -l
+# ---- raw output ----
+027eebc23ecf11051bcf23674e171b1f83630cba4f9786b3243eec48e8a41d27  /opt/w947/fix2.patch
+diff --git a/src/add-ons/kernel/network/protocols/udp/udp.cpp b/src/add-ons/kernel/network/protocols/udp/udp.cpp
+index e8e9581577..4b4b32616e 100644
+--- a/src/add-ons/kernel/network/protocols/udp/udp.cpp
++++ b/src/add-ons/kernel/network/protocols/udp/udp.cpp
+@@ -1788,8 +1788,11 @@ ssize_t
+ udp_process_ancillary_data_no_container(net_protocol *protocol,
+ 	net_buffer* buffer, void *data, size_t dataSize)
+ {
++	// The receive options (IP_RECVDSTADDR, IPV6_RECVPKTINFO, ...) were set
++	// on the network protocol below, through udp_setsockopt(), and that is
++	// the object its module reads them from -- not this endpoint.
+ 	return protocol->next->module->process_ancillary_data_no_container(
+-		protocol, buffer, data, dataSize);
++		protocol->next, buffer, data, dataSize);
+ }
+ 
+ 
+JAM after2 ref=4ef344f5fa head=4ef344f5 patch=/opt/w947/fix2.patch rc=0 wall=9s failed=0 warnings=2
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  after2/stack
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  after2/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  after2/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  after2/tcp
+696d78bb037e457d961ab302c7ef421f6cbf131be483dffc7d1116529785c0da  after2/udp
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  after2/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  after2/icmp6
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  after2/unix
+32

@@ -1,0 +1,98 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-repro
+# instance: i-031824bd735c105dc   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T152421Z   end: 20261102T152432Z   rc: 0
+# script sha256: 139584e3669cbf28c28e43af34a2b18372251b60d96b8636cb596b9a3b594aa4
+# ---- script ----
+# | cd /boot/home/w947
+# | sha256sum udp947.c udp947
+# | uname -a
+# | echo "--- packaged kernel / non-packaged network overrides"
+# | sha256sum /boot/system/kernel_arm64
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | sort | xargs sha256sum
+# | echo "--- network modules loaded by the kernel (team 1)"
+# | listimage 1 2>/dev/null | grep -E 'add-ons/kernel/network/' | awk '{print $NF}' | sort -u
+# | for run in 1 2 3; do
+# | 	echo "=== run $run"
+# | 	./udp947 > run$run.out
+# | 	echo "exit=$?"
+# | 	grep -E 'FAIL|udp947:' run$run.out
+# | done
+# | echo "=== run 1 full output"
+# | cat run1.out
+# | echo "=== -t (a requested control message that does not fit)"
+# | ./udp947 -t; echo "exit=$?"
+# ---- raw output ----
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+Haiku ip-10-128-6-86.us-west-2.comput R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- packaged kernel / non-packaged network overrides
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+696d78bb037e457d961ab302c7ef421f6cbf131be483dffc7d1116529785c0da  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- network modules loaded by the kernel (team 1)
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+/boot/system/add-ons/kernel/network/datalink_protocols/arp
+/boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+/boot/system/add-ons/kernel/network/datalink_protocols/loopback_frame
+/boot/system/add-ons/kernel/network/devices/ethernet
+/boot/system/add-ons/kernel/network/devices/loopback
+/boot/system/add-ons/kernel/network/notifications
+=== run 1
+exit=4
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+udp947: 14 passed, 4 failed
+=== run 2
+exit=4
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+udp947: 14 passed, 4 failed
+=== run 3
+exit=4
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+udp947: 14 passed, 4 failed
+=== run 1 full output
+ipv4 none                                                  PASS  controllen=0 flags=0x0
+ipv4 IP_RECVDSTADDR                                        PASS  controllen=24 flags=0x0 [IP_RECVDSTADDR 127.0.0.1]
+ipv4 IP_RECVDSTADDR set+cleared                            PASS  controllen=0 flags=0x0
+ipv4 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+ipv6 none                                                  PASS  controllen=0 flags=0x0
+ipv6 IPV6_RECVPKTINFO                                      PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVPKTINFO set+cleared                          PASS  controllen=0 flags=0x0
+ipv6 both set+cleared                                      PASS  controllen=0 flags=0x0
+ipv6 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+v4-to-dual none                                            PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO                                PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVPKTINFO set+cleared                    PASS  controllen=0 flags=0x0
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 14 passed, 4 failed
+=== -t (a requested control message that does not fit)
+ipv4 IP_RECVDSTADDR, 4-byte control buffer                 FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+ipv6 IPV6_RECVPKTINFO, 4-byte control buffer               FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+udp947 -t: 0 passed, 3 failed
+exit=3
