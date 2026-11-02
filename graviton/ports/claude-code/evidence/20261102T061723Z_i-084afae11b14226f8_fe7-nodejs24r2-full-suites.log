@@ -1,0 +1,75 @@
+# evidence: fe7-nodejs24r2-full-suites
+# instance: i-084afae11b14226f8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T061723Z   end: 20261102T063534Z   rc: 0
+# script sha256: d9fb1d1dec54d81dd3f71ec1f3bb3b3b4d561c626a6491888e9c6c98da441339
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0 || exit 1
+# | echo "node $(node --version); $(ls /boot/system/packages | grep -E '^(nodejs24|libuv)-' | tr '\n' ' '); $(uname -v)"
+# | echo "cpus: $(sysinfo -cpu 2>/dev/null | grep -c 'CPU #')"
+# | for s in parallel sequential; do
+# | 	start=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap "$s" > /boot/home/node-$s-fe7.tap 2>&1; rc=$?
+# | 	f=/boot/home/node-$s-fe7.tap
+# | 	echo "== $s (canonical fe7fef0b47): rc=$rc, $(( $(date +%s) - start ))s, plan $(grep -m1 '^1\.\.' $f), $(grep -c '^ok ' $f) ok ($(grep -c '^ok .*# skip' $f) skip), $(grep -c '^not ok ' $f) not ok ($(grep -c '^    timeout$' $f) timeout)"
+# | done
+# | for s in parallel sequential; do
+# | 	f=/boot/home/node-$s-fe7.tap
+# | 	echo "-- every $s result: name, state (FAIL or TIMEOUT; ok and skip omitted)"
+# | 	awk '/^ok /{ if (n) print n, st; n=$3; st=($0 ~ /# skip/) ? "skip" : "ok"; next }
+# | 	     /^not ok /{ if (n) print n, st; n=$4; st="FAIL"; next }
+# | 	     /^    timeout$/{ if (st=="FAIL") st="TIMEOUT" }
+# | 	     END { if (n) print n, st }' $f | grep -E ' (FAIL|TIMEOUT)$'
+# | done
+# ---- raw output ----
+node v24.21.0; libuv-1.52.1-4-arm64.hpkg nodejs24-24.21.0-2-arm64.hpkg ; hrev59996 Nov  2 2026 00:47:18
+cpus: 0
+== parallel (canonical fe7fef0b47): rc=1, 583s, plan 1..4507, 4469 ok (323 skip), 38 not ok (3 timeout)
+== sequential (canonical fe7fef0b47): rc=1, 496s, plan 1..120, 113 ok (0 skip), 7 not ok (1 timeout)
+-- every parallel result: name, state (FAIL or TIMEOUT; ok and skip omitted)
+parallel/test-child-process-default-options FAIL
+parallel/test-child-process-env FAIL
+parallel/test-child-process-exec-env FAIL
+parallel/test-cluster-net-listen-ipv6only-false FAIL
+parallel/test-cwd-enoent-improved-message FAIL
+parallel/test-fs-link FAIL
+parallel/test-fs-promises FAIL
+parallel/test-fs-stat-date FAIL
+parallel/test-http-autoselectfamily FAIL
+parallel/test-http-writable-true-after-close FAIL
+parallel/test-http2-connect FAIL
+parallel/test-http2-ip-address-host FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL
+parallel/test-http2-misbehaving-flow-control FAIL
+parallel/test-https-autoselectfamily FAIL
+parallel/test-https-connect-address-family FAIL
+parallel/test-net-autoselectfamily FAIL
+parallel/test-net-autoselectfamily-ipv4first FAIL
+parallel/test-net-boundsocket FAIL
+parallel/test-net-connect-options-ipv6 FAIL
+parallel/test-net-dns-custom-lookup FAIL
+parallel/test-net-dns-lookup-skip FAIL
+parallel/test-net-pingpong FAIL
+parallel/test-os FAIL
+parallel/test-permission-fs-symlink-target-write FAIL
+parallel/test-process-dlopen-error-message-crash FAIL
+parallel/test-process-euid-egid FAIL
+parallel/test-repl-underscore FAIL
+parallel/test-setproctitle FAIL
+parallel/test-tcp-wrap-listen FAIL
+parallel/test-tls-connect-address-family FAIL
+parallel/test-util-exception-with-host-port FAIL
+parallel/test-trace-events-fs-sync FAIL
+parallel/test-trace-events-fs-async FAIL
+parallel/test-worker-memory FAIL
+parallel/test-dgram-connect-send-empty-array TIMEOUT
+parallel/test-dgram-connect-send-empty-buffer TIMEOUT
+parallel/test-worker-init-failure TIMEOUT
+-- every sequential result: name, state (FAIL or TIMEOUT; ok and skip omitted)
+sequential/test-fs-watch FAIL
+sequential/test-module-loading FAIL
+sequential/test-net-connect-econnrefused FAIL
+sequential/test-net-connect-local-error FAIL
+sequential/test-net-server-address FAIL
+sequential/test-net-server-listen-ipv6-link-local FAIL
+sequential/test-tls-psk-client TIMEOUT

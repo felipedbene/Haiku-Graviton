@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fe7-repo-origin-and-ami
+# workstation 20261102T080118Z: repo origin, AMI under test, instance launch facts
+# ---- raw output ----
+EZBGMRSQZAMKW	packages.debene.dev	haiku-graviton-hpkg-<ACCOUNT_ID>.s3.us-west-2.amazonaws.com	/debeos-repo-green
+ami-03c3545c37f391c1f	haiku-oven-1793580871	2026-11-02T01:03:31.000Z	true	fe7fef0b47685471f94fce4af712632dc129f86a	debeos-r70748-gfe7fef0b47	hrev59996
+i-084afae11b14226f8	c8g.4xlarge	ami-03c3545c37f391c1f	None	None	haiku-rdclient	None	2026-11-02T05:50:25+00:00	terminated
+auto-stop	no
+ephemeral	true
+Project	haiku-graviton
+Name	cc-verify-trunk-fe7fef0b47

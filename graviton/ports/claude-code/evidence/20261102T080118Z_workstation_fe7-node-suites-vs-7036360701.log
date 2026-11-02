@@ -1,0 +1,73 @@
+# evidence: fe7-node-suites-vs-7036360701
+# workstation 20261102T080118Z. A = 20261101T221638Z_i-09e325e6c72394c08_trunk-nodejs24r2-full-suites.log (trunk 7036360701), B = 20261102T061723Z_i-084afae11b14226f8_fe7-nodejs24r2-full-suites.log (canonical fe7fef0b47). Lists = every FAIL/TIMEOUT line of each log.
+# ---- raw output ----
+A not ok:       63  B not ok:       45
+-- fail -> pass (19):
+parallel/test-cluster-worker-kill-signal
+parallel/test-crypto-no-algorithm
+parallel/test-domain-no-error-handler-abort-on-uncaught-0
+parallel/test-domain-no-error-handler-abort-on-uncaught-1
+parallel/test-domain-no-error-handler-abort-on-uncaught-2
+parallel/test-domain-no-error-handler-abort-on-uncaught-3
+parallel/test-domain-no-error-handler-abort-on-uncaught-4
+parallel/test-domain-no-error-handler-abort-on-uncaught-5
+parallel/test-domain-no-error-handler-abort-on-uncaught-6
+parallel/test-domain-no-error-handler-abort-on-uncaught-7
+parallel/test-domain-no-error-handler-abort-on-uncaught-8
+parallel/test-domain-no-error-handler-abort-on-uncaught-9
+parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler
+parallel/test-domain-with-abort-on-uncaught-exception
+parallel/test-fs-write-sigxfsz
+parallel/test-http2-max-invalid-frames
+parallel/test-os-process-priority
+parallel/test-process-umask-mask
+sequential/test-child-process-emfile
+-- pass -> fail (1):
+sequential/test-net-connect-econnrefused
+-- FAIL <-> TIMEOUT among tests failing in both:
+parallel/test-worker-init-failure FAIL TIMEOUT
+-- failing in both (44):
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cluster-net-listen-ipv6only-false FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-dgram-connect-send-empty-array TIMEOUT TIMEOUT
+parallel/test-dgram-connect-send-empty-buffer TIMEOUT TIMEOUT
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-autoselectfamily FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-connect FAIL FAIL
+parallel/test-http2-ip-address-host FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-https-autoselectfamily FAIL FAIL
+parallel/test-https-connect-address-family FAIL FAIL
+parallel/test-net-autoselectfamily FAIL FAIL
+parallel/test-net-autoselectfamily-ipv4first FAIL FAIL
+parallel/test-net-boundsocket FAIL FAIL
+parallel/test-net-connect-options-ipv6 FAIL FAIL
+parallel/test-net-dns-custom-lookup FAIL FAIL
+parallel/test-net-dns-lookup-skip FAIL FAIL
+parallel/test-net-pingpong FAIL FAIL
+parallel/test-os FAIL FAIL
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-tcp-wrap-listen FAIL FAIL
+parallel/test-tls-connect-address-family FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-init-failure FAIL TIMEOUT
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL
+sequential/test-net-connect-local-error FAIL FAIL
+sequential/test-net-server-address FAIL FAIL
+sequential/test-net-server-listen-ipv6-link-local FAIL FAIL
+sequential/test-tls-psk-client TIMEOUT TIMEOUT

@@ -1,0 +1,63 @@
+# evidence: fe7-residual-changed-tests
+# instance: i-084afae11b14226f8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T073735Z   end: 20261102T075600Z   rc: 0
+# script sha256: c7c017dca0a7a85dd26e77bf6a1f4edafde197254728749ea3d5701748b47d44
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0 || exit 1
+# | one() {	# one <test> <runs>
+# | 	local t=$1 n=$2 i pass=0
+# | 	for i in $(seq $n); do : | timeout 900 python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap $t > /tmp/r1.tap 2>&1; grep -q '^ok ' /tmp/r1.tap && pass=$((pass+1)); done
+# | 	echo "== $t: $pass/$n pass alone"; sed -n '/^  stack/,/^  \.\.\./p' /tmp/r1.tap | head -30
+# | }
+# | one sequential/test-net-connect-econnrefused 10
+# | one parallel/test-worker-init-failure 2
+# | one parallel/test-os 3
+# | echo "== getpriority/setpriority round trip (os-process-priority's mechanism)"
+# | node -e 'const os=require("os");for(const p of [19,10,5,1,0]){try{os.setPriority(p);console.log("set",p,"get",os.getPriority())}catch(e){console.log("set",p,e.code)}}'
+# | echo "== ulimit -n lower hard limit (worker-init-failure / emfile mechanism)"
+# | bash -c 'ulimit -Hn; ulimit -Hn 256 && echo "lowered hard to $(ulimit -Hn)"; ulimit -Sn'
+# ---- raw output ----
+== sequential/test-net-connect-econnrefused: 9/10 pass alone
+== parallel/test-worker-init-failure: 0/2 pass alone
+  stack: |-
+    timeout
+  ...
+== parallel/test-os: 0/3 pass alone
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert.ok(cpus.length > 0)
+    
+        at Object.<anonymous> (/boot/home/node-src/node-v24.21.0/test/parallel/test-os.js:104:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+== getpriority/setpriority round trip (os-process-priority's mechanism)
+set 19 get 19
+set 10 get 10
+set 5 get 5
+set 1 get 1
+set 0 get 0
+== ulimit -n lower hard limit (worker-init-failure / emfile mechanism)
+8192
+lowered hard to 256
+256

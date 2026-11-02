@@ -1,0 +1,171 @@
+# evidence: fe7-cpu-topology-probe
+# instance: i-084afae11b14226f8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T075855Z   end: 20261102T075917Z   rc: 0
+# script sha256: 29e728771cdb736f2eefce9878f5dc376efecf65943421e3e5cc80fae7db77b8
+# ---- script ----
+# | set -u
+# | S=/boot/home/node-src/node-v24.21.0
+# | cat > /tmp/topo.c <<'C'
+# | #include <stdio.h>
+# | #include <stdlib.h>
+# | #include <OS.h>
+# | int main(void) {
+# | 	system_info si; status_t s = get_system_info(&si);
+# | 	printf("get_system_info: %s, cpu_count %u\n", strerror(s), (unsigned)si.cpu_count);
+# | 	uint32 n = 0; s = get_cpu_topology_info(NULL, &n); printf("get_cpu_topology_info(NULL): %s, count %u\n", strerror(s), (unsigned)n);
+# | 	cpu_topology_node_info *t = calloc(n ? n : 1, sizeof *t);
+# | 	s = get_cpu_topology_info(t, &n); printf("get_cpu_topology_info(buf): %s, count %u\n", strerror(s), (unsigned)n);
+# | 	for (uint32 i = 0; i < n && i < 40; i++) {
+# | 		printf("  node %u: id %u type %d level %u", (unsigned)i, (unsigned)t[i].id, (int)t[i].type, (unsigned)t[i].level);
+# | 		if (t[i].type == B_TOPOLOGY_ROOT) printf(" ROOT platform %d", (int)t[i].data.root.platform);
+# | 		if (t[i].type == B_TOPOLOGY_PACKAGE) printf(" PACKAGE vendor %d", (int)t[i].data.package.vendor);
+# | 		if (t[i].type == B_TOPOLOGY_CORE) printf(" CORE model %d default_frequency %llu", (int)t[i].data.core.model, (unsigned long long)t[i].data.core.default_frequency);
+# | 		printf("\n");
+# | 	}
+# | 	cpu_info ci[64]; s = get_cpu_info(0, si.cpu_count < 64 ? si.cpu_count : 64, ci);
+# | 	printf("get_cpu_info(0, %u): %s, cpu0 active_time %lld\n", (unsigned)si.cpu_count, strerror(s), (long long)ci[0].active_time);
+# | 	return 0;
+# | }
+# | C
+# | gcc -o /tmp/topo /tmp/topo.c && /tmp/topo
+# | echo "== uv_cpu_info remainder (deps/uv/src/unix/haiku.c)"; sed -n 148,175p $S/deps/uv/src/unix/haiku.c
+# | echo "== node's os.cpus binding error, if any"; node -e 'try{console.log(process.binding("os").getCPUs?"has getCPUs":"no")}catch(e){console.log(e.message)}' 2>&1 | head -2
+# | echo "== worker-init-failure source"; sed -n 1,80p $S/test/parallel/test-worker-init-failure.js
+# ---- raw output ----
+get_system_info: No error, cpu_count 16
+get_cpu_topology_info(NULL): No error, count 34
+get_cpu_topology_info(buf): No error, count 34
+  node 0: id 0 type 1 level 3 ROOT platform 7
+  node 1: id 0 type 4 level 2 PACKAGE vendor 15
+  node 2: id 0 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 3: id 0 type 2 level 0
+  node 4: id 1 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 5: id 1 type 2 level 0
+  node 6: id 2 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 7: id 2 type 2 level 0
+  node 8: id 3 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 9: id 3 type 2 level 0
+  node 10: id 4 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 11: id 4 type 2 level 0
+  node 12: id 5 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 13: id 5 type 2 level 0
+  node 14: id 6 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 15: id 6 type 2 level 0
+  node 16: id 7 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 17: id 7 type 2 level 0
+  node 18: id 8 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 19: id 8 type 2 level 0
+  node 20: id 9 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 21: id 9 type 2 level 0
+  node 22: id 10 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 23: id 10 type 2 level 0
+  node 24: id 11 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 25: id 11 type 2 level 0
+  node 26: id 12 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 27: id 12 type 2 level 0
+  node 28: id 13 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 29: id 13 type 2 level 0
+  node 30: id 14 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 31: id 14 type 2 level 0
+  node 32: id 15 type 3 level 1 CORE model 1091556593 default_frequency 2798065201
+  node 33: id 15 type 2 level 0
+get_cpu_info(0, 16): No error, cpu0 active_time 128653023
+== uv_cpu_info remainder (deps/uv/src/unix/haiku.c)
+      break;
+    }
+  }
+
+  uv__free(topology_infos);
+
+  status = get_system_info(&system);
+  if (status != B_OK)
+    return UV__ERR(status);
+
+  *cpu_infos = uv__calloc(system.cpu_count, sizeof(**cpu_infos));
+  if (*cpu_infos == NULL)
+    return UV_ENOMEM;
+
+  /* CPU time and model are not exposed by Haiku. */
+  cpu_info = *cpu_infos;
+  for (i = 0; i < (int)system.cpu_count; i++) {
+    cpu_info->model = uv__strdup("unknown");
+    cpu_info->speed = (int)(cpuspeed / 1000000);
+    cpu_info++;
+  }
+  *count = system.cpu_count;
+
+  return 0;
+}
+== node's os.cpus binding error, if any
+has getCPUs
+== worker-init-failure source
+'use strict';
+const common = require('../common');
+const assert = require('assert');
+const child_process = require('child_process');
+
+// Test that workers fail with meaningful error message
+// when their initialization fails.
+
+if (common.isWindows) {
+  common.skip('ulimit does not work on Windows.');
+}
+
+if (process.config.variables.node_builtin_modules_path) {
+  common.skip('this test cannot pass when Node.js is built with --node-builtin-modules-path');
+}
+
+// A reasonably low fd count. An empty node process
+// creates around 30 fds for its internal purposes,
+// so making it too low will crash the process early,
+// making it too high will cause too much resource use.
+const OPENFILES = 128;
+
+// Double the open files - so that some workers fail for sure.
+const WORKERCOUNT = 256;
+
+if (process.argv[2] === 'child') {
+  const { Worker } = require('worker_threads');
+  for (let i = 0; i < WORKERCOUNT; ++i) {
+    const worker = new Worker(
+      'require(\'worker_threads\').parentPort.postMessage(2 + 2)',
+      { eval: true });
+    worker.on('message', common.mustCallAtLeast((result) => {
+      assert.strictEqual(result, 4);
+    }, 0));
+
+    // We want to test that if there is an error in a constrained running
+    // environment, it will be one of `ENFILE`, `EMFILE`, 'ENOENT', or
+    // `ERR_WORKER_INIT_FAILED`.
+    const expected = ['ERR_WORKER_INIT_FAILED', 'EMFILE', 'ENFILE', 'ENOENT'];
+
+    // `common.mustCall*` cannot be used here as in some environments
+    // (i.e. single cpu) `ulimit` may not lead to such an error.
+    worker.on('error', common.mustCallAtLeast((e) => {
+      assert.ok(expected.includes(e.code), `${e.code} not expected`);
+    }, 0));
+  }
+
+} else {
+  // Limit the number of open files, to force workers to fail.
+  const cp = child_process.exec(...common.escapePOSIXShell`ulimit -n ${OPENFILES} && "${process.execPath}" "${__filename}" child`);
+
+  // Turn on the child streams for debugging purposes.
+  let stdout = '';
+  cp.stdout.setEncoding('utf8');
+  cp.stdout.on('data', (chunk) => {
+    stdout += chunk;
+  });
+  let stderr = '';
+  cp.stderr.setEncoding('utf8');
+  cp.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  cp.on('exit', common.mustCall((code, signal) => {
+    console.log(`child stdout: ${stdout}\n`);
+    console.log(`child stderr: ${stderr}\n`);
+    assert.strictEqual(code, 0);
+    assert.strictEqual(signal, null);
+  }));
+}

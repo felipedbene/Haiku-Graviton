@@ -1,0 +1,70 @@
+# evidence: fe7-residual-probes2
+# instance: i-084afae11b14226f8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T075637Z   end: 20261102T075820Z   rc: 1
+# script sha256: c95e47e54e9de558f2ddee1a4a88ab582d9b17e2934444afecbc7ac69f564e7a
+# ---- script ----
+# | set -u
+# | S=/boot/home/node-src/node-v24.21.0
+# | echo "== os.cpus() / availableParallelism / loadavg"
+# | node -e 'const os=require("os");const c=os.cpus();console.log("cpus.length",c.length,"first",JSON.stringify(c[0]||null),"availableParallelism",os.availableParallelism(),"loadavg",os.loadavg())'
+# | echo "== test-os.js around the failing line and the priority checks"; grep -n -E 'cpus|Priority|priority' $S/test/parallel/test-os.js | head -12
+# | echo "== sysinfo CPU lines"; sysinfo 2>&1 | grep -i -E 'cpu' | head -6
+# | echo "== libuv source used for uv_cpu_info on Haiku (from the node tree's bundled deps, for reference)"; grep -n -A30 '^int uv_cpu_info' $S/deps/uv/src/unix/haiku.c | head -45
+# | echo "== worker-init-failure: direct run, 60 s cap"
+# | cd $S && timeout 60 node test/parallel/test-worker-init-failure.js; echo "rc=$?"
+# | echo "== econnrefused: 30 runs alone, first failure's output"
+# | fails=0; for i in $(seq 30); do : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap sequential/test-net-connect-econnrefused > /tmp/e.tap 2>&1; if ! grep -q '^ok ' /tmp/e.tap; then fails=$((fails+1)); [ $fails -eq 1 ] && cp /tmp/e.tap /tmp/e-fail.tap; fi; done
+# | echo "econnrefused alone: $((30-fails))/30 pass"; [ -f /tmp/e-fail.tap ] && sed -n '/^not ok/,/^  \.\.\./p' /tmp/e-fail.tap | head -40
+# ---- raw output ----
+== os.cpus() / availableParallelism / loadavg
+cpus.length 0 first null availableParallelism 16 loadavg [ 0, 0, 0 ]
+== test-os.js around the failing line and the priority checks
+84:// IBMi process priority is different.
+86:  const { PRIORITY_BELOW_NORMAL, PRIORITY_LOW } = os.constants.priority;
+87:  // Priority means niceness: higher numeric value <=> lower priority
+88:  const LOWER_PRIORITY = os.getPriority() < PRIORITY_BELOW_NORMAL ? PRIORITY_BELOW_NORMAL : PRIORITY_LOW;
+89:  os.setPriority(LOWER_PRIORITY);
+90:  const priority = os.getPriority();
+91:  is.number(priority);
+92:  assert.strictEqual(priority, LOWER_PRIORITY);
+102:const cpus = os.cpus();
+103:is.array(cpus);
+104:assert.ok(cpus.length > 0);
+105:for (const cpu of cpus) {
+== sysinfo CPU lines
+== libuv source used for uv_cpu_info on Haiku (from the node tree's bundled deps, for reference)
+118:int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+119-  cpu_topology_node_info* topology_infos;
+120-  int i;
+121-  status_t status;
+122-  system_info system;
+123-  uint32 topology_count;  /* Haiku expects address of uint32, not uint32_t */
+124-  uint64_t cpuspeed;
+125-  uv_cpu_info_t* cpu_info;
+126-
+127-  if (cpu_infos == NULL || count == NULL)
+128-    return UV_EINVAL;
+129-
+130-  status = get_cpu_topology_info(NULL, &topology_count);
+131-  if (status != B_OK)
+132-    return UV__ERR(status);
+133-
+134-  topology_infos = uv__malloc(topology_count * sizeof(*topology_infos));
+135-  if (topology_infos == NULL)
+136-    return UV_ENOMEM;
+137-
+138-  status = get_cpu_topology_info(topology_infos, &topology_count);
+139-  if (status != B_OK) {
+140-    uv__free(topology_infos);
+141-    return UV__ERR(status);
+142-  }
+143-
+144-  cpuspeed = 0;
+145-  for (i = 0; i < (int)topology_count; i++) {
+146-    if (topology_infos[i].type == B_TOPOLOGY_CORE) {
+147-      cpuspeed = topology_infos[i].data.core.default_frequency;
+148-      break;
+== worker-init-failure: direct run, 60 s cap
+rc=124
+== econnrefused: 30 runs alone, first failure's output
+econnrefused alone: 30/30 pass

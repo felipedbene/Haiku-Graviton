@@ -1,0 +1,23 @@
+# evidence: fe7-probe
+# instance: i-084afae11b14226f8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T055143Z   end: 20261102T055205Z   rc: 1
+# script sha256: 076fbb6f8634153b5f813ed10bf345561b2842d4f91bc1757ee1928a2df43b5a
+# ---- script ----
+# | set -u
+# | uname -a; id; df -k /boot | tail -1; sysinfo | grep -E -i 'CPU #|cpus|memory' | head -4
+# | echo "== repos"; pkgman list-repos 2>&1
+# | echo "== preinstalled of interest"; ls /boot/system/packages | grep -E -i '^(nodejs|libuv|claude|tmux|git|ripgrep|python|curl|openssl|bash|patch|gzip|tar)' || echo none
+# | command -v curl tar gzip python3 patch git rg tmux node 2>&1
+# ---- raw output ----
+Haiku ip-10-128-10-209.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+uid=0(baron) gid=0(root) groups=0(root)
+   Root Inode: 524288
+== repos
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+== preinstalled of interest
+bash-5.3_bootstrap-1-arm64.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg

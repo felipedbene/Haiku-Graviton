@@ -109,6 +109,72 @@ Per-test diff, each moved test labelled with its row in the root-cause table:
     #882 ×4, #881 ×2, #877 ×2, nghttp2 packaging ×2, and one each for #893, #878, #891 (PR 913
     open), #880, euid/egid (uid 0), setproctitle (`ps -p`) and worker-memory.
 
+## 2026-11-02 — fresh canonical image fe7fef0b47
+
+This is the same verification on one fresh launch of the new canonical `ami-03c3545c37f391c1f`
+(`haiku-oven-1793580871`, `debeos-r70748-gfe7fef0b47`, `canonical=true`). Over 7036360701 it adds
+PRs 913, 920–928, 931–937 and 916. Instance `i-084afae11b14226f8`: c8g.4xlarge, 60 GiB,
+`subnet-0c98257f993bfc1b2`, `sg-0efc97cc673949063`, key `haiku-rdclient`, `ssm-instance-profile`,
+tags `Project=haiku-graviton`, `auto-stop=no`, Name `cc-verify-trunk-fe7fef0b47`. It has been
+terminated (`20261102T080118Z_workstation_fe7-repo-origin-and-ami.log`). The packages came from
+green, the same as before: claude_code 2.1.314-2, nodejs24 24.21.0-2 and libuv 1.52.1-4
+(`20261102T055220Z_i-084afae11b14226f8_fe7-install.log`). The scripts are the ones used for
+7036360701, with fresh presigned URLs. Evidence names below drop the `_i-084afae11b14226f8_` part.
+
+| Check | 7036360701 | fe7fef0b47 | Evidence (`20261102T…`) |
+|---|---|---|---|
+| Node acceptance | 23/23 | 23/23 ALL PASS | `055314Z…fe7-node24-accept` |
+| node-gyp addon (with `haiku_devel` + `binutils` from the repo) | `add(2,40) = 42` | `add(2,40) = 42` | `055343Z…fe7-node24-gyp-addon-cxx` |
+| `--version`, `doctor`, `cc-teaminfo`, vectors | pass | pass (`haiku-arm64`, `Search: OK`, `ALL PASS`) | `055447Z…fe7-claude-accept` |
+| `claude -p` via Bedrock | `pong`, 7 s | `pong`, rc 0, 8 s | `055703Z…fe7-bedrock-headless-smoke` |
+| Headless Read/Grep/Bash | correct | `aurora-7\|src/a.js,src/deep/b.js\|Haiku` | `055732Z…fe7-bedrock-headless-tools` |
+| Grep tool vs rg | 0.389 s / 0.142 s | 0.392 s / 0.144 s | `055812Z…fe7-bedrock-grep-timing` |
+| Interactive TUI: edit, bash, resize, /compact | pass | pass (`bash-ok-Haiku`, edit on disk; same /compact behaviour) | `055905Z…fe7-bedrock-tui-session` |
+| `/compact` + recall ×5 | 5/5 | 5/5 | `060121Z…fe7-compact-haiku-x5` |
+| FileChanged through `libuv_fs_event` | fired 2× | fired 2×, `delivers` | `060402Z…fe7-enduser-fresh-install-3` |
+| Ctrl-C, `-p` with no credentials | identical | identical | `060630Z…fe7-tui-ctrlc-and-headless` |
+| Worker scenarios | 13/13 | 13/13 | `060746Z…fe7-compat-scenarios-on-haiku` |
+| Bun.spawn vs Bun | 188 / 23 platform / 2 / **1 mismatch** / 4 | 188 / **24** platform / 2 / **0 mismatch** / 4, check rc 0 | `060830Z…fe7-scen-haiku-node-v2` |
+| Bun.serve/listen/connect vs Bun | 35 / 6 / 1 | 35 / 6 / 1 (the Response-defaults mismatch, Node's) | same |
+| TUI snapshots vs Linux | 60/64, 33/33 | 60/64 (same 4 keycap snapshots), 33/33 | `061007Z…fe7-tui-capture-B-haiku`, `061539Z_workstation_fe7-tui-compare-{linuxA-haikuB,tmux37c}` |
+| 30-min working soak | 135/135, 3–5 s | 123/123, 4–8 s, one process, RSS 420 → 577 MB | `063556Z…fe7-working-soak-v3-haiku` |
+| 30-min idle soak | 323 → 185 MB | alive, 12 threads, 324 → 184 MB | `070633Z…fe7-tui-soak-30min` |
+
+- **Spawn:** `bad interpreter` was the one mismatch. It is now an errno-convention platform
+  difference only (spawn fails with ENOENT, as Bun on Linux does). PR 926 caused this (libroot fails
+  exec/spawn of a script whose interpreter is missing). `KNOWN_DEFECTS` in
+  `compat/test/platform-diff.mjs` still describes the old behaviour; the checker doesn't need it now.
+- **Working soak:** the per-task time includes the Bedrock round trip. Local tool execution measured
+  the same as on 7036360701 (Grep 0.392 s vs 0.389 s, rg 0.144 s vs 0.142 s). The slower tasks are
+  not attributed to the image.
+
+**Node 24 suites** (`061723Z…fe7-nodejs24r2-full-suites`). Same tree preparation
+(`061553Z…fe7-node-src-prepare`), same command, stdin a pipe. Full plans: 1..4507, 1..120.
+
+| Suite | 7036360701 | fe7fef0b47 |
+|---|---|---|
+| parallel | 4451 ok (323 skip) / 56 not ok (2 timeout) | **4469 ok (323 skip) / 38 not ok (3 timeout)**, 583 s |
+| sequential | 113 ok / 7 not ok (1 timeout) | 113 ok / 7 not ok (1 timeout), 496 s |
+
+Per-test diff: `20261102T080118Z_workstation_fe7-node-suites-vs-7036360701.log`.
+
+- **19 went from fail to pass:**
+  - #876 ×13 (`domain-no-error-handler-abort-on-uncaught-0…9`, `domain-throw-error-then-throw-from-uncaught-exception-handler`, `domain-with-abort-on-uncaught-exception`, `crypto-no-algorithm`), by PR 920: a crash or abort() is now reported by its signal.
+  - #893 `cluster-worker-kill-signal`, by PR 923: a dying team's fds close before its death is reported.
+  - #878 `fs-write-sigxfsz`, by PR 922 (RLIMIT_FSIZE).
+  - #891 `http2-max-invalid-frames`, by PR 913 (TCP reset after close).
+  - #881 `os-process-priority`, by PR 925 (getpriority round trip; set 19/10/5/1/0 reads back the same).
+  - #880 `process-umask-mask`, by PR 924.
+  - #877 `seq/child-process-emfile`, by PR 921 (the NOFILE hard limit can be lowered: `ulimit -Hn 256` works).
+- **1 went from pass to fail: `seq/net-connect-econnrefused`.** It passed 9/10 and then 30/30 alone
+  (`073735Z…fe7-residual-changed-tests`, `075637Z…fe7-residual-probes2`). It is the same
+  load-dependent single failure this suite showed in the 24.21.0-2 run. One run in 40 alone is not
+  enough to substantiate a defect, so it is not filed and not attributed.
+- **State changed among tests failing both times:**
+  - `worker-init-failure`: FAIL -> TIMEOUT. PR 921 lets `ulimit -n 128` work, so the test now runs and hangs (0/2 alone; a direct run hit the 60 s cap). That is open **#918**; commented there.
+  - `parallel/test-os` stays FAIL with a new cause. PR 925 cleared the priority assertion at `test-os.js:92`, and it now fails at `:104`, `os.cpus().length > 0`. `os.cpus()` is `[]`, but the kernel reports 16 CPUs and 16 CORE topology nodes (`075855Z…fe7-cpu-topology-probe`). The HaikuPorts patchset comments out the body of `GetCPUInfo` (`src/node_os.cc`), so this is a nodejs24 packaging defect and the image is fine. That is open **#917**; commented there.
+- **Still failing, unchanged:** 42 others. #873 ×19, class (c) ×9, #882 ×5 (incl. `fs-promises`), #899 ×2 (`dgram-connect-send-empty-*`), nghttp2 packaging ×2, and one each for #929 (`fs-stat-date`), #871 (`http-writable-true-after-close`), uid 0 (`process-euid-egid`), `setproctitle` and `worker-memory`.
+
 ## Phase 1 — tool sanity on the canonical image
 
 `20261031T031440Z_i-07451948888de2466_phase1-sanity-tools.log`: git 2.54.0 (status, diff,
