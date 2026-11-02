@@ -654,8 +654,6 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 		return B_IO_ERROR;
 	NtfsInodeCloser niCloser(ni);
 
-	bool updateTime = false;
-
 	if ((mask & B_STAT_SIZE) != 0 && node->size != stat->st_size) {
 		if ((node->mode & S_IFDIR) != 0)
 			return B_IS_A_DIRECTORY;
@@ -670,7 +668,11 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 		node->size = na->data_size;
 		file_cache_set_size(node->file_cache, node->size);
 
-		updateTime = true;
+		// A size change is a change to the data: like a write, it updates the
+		// modification and change times. Neither is in the caller's stat, which
+		// for truncate() carries nothing but the size. An explicit time in the
+		// mask still wins, as it is applied below.
+		ntfs_inode_update_times(ni, (ntfs_time_update_flags)NTFS_UPDATE_MCTIME);
 	}
 
 	if ((mask & B_STAT_UID) != 0) {
@@ -697,7 +699,7 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 	if ((mask & B_STAT_MODIFICATION_TIME) != 0)
 		ni->last_data_change_time = timespec2ntfs(stat->st_mtim);
 
-	if ((mask & B_STAT_CHANGE_TIME) != 0 || updateTime)
+	if ((mask & B_STAT_CHANGE_TIME) != 0)
 		ni->last_mft_change_time = timespec2ntfs(stat->st_ctim);
 
 	if ((mask & B_STAT_ACCESS_TIME) != 0)
