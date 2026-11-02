@@ -632,6 +632,26 @@ TCPEndpoint::~TCPEndpoint()
 
 	T(APICall(this, "destructor"));
 
+	// An endpoint whose socket was never closed, but whose peer still holds
+	// the connection open, is a child the listener spawned and nobody
+	// accepted: an accepted socket always passes through Close() and Free()
+	// first. Its socket goes away with the listener (or a shrunken backlog)
+	// and nothing else will ever tell the peer, so a client that only reads
+	// would wait forever. Reset it, as Linux does when it empties the accept
+	// queue of a closing listener (inet_csk_listen_stop()). A child still in
+	// SYNCHRONIZE_RECEIVED is included: its peer may already count itself
+	// connected, and if it does not, it takes the reset as a refusal. One
+	// whose SYN-ACK never went out -- _Spawn() gave up half way -- has no
+	// peer that knows of it, and may not even have the sequence numbers a
+	// reset needs, so it is left alone.
+	if ((fFlags & FLAG_CLOSED) == 0 && fSendMax != fInitialSendSequence
+		&& (fState == SYNCHRONIZE_RECEIVED || fState == ESTABLISHED
+			|| fState == FINISH_RECEIVED)) {
+		fState = CLOSED;
+		T(State(this));
+		_SendReset(true);
+	}
+
 	_CancelConnectionTimers();
 	gStackModule->cancel_timer(&fTimeWaitTimer);
 	T(TimerSet(this, "time-wait", -1));
