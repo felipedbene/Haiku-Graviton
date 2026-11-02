@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules-v2
+# instance: i-0e3292f9d574c8ea3   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153742Z   end: 20261102T153800Z   rc: 0
+# script sha256: 90aa7af02021b907c8ccd5b7ed24e525f14efee6bf983f81495b0550ad094780
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/tcpw
+# | cd /opt/tw/hg/generated || exit 1
+# | git -C .. fetch -q --depth 80 origin graviton
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/tw/$patch || return 1
+# | 		sha256sum /opt/tw/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/tw/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/tcp/' | head -20
+# | 	mkdir -p /opt/tw/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/tw/out/$label/$t && sha256sum /opt/tw/out/$label/$t | sed "s|/opt/tw/out/||"
+# | 		aws s3 cp --quiet /opt/tw/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build f946v2 origin/graviton 946-v2.patch tcp
+# ---- raw output ----
+7f6c23817e90c58f4411d769ce70d0abcc533c07d3dcbe69c660bbab89f26d35  /opt/tw/946-v2.patch
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp     | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+JAM f946v2 ref=origin/graviton head=4ef344f5 patch=946-v2.patch rc=0 wall=6s failed=0 warnings=0
+773e45b8aa2713dfd895bee77c6335ecc6291e8f88cd7b271a87110aa80a3cc7  f946v2/tcp

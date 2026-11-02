@@ -1,0 +1,96 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-v2-listen946
+# instance: i-04b34cb6a2f397a25   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T154942Z   end: 20261102T154959Z   rc: 0
+# script sha256: 64a3be0ca631a69e2124abda962da2a0be1f426c7f4552b573355a7f394f8fee
+# ---- script ----
+# | set -u
+# | cd /boot/home/tw || exit 3
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\).*/\1/p' | head -1)
+# | echo "own address: $OWN"
+# | echo 'LyoKICogbGlzdGVuOTQ2LmMgLS0gaXNzdWUgOTQ2OiBjbG9zaW5nIGEgbGlzdGVuaW5nIHNvY2tldCBtdXN0IHJlc2V0IHRoZQogKiBjb25uZWN0aW9ucyBpdCBuZXZlciBhY2NlcHQoKWVkLCBzbyB0aGVpciBwZWVycyBsZWFybiB0aGUgY29ubmVjdGlvbiBpcwogKiBnb25lIChMaW51eDogUlNULCB0aGUgY2xpZW50J3MgcmVjdigpIGZhaWxzIHdpdGggRUNPTk5SRVNFVCkuIEFuIGFjY2VwdGVkCiAqIGNvbm5lY3Rpb24gbXVzdCBub3QgYmUgYWZmZWN0ZWQ6IGl0IGtlZXBzIHdvcmtpbmcsIGFuZCBpdHMgbm9ybWFsIGNsb3NlKCkKICogc3RpbGwgZW5kcyBpbiBhbiBvcmRlcmx5IEVPRiwgbm90IGEgcmVzZXQuCiAqCiAqIFBsYWluIFBPU0lYOyBldmVyeSB3YWl0IGhhcyBhIGRlYWRsaW5lLiBFeGl0IHN0YXR1cyBpcyB0aGUgbnVtYmVyIG9mIEZBSUxzLgogKi8KI2luY2x1ZGUgPGFycGEvaW5ldC5oPgojaW5jbHVkZSA8ZXJybm8uaD4KI2luY2x1ZGUgPGlmYWRkcnMuaD4KI2luY2x1ZGUgPG5ldC9pZi5oPgojaW5jbHVkZSA8bmV0aW5ldC9pbi5oPgojaW5jbHVkZSA8cG9sbC5oPgojaW5jbHVkZSA8c3RkaW8uaD4KI2luY2x1ZGUgPHN0ZGxpYi5oPgojaW5jbHVkZSA8c3RyaW5nLmg+CiNpbmNsdWRlIDxzeXMvc29ja2V0Lmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KCnN0YXRpYyBpbnQgc0ZhaWx1cmVzID0gMDsKCnN0YXRpYyB2b2lkCnJlc3VsdChpbnQgcGFzcywgY29uc3QgY2hhciogbmFtZSwgY29uc3QgY2hhciogZGV0YWlsKQp7CglwcmludGYoIiUtNDRzICVzICAlc1xuIiwgbmFtZSwgcGFzcyA/ICJQQVNTIiA6ICJGQUlMIiwgZGV0YWlsKTsKCWlmICghcGFzcykKCQlzRmFpbHVyZXMrKzsKCWZmbHVzaChzdGRvdXQpOwp9CgpzdGF0aWMgaW50Cm1ha2VfbGlzdGVuZXIoaW50IGZhbWlseSwgY29uc3QgY2hhciogaG9zdCwgc3RydWN0IHNvY2thZGRyX3N0b3JhZ2UqIGFkZHJlc3MsCglzb2NrbGVuX3QqIGxlbmd0aCwgaW50IGJhY2tsb2cpCnsKCWludCBzID0gc29ja2V0KGZhbWlseSwgU09DS19TVFJFQU0sIDApOwoJbWVtc2V0KGFkZHJlc3MsIDAsIHNpemVvZigqYWRkcmVzcykpOwoJaWYgKGZhbWlseSA9PSBBRl9JTkVUKSB7CgkJc3RydWN0IHNvY2thZGRyX2luKiBhID0gKHN0cnVjdCBzb2NrYWRkcl9pbiopYWRkcmVzczsKCQlhLT5zaW5fZmFtaWx5ID0gQUZfSU5FVDsKCQlpbmV0X3B0b24oQUZfSU5FVCwgaG9zdCwgJmEtPnNpbl9hZGRyKTsKCQkqbGVuZ3RoID0gc2l6ZW9mKCphKTsKCX0gZWxzZSB7CgkJc3RydWN0IHNvY2thZGRyX2luNiogYSA9IChzdHJ1Y3Qgc29ja2FkZHJfaW42KilhZGRyZXNzOwoJCWEtPnNpbjZfZmFtaWx5ID0gQUZfSU5FVDY7CgkJaW5ldF9wdG9uKEFGX0lORVQ2LCBob3N0LCAmYS0+c2luNl9hZGRyKTsKCQkqbGVuZ3RoID0gc2l6ZW9mKCphKTsKCX0KCWlmIChzIDwgMCB8fCBiaW5kKHMsIChzdHJ1Y3Qgc29ja2FkZHIqKWFkZHJlc3MsICpsZW5ndGgpICE9IDAKCQl8fCBsaXN0ZW4ocywgYmFja2xvZykgIT0gMCkgewoJCXByaW50Zigic2V0dXAgJXM6ICVzXG4iLCBob3N0LCBzdHJlcnJvcihlcnJubykpOwoJCWV4aXQoMTAwKTsKCX0KCWdldHNvY2tuYW1lKHMsIChzdHJ1Y3Qgc29ja2FkZHIqKWFkZHJlc3MsIGxlbmd0aCk7CglyZXR1cm4gczsKfQoKc3RhdGljIGludApjb25uZWN0X3RvKGludCBmYW1pbHksIHN0cnVjdCBzb2NrYWRkcl9zdG9yYWdlKiBhZGRyZXNzLCBzb2NrbGVuX3QgbGVuZ3RoKQp7CglpbnQgYyA9IHNvY2tldChmYW1pbHksIFNPQ0tfU1RSRUFNLCAwKTsKCWlmIChjb25uZWN0KGMsIChzdHJ1Y3Qgc29ja2FkZHIqKWFkZHJlc3MsIGxlbmd0aCkgIT0gMCkgewoJCXByaW50ZigiY29ubmVjdDogJXNcbiIsIHN0cmVycm9yKGVycm5vKSk7CgkJZXhpdCgxMDEpOwoJfQoJcmV0dXJuIGM7Cn0KCi8qIFdhaXRzIHVwIHRvIDUgcyBmb3IgdGhlIGNsaWVudCB0byBsZWFybiB0aGUgY29ubmVjdGlvbidzIGZhdGUuIFJldHVybnMKICogdGhlIGVycm5vIGl0cyByZWN2KCkgZmFpbGVkIHdpdGgsIDAgZm9yIEVPRiwgLTEgZm9yICJub3QgdG9sZCIsIC0yIGZvcgogKiBkYXRhLiAqLwpzdGF0aWMgaW50CmNsaWVudF9vdXRjb21lKGludCBjLCBjaGFyKiBkZXRhaWwsIHNpemVfdCBzaXplKQp7CglzdHJ1Y3QgcG9sbGZkIHAgPSB7IGMsIFBPTExJTiwgMCB9OwoJaW50IHJlYWR5ID0gcG9sbCgmcCwgMSwgNTAwMCk7CglpZiAocmVhZHkgPD0gMCkgewoJCXNucHJpbnRmKGRldGFpbCwgc2l6ZSwgIm5vdCB0b2xkIHdpdGhpbiA1IHMgKHBvbGw9JWQpIiwgcmVhZHkpOwoJCXJldHVybiAtMTsKCX0KCWNoYXIgYnl0ZTsKCXNzaXplX3QgbiA9IHJlY3YoYywgJmJ5dGUsIDEsIDApOwoJaW50IGUgPSBlcnJubzsKCXNucHJpbnRmKGRldGFpbCwgc2l6ZSwgInBvbGwgcmV2ZW50cz0lI3ggcmVjdj0lemQgJXMiLCBwLnJldmVudHMsIG4sCgkJbiA8IDAgPyBzdHJlcnJvcihlKSA6IG4gPT0gMCA/ICIoRU9GKSIgOiAiKGRhdGEpIik7CglyZXR1cm4gbiA8IDAgPyBlIDogbiA9PSAwID8gMCA6IC0yOwp9CgpzdGF0aWMgdm9pZAp1bmFjY2VwdGVkKGludCBmYW1pbHksIGNvbnN0IGNoYXIqIGhvc3QsIGNvbnN0IGNoYXIqIGxhYmVsLCBpbnQgY291bnQsCglpbnQgc2VuZEZpcnN0KQp7CglzdHJ1Y3Qgc29ja2FkZHJfc3RvcmFnZSBhZGRyZXNzOwoJc29ja2xlbl90IGxlbmd0aDsKCWludCBsaXN0ZW5lciA9IG1ha2VfbGlzdGVuZXIoZmFtaWx5LCBob3N0LCAmYWRkcmVzcywgJmxlbmd0aCwgOCk7CglpbnQgY2xpZW50c1s4XTsKCWZvciAoaW50IGkgPSAwOyBpIDwgY291bnQ7IGkrKykgewoJCWNsaWVudHNbaV0gPSBjb25uZWN0X3RvKGZhbWlseSwgJmFkZHJlc3MsIGxlbmd0aCk7CgkJaWYgKHNlbmRGaXJzdCkKCQkJc2VuZChjbGllbnRzW2ldLCAiaGVsbG8iLCA1LCAwKTsKCX0KCXVzbGVlcCgxMDAwMDApOwoJY2xvc2UobGlzdGVuZXIpOwoKCWZvciAoaW50IGkgPSAwOyBpIDwgY291bnQ7IGkrKykgewoJCWNoYXIgbmFtZVs5Nl0sIGRldGFpbFsxNjBdOwoJCXNucHJpbnRmKG5hbWUsIHNpemVvZihuYW1lKSwgIiVzIHVuYWNjZXB0ZWQgJWQvJWQlcyIsIGxhYmVsLCBpICsgMSwKCQkJY291bnQsIHNlbmRGaXJzdCA/ICIgK2RhdGEiIDogIiIpOwoJCWludCBvdXRjb21lID0gY2xpZW50X291dGNvbWUoY2xpZW50c1tpXSwgZGV0YWlsLCBzaXplb2YoZGV0YWlsKSk7CgkJcmVzdWx0KG91dGNvbWUgPT0gRUNPTk5SRVNFVCwgbmFtZSwgZGV0YWlsKTsKCQljbG9zZShjbGllbnRzW2ldKTsKCX0KfQoKLyogQW4gYWNjZXB0ZWQgY29ubmVjdGlvbiBzdXJ2aXZlcyBpdHMgbGlzdGVuZXIncyBjbG9zZSwgYW5kIGl0cyBvd24gY2xvc2UKICogaXMgc3RpbGwgYW4gb3JkZXJseSBvbmU7IGFuIHVuYWNjZXB0ZWQgc2libGluZyBpcyByZXNldC4gKi8Kc3RhdGljIHZvaWQKYWNjZXB0ZWRfc3Vydml2ZXMoaW50IGZhbWlseSwgY29uc3QgY2hhciogaG9zdCwgY29uc3QgY2hhciogbGFiZWwpCnsKCXN0cnVjdCBzb2NrYWRkcl9zdG9yYWdlIGFkZHJlc3M7Cglzb2NrbGVuX3QgbGVuZ3RoOwoJaW50IGxpc3RlbmVyID0gbWFrZV9saXN0ZW5lcihmYW1pbHksIGhvc3QsICZhZGRyZXNzLCAmbGVuZ3RoLCA4KTsKCWludCBmaXJzdCA9IGNvbm5lY3RfdG8oZmFtaWx5LCAmYWRkcmVzcywgbGVuZ3RoKTsKCWludCBzZXJ2ZXIgPSBhY2NlcHQobGlzdGVuZXIsIE5VTEwsIE5VTEwpOwoJaW50IHNlY29uZCA9IGNvbm5lY3RfdG8oZmFtaWx5LCAmYWRkcmVzcywgbGVuZ3RoKTsKCXVzbGVlcCgxMDAwMDApOwoJY2xvc2UobGlzdGVuZXIpOwoKCWNoYXIgbmFtZVs5Nl0sIGRldGFpbFsxNjBdOwoJc25wcmludGYobmFtZSwgc2l6ZW9mKG5hbWUpLCAiJXMgdW5hY2NlcHRlZCBzaWJsaW5nIiwgbGFiZWwpOwoJaW50IG91dGNvbWUgPSBjbGllbnRfb3V0Y29tZShzZWNvbmQsIGRldGFpbCwgc2l6ZW9mKGRldGFpbCkpOwoJcmVzdWx0KG91dGNvbWUgPT0gRUNPTk5SRVNFVCwgbmFtZSwgZGV0YWlsKTsKCgljaGFyIGJ1ZmZlcls4XSA9IHsgMCB9OwoJaW50IG9rID0gc2VydmVyID49IDAgJiYgc2VuZChmaXJzdCwgInBpbmciLCA0LCAwKSA9PSA0OwoJc3RydWN0IHBvbGxmZCBwID0geyBzZXJ2ZXIsIFBPTExJTiwgMCB9OwoJb2sgPSBvayAmJiBwb2xsKCZwLCAxLCA1MDAwKSA9PSAxICYmIHJlY3Yoc2VydmVyLCBidWZmZXIsIDgsIDApID09IDQKCQkmJiBtZW1jbXAoYnVmZmVyLCAicGluZyIsIDQpID09IDA7CglvayA9IG9rICYmIHNlbmQoc2VydmVyLCAicG9uZyIsIDQsIDApID09IDQ7CglwLmZkID0gZmlyc3Q7CglvayA9IG9rICYmIHBvbGwoJnAsIDEsIDUwMDApID09IDEgJiYgcmVjdihmaXJzdCwgYnVmZmVyLCA4LCAwKSA9PSA0CgkJJiYgbWVtY21wKGJ1ZmZlciwgInBvbmciLCA0KSA9PSAwOwoJc25wcmludGYobmFtZSwgc2l6ZW9mKG5hbWUpLCAiJXMgYWNjZXB0ZWQgc3RpbGwgd29ya3MiLCBsYWJlbCk7CglyZXN1bHQob2ssIG5hbWUsIG9rID8gInBpbmcvcG9uZyBhZnRlciB0aGUgbGlzdGVuZXIgY2xvc2VkIgoJCTogImV4Y2hhbmdlIGZhaWxlZCIpOwoKCWNsb3NlKHNlcnZlcik7CglvdXRjb21lID0gY2xpZW50X291dGNvbWUoZmlyc3QsIGRldGFpbCwgc2l6ZW9mKGRldGFpbCkpOwoJc25wcmludGYobmFtZSwgc2l6ZW9mKG5hbWUpLCAiJXMgYWNjZXB0ZWQgY2xvc2UgaXMgRU9GIiwgbGFiZWwpOwoJcmVzdWx0KG91dGNvbWUgPT0gMCwgbmFtZSwgZGV0YWlsKTsKCWNsb3NlKGZpcnN0KTsKCWNsb3NlKHNlY29uZCk7Cn0KCmludAptYWluKCkKewoJY2hhciBvd25bSU5FVF9BRERSU1RSTEVOXSA9ICIiOwoJc3RydWN0IGlmYWRkcnMqIGxpc3Q7CglpZiAoZ2V0aWZhZGRycygmbGlzdCkgPT0gMCkgewoJCWZvciAoc3RydWN0IGlmYWRkcnMqIGkgPSBsaXN0OyBpICE9IE5VTEw7IGkgPSBpLT5pZmFfbmV4dCkgewoJCQlpZiAoaS0+aWZhX2FkZHIgPT0gTlVMTCB8fCBpLT5pZmFfYWRkci0+c2FfZmFtaWx5ICE9IEFGX0lORVQKCQkJCXx8IChpLT5pZmFfZmxhZ3MgJiBJRkZfTE9PUEJBQ0spICE9IDApCgkJCQljb250aW51ZTsKCQkJaW5ldF9udG9wKEFGX0lORVQsICYoKHN0cnVjdCBzb2NrYWRkcl9pbiopaS0+aWZhX2FkZHIpLT5zaW5fYWRkciwKCQkJCW93biwgc2l6ZW9mKG93bikpOwoJCQlicmVhazsKCQl9CgkJZnJlZWlmYWRkcnMobGlzdCk7Cgl9CgoJdW5hY2NlcHRlZChBRl9JTkVULCAiMTI3LjAuMC4xIiwgIjEyNy4wLjAuMSIsIDEsIDApOwoJdW5hY2NlcHRlZChBRl9JTkVULCAiMTI3LjAuMC4xIiwgIjEyNy4wLjAuMSIsIDEsIDEpOwoJdW5hY2NlcHRlZChBRl9JTkVULCAiMTI3LjAuMC4xIiwgIjEyNy4wLjAuMSIsIDQsIDApOwoJdW5hY2NlcHRlZChBRl9JTkVUNiwgIjo6MSIsICI6OjEiLCAxLCAwKTsKCXVuYWNjZXB0ZWQoQUZfSU5FVDYsICI6OjEiLCAiOjoxIiwgMiwgMSk7CglpZiAob3duWzBdICE9ICdcMCcpIHsKCQljaGFyIGxhYmVsWzY0XTsKCQlzbnByaW50ZihsYWJlbCwgc2l6ZW9mKGxhYmVsKSwgIm93biAlcyIsIG93bik7CgkJdW5hY2NlcHRlZChBRl9JTkVULCBvd24sIGxhYmVsLCAyLCAwKTsKCX0gZWxzZQoJCXByaW50Zigibm8gbm9uLWxvb3BiYWNrIElQdjQgYWRkcmVzczogb3duLWFkZHJlc3Mgcm93cyBza2lwcGVkXG4iKTsKCWFjY2VwdGVkX3N1cnZpdmVzKEFGX0lORVQsICIxMjcuMC4wLjEiLCAiMTI3LjAuMC4xIik7CglhY2NlcHRlZF9zdXJ2aXZlcyhBRl9JTkVUNiwgIjo6MSIsICI6OjEiKTsKCglwcmludGYoIkZBSUxTICVkXG4iLCBzRmFpbHVyZXMpOwoJcmV0dXJuIHNGYWlsdXJlczsKfQo=' | base64 -d > listen946.c && gcc -O2 -Wall -o listen946 listen946.c -lnetwork || exit 6; sha256sum listen946.c listen946
+# | for i in 1 2 3; do echo "=== run $i"; ./listen946; echo "exit=$?"; done
+# ---- raw output ----
+Haiku ip-10-128-10-190.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- non-packaged overrides
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+773e45b8aa2713dfd895bee77c6335ecc6291e8f88cd7b271a87110aa80a3cc7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2285 0xffff000002484000 0xffff0000024a6000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2305 0xffff0000024a8000 0xffff0000024b0000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2306 0xffff0000024b1000 0xffff0000024bc000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2307 0xffff0000024be000 0xffff0000024d0000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2311 0xffff0000024d1000 0xffff0000024dc000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2319 0xffff0000024e3000 0xffff0000024f1000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+own address: 10.128.10.190
+417999254b989a0bef4da6fd1c57f2f1dd721b5fcffbcf0171a5fe4b8fbaf311  listen946.c
+7271a0601336265e5b79ae8349d0d22b9b12e28a35be93634e73592b18ba473f  listen946
+=== run 1
+127.0.0.1 unaccepted 1/1                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/1 +data               PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 2/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 3/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 4/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/1                           PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 2/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.10.190 unaccepted 1/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.10.190 unaccepted 2/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted sibling                 PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 accepted still works               PASS  ping/pong after the listener closed
+127.0.0.1 accepted close is EOF              PASS  poll revents=0x81 recv=0 (EOF)
+::1 unaccepted sibling                       PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 accepted still works                     PASS  ping/pong after the listener closed
+::1 accepted close is EOF                    PASS  poll revents=0x81 recv=0 (EOF)
+FAILS 0
+exit=0
+=== run 2
+127.0.0.1 unaccepted 1/1                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/1 +data               PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 2/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 3/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 4/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/1                           PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 2/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.10.190 unaccepted 1/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.10.190 unaccepted 2/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted sibling                 PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 accepted still works               PASS  ping/pong after the listener closed
+127.0.0.1 accepted close is EOF              PASS  poll revents=0x81 recv=0 (EOF)
+::1 unaccepted sibling                       PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 accepted still works                     PASS  ping/pong after the listener closed
+::1 accepted close is EOF                    PASS  poll revents=0x81 recv=0 (EOF)
+FAILS 0
+exit=0
+=== run 3
+127.0.0.1 unaccepted 1/1                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/1 +data               PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 1/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 2/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 3/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted 4/4                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/1                           PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 1/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 unaccepted 2/2 +data                     PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.10.190 unaccepted 1/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+own 10.128.10.190 unaccepted 2/2             PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 unaccepted sibling                 PASS  poll revents=0x85 recv=-1 Connection reset by peer
+127.0.0.1 accepted still works               PASS  ping/pong after the listener closed
+127.0.0.1 accepted close is EOF              PASS  poll revents=0x81 recv=0 (EOF)
+::1 unaccepted sibling                       PASS  poll revents=0x85 recv=-1 Connection reset by peer
+::1 accepted still works                     PASS  ping/pong after the listener closed
+::1 accepted close is EOF                    PASS  poll revents=0x81 recv=0 (EOF)
+FAILS 0
+exit=0
