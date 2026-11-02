@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: x891-reverse-canonserver-client-A
+# instance: i-0217bc36378442927   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T201145Z   end: 20261101T201221Z   rc: 0
+# script sha256: bf48407dfc5d6053c3317b90cbe144ece3ebac934ccacd91bbbeb35bc83793ac
+# ---- script ----
+# | cd /boot/home/tnet
+# | listimage 1 | grep 'protocols/tcp' | awk '{print $NF}'
+# | ifconfig /dev/net/ena/0 | grep 'inet addr'
+# | echo "peer: 10.128.9.158:10901 (allowed only by sg-002054e57f5449529)"
+# | sleep 3
+# | for i in 1 2 3; do ./tcp891 connect 10.128.9.158 10901 closed 5; done
+# | sleep 2
+# | for i in 1 2 3; do ./tcp891 connect 10.128.9.158 10901 halfclose; sleep 0.5; done
+# | sleep 2
+# | for i in 1 2 3; do ./tcp891 connect 10.128.9.158 10901 bulk 512; sleep 0.5; done
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+	inet addr: 10.128.4.64, Bcast: 10.128.7.255, Mask: 255.255.252.0
+peer: 10.128.9.158:10901 (allowed only by sg-002054e57f5449529)
+closed     FAIL  read=0  still writing OK after 5004.9 ms (500 writes)
+closed     FAIL  read=0  still writing OK after 5004.9 ms (500 writes)
+closed     FAIL  read=0  still writing OK after 5004.8 ms (500 writes)
+halfclose  PASS  read=0  writes=100 (the server reports what it read)
+halfclose  PASS  read=0  writes=100 (the server reports what it read)
+halfclose  PASS  read=0  writes=100 (the server reports what it read)
+bulk: 512 MiB in 1265 ms, 405 MiB/s
+bulk: 512 MiB in 1293 ms, 396 MiB/s
+bulk: 512 MiB in 1290 ms, 397 MiB/s

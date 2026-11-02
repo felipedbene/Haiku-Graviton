@@ -1,0 +1,9 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: diag-ps
+# instance: i-04b896fa16dacaa46   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T175506Z   end: 20261101T175511Z   rc: 0
+# script sha256: 222fab333ad58229ca83c808b86e74fc8df298bb5c452f6aa282a03bf8f36c85
+# ---- script ----
+# | ps | grep -E 'python|pkgman|curl|node|test.py' | grep -v grep | head
+# ---- raw output ----
+/boot/system/bin/python3 -I -                        649        2    0    0 

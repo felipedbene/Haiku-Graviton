@@ -1,0 +1,204 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-node-regress-tcp
+# instance: i-08487b684d62c02cf   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T181828Z   end: 20261101T184554Z   rc: 0
+# script sha256: 01028833c00d555591aa67274416ad696b9e3c089b79f195225f6fa500cc3f55
+# ---- script ----
+# | cd /boot/home/tnet/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'protocols/(unix|udp|ipv6|tcp)' | awk '{print $NF}' | sort -u
+# | sha256sum /boot/system/kernel_arm64
+# | run() {
+# | 	local name=$1; shift
+# | 	local s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 60 -p tap "$@" > /tmp/regress-$name.tap 2>&1
+# | 	echo "=== $name: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/regress-$name.tap) notok=$(grep -c '^not ok ' /tmp/regress-$name.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/regress-$name.tap | sed 's/^/  /' | sort -k3
+# | }
+# | run repeat-max-invalid-frames --repeat 3 parallel/test-http2-max-invalid-frames
+# | run net 'parallel/test-net-*'
+# | run http2-subset 'parallel/test-http2-*frames*' 'parallel/test-http2-session-*' 'parallel/test-http2-misbehaving-*'
+# ---- raw output ----
+/boot/system/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+=== repeat-max-invalid-frames: rc=1 wall=11s ok=0 notok=3
+  not ok 1 parallel/test-http2-max-invalid-frames
+  not ok 2 parallel/test-http2-max-invalid-frames
+  not ok 3 parallel/test-http2-max-invalid-frames
+=== net: rc=1 wall=1270s ok=122 notok=37
+  not ok 104 parallel/test-net-server-listen-path
+  not ok 106 parallel/test-net-persistent-keepalive
+  not ok 110 parallel/test-net-persistent-nodelay
+  not ok 111 parallel/test-net-persistent-ref-unref
+  not ok 118 parallel/test-net-server-max-connections
+  not ok 121 parallel/test-net-server-pause-on-connect
+  not ok 122 parallel/test-net-socket-byteswritten
+  not ok 124 parallel/test-net-socket-close-after-end
+  not ok 130 parallel/test-net-socket-connect-without-cb
+  not ok 136 parallel/test-net-socket-connecting
+  not ok 144 parallel/test-net-socket-local-address
+  not ok 145 parallel/test-net-socket-ready-without-cb
+  not ok 15 parallel/test-net-boundsocket
+  not ok 150 parallel/test-net-socket-tos
+  not ok 156 parallel/test-net-throttle
+  not ok 157 parallel/test-net-writable
+  not ok 158 parallel/test-net-write-after-end-nt
+  not ok 159 parallel/test-net-write-slow
+  not ok 19 parallel/test-net-after-close
+  not ok 20 parallel/test-net-allow-half-open
+  not ok 23 parallel/test-net-autoselectfamily-default
+  not ok 3 parallel/test-net-autoselectfamily
+  not ok 40 parallel/test-net-connect-options-ipv6
+  not ok 47 parallel/test-net-bytes-written-large
+  not ok 48 parallel/test-net-dns-custom-lookup
+  not ok 50 parallel/test-net-dns-lookup-skip
+  not ok 60 parallel/test-net-connect-options-allowhalfopen
+  not ok 63 parallel/test-net-connect-options-port
+  not ok 68 parallel/test-net-dns-lookup
+  not ok 7 parallel/test-net-autoselectfamily-ipv4first
+  not ok 78 parallel/test-net-keepalive
+  not ok 80 parallel/test-net-listen-after-destroying-stdin
+  not ok 82 parallel/test-net-normalize-args
+  not ok 83 parallel/test-net-onread-static-buffer
+  not ok 84 parallel/test-net-pause-resume-connecting
+  not ok 85 parallel/test-net-pingpong
+  not ok 86 parallel/test-net-pipe-connect-errors
+  ok 1 parallel/test-net-access-byteswritten
+  ok 2 parallel/test-net-allow-half-open-async-iter
+  ok 4 parallel/test-net-autoselectfamily-attempt-timeout-cli-option
+  ok 5 parallel/test-net-autoselectfamily-attempt-timeout-default-value
+  ok 6 parallel/test-net-autoselectfamily-commandline-option
+  ok 8 parallel/test-net-better-error-messages-listen
+  ok 9 parallel/test-net-better-error-messages-listen-path
+  ok 10 parallel/test-net-better-error-messages-path
+  ok 11 parallel/test-net-better-error-messages-port-hostname
+  ok 12 parallel/test-net-binary
+  ok 13 parallel/test-net-bind-twice
+  ok 14 parallel/test-net-blocklist
+  ok 16 parallel/test-net-buffersize
+  ok 17 parallel/test-net-bytes-read
+  ok 18 parallel/test-net-bytes-stats
+  ok 22 parallel/test-net-can-reset-timeout
+  ok 21 parallel/test-net-child-process-connect-reset
+  ok 24 parallel/test-net-client-bind-twice
+  ok 25 parallel/test-net-connect-abort-controller
+  ok 26 parallel/test-net-connect-after-destroy
+  ok 27 parallel/test-net-connect-buffer
+  ok 28 parallel/test-net-connect-buffer2
+  ok 30 parallel/test-net-connect-call-socket-connect
+  ok 31 parallel/test-net-connect-custom-lookup-non-string-address
+  ok 29 parallel/test-net-connect-destroy
+  ok 32 parallel/test-net-connect-immediate-destroy
+  ok 33 parallel/test-net-connect-immediate-finish
+  ok 34 parallel/test-net-connect-keepalive
+  ok 36 parallel/test-net-connect-memleak
+  ok 35 parallel/test-net-connect-no-arg
+  ok 37 parallel/test-net-connect-nodelay
+  ok 39 parallel/test-net-connect-options-fd
+  ok 38 parallel/test-net-connect-options-invalid
+  ok 41 parallel/test-net-connect-options-path
+  ok 42 parallel/test-net-connect-paused-connection
+  ok 43 parallel/test-net-connect-reset
+  ok 44 parallel/test-net-connect-reset-after-destroy
+  ok 45 parallel/test-net-connect-reset-before-connected
+  ok 46 parallel/test-net-connect-reset-until-connected
+  ok 49 parallel/test-net-dns-error
+  ok 51 parallel/test-net-during-close
+  ok 52 parallel/test-net-eaddrinuse
+  ok 53 parallel/test-net-end-close
+  ok 54 parallel/test-net-end-destroyed
+  ok 55 parallel/test-net-end-without-connect
+  ok 56 parallel/test-net-error-twice
+  ok 57 parallel/test-net-isip
+  ok 58 parallel/test-net-isipv4
+  ok 59 parallel/test-net-isipv6
+  ok 61 parallel/test-net-keepalive-interval-count
+  ok 62 parallel/test-net-large-string
+  ok 64 parallel/test-net-listen-close-server
+  ok 65 parallel/test-net-listen-close-server-callback-is-not-function
+  ok 66 parallel/test-net-listen-error
+  ok 67 parallel/test-net-listen-exclusive-random-ports
+  ok 69 parallel/test-net-listen-fd0
+  ok 70 parallel/test-net-listen-handle-in-cluster-1
+  ok 71 parallel/test-net-listen-handle-in-cluster-2
+  ok 72 parallel/test-net-listen-invalid-port
+  ok 74 parallel/test-net-listen-twice
+  ok 73 parallel/test-net-listening
+  ok 75 parallel/test-net-local-address-port
+  ok 76 parallel/test-net-localerror
+  ok 77 parallel/test-net-negative-zero
+  ok 79 parallel/test-net-options-lookup
+  ok 81 parallel/test-net-perf_hooks
+  ok 87 parallel/test-net-pipe-with-long-path
+  ok 88 parallel/test-net-reconnect
+  ok 89 parallel/test-net-remote-address
+  ok 90 parallel/test-net-remote-address-port
+  ok 91 parallel/test-net-reuseport # skip The `reusePort` option is not supported
+  ok 92 parallel/test-net-server-async-dispose
+  ok 93 parallel/test-net-server-blocklist
+  ok 94 parallel/test-net-server-call-listen-multiple-times
+  ok 95 parallel/test-net-server-capture-rejection
+  ok 96 parallel/test-net-server-close
+  ok 97 parallel/test-net-server-close-before-calling-lookup-callback
+  ok 98 parallel/test-net-server-close-before-ipc-response
+  ok 99 parallel/test-net-server-drop-connections
+  ok 100 parallel/test-net-server-keepalive
+  ok 101 parallel/test-net-server-listen-handle
+  ok 102 parallel/test-net-server-listen-options
+  ok 103 parallel/test-net-server-listen-options-signal
+  ok 105 parallel/test-net-server-listen-remove-callback
+  ok 107 parallel/test-net-server-max-connections-close-makes-more-available
+  ok 108 parallel/test-net-server-nodelay
+  ok 109 parallel/test-net-server-options
+  ok 112 parallel/test-net-server-reset
+  ok 114 parallel/test-net-server-transfer-worker
+  ok 113 parallel/test-net-server-try-ports
+  ok 115 parallel/test-net-server-unref
+  ok 116 parallel/test-net-server-unref-persistent
+  ok 117 parallel/test-net-settimeout
+  ok 119 parallel/test-net-socket-connect-invalid-autoselectfamily
+  ok 120 parallel/test-net-socket-connect-invalid-autoselectfamilyattempttimeout
+  ok 123 parallel/test-net-socket-constructor
+  ok 125 parallel/test-net-socket-destroy-send
+  ok 126 parallel/test-net-socket-destroy-twice
+  ok 127 parallel/test-net-socket-end-before-connect
+  ok 128 parallel/test-net-socket-end-callback
+  ok 129 parallel/test-net-socket-no-halfopen-enforcer
+  ok 131 parallel/test-net-socket-reset-send
+  ok 132 parallel/test-net-socket-reset-twice
+  ok 133 parallel/test-net-socket-setnodelay
+  ok 134 parallel/test-net-socket-timeout
+  ok 135 parallel/test-net-socket-timeout-unref
+  ok 137 parallel/test-net-socket-transfer-worker
+  ok 138 parallel/test-net-socket-transfer-worker-http
+  ok 139 parallel/test-net-socket-unref-timer-parent-chain
+  ok 140 parallel/test-net-socket-write-after-close
+  ok 141 parallel/test-net-socket-write-error
+  ok 142 parallel/test-net-stream
+  ok 143 parallel/test-net-sync-cork
+  ok 147 parallel/test-net-timeout-no-handle
+  ok 146 parallel/test-net-transfer-guards
+  ok 148 parallel/test-net-unref-timer-parent-undefined
+  ok 149 parallel/test-net-write-after-close
+  ok 151 parallel/test-net-write-arguments
+  ok 152 parallel/test-net-write-cb-on-destroy-before-connect
+  ok 153 parallel/test-net-write-connect-write
+  ok 154 parallel/test-net-write-fully-async-buffer
+  ok 155 parallel/test-net-write-fully-async-hex-string
+=== http2-subset: rc=1 wall=361s ok=5 notok=8
+  not ok 10 parallel/test-http2-misbehaving-flow-control-paused
+  not ok 12 parallel/test-http2-session-stream-state
+  not ok 13 parallel/test-http2-session-timeout
+  not ok 4 parallel/test-http2-max-invalid-frames
+  not ok 5 parallel/test-http2-session-graceful-close
+  not ok 6 parallel/test-http2-session-reuse-different-authority
+  not ok 7 parallel/test-http2-session-settings
+  not ok 9 parallel/test-http2-misbehaving-flow-control
+  ok 11 parallel/test-http2-misbehaving-multiplex
+  ok 1 parallel/test-http2-session-cleanup-on-nghttp2-goaway
+  ok 3 parallel/test-http2-session-destroy-during-receive
+  ok 2 parallel/test-http2-session-gc-while-write-scheduled
+  ok 8 parallel/test-http2-session-unref

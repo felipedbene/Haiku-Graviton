@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: x891-after-fixedserver-server-A
+# instance: i-0217bc36378442927   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T201109Z   end: 20261101T201133Z   rc: 0
+# script sha256: c4720252b6c3590fb108946eed652e79f7d07764799c52f5907e7eefacd8a34a
+# ---- script ----
+# | cd /boot/home/tnet
+# | ifconfig /dev/net/ena/0 | grep "inet addr"
+# | listimage 1 | grep 'protocols/tcp' | awk '{print $NF}'
+# | for m in closed halfclose bulk; do timeout 120 ./tcp891 serve 10901 $m 3; done
+# ---- raw output ----
+	inet addr: 10.128.4.64, Bcast: 10.128.7.255, Mask: 255.255.252.0
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+serve closed on port 10901, 3 connection(s)
+  connection 1: close()d at once
+  connection 2: close()d at once
+  connection 3: close()d at once
+serve halfclose on port 10901, 3 connection(s)
+  connection 1: read 1000 bytes, then 0
+  connection 2: read 1000 bytes, then 0
+  connection 3: read 1000 bytes, then 0
+serve bulk on port 10901, 3 connection(s)
+  connection 1: read 536870912 bytes, then 0, 438 MiB/s
+  connection 2: read 536870912 bytes, then 0, 407 MiB/s
+  connection 3: read 536870912 bytes, then 0, 412 MiB/s

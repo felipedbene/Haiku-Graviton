@@ -1,0 +1,58 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-v6bulk
+# instance: i-08487b684d62c02cf   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T175729Z   end: 20261101T175737Z   rc: 0
+# script sha256: 5837bc6b2aff62216e35709c13159851697c49e5a3cb4c5471dc258dd657a240
+# ---- script ----
+# | sha256sum /boot/system/add-ons/kernel/network/protocols/tcp /boot/system/add-ons/kernel/network/protocols/ipv6 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/* 2>/dev/null
+# | ifconfig loop | head -6
+# | timeout 120 python3 -u -I - <<'PY'
+# | import socket, threading, time
+# | for fam, host in ((socket.AF_INET6, "::1"), (socket.AF_INET, "127.0.0.1")):
+# |     for size in (1000, 16000, 16300, 16400, 32000, 65000, 1 << 20):
+# |         l = socket.socket(fam); l.bind((host, 0)); l.listen(1)
+# |         res = {}
+# |         def server():
+# |             s, _ = l.accept(); s.settimeout(3)
+# |             try:
+# |                 s.sendall(b"x" * size); res["sent"] = True
+# |             except Exception as e:
+# |                 res["sent"] = repr(e)
+# |             s.close()
+# |         t = threading.Thread(target=server); t.start()
+# |         c = socket.socket(fam); c.connect(l.getsockname()[:2]); c.settimeout(3)
+# |         got = 0; err = None; st = time.time()
+# |         try:
+# |             while got < size:
+# |                 b = c.recv(65536)
+# |                 if not b: break
+# |                 got += len(b)
+# |         except Exception as e:
+# |             err = repr(e)
+# |         t.join(); c.close(); l.close()
+# |         mss = None
+# |         print(f"{host} write {size}: client got {got} in {time.time()-st:.2f}s err={err} server={res.get('sent')}", flush=True)
+# | PY
+# ---- raw output ----
+a275262053d51bd688c6315ccb3e1f22e08f6d473094a7ad21bc18fd0c59ce38  /boot/system/add-ons/kernel/network/protocols/tcp
+09f4fdbc06f628da7bd2030fa214b6a6e6101e534433284912945ec432098fba  /boot/system/add-ons/kernel/network/protocols/ipv6
+loop	Hardware type: Local Loopback, Address: none
+	inet addr: 127.0.0.1, Mask: 255.0.0.0
+	inet6 addr: ::1, Prefix Length: 128
+	MTU: 65536, Metric: 0, up loopback link
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 39071 packets, 0 errors, 1220610781 bytes, 0 mcasts, 0 dropped
+::1 write 1000: client got 1000 in 0.00s err=None server=True
+::1 write 16000: client got 16000 in 0.00s err=None server=True
+::1 write 16300: client got 16300 in 0.00s err=None server=True
+::1 write 16400: client got 16400 in 0.00s err=None server=True
+::1 write 32000: client got 32000 in 0.00s err=None server=True
+::1 write 65000: client got 65000 in 0.00s err=None server=True
+::1 write 1048576: client got 0 in 3.00s err=TimeoutError('timed out') server=TimeoutError('timed out')
+127.0.0.1 write 1000: client got 1000 in 0.00s err=None server=True
+127.0.0.1 write 16000: client got 16000 in 0.00s err=None server=True
+127.0.0.1 write 16300: client got 16300 in 0.00s err=None server=True
+127.0.0.1 write 16400: client got 16400 in 0.00s err=None server=True
+127.0.0.1 write 32000: client got 32000 in 0.00s err=None server=True
+127.0.0.1 write 65000: client got 65000 in 0.00s err=None server=True
+127.0.0.1 write 1048576: client got 1048576 in 0.00s err=None server=True

@@ -3021,6 +3021,19 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 		}
 	}
 
+	if ((fFlags & FLAG_CLOSED) != 0 && buffer->size > 0
+		&& (fState == FINISH_SENT || fState == FINISH_ACKNOWLEDGED)) {
+		// New data for a connection the application has close()d: nobody
+		// can ever read it. RFC 1122 section 4.2.2.13 asks for a reset, and
+		// Linux and the BSDs send one. Queueing and acknowledging it instead
+		// let the peer's writes go on succeeding until our window was full
+		// and the window probe above finally got the reset. The trimming
+		// above has already removed duplicates, so this is data beyond
+		// RCV.NXT. A connection that is only half-closed (shutdown(SHUT_WR),
+		// no close()) still has a reader and keeps receiving (#615).
+		return DROP | RESET;
+	}
+
 	bool notify = false;
 
 	// The buffer may be freed if its data is added to the queue, so cache

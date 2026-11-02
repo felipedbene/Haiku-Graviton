@@ -1,0 +1,37 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: diag-bulk2
+# instance: i-08487b684d62c02cf   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T175558Z   end: 20261101T175703Z   rc: 0
+# script sha256: da1adb2361dc97bbb5ff81f182550af0f07ef6c6fd654d751b6561c72ab5b887
+# ---- script ----
+# | timeout 60 python3 -u -I - <<'PY'
+# | import socket, threading, time
+# | N = 64 << 20
+# | for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+# |     l = socket.socket(fam); l.bind((host, 0)); l.listen(1)
+# |     port = l.getsockname()[1]
+# |     def server():
+# |         s, _ = l.accept()
+# |         buf = b"x" * (1 << 20)
+# |         for i in range(N >> 20): s.sendall(buf)
+# |         print(host, "server sent all, closing", flush=True)
+# |         s.close()
+# |     t = threading.Thread(target=server); t.start()
+# |     c = socket.socket(fam); c.connect((host, port))
+# |     st = time.time(); got = 0
+# |     c.settimeout(10)
+# |     try:
+# |         while True:
+# |             b = c.recv(1 << 20)
+# |             if not b: break
+# |             got += len(b)
+# |     except Exception as e:
+# |         print(host, "client recv exception", repr(e), "got", got, flush=True)
+# |     t.join(); print(host, "down done", got, round(time.time() - st, 2), flush=True)
+# | PY
+# | echo "rc=$?"
+# ---- raw output ----
+127.0.0.1 server sent all, closing
+127.0.0.1 down done 67108864 0.19
+::1 client recv exception TimeoutError('timed out') got 0
+rc=124
