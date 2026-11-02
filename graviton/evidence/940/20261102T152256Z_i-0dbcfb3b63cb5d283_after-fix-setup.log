@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-fix-setup
+# instance: i-0dbcfb3b63cb5d283   region: us-west-2   transport: SSM AWS-RunShellScript
+# ssm command: 6ebc380d-6b2c-475e-864c-1fd7930fd152 (agent status: Success)
+# start: 20261102T152256Z   end: 20261102T152308Z   rc: 0
+# script sha256: a82b99edd6fc28106a0e25f5f57ae9de8978ed90e0a6794059349f657c98a1bd
+# ---- script ----
+# | set +e
+# | echo "== identity"
+# | uname -v
+# | sha256sum /boot/system/kernel_arm64
+# | echo "== random add-on images loaded in the kernel team, before the copy"
+# | listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | echo "== copy the packaged random add-on into the user non-packaged add-on dir"
+# | D=/boot/home/config/non-packaged/add-ons/kernel/bus_managers
+# | P=$(ls /boot/system/packages/haiku-r1~beta6_*-arm64.hpkg); echo "$P"
+# | rm -rf /tmp/px && mkdir /tmp/px && package extract -C /tmp/px "$P" add-ons/kernel/bus_managers/random || exit 3
+# | mkdir -p $D && cp /tmp/px/add-ons/kernel/bus_managers/random $D/random.new && mv $D/random.new $D/random || exit 4
+# | sha256sum /tmp/px/add-ons/kernel/bus_managers/random $D/random
+# | sync
+# | echo "== random add-on images loaded in the kernel team, after the copy"
+# | listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo SETUP_DONE
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+== identity
+hrev59996 Oct 19 2026 21:09:42
+073fc4bfbdd8a4dcadc8803dbbf8c8e544af6489f409b6544e6d5099243482df  /boot/system/kernel_arm64
+== random add-on images loaded in the kernel team, before the copy
+ 217 0xffff0000021f7000 0xffff0000021f9000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+== copy the packaged random add-on into the user non-packaged add-on dir
+/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+bc296db6c84e7540634e2b4c5aa5e13fc6107896ae89d29980cfef3e25ed599b  /tmp/px/add-ons/kernel/bus_managers/random
+bc296db6c84e7540634e2b4c5aa5e13fc6107896ae89d29980cfef3e25ed599b  /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+== random add-on images loaded in the kernel team, after the copy
+ 217 0xffff0000021f7000 0xffff0000021f9000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+2026-11-02T15:22:57Z
+SETUP_DONE
+# ---- raw stderr ----
+

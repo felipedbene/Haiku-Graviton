@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-fix-soak-trigger2
+# instance: i-0dbcfb3b63cb5d283   region: us-west-2   transport: SSM AWS-RunShellScript
+# ssm command: cd0a9a16-3160-4bf4-9a70-09bbf4c17eb5 (agent status: Failed)
+# start: 20261102T152402Z   end: 20261102T152700Z   rc: 127
+# script sha256: 978001e98d49b4b669c6871d67ac5c0de033231c27c2eedbcbb487ece407df7b
+# ---- script ----
+# | echo "== uptime and a 150 s soak, so debeos-cloudwatch reads /dev/urandom on its own schedule too"; uptime; sleep 150
+# | set +e
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo "== open and close /dev/urandom and /dev/random 20 times each"
+# | ok=0
+# | for i in $(seq 1 20); do
+# | 	for dev in /dev/urandom /dev/random; do
+# | 		b=$(head -c 16 $dev | od -An -tx1 | tr -d ' \n')
+# | 		[ ${#b} = 32 ] && ok=$((ok + 1))
+# | 	done
+# | 	[ $i = 1 ] && echo "first read: $b"
+# | 	sleep 1
+# | done
+# | echo "reads returning 16 bytes: $ok of 40"
+# | echo "== random add-on images loaded in the kernel team, after the reads"
+# | listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | ls -l /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo TRIGGER_DONE
+# | uptime
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+== uptime and a 150 s soak, so debeos-cloudwatch reads /dev/urandom on its own schedule too
+2026-11-02T15:26:32Z
+== open and close /dev/urandom and /dev/random 20 times each
+first read: 16920c4a951a14385202ce7942cffdc1
+reads returning 16 bytes: 40 of 40
+== random add-on images loaded in the kernel team, after the reads
+ 217 0xffff0000021f7000 0xffff0000021f9000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+-rwxr-xr-x 1 baron root 17739 Nov  2 15:22 /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+2026-11-02T15:26:52Z
+TRIGGER_DONE
+# ---- raw stderr ----
+/var/lib/amazon/ssm/i-0dbcfb3b63cb5d283/document/orchestration/cd0a9a16-3160-4bf4-9a70-09bbf4c17eb5/awsrunShellScript/0.awsrunShellScript/_script.sh: line 1: uptime: command not found
+/var/lib/amazon/ssm/i-0dbcfb3b63cb5d283/document/orchestration/cd0a9a16-3160-4bf4-9a70-09bbf4c17eb5/awsrunShellScript/0.awsrunShellScript/_script.sh: line 20: uptime: command not found
+failed to run commands: exit status 127

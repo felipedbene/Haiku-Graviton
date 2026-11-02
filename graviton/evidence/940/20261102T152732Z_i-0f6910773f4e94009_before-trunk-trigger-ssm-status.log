@@ -1,0 +1,8 @@
+# evidence: before-trunk-trigger-ssm-status (the trigger command, sent with executionTimeout 300 s, never reported back)
+# instance: i-0f6910773f4e94009   region: us-west-2   captured: 20261102T152732Z
+$ aws ssm list-commands --command-id dcda7962-083a-406c-9d43-859f10919f5f --query "Commands[0].[Status,RequestedDateTime,TimeoutSeconds]"
+InProgress	2026-11-02T09:19:29.160000-06:00	3600
+$ aws ec2 get-console-output --latest | tail -n 3
+23 000000c957e20fd0 (+  48) 00000033abad1348   </boot/system/runtime_loader> runtime_loader + 0x128
+24 0000000000000000 (+   0) 0000018eaeb58208   <commpage> commpage_thread_exit + 0x00
+

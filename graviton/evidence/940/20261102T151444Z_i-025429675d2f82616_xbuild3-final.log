@@ -1,0 +1,165 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild3-final
+# instance: i-025429675d2f82616   region: us-west-2   transport: SSM AWS-RunShellScript
+# ssm command: fabeb179-21e6-41af-addd-aa8ce3721544 (agent status: Success)
+# start: 20261102T151444Z   end: 20261102T151628Z   rc: 0
+# script sha256: 8e5492c21fdde9220a32aa35b4696416142733f11efa28d92440150c890bb7a7
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/w943-940
+# | mkdir -p /opt/w && cd /opt/w && rm -rf hg buildtools out canonical && mkdir -p out canonical
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg log -1 --format='trunk %H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | echo 'ZGlmZiAtLWdpdCBhL3NyYy9zeXN0ZW0va2VybmVsL21vZHVsZS5jcHAgYi9zcmMvc3lzdGVtL2tlcm5lbC9tb2R1bGUuY3BwCmluZGV4IDkxNTY2OWY4YjAuLjNjM2VmYjIzNmMgMTAwNjQ0Ci0tLSBhL3NyYy9zeXN0ZW0va2VybmVsL21vZHVsZS5jcHAKKysrIGIvc3JjL3N5c3RlbS9rZXJuZWwvbW9kdWxlLmNwcApAQCAtNjYzLDYgKzY2Myw1MCBAQCBzZWFyY2hfbW9kdWxlKGNvbnN0IGNoYXIqIG5hbWUsIG1vZHVsZV9pbWFnZSoqIF9tb2R1bGVJbWFnZSkKIH0KIAogCisvKiEJTG9va3MgZm9yIGFuIGltYWdlIHRoYXQgYW5vdGhlciBtb2R1bGUgaXMgY3VycmVudGx5IGJvdW5kIHRvIGFuZCB0aGF0CisJYWxzbyBleHBvcnRzIGEgbW9kdWxlIGNhbGxlZCBcYSBuYW1lLiBSZXR1cm5zIGl0LCBhbmQgdGhlIGluZGV4IG9mIFxhIG5hbWUKKwlpbiBpdHMgbW9kdWxlX2luZm8gYXJyYXkgaW4gXGEgX29mZnNldCwgb3IgXGMgTlVMTCBpZiB0aGVyZSBpcyBub25lLgorCisJVGhlIG1vZHVsZXMgb2Ygb25lIGltYWdlIHNoYXJlIGl0cyBzdGF0aWMgZGF0YSwgYW5kIHVzdWFsbHkgb25seSBvbmUgb2YKKwl0aGVtIHNldHMgaXQgdXAgKGEgZHJpdmVyIG1vZHVsZSBmcm9tIGluaXRfZHJpdmVyKCksIHdpdGggaXRzIGRldmljZQorCW1vZHVsZSB1c2luZyB0aGUgcmVzdWx0KS4gVGhlaXIgcmVmZXJlbmNlIGNvdW50cyBhcmUgc2VwYXJhdGUsIHRob3VnaCwgc28KKwlvbmUgb2YgdGhlbSBjYW4gYmUgcmVsZWFzZWQgYW5kIGxhdGVyIHJlYWNxdWlyZWQgd2hpbGUgYW5vdGhlciBzdGF5cworCWxvYWRlZC4gU2VhcmNoaW5nIHRoZSBhZGQtb24gZGlyZWN0b3JpZXMgYWdhaW4gYXQgdGhhdCBwb2ludCBjYW4gZmluZCBhCisJZGlmZmVyZW50IGZpbGUsIGUuZy4gYSBjb3B5IHRoYXQgd2FzIHB1dCBpbnRvIGEgaGlnaGVyLXByaW9yaXR5IGRpcmVjdG9yeQorCWluIHRoZSBtZWFudGltZSwgYW5kIHdvdWxkIGJpbmQgdGhlIHJlYWNxdWlyZWQgbW9kdWxlIHRvIGEgc2Vjb25kLAorCXVuaW5pdGlhbGl6ZWQgY29weSBvZiB0aGUgaW1hZ2UuIEJpbmRpbmcgaXQgdG8gdGhlIGltYWdlIGl0cyBzaWJsaW5ncyBhcmUKKwl1c2luZyBrZWVwcyBhbGwgbGl2ZSBtb2R1bGVzIG9mIGFuIGFkZC1vbiBpbiBvbmUgY29weS4KKworCU5lZWRzIHRvIGJlIGNhbGxlZCB3aXRoIHRoZSBzTW9kdWxlc0xvY2sgaGVsZC4KKyovCitzdGF0aWMgbW9kdWxlX2ltYWdlKgorZmluZF9zaWJsaW5nX21vZHVsZV9pbWFnZShjb25zdCBjaGFyKiBuYW1lLCBpbnQzMiogX29mZnNldCkKK3sKKwlBU1NFUlRfTE9DS0VEX1JFQ1VSU0lWRSgmc01vZHVsZXNMb2NrKTsKKworCU1vZHVsZVRhYmxlOjpJdGVyYXRvciBpdGVyYXRvcihzTW9kdWxlc0hhc2gpOworCXdoaWxlIChpdGVyYXRvci5IYXNOZXh0KCkpIHsKKwkJc3RydWN0IG1vZHVsZSogc2libGluZyA9IGl0ZXJhdG9yLk5leHQoKTsKKworCQkvLyBPbmx5IGEgcmVmZXJlbmNlZCBtb2R1bGUgaG9sZHMgYSByZWZlcmVuY2UgdG8gaXRzIGltYWdlLCBzbyBvbmx5CisJCS8vIHRoZW4gaXMgdGhlIGltYWdlIGtub3duIHRvIHN0YXkgbG9hZGVkLgorCQlpZiAoKHNpYmxpbmctPmZsYWdzICYgQl9CVUlMVF9JTl9NT0RVTEUpICE9IDAKKwkJCXx8IHNpYmxpbmctPm1vZHVsZV9pbWFnZSA9PSBOVUxMIHx8IHNpYmxpbmctPnJlZl9jb3VudCA9PSAwKQorCQkJY29udGludWU7CisKKwkJbW9kdWxlX2luZm8qKiBpbmZvID0gc2libGluZy0+bW9kdWxlX2ltYWdlLT5pbmZvOworCQlmb3IgKGludDMyIGkgPSAwOyBpbmZvW2ldICE9IE5VTEw7IGkrKykgeworCQkJaWYgKGluZm9baV0tPm5hbWUgIT0gTlVMTCAmJiBzdHJjbXAoaW5mb1tpXS0+bmFtZSwgbmFtZSkgPT0gMCkgeworCQkJCSpfb2Zmc2V0ID0gaTsKKwkJCQlyZXR1cm4gc2libGluZy0+bW9kdWxlX2ltYWdlOworCQkJfQorCQl9CisJfQorCisJcmV0dXJuIE5VTEw7Cit9CisKKwogc3RhdGljIHN0YXR1c190CiBwdXRfZGVwZW5kZW50X21vZHVsZXMoc3RydWN0IG1vZHVsZSogbW9kdWxlKQogewpAQCAtMjE5NywxMCArMjI0MSwyMSBAQCBnZXRfbW9kdWxlKGNvbnN0IGNoYXIqIHBhdGgsIG1vZHVsZV9pbmZvKiogX2luZm8pCiAJLy8gaWYgd2UgZG9uJ3QgaGF2ZSBpdCBjYWNoZWQgeWV0LCBzZWFyY2ggZm9yIGl0CiAJaWYgKG1vZHVsZSA9PSBOVUxMIHx8ICgobW9kdWxlLT5mbGFncyAmIEJfQlVJTFRfSU5fTU9EVUxFKSA9PSAwCiAJCQkmJiBtb2R1bGUtPm1vZHVsZV9pbWFnZSA9PSBOVUxMKSkgewotCQltb2R1bGUgPSBzZWFyY2hfbW9kdWxlKHBhdGgsICZtb2R1bGVJbWFnZSk7Ci0JCWlmIChtb2R1bGUgPT0gTlVMTCkgewotCQkJRkFUQUwoKCJtb2R1bGU6IFNlYXJjaCBmb3IgJXMgZmFpbGVkLlxuIiwgcGF0aCkpOwotCQkJcmV0dXJuIEJfRU5UUllfTk9UX0ZPVU5EOworCQkvLyBBIG1vZHVsZSBvZiBhbiBpbWFnZSB0aGF0IGlzIHN0aWxsIGluIHVzZSBtdXN0IGNvbWUgZnJvbSB0aGF0CisJCS8vIGltYWdlLCBub3QgZnJvbSB3aGF0ZXZlciBmaWxlIGEgbmV3IHNlYXJjaCB0dXJucyB1cC4KKwkJaW50MzIgb2Zmc2V0OworCQlpZiAobW9kdWxlICE9IE5VTEwKKwkJCSYmIChtb2R1bGVJbWFnZSA9IGZpbmRfc2libGluZ19tb2R1bGVfaW1hZ2UocGF0aCwgJm9mZnNldCkpCisJCQkJIT0gTlVMTCkgeworCQkJYXRvbWljX2FkZCgmbW9kdWxlSW1hZ2UtPnJlZl9jb3VudCwgMSk7CisJCQltb2R1bGUtPm9mZnNldCA9IG9mZnNldDsKKwkJCW1vZHVsZS0+ZmxhZ3MgPSBtb2R1bGVJbWFnZS0+aW5mb1tvZmZzZXRdLT5mbGFnczsKKwkJfSBlbHNlIHsKKwkJCW1vZHVsZSA9IHNlYXJjaF9tb2R1bGUocGF0aCwgJm1vZHVsZUltYWdlKTsKKwkJCWlmIChtb2R1bGUgPT0gTlVMTCkgeworCQkJCUZBVEFMKCgibW9kdWxlOiBTZWFyY2ggZm9yICVzIGZhaWxlZC5cbiIsIHBhdGgpKTsKKwkJCQlyZXR1cm4gQl9FTlRSWV9OT1RfRk9VTkQ7CisJCQl9CiAJCX0KIAogCQltb2R1bGUtPmluZm8gPSBtb2R1bGVJbWFnZS0+aW5mb1ttb2R1bGUtPm9mZnNldF07CkBAIC0yMjc3LDcgKzIzMzIsOCBAQCBwdXRfbW9kdWxlKGNvbnN0IGNoYXIqIHBhdGgpCiAJCQlwdXRfbW9kdWxlX2ltYWdlKG1vZHVsZS0+bW9kdWxlX2ltYWdlKTsKIAkJCS8vIFVubGVzcyB3ZSBkb24ndCBoYXZlIGEgYm9vdCBkZXZpY2UgeWV0LCB3ZSBjbGVhciB0aGUgbW9kdWxlJ3MKIAkJCS8vIGltYWdlIHBvaW50ZXIgaWYgdGhlIHJlZiBjb3VudCBkcm9wcGVkIHRvIDAuIGdldF9tb2R1bGUoKSB3aWxsCi0JCQkvLyBoYXZlIHRvIHJlbG9hZCB0aGUgaW1hZ2UuCisJCQkvLyBoYXZlIHRvIHJlYmluZCBpdCwgdG8gdGhlIGltYWdlIG9mIGEgc2libGluZyBzdGlsbCBpbiB1c2Ugb3IKKwkJCS8vIGVsc2UgdG8gYSBmcmVzaGx5IHNlYXJjaGVkIG9uZS4KIAkJCWlmIChoYXNfYm9vdF9kZXZpY2UoKSkKIAkJCQltb2R1bGUtPm1vZHVsZV9pbWFnZSA9IE5VTEw7CiAJCX0K' | base64 -d > /opt/w/fix940.patch; sha256sum /opt/w/fix940.patch
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | # the canonical AMI is tagged haiku-revision=hrev59996 and its uname -v says so
+# | REV=hrev59996
+# | echo "canonical revision section: '$REV'"
+# | export SOURCE_DATE_EPOCH=$(date -u -d '2026-10-19 21:09:42' +%s)
+# | R=objects/haiku/arm64/release/system
+# | build() {	# build <label>
+# | 	git -C .. log -1 --format="$1 %H %s"; git -C .. diff --stat
+# | 	rm -rf $R/kernel
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION="$REV" "<revisioned>kernel_arm64" > ../../out/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' ../../out/jam-$1.log) warnings_module=$(grep -c 'module.cpp.*warning' ../../out/jam-$1.log)"
+# | 	[ $rc = 0 ] || { tail -30 ../../out/jam-$1.log; return 1; }
+# | 	cp $R/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.$1
+# | 	sha256sum ../../out/kernel_arm64.$1
+# | }
+# | build trunk || exit 1
+# | git -C .. apply --check /opt/w/fix940.patch && git -C .. apply /opt/w/fix940.patch || exit 2
+# | build fix940 || exit 1
+# | grep -c find_sibling_module_image ../src/system/kernel/module.cpp
+# | ${X}nm ../../out/kernel_arm64.fix940 | grep -c find_sibling_module_image
+# | ${X}nm ../../out/kernel_arm64.trunk | grep -c find_sibling_module_image
+# | cd ../../out && sha256sum kernel_arm64.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive . $OUT/out/ && aws s3 ls $OUT/out/
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+apt rc=0
+/usr/local/bin/aws
+trunk 4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+34a614fc5098a4dc2f790508c0616a81e350f9f00d7483d6b8d421825faac7ba  /opt/w/fix940.patch
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+canonical revision section: 'hrev59996'
+trunk 4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+JAM trunk rc=0 wall=16s failed=0 warnings_module=0
+8dd8dbec4c38e24478cbda4fae459d38cd80686ce3e0f9dc4f1a5bcda712fcc3  ../../out/kernel_arm64.trunk
+fix940 4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+ src/system/kernel/module.cpp | 66 ++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 61 insertions(+), 5 deletions(-)
+JAM fix940 rc=0 wall=10s failed=0 warnings_module=0
+073fc4bfbdd8a4dcadc8803dbbf8c8e544af6489f409b6544e6d5099243482df  ../../out/kernel_arm64.fix940
+2
+0
+0
+073fc4bfbdd8a4dcadc8803dbbf8c8e544af6489f409b6544e6d5099243482df  kernel_arm64.fix940
+8dd8dbec4c38e24478cbda4fae459d38cd80686ce3e0f9dc4f1a5bcda712fcc3  kernel_arm64.trunk
+2026-11-02 15:16:20        171 SHA256SUMS
+2026-11-02 15:16:20      40236 jam-fix940.log
+2026-11-02 15:16:20     100410 jam-trunk.log
+2026-11-02 15:16:20    2551369 kernel_arm64.fix940
+2026-11-02 15:16:20    2551369 kernel_arm64.trunk
+# ---- raw stderr ----
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo apt rc=0
++ command -v aws
++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w943-940
++ mkdir -p /opt/w
++ cd /opt/w
++ rm -rf hg buildtools out canonical
++ mkdir -p out canonical
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg log -1 --format=trunk %H %s
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ echo ZGlmZiAtLWdpdCBhL3NyYy9zeXN0ZW0va2VybmVsL21vZHVsZS5jcHAgYi9zcmMvc3lzdGVtL2tlcm5lbC9tb2R1bGUuY3BwCmluZGV4IDkxNTY2OWY4YjAuLjNjM2VmYjIzNmMgMTAwNjQ0Ci0tLSBhL3NyYy9zeXN0ZW0va2VybmVsL21vZHVsZS5jcHAKKysrIGIvc3JjL3N5c3RlbS9rZXJuZWwvbW9kdWxlLmNwcApAQCAtNjYzLDYgKzY2Myw1MCBAQCBzZWFyY2hfbW9kdWxlKGNvbnN0IGNoYXIqIG5hbWUsIG1vZHVsZV9pbWFnZSoqIF9tb2R1bGVJbWFnZSkKIH0KIAogCisvKiEJTG9va3MgZm9yIGFuIGltYWdlIHRoYXQgYW5vdGhlciBtb2R1bGUgaXMgY3VycmVudGx5IGJvdW5kIHRvIGFuZCB0aGF0CisJYWxzbyBleHBvcnRzIGEgbW9kdWxlIGNhbGxlZCBcYSBuYW1lLiBSZXR1cm5zIGl0LCBhbmQgdGhlIGluZGV4IG9mIFxhIG5hbWUKKwlpbiBpdHMgbW9kdWxlX2luZm8gYXJyYXkgaW4gXGEgX29mZnNldCwgb3IgXGMgTlVMTCBpZiB0aGVyZSBpcyBub25lLgorCisJVGhlIG1vZHVsZXMgb2Ygb25lIGltYWdlIHNoYXJlIGl0cyBzdGF0aWMgZGF0YSwgYW5kIHVzdWFsbHkgb25seSBvbmUgb2YKKwl0aGVtIHNldHMgaXQgdXAgKGEgZHJpdmVyIG1vZHVsZSBmcm9tIGluaXRfZHJpdmVyKCksIHdpdGggaXRzIGRldmljZQorCW1vZHVsZSB1c2luZyB0aGUgcmVzdWx0KS4gVGhlaXIgcmVmZXJlbmNlIGNvdW50cyBhcmUgc2VwYXJhdGUsIHRob3VnaCwgc28KKwlvbmUgb2YgdGhlbSBjYW4gYmUgcmVsZWFzZWQgYW5kIGxhdGVyIHJlYWNxdWlyZWQgd2hpbGUgYW5vdGhlciBzdGF5cworCWxvYWRlZC4gU2VhcmNoaW5nIHRoZSBhZGQtb24gZGlyZWN0b3JpZXMgYWdhaW4gYXQgdGhhdCBwb2ludCBjYW4gZmluZCBhCisJZGlmZmVyZW50IGZpbGUsIGUuZy4gYSBjb3B5IHRoYXQgd2FzIHB1dCBpbnRvIGEgaGlnaGVyLXByaW9yaXR5IGRpcmVjdG9yeQorCWluIHRoZSBtZWFudGltZSwgYW5kIHdvdWxkIGJpbmQgdGhlIHJlYWNxdWlyZWQgbW9kdWxlIHRvIGEgc2Vjb25kLAorCXVuaW5pdGlhbGl6ZWQgY29weSBvZiB0aGUgaW1hZ2UuIEJpbmRpbmcgaXQgdG8gdGhlIGltYWdlIGl0cyBzaWJsaW5ncyBhcmUKKwl1c2luZyBrZWVwcyBhbGwgbGl2ZSBtb2R1bGVzIG9mIGFuIGFkZC1vbiBpbiBvbmUgY29weS4KKworCU5lZWRzIHRvIGJlIGNhbGxlZCB3aXRoIHRoZSBzTW9kdWxlc0xvY2sgaGVsZC4KKyovCitzdGF0aWMgbW9kdWxlX2ltYWdlKgorZmluZF9zaWJsaW5nX21vZHVsZV9pbWFnZShjb25zdCBjaGFyKiBuYW1lLCBpbnQzMiogX29mZnNldCkKK3sKKwlBU1NFUlRfTE9DS0VEX1JFQ1VSU0lWRSgmc01vZHVsZXNMb2NrKTsKKworCU1vZHVsZVRhYmxlOjpJdGVyYXRvciBpdGVyYXRvcihzTW9kdWxlc0hhc2gpOworCXdoaWxlIChpdGVyYXRvci5IYXNOZXh0KCkpIHsKKwkJc3RydWN0IG1vZHVsZSogc2libGluZyA9IGl0ZXJhdG9yLk5leHQoKTsKKworCQkvLyBPbmx5IGEgcmVmZXJlbmNlZCBtb2R1bGUgaG9sZHMgYSByZWZlcmVuY2UgdG8gaXRzIGltYWdlLCBzbyBvbmx5CisJCS8vIHRoZW4gaXMgdGhlIGltYWdlIGtub3duIHRvIHN0YXkgbG9hZGVkLgorCQlpZiAoKHNpYmxpbmctPmZsYWdzICYgQl9CVUlMVF9JTl9NT0RVTEUpICE9IDAKKwkJCXx8IHNpYmxpbmctPm1vZHVsZV9pbWFnZSA9PSBOVUxMIHx8IHNpYmxpbmctPnJlZl9jb3VudCA9PSAwKQorCQkJY29udGludWU7CisKKwkJbW9kdWxlX2luZm8qKiBpbmZvID0gc2libGluZy0+bW9kdWxlX2ltYWdlLT5pbmZvOworCQlmb3IgKGludDMyIGkgPSAwOyBpbmZvW2ldICE9IE5VTEw7IGkrKykgeworCQkJaWYgKGluZm9baV0tPm5hbWUgIT0gTlVMTCAmJiBzdHJjbXAoaW5mb1tpXS0+bmFtZSwgbmFtZSkgPT0gMCkgeworCQkJCSpfb2Zmc2V0ID0gaTsKKwkJCQlyZXR1cm4gc2libGluZy0+bW9kdWxlX2ltYWdlOworCQkJfQorCQl9CisJfQorCisJcmV0dXJuIE5VTEw7Cit9CisKKwogc3RhdGljIHN0YXR1c190CiBwdXRfZGVwZW5kZW50X21vZHVsZXMoc3RydWN0IG1vZHVsZSogbW9kdWxlKQogewpAQCAtMjE5NywxMCArMjI0MSwyMSBAQCBnZXRfbW9kdWxlKGNvbnN0IGNoYXIqIHBhdGgsIG1vZHVsZV9pbmZvKiogX2luZm8pCiAJLy8gaWYgd2UgZG9uJ3QgaGF2ZSBpdCBjYWNoZWQgeWV0LCBzZWFyY2ggZm9yIGl0CiAJaWYgKG1vZHVsZSA9PSBOVUxMIHx8ICgobW9kdWxlLT5mbGFncyAmIEJfQlVJTFRfSU5fTU9EVUxFKSA9PSAwCiAJCQkmJiBtb2R1bGUtPm1vZHVsZV9pbWFnZSA9PSBOVUxMKSkgewotCQltb2R1bGUgPSBzZWFyY2hfbW9kdWxlKHBhdGgsICZtb2R1bGVJbWFnZSk7Ci0JCWlmIChtb2R1bGUgPT0gTlVMTCkgewotCQkJRkFUQUwoKCJtb2R1bGU6IFNlYXJjaCBmb3IgJXMgZmFpbGVkLlxuIiwgcGF0aCkpOwotCQkJcmV0dXJuIEJfRU5UUllfTk9UX0ZPVU5EOworCQkvLyBBIG1vZHVsZSBvZiBhbiBpbWFnZSB0aGF0IGlzIHN0aWxsIGluIHVzZSBtdXN0IGNvbWUgZnJvbSB0aGF0CisJCS8vIGltYWdlLCBub3QgZnJvbSB3aGF0ZXZlciBmaWxlIGEgbmV3IHNlYXJjaCB0dXJucyB1cC4KKwkJaW50MzIgb2Zmc2V0OworCQlpZiAobW9kdWxlICE9IE5VTEwKKwkJCSYmIChtb2R1bGVJbWFnZSA9IGZpbmRfc2libGluZ19tb2R1bGVfaW1hZ2UocGF0aCwgJm9mZnNldCkpCisJCQkJIT0gTlVMTCkgeworCQkJYXRvbWljX2FkZCgmbW9kdWxlSW1hZ2UtPnJlZl9jb3VudCwgMSk7CisJCQltb2R1bGUtPm9mZnNldCA9IG9mZnNldDsKKwkJCW1vZHVsZS0+ZmxhZ3MgPSBtb2R1bGVJbWFnZS0+aW5mb1tvZmZzZXRdLT5mbGFnczsKKwkJfSBlbHNlIHsKKwkJCW1vZHVsZSA9IHNlYXJjaF9tb2R1bGUocGF0aCwgJm1vZHVsZUltYWdlKTsKKwkJCWlmIChtb2R1bGUgPT0gTlVMTCkgeworCQkJCUZBVEFMKCgibW9kdWxlOiBTZWFyY2ggZm9yICVzIGZhaWxlZC5cbiIsIHBhdGgpKTsKKwkJCQlyZXR1cm4gQl9FTlRSWV9OT1RfRk9VTkQ7CisJCQl9CiAJCX0KIAogCQltb2R1bGUtPmluZm8gPSBtb2R1bGVJbWFnZS0+aW5mb1ttb2R1bGUtPm9mZnNldF07CkBAIC0yMjc3LDcgKzIzMzIsOCBAQCBwdXRfbW9kdWxlKGNvbnN0IGNoYXIqIHBhdGgpCiAJCQlwdXRfbW9kdWxlX2ltYWdlKG1vZHVsZS0+bW9kdWxlX2ltYWdlKTsKIAkJCS8vIFVubGVzcyB3ZSBkb24ndCBoYXZlIGEgYm9vdCBkZXZpY2UgeWV0LCB3ZSBjbGVhciB0aGUgbW9kdWxlJ3MKIAkJCS8vIGltYWdlIHBvaW50ZXIgaWYgdGhlIHJlZiBjb3VudCBkcm9wcGVkIHRvIDAuIGdldF9tb2R1bGUoKSB3aWxsCi0JCQkvLyBoYXZlIHRvIHJlbG9hZCB0aGUgaW1hZ2UuCisJCQkvLyBoYXZlIHRvIHJlYmluZCBpdCwgdG8gdGhlIGltYWdlIG9mIGEgc2libGluZyBzdGlsbCBpbiB1c2Ugb3IKKwkJCS8vIGVsc2UgdG8gYSBmcmVzaGx5IHNlYXJjaGVkIG9uZS4KIAkJCWlmIChoYXNfYm9vdF9kZXZpY2UoKSkKIAkJCQltb2R1bGUtPm1vZHVsZV9pbWFnZSA9IE5VTEw7CiAJCX0K
++ base64 -d
++ sha256sum /opt/w/fix940.patch
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
++ nproc
++ ../configure --cross-tools-prefix /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j16
++ X=/opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ REV=hrev59996
++ echo canonical revision section: 'hrev59996'
++ date -u -d 2026-10-19 21:09:42 +%s
++ export SOURCE_DATE_EPOCH=1792444182
++ R=objects/haiku/arm64/release/system
++ build trunk
++ git -C .. log -1 --format=trunk %H %s
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/system/kernel
++ date +%s
++ s=1793632552
++ nproc
++ jam -q -j16 -sHAIKU_REVISION=hrev59996 <revisioned>kernel_arm64
++ rc=0
++ date +%s
++ grep -cE \.\.\.failed ../../out/jam-trunk.log
++ grep -c module.cpp.*warning ../../out/jam-trunk.log
++ echo JAM trunk rc=0 wall=16s failed=0 warnings_module=0
++ [ 0 = 0 ]
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.trunk
++ sha256sum ../../out/kernel_arm64.trunk
++ git -C .. apply --check /opt/w/fix940.patch
++ git -C .. apply /opt/w/fix940.patch
++ build fix940
++ git -C .. log -1 --format=fix940 %H %s
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/system/kernel
++ date +%s
++ s=1793632568
++ nproc
++ jam -q -j16 -sHAIKU_REVISION=hrev59996 <revisioned>kernel_arm64
++ rc=0
++ date +%s
++ grep -cE \.\.\.failed ../../out/jam-fix940.log
++ grep -c module.cpp.*warning ../../out/jam-fix940.log
++ echo JAM fix940 rc=0 wall=10s failed=0 warnings_module=0
++ [ 0 = 0 ]
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.fix940
++ sha256sum ../../out/kernel_arm64.fix940
++ grep -c find_sibling_module_image ../src/system/kernel/module.cpp
++ /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm ../../out/kernel_arm64.fix940
++ grep -c find_sibling_module_image
++ /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm ../../out/kernel_arm64.trunk
++ grep -c find_sibling_module_image
++ cd ../../out
++ sha256sum kernel_arm64.fix940 kernel_arm64.trunk
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w943-940/out/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w943-940/out/
