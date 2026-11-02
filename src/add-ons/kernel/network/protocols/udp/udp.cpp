@@ -117,6 +117,9 @@ public:
 			void				Dump() const;
 
 private:
+			status_t			_SetDomainFamily(int family);
+			status_t			_MoveToFamily(int family);
+
 			UdpDomainSupport*	fManager;
 			bool				fActive;
 									// an active UdpEndpoint is part of the
@@ -186,6 +189,7 @@ public:
 	bool Put() { fEndpointCount--; return fEndpointCount == 0; }
 
 	status_t DemuxIncomingBuffer(net_buffer* buffer);
+	status_t DemuxDualStack(net_buffer* buffer);
 	status_t DeliverError(status_t error, net_buffer* buffer);
 
 	status_t BindEndpoint(UdpEndpoint *endpoint, const sockaddr *address);
@@ -195,9 +199,16 @@ public:
 	void DumpEndpoints() const;
 
 private:
-	status_t _BindEndpoint(UdpEndpoint *endpoint, const sockaddr *address);
-	status_t _Bind(UdpEndpoint *endpoint, const sockaddr *address);
-	status_t _BindToEphemeral(UdpEndpoint *endpoint, const sockaddr *address);
+	UdpDomainSupport* _DualStackCounterpart(UdpEndpoint *endpoint,
+		const sockaddr *address);
+	status_t _CheckDualStackConflict(UdpDomainSupport *counterpart,
+		UdpEndpoint *endpoint, const sockaddr *address);
+	status_t _BindEndpoint(UdpEndpoint *endpoint, const sockaddr *address,
+		UdpDomainSupport *counterpart = NULL);
+	status_t _Bind(UdpEndpoint *endpoint, const sockaddr *address,
+		UdpDomainSupport *counterpart);
+	status_t _BindToEphemeral(UdpEndpoint *endpoint, const sockaddr *address,
+		UdpDomainSupport *counterpart);
 	status_t _FinishBind(UdpEndpoint *endpoint, const sockaddr *address);
 
 	UdpEndpoint *_FindActiveEndpoint(const sockaddr *ourAddress,
@@ -205,7 +216,7 @@ private:
 	status_t _DemuxBroadcast(net_buffer *buffer);
 	status_t _DemuxUnicast(net_buffer *buffer);
 
-	uint16 _GetNextEphemeral();
+	uint16 _GetNextEphemeral(UdpDomainSupport *counterpart);
 	UdpEndpoint *_EndpointWithPort(uint16 port) const;
 
 	net_address_module_info *AddressModule() const
@@ -243,6 +254,7 @@ public:
 			status_t			Deframe(net_buffer* buffer);
 
 			UdpDomainSupport*	OpenEndpoint(UdpEndpoint* endpoint);
+			UdpDomainSupport*	OpenDomain(net_domain* domain, bool create);
 			status_t			FreeEndpoint(UdpDomainSupport* domain);
 
 	static	int					DumpEndpoints(int argc, char *argv[]);
@@ -260,6 +272,25 @@ private:
 
 
 static UdpEndpointManager *sUdpEndpointManager;
+
+
+struct DomainSupportDelete
+{
+	inline void operator()(UdpDomainSupport* object)
+	{
+		if (object != NULL)
+			sUdpEndpointManager->FreeEndpoint(object);
+	}
+};
+
+
+struct DomainSupportDeleter
+	: BPrivate::AutoDeleter<UdpDomainSupport, DomainSupportDelete>
+{
+	DomainSupportDeleter(UdpDomainSupport* object)
+		: BPrivate::AutoDeleter<UdpDomainSupport, DomainSupportDelete>(object)
+	{}
+};
 
 net_buffer_module_info *gBufferModule;
 net_datalink_module_info *gDatalinkModule;
@@ -338,12 +369,28 @@ UdpDomainSupport::BindEndpoint(UdpEndpoint *endpoint,
 	if (!AddressModule()->is_same_family(address))
 		return EAFNOSUPPORT;
 
-	MutexLocker _(fLock);
+	// When the bind must respect the bindings of the other address family as
+	// well, that domain's lock is held too; the IPv4 one is always taken
+	// first, so binds in the two families cannot deadlock each other. The
+	// deleter is declared first so that it runs after both unlocks.
+	UdpDomainSupport* counterpart = _DualStackCounterpart(endpoint, address);
+	DomainSupportDeleter counterpartDeleter(counterpart);
+
+	MutexLocker counterpartLocker;
+	MutexLocker locker;
+	if (counterpart != NULL && counterpart->Domain()->family == AF_INET) {
+		counterpartLocker.SetTo(counterpart->fLock, false);
+		locker.SetTo(fLock, false);
+	} else {
+		locker.SetTo(fLock, false);
+		if (counterpart != NULL)
+			counterpartLocker.SetTo(counterpart->fLock, false);
+	}
 
 	if (endpoint->IsActive())
 		return EINVAL;
 
-	return _BindEndpoint(endpoint, address);
+	return _BindEndpoint(endpoint, address, counterpart);
 }
 
 
@@ -431,19 +478,95 @@ UdpDomainSupport::DumpEndpoints() const
 }
 
 
-status_t
-UdpDomainSupport::_BindEndpoint(UdpEndpoint *endpoint,
+/*!	Returns the other address family's domain support, with a reference,
+	whose bindings a bind of \a endpoint to \a address here conflicts with, if
+	any. An IPv6 socket bound to :: that does not refuse IPv4 (IPV6_V6ONLY
+	off) holds its port for IPv4 as well, as on Linux: so any IPv4 bind has
+	to look at the IPv6 bindings, and such an IPv6 bind at the IPv4 ones.
+*/
+UdpDomainSupport*
+UdpDomainSupport::_DualStackCounterpart(UdpEndpoint *endpoint,
 	const sockaddr *address)
 {
-	if (AddressModule()->get_port(address) == 0)
-		return _BindToEphemeral(endpoint, address);
+	int family;
+	switch (fDomain->family) {
+		case AF_INET:
+			family = AF_INET6;
+			break;
+		case AF_INET6:
+			if (!AddressModule()->is_empty_address(address, false)
+				|| is_ipv6_only(endpoint->next))
+				return NULL;
+			family = AF_INET;
+			break;
+		default:
+			return NULL;
+	}
 
-	return _Bind(endpoint, address);
+	return sUdpEndpointManager->OpenDomain(gStackModule->get_domain(family),
+		false);
+}
+
+
+/*!	Applies the rules of _Bind() to the bindings of \a address's port in the
+	other family's domain support \a counterpart: there an IPv6 socket bound
+	to :: that takes IPv4 counts as bound to INADDR_ANY, and when this bind
+	is such a socket, it counts as a bind to INADDR_ANY.
+	You must hold both domain supports' locks.
+*/
+status_t
+UdpDomainSupport::_CheckDualStackConflict(UdpDomainSupport *counterpart,
+	UdpEndpoint *endpoint, const sockaddr *address)
+{
+	int socketOptions = endpoint->Socket()->options;
+	uint16 port = AddressModule()->get_port(address);
+	bool counterpartIsIPv6 = counterpart->Domain()->family == AF_INET6;
+
+	EndpointTable::Iterator it = counterpart->fActiveEndpoints.GetIterator();
+	while (UdpEndpoint *otherEndpoint = it.Next()) {
+		if (otherEndpoint->LocalAddress().Port() != port)
+			continue;
+
+		bool otherIsWildcard = otherEndpoint->LocalAddress().IsEmpty(false);
+		if (counterpartIsIPv6
+			&& (!otherIsWildcard || is_ipv6_only(otherEndpoint->next)))
+			continue;
+
+		// port is already bound, SO_REUSEADDR or SO_REUSEPORT is required:
+		if ((otherEndpoint->Socket()->options
+				& (SO_REUSEADDR | SO_REUSEPORT)) == 0
+			|| (socketOptions & (SO_REUSEADDR | SO_REUSEPORT)) == 0)
+			return EADDRINUSE;
+
+		// if both addresses are the same, SO_REUSEPORT is required; seen from
+		// IPv4 the dual-stack socket's address is INADDR_ANY
+		bool sameAddress = counterpartIsIPv6
+			? AddressModule()->is_empty_address(address, false)
+			: otherIsWildcard;
+		if (sameAddress
+			&& ((otherEndpoint->Socket()->options & SO_REUSEPORT) == 0
+				|| (socketOptions & SO_REUSEPORT) == 0))
+			return EADDRINUSE;
+	}
+
+	return B_OK;
 }
 
 
 status_t
-UdpDomainSupport::_Bind(UdpEndpoint *endpoint, const sockaddr *address)
+UdpDomainSupport::_BindEndpoint(UdpEndpoint *endpoint,
+	const sockaddr *address, UdpDomainSupport *counterpart)
+{
+	if (AddressModule()->get_port(address) == 0)
+		return _BindToEphemeral(endpoint, address, counterpart);
+
+	return _Bind(endpoint, address, counterpart);
+}
+
+
+status_t
+UdpDomainSupport::_Bind(UdpEndpoint *endpoint, const sockaddr *address,
+	UdpDomainSupport *counterpart)
 {
 	int socketOptions = endpoint->Socket()->options;
 
@@ -481,20 +604,27 @@ UdpDomainSupport::_Bind(UdpEndpoint *endpoint, const sockaddr *address)
 		}
 	}
 
+	if (counterpart != NULL) {
+		status_t status = _CheckDualStackConflict(counterpart, endpoint,
+			address);
+		if (status != B_OK)
+			return status;
+	}
+
 	return _FinishBind(endpoint, address);
 }
 
 
 status_t
 UdpDomainSupport::_BindToEphemeral(UdpEndpoint *endpoint,
-	const sockaddr *address)
+	const sockaddr *address, UdpDomainSupport *counterpart)
 {
 	SocketAddressStorage newAddress(AddressModule());
 	status_t status = newAddress.SetTo(address);
 	if (status < B_OK)
 		return status;
 
-	uint16 allocedPort = _GetNextEphemeral();
+	uint16 allocedPort = _GetNextEphemeral(counterpart);
 	if (allocedPort == 0)
 		return ENOBUFS;
 
@@ -631,8 +761,54 @@ UdpDomainSupport::_DemuxUnicast(net_buffer* buffer)
 }
 
 
+/*!	Delivers an IPv4 datagram to the IPv6 sockets bound to :: on its port that
+	do not refuse IPv4 (IPV6_V6ONLY off): a broadcast to each of them, any
+	other datagram, which no IPv4 socket took, to the first, as
+	_DemuxUnicast() does. This must be the IPv6 domain support; the datagram
+	keeps its IPv4 addresses, which the socket layer maps for recvfrom().
+	A connected IPv6 socket is not a candidate: one connected to an IPv4 peer
+	lives in the IPv4 domain support.
+*/
+status_t
+UdpDomainSupport::DemuxDualStack(net_buffer* buffer)
+{
+	if ((buffer->msg_flags & MSG_MCAST) != 0)
+		return B_ERROR;
+
+	MutexLocker _(fLock);
+
+	bool broadcast = (buffer->msg_flags & MSG_BCAST) != 0;
+	uint16 port = ((sockaddr_in*)buffer->destination)->sin_port;
+	status_t status = B_NAME_NOT_FOUND;
+
+	EndpointTable::Iterator iterator = fActiveEndpoints.GetIterator();
+	while (UdpEndpoint* endpoint = iterator.Next()) {
+		if (endpoint->LocalAddress().Port() != port
+			|| !endpoint->LocalAddress().IsEmpty(false)
+			|| !endpoint->PeerAddress().IsEmpty(true))
+			continue;
+		if (endpoint->socket->bound_to_device != 0
+			&& buffer->index != endpoint->socket->bound_to_device)
+			continue;
+		if (is_ipv6_only(endpoint->next))
+			continue;
+
+		endpoint->StoreData(buffer);
+		status = B_OK;
+		if (!broadcast)
+			break;
+	}
+
+	return status;
+}
+
+
+/*!	A port in use in \a counterpart at all is skipped: a stricter test than
+	_CheckDualStackConflict(), which costs nothing when choosing a free port.
+	You must hold \a counterpart's lock, if it is given.
+*/
 uint16
-UdpDomainSupport::_GetNextEphemeral()
+UdpDomainSupport::_GetNextEphemeral(UdpDomainSupport *counterpart)
 {
 	uint16 stop, curr;
 	if (fLastUsedEphemeral < kLast) {
@@ -651,7 +827,9 @@ UdpDomainSupport::_GetNextEphemeral()
 	for (; curr != stop; curr = (curr < kLast) ? (curr + 1) : kFirst) {
 		TRACE_DOMAIN("  _GetNextEphemeral(): trying port %hu...", curr);
 
-		if (_EndpointWithPort(htons(curr)) == NULL) {
+		if (_EndpointWithPort(htons(curr)) == NULL
+			&& (counterpart == NULL
+				|| counterpart->_EndpointWithPort(htons(curr)) == NULL)) {
 			TRACE_DOMAIN("  _GetNextEphemeral(): ...using port %hu", curr);
 			fLastUsedEphemeral = curr;
 			return curr;
@@ -717,48 +895,52 @@ UdpEndpointManager::DumpEndpoints(int argc, char *argv[])
 // #pragma mark - inbound
 
 
-struct DomainSupportDelete
-{
-	inline void operator()(UdpDomainSupport* object)
-	{
-		sUdpEndpointManager->FreeEndpoint(object);
-	}
-};
-
-
-struct DomainSupportDeleter
-	: BPrivate::AutoDeleter<UdpDomainSupport, DomainSupportDelete>
-{
-	DomainSupportDeleter(UdpDomainSupport* object)
-		: BPrivate::AutoDeleter<UdpDomainSupport, DomainSupportDelete>(object)
-	{}
-};
-
-
 status_t
 UdpEndpointManager::ReceiveData(net_buffer *buffer)
 {
 	TRACE_EPM("ReceiveData(%p [%" B_PRIu32 " bytes])", buffer, buffer->size);
 
-	UdpDomainSupport* domainSupport = _GetDomainSupport(buffer);
-	if (domainSupport == NULL) {
-		// we don't instantiate domain supports in the receiving path, as
-		// we are only interested in delivering data to existing sockets.
+	net_domain* domain = _GetDomain(buffer);
+	if (domain == NULL)
 		return B_ERROR;
-	}
+
+	// we don't instantiate domain supports in the receiving path, as
+	// we are only interested in delivering data to existing sockets.
+	UdpDomainSupport* domainSupport = OpenDomain(domain, false);
 	DomainSupportDeleter deleter(domainSupport);
+
+	// An IPv4 datagram can also be for an IPv6 socket that takes IPv4
+	// (IPV6_V6ONLY off).
+	UdpDomainSupport* dualStackSupport = NULL;
+	if (domain->family == AF_INET) {
+		dualStackSupport = OpenDomain(gStackModule->get_domain(AF_INET6),
+			false);
+	}
+	DomainSupportDeleter dualStackDeleter(dualStackSupport);
+
+	if (domainSupport == NULL && dualStackSupport == NULL)
+		return B_ERROR;
 
 	status_t status = Deframe(buffer);
 	if (status != B_OK) {
 		return status;
 	}
 
-	status = domainSupport->DemuxIncomingBuffer(buffer);
+	status = domainSupport != NULL
+		? domainSupport->DemuxIncomingBuffer(buffer) : B_NAME_NOT_FOUND;
+	if (dualStackSupport != NULL
+		&& (status != B_OK || (buffer->msg_flags & MSG_BCAST) != 0)) {
+		// a broadcast goes to every socket that wants it, in either domain
+		status_t dualStackStatus = dualStackSupport->DemuxDualStack(buffer);
+		if (status != B_OK)
+			status = dualStackStatus;
+	}
+
 	if (status != B_OK) {
 		TRACE_EPM("  ReceiveData(): no endpoint.");
 		// Send port unreachable error
-		domainSupport->Domain()->module->error_reply(NULL, buffer,
-			B_NET_ERROR_UNREACH_PORT, NULL);
+		domain->module->error_reply(NULL, buffer, B_NET_ERROR_UNREACH_PORT,
+			NULL);
 		return B_ERROR;
 	}
 
@@ -865,10 +1047,19 @@ UdpEndpointManager::Deframe(net_buffer* buffer)
 UdpDomainSupport *
 UdpEndpointManager::OpenEndpoint(UdpEndpoint *endpoint)
 {
+	return OpenDomain(endpoint->Domain(), true);
+}
+
+
+/*!	Returns the domain support of \a domain with a reference, which
+	FreeEndpoint() releases; one is only created if \a create is set.
+*/
+UdpDomainSupport *
+UdpEndpointManager::OpenDomain(net_domain *domain, bool create)
+{
 	MutexLocker _(fLock);
 
-	UdpDomainSupport* domain = _GetDomainSupport(endpoint->Domain(), true);
-	return domain;
+	return _GetDomainSupport(domain, create);
 }
 
 
@@ -969,7 +1160,28 @@ status_t
 UdpEndpoint::Bind(const sockaddr *address)
 {
 	TRACE_EP("Bind(%s)", AddressString(Domain(), address, true).Data());
-	return fManager->BindEndpoint(this, address);
+
+	// A bind to a mapped address makes an IPv6 socket an IPv4 one, which an
+	// IPv6-only socket refuses with EINVAL, as on Linux and FreeBSD.
+	if (fSocket->family != AF_INET6 || !is_ipv4_mapped_address(address))
+		return fManager->BindEndpoint(this, address);
+	if (is_ipv6_only(next))
+		return EINVAL;
+
+	sockaddr_in ipv4Address;
+	ipv4_address_from_mapped(address, &ipv4Address);
+
+	int previousFamily = Domain()->family;
+	if (previousFamily != AF_INET) {
+		status_t status = _SetDomainFamily(AF_INET);
+		if (status != B_OK)
+			return status;
+	}
+
+	status_t status = fManager->BindEndpoint(this, (sockaddr*)&ipv4Address);
+	if (status != B_OK && previousFamily != AF_INET)
+		_SetDomainFamily(previousFamily);
+	return status;
 }
 
 
@@ -985,6 +1197,24 @@ status_t
 UdpEndpoint::Connect(const sockaddr *address)
 {
 	TRACE_EP("Connect(%s)", AddressString(Domain(), address, true).Data());
+
+	// An IPv6 socket names an IPv4 peer by its mapped address; the socket is
+	// then carried in the IPv4 domain, until it connects to an IPv6 peer.
+	sockaddr_in ipv4Address;
+	if (fSocket->family == AF_INET6 && is_ipv4_mapped_address(address)) {
+		if (is_ipv6_only(next))
+			return ENETUNREACH;
+		ipv4_address_from_mapped(address, &ipv4Address);
+		address = (sockaddr*)&ipv4Address;
+	}
+
+	if (fSocket->family == AF_INET6 && address->sa_family != AF_UNSPEC
+		&& address->sa_family != Domain()->family) {
+		status_t status = _MoveToFamily(address->sa_family);
+		if (status != B_OK)
+			return status;
+	}
+
 	return fManager->ConnectEndpoint(this, address);
 }
 
@@ -1044,6 +1274,71 @@ UdpEndpoint::Free()
 }
 
 
+/*!	Moves the endpoint of an IPv6 socket into the domain of \a family: a
+	dual-stack socket bound or connected to an IPv4 address is carried in the
+	IPv4 domain support, with that domain's routes and address module, and
+	its addresses in IPv4 form; only the application sees them as mapped
+	IPv6 addresses (see net_socket.cpp). The endpoint must not be active.
+*/
+status_t
+UdpEndpoint::_SetDomainFamily(int family)
+{
+	net_domain* domain = gStackModule->get_domain(family);
+	if (domain == NULL || domain->address_module == NULL)
+		return EAFNOSUPPORT;
+
+	UdpDomainSupport* manager = sUdpEndpointManager->OpenDomain(domain, true);
+	if (manager == NULL)
+		return ENOBUFS;
+
+	sUdpEndpointManager->FreeEndpoint(fManager);
+	fDomain = domain;
+	fManager = manager;
+	return B_OK;
+}
+
+
+/*!	Carries a dual-stack socket that is about to connect to a peer of
+	\a family over to that family's domain. Only the local port is kept, as
+	connect() keeps only that of the local address in any case (see
+	UdpDomainSupport::ConnectEndpoint()). If the port cannot be had in the new
+	family, the socket is put back as it was.
+*/
+status_t
+UdpEndpoint::_MoveToFamily(int family)
+{
+	bool wasActive = IsActive();
+	uint16 port = LocalAddress().Port();
+	fManager->UnbindEndpoint(this);
+
+	int previousFamily = Domain()->family;
+	status_t status = _SetDomainFamily(family);
+	if (status == B_OK) {
+		LocalAddress().SetToEmpty();
+		LocalAddress().SetPort(port);
+		if (!wasActive)
+			return B_OK;
+
+		// ConnectEndpoint() does that bind once more, after it has set the
+		// local address the route to the peer gives; the port is checked
+		// here so that a failure can still leave the socket as it was
+		status = fManager->BindEndpoint(this, *LocalAddress());
+		if (status == B_OK) {
+			fManager->UnbindEndpoint(this);
+			return B_OK;
+		}
+
+		_SetDomainFamily(previousFamily);
+	}
+
+	LocalAddress().SetToEmpty();
+	LocalAddress().SetPort(port);
+	if (wasActive)
+		fManager->BindEndpoint(this, *LocalAddress());
+	return status;
+}
+
+
 // #pragma mark - outbound
 
 
@@ -1069,15 +1364,20 @@ UdpEndpoint::SendRoutedData(net_buffer *buffer, net_route *route)
 	if (header.Status() < B_OK)
 		return header.Status();
 
-	header->source_port = AddressModule()->get_port(buffer->source);
-	header->destination_port = AddressModule()->get_port(buffer->destination);
+	// The route's domain, not the socket's: an IPv4 datagram of a dual-stack
+	// IPv6 socket has IPv4 addresses and an IPv4 pseudo-header.
+	net_address_module_info* addressModule
+		= route->interface_address->domain->address_module;
+
+	header->source_port = addressModule->get_port(buffer->source);
+	header->destination_port = addressModule->get_port(buffer->destination);
 	header->udp_length = htons(buffer->size);
 		// the udp-header is already included in the buffer-size
 	header->udp_checksum = 0;
 
 	header.Sync();
 
-	uint16 calculatedChecksum = Checksum::PseudoHeader(AddressModule(),
+	uint16 calculatedChecksum = Checksum::PseudoHeader(addressModule,
 		gBufferModule, buffer, IPPROTO_UDP);
 	if (calculatedChecksum == 0)
 		calculatedChecksum = 0xffff;
@@ -1101,19 +1401,51 @@ UdpEndpoint::SendData(net_buffer *buffer)
 	if (status != B_OK)
 		return status;
 
+	net_domain* domain = Domain();
+	sockaddr* destination = buffer->destination;
+
+	if (fSocket->family == AF_INET6 && is_ipv4_mapped_address(destination)) {
+		// A datagram to an IPv4 peer goes out through IPv4, with the IPv4
+		// addresses; one bound to a specific IPv6 address has no IPv4 source.
+		if (is_ipv6_only(next))
+			return ENETUNREACH;
+		if (domain->family == AF_INET6 && !LocalAddress().IsEmpty(false))
+			return ENETUNREACH;
+
+		domain = gStackModule->get_domain(AF_INET);
+		if (domain == NULL)
+			return ENETUNREACH;
+
+		sockaddr_in ipv4Destination;
+		ipv4_address_from_mapped(destination, &ipv4Destination);
+		memcpy(destination, &ipv4Destination, sizeof(ipv4Destination));
+
+		if (Domain()->family == AF_INET6) {
+			// the socket is bound to :: -- send from its port of INADDR_ANY,
+			// which the route fills in
+			uint16 port = LocalAddress().Port();
+			domain->address_module->set_to_empty_address(buffer->source);
+			domain->address_module->set_port(buffer->source, port);
+		}
+	} else if (fSocket->family == AF_INET6 && domain->family == AF_INET
+		&& destination->sa_family == AF_INET6) {
+		// bound to an IPv4 address: there is no IPv6 source
+		return ENETUNREACH;
+	}
+
 	// A sendto() to INADDR_ANY (or in6addr_any) means this host, as it does
 	// for connect() (see UdpDomainSupport::ConnectEndpoint()) and as it does
 	// on Linux. Left as it is, the IP layer refuses it with EDESTADDRREQ.
 	// A connected send has already been mapped.
-	sockaddr* destination = buffer->destination;
-	if (AddressModule()->is_same_family(destination)
-		&& AddressModule()->is_empty_address(destination, false)) {
-		uint16 port = AddressModule()->get_port(destination);
-		AddressModule()->get_loopback_address(destination);
-		AddressModule()->set_port(destination, port);
+	net_address_module_info* addressModule = domain->address_module;
+	if (addressModule->is_same_family(destination)
+		&& addressModule->is_empty_address(destination, false)) {
+		uint16 port = addressModule->get_port(destination);
+		addressModule->get_loopback_address(destination);
+		addressModule->set_port(destination, port);
 	}
 
-	return gDatalinkModule->send_data(this, NULL, buffer);
+	return gDatalinkModule->send_data(this, domain, buffer);
 }
 
 
@@ -1284,6 +1616,13 @@ status_t
 udp_setsockopt(net_protocol *protocol, int level, int option,
 	const void *value, int length)
 {
+	if (level == IPPROTO_IPV6 && option == IPV6_V6ONLY
+		&& protocol->socket->family == AF_INET6
+		&& ((UdpEndpoint *)protocol)->IsActive()) {
+		// the binding was checked against the value it had (Linux, FreeBSD)
+		return EINVAL;
+	}
+
 	return protocol->next->module->setsockopt(protocol->next, level, option,
 		value, length);
 }
