@@ -6,7 +6,8 @@
 # supported extension point, so no Haiku source file has to be patched.
 #
 # It expects the artefacts produced by ssh/build-openssh-arm64.sh:
-#   $HG_SSH_DIR/openssh-10.4p1-1-arm64.hpkg   cross-built OpenSSH package
+#   $HG_SSH_DIR/openssh_debeos-10.4p1-1-arm64.hpkg   cross-built OpenSSH package
+#     (not named "openssh": that name is the DeBeOS repo's OpenSSL build, #986)
 #   $HG_SSH_DIR/image/sshd_config             our sshd configuration
 #   $HG_SSH_DIR/image/ssh_config              client configuration
 #   $HG_SSH_DIR/image/launch-sshd             launch_daemon job -> settings/launch/sshd
@@ -20,7 +21,7 @@
 
 HG_SSH_DIR ?= /opt/haiku/ssh ;
 HG_SSH_IMAGE_DIR = $(HG_SSH_DIR)/image ;
-HG_SSH_PACKAGE = openssh-10.4p1-1-arm64.hpkg ;
+HG_SSH_PACKAGE = openssh_debeos-10.4p1-1-arm64.hpkg ;
 
 rule UserBuildConfigRulePreImage
 {
