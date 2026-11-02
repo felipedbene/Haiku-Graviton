@@ -1,0 +1,67 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-setup
+# instance: i-07ebbacc7c65cf797   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T055844Z   end: 20261102T060014Z   rc: 0
+# script sha256: 1ef7bca1a7af4482281883224b33defec67f48657204e79c663674eea60a09d8
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq
+# | apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /dev/null
+# | echo "apt rc=$?"
+# | if ! command -v aws; then
+# | 	curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
+# | 	(cd /tmp && unzip -q a.zip && ./aws/install > /dev/null)
+# | fi
+# | set +x
+# | mkdir -p /opt/t899 && cd /opt/t899
+# | rm -rf hg buildtools
+# | git clone -q --depth 80 --branch fix/873-ipv6-dual-stack https://github.com/felipedbene/Haiku-Graviton.git hg || exit 3
+# | git -C hg fetch -q --depth 80 origin graviton:refs/remotes/origin/graviton
+# | git -C hg log -1 --format='pr948-tip %H %s'
+# | git -C hg log -1 --format='trunk %H %s' origin/graviton
+# | git clone -q --depth 1 https://github.com/felipedbene/buildtools.git buildtools || exit 3
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /dev/null 2>&1 && ./jam0 install > /dev/null 2>&1)
+# | command -v jam || exit 4
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 5
+# | tar --zstd -xf /tmp/ct.tar.zst -C .
+# | ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix /opt/t899/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32 2>&1 | tail -1
+# | echo SETUP-DONE
+# ---- raw output ----
+apt rc=0
+pr948-tip eaf7d9a1bab6efb76a1caaf967683c44de767f99 evidence: issue 873 dual-stack sockets before/after on Graviton
+trunk 909e7c6b3ae5883daa6d6249d728232199198bcc kernel, libroot: apply the POSIX rules for who may set a file's times (#937)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+SETUP-DONE
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ set +x

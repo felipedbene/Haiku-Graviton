@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-node-slice2
+# instance: i-0ef31bb222394c2ba   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T063312Z   end: 20261102T063406Z   rc: 1
+# script sha256: 767b1a3356dcd513d7d246a8d157e10d028e80cfae561dcd44bc4e36a5e39352
+# ---- script ----
+# | cd /boot/home/t899/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/)' | awk '{print $NF}' | sort -u
+# | run() {
+# | 	local name=$1; shift
+# | 	local s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap "$@" > /tmp/slice2-$name.tap 2>&1
+# | 	echo "=== $name: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/slice2-$name.tap) notok=$(grep -c '^not ok ' /tmp/slice2-$name.tap) plan=$(grep -E '^1\.\.' /tmp/slice2-$name.tap)"
+# | 	grep -E '^not ok ' /tmp/slice2-$name.tap | sed -E 's/^(ok|not ok) [0-9]+ /\1 /' | sed 's/^/  /' | sort -k2
+# | }
+# | run dgram-r2 'parallel/test-dgram-*' 'sequential/test-dgram-*'
+# | run dgram-r3 'parallel/test-dgram-*' 'sequential/test-dgram-*'
+# | run http 'parallel/test-http-*'
+# | run tls 'parallel/test-tls-*'
+# | run pipe-cluster 'parallel/test-pipe-*' 'parallel/test-cluster-dgram-*' 'parallel/test-cluster-net-*'
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+=== dgram-r2: rc=0 wall=4s ok=84 notok=0 plan=1..84
+=== dgram-r3: rc=0 wall=3s ok=84 notok=0 plan=1..84
+=== http: rc=1 wall=30s ok=401 notok=1 plan=1..402
+  not ok parallel/test-http-writable-true-after-close
+=== tls: rc=0 wall=6s ok=222 notok=0 plan=1..222
+=== pipe-cluster: rc=0 wall=3s ok=23 notok=0 plan=1..23
+failed to run commands: exit status 1

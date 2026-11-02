@@ -1,0 +1,309 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-node-slice
+# instance: i-0919dbca70bf1e4d2   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T062638Z   end: 20261102T063257Z   rc: 0
+# script sha256: 0521e50996af17c176bd1bbe3204bf730c731741d5c12e188ee9b512b9cf7111
+# ---- script ----
+# | cd /boot/home/t899/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/)' | awk '{print $NF}' | sort -u
+# | run() {
+# | 	local name=$1; shift
+# | 	local s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap "$@" > /tmp/slice-$name.tap 2>&1
+# | 	echo "=== $name: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/slice-$name.tap) notok=$(grep -c '^not ok ' /tmp/slice-$name.tap) plan=$(grep -E '^1\.\.' /tmp/slice-$name.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/slice-$name.tap | sed -E 's/^(ok|not ok) [0-9]+ /\1 /' | sed 's/^/  /' | sort -k2
+# | }
+# | run dgram 'parallel/test-dgram-*' 'sequential/test-dgram-*'
+# | run net 'parallel/test-net-*'
+# | run tcp 'parallel/test-tcp-*' 'sequential/test-net-*'
+# | echo "=== dgram failure detail"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/slice-dgram.tap | grep -vE '^\s*$' | head -300
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+=== dgram: rc=1 wall=361s ok=82 notok=2 plan=1..84
+  not ok parallel/test-dgram-connect-send-empty-array
+  not ok parallel/test-dgram-connect-send-empty-buffer
+  ok parallel/test-dgram-abort-closed
+  ok parallel/test-dgram-address
+  ok parallel/test-dgram-async-dispose
+  ok parallel/test-dgram-bind
+  ok parallel/test-dgram-bind-default-address
+  ok parallel/test-dgram-bind-error-callback
+  ok parallel/test-dgram-bind-error-repeat
+  ok parallel/test-dgram-bind-fd
+  ok parallel/test-dgram-bind-fd-error
+  ok parallel/test-dgram-bind-socket-close-before-cluster-reply
+  ok parallel/test-dgram-bind-socket-close-before-lookup
+  ok parallel/test-dgram-bind-sync
+  ok parallel/test-dgram-blocklist
+  ok parallel/test-dgram-bytes-length
+  ok parallel/test-dgram-close
+  ok parallel/test-dgram-close-during-bind
+  ok parallel/test-dgram-close-in-listening
+  ok parallel/test-dgram-close-is-not-callback
+  ok parallel/test-dgram-close-signal
+  ok parallel/test-dgram-cluster-bind-error
+  ok parallel/test-dgram-cluster-close-during-bind
+  ok parallel/test-dgram-cluster-close-in-listening
+  ok parallel/test-dgram-connect
+  ok parallel/test-dgram-connect-send-callback-buffer
+  ok parallel/test-dgram-connect-send-callback-buffer-length
+  ok parallel/test-dgram-connect-send-callback-multi-buffer
+  ok parallel/test-dgram-connect-send-default-host
+  ok parallel/test-dgram-connect-send-empty-packet
+  ok parallel/test-dgram-connect-send-multi-buffer-copy
+  ok parallel/test-dgram-connect-send-multi-string-array
+  ok parallel/test-dgram-connect-sync
+  ok parallel/test-dgram-create-socket-handle
+  ok parallel/test-dgram-create-socket-handle-fd
+  ok parallel/test-dgram-createSocket-type
+  ok parallel/test-dgram-custom-lookup
+  ok parallel/test-dgram-default-lookup-ip
+  ok parallel/test-dgram-deprecation-error
+  ok parallel/test-dgram-error-message-address
+  ok parallel/test-dgram-exclusive-implicit-bind
+  ok parallel/test-dgram-implicit-bind
+  ok parallel/test-dgram-ipv6only
+  ok parallel/test-dgram-listen-after-bind
+  ok parallel/test-dgram-membership
+  ok parallel/test-dgram-msgsize
+  ok parallel/test-dgram-multicast-loopback
+  ok parallel/test-dgram-multicast-set-interface
+  ok parallel/test-dgram-multicast-setTTL
+  ok parallel/test-dgram-oob-buffer
+  ok parallel/test-dgram-recv-error
+  ok parallel/test-dgram-ref
+  ok parallel/test-dgram-reuseport # skip The `reusePort` option is not supported
+  ok parallel/test-dgram-send-address-types
+  ok parallel/test-dgram-send-bad-arguments
+  ok parallel/test-dgram-send-callback-buffer
+  ok parallel/test-dgram-send-callback-buffer-empty-address
+  ok parallel/test-dgram-send-callback-buffer-length
+  ok parallel/test-dgram-send-callback-buffer-length-empty-address
+  ok parallel/test-dgram-send-callback-multi-buffer
+  ok parallel/test-dgram-send-callback-multi-buffer-empty-address
+  ok parallel/test-dgram-send-callback-recursive
+  ok parallel/test-dgram-send-cb-quelches-error
+  ok parallel/test-dgram-send-default-host
+  ok parallel/test-dgram-send-empty-array
+  ok parallel/test-dgram-send-empty-buffer
+  ok parallel/test-dgram-send-empty-packet
+  ok parallel/test-dgram-send-error
+  ok parallel/test-dgram-send-invalid-msg-type
+  ok parallel/test-dgram-send-multi-buffer-copy
+  ok parallel/test-dgram-send-multi-string-array
+  ok parallel/test-dgram-send-queue-info
+  ok parallel/test-dgram-sendto
+  ok parallel/test-dgram-setBroadcast
+  ok parallel/test-dgram-setTTL
+  ok parallel/test-dgram-socket-buffer-size
+  ok parallel/test-dgram-udp4
+  ok parallel/test-dgram-udp6-link-local-address # skip cannot find any IPv6 interfaces with a link local address
+  ok parallel/test-dgram-udp6-send-default-host
+  ok parallel/test-dgram-unref
+  ok parallel/test-dgram-unref-in-cluster
+  ok sequential/test-dgram-bind-shared-ports
+  ok sequential/test-dgram-implicit-bind-failure
+  ok sequential/test-dgram-pingpong
+=== net: rc=0 wall=6s ok=159 notok=0 plan=1..159
+  ok parallel/test-net-access-byteswritten
+  ok parallel/test-net-after-close
+  ok parallel/test-net-allow-half-open
+  ok parallel/test-net-allow-half-open-async-iter
+  ok parallel/test-net-autoselectfamily
+  ok parallel/test-net-autoselectfamily-attempt-timeout-cli-option
+  ok parallel/test-net-autoselectfamily-attempt-timeout-default-value
+  ok parallel/test-net-autoselectfamily-commandline-option
+  ok parallel/test-net-autoselectfamily-default
+  ok parallel/test-net-autoselectfamily-ipv4first
+  ok parallel/test-net-better-error-messages-listen
+  ok parallel/test-net-better-error-messages-listen-path
+  ok parallel/test-net-better-error-messages-path
+  ok parallel/test-net-better-error-messages-port-hostname
+  ok parallel/test-net-binary
+  ok parallel/test-net-bind-twice
+  ok parallel/test-net-blocklist
+  ok parallel/test-net-boundsocket
+  ok parallel/test-net-buffersize
+  ok parallel/test-net-bytes-read
+  ok parallel/test-net-bytes-stats
+  ok parallel/test-net-bytes-written-large
+  ok parallel/test-net-can-reset-timeout
+  ok parallel/test-net-child-process-connect-reset
+  ok parallel/test-net-client-bind-twice
+  ok parallel/test-net-connect-abort-controller
+  ok parallel/test-net-connect-after-destroy
+  ok parallel/test-net-connect-buffer
+  ok parallel/test-net-connect-buffer2
+  ok parallel/test-net-connect-call-socket-connect
+  ok parallel/test-net-connect-custom-lookup-non-string-address
+  ok parallel/test-net-connect-destroy
+  ok parallel/test-net-connect-immediate-destroy
+  ok parallel/test-net-connect-immediate-finish
+  ok parallel/test-net-connect-keepalive
+  ok parallel/test-net-connect-memleak
+  ok parallel/test-net-connect-no-arg
+  ok parallel/test-net-connect-nodelay
+  ok parallel/test-net-connect-options-allowhalfopen
+  ok parallel/test-net-connect-options-fd
+  ok parallel/test-net-connect-options-invalid
+  ok parallel/test-net-connect-options-ipv6
+  ok parallel/test-net-connect-options-path
+  ok parallel/test-net-connect-options-port
+  ok parallel/test-net-connect-paused-connection
+  ok parallel/test-net-connect-reset
+  ok parallel/test-net-connect-reset-after-destroy
+  ok parallel/test-net-connect-reset-before-connected
+  ok parallel/test-net-connect-reset-until-connected
+  ok parallel/test-net-dns-custom-lookup
+  ok parallel/test-net-dns-error
+  ok parallel/test-net-dns-lookup
+  ok parallel/test-net-dns-lookup-skip
+  ok parallel/test-net-during-close
+  ok parallel/test-net-eaddrinuse
+  ok parallel/test-net-end-close
+  ok parallel/test-net-end-destroyed
+  ok parallel/test-net-end-without-connect
+  ok parallel/test-net-error-twice
+  ok parallel/test-net-isip
+  ok parallel/test-net-isipv4
+  ok parallel/test-net-isipv6
+  ok parallel/test-net-keepalive
+  ok parallel/test-net-keepalive-interval-count
+  ok parallel/test-net-large-string
+  ok parallel/test-net-listen-after-destroying-stdin
+  ok parallel/test-net-listen-close-server
+  ok parallel/test-net-listen-close-server-callback-is-not-function
+  ok parallel/test-net-listen-error
+  ok parallel/test-net-listen-exclusive-random-ports
+  ok parallel/test-net-listen-fd0
+  ok parallel/test-net-listen-handle-in-cluster-1
+  ok parallel/test-net-listen-handle-in-cluster-2
+  ok parallel/test-net-listen-invalid-port
+  ok parallel/test-net-listen-twice
+  ok parallel/test-net-listening
+  ok parallel/test-net-local-address-port
+  ok parallel/test-net-localerror
+  ok parallel/test-net-negative-zero
+  ok parallel/test-net-normalize-args
+  ok parallel/test-net-onread-static-buffer
+  ok parallel/test-net-options-lookup
+  ok parallel/test-net-pause-resume-connecting
+  ok parallel/test-net-perf_hooks
+  ok parallel/test-net-persistent-keepalive
+  ok parallel/test-net-persistent-nodelay
+  ok parallel/test-net-persistent-ref-unref
+  ok parallel/test-net-pingpong
+  ok parallel/test-net-pipe-connect-errors
+  ok parallel/test-net-pipe-with-long-path
+  ok parallel/test-net-reconnect
+  ok parallel/test-net-remote-address
+  ok parallel/test-net-remote-address-port
+  ok parallel/test-net-reuseport # skip The `reusePort` option is not supported
+  ok parallel/test-net-server-async-dispose
+  ok parallel/test-net-server-blocklist
+  ok parallel/test-net-server-call-listen-multiple-times
+  ok parallel/test-net-server-capture-rejection
+  ok parallel/test-net-server-close
+  ok parallel/test-net-server-close-before-calling-lookup-callback
+  ok parallel/test-net-server-close-before-ipc-response
+  ok parallel/test-net-server-drop-connections
+  ok parallel/test-net-server-keepalive
+  ok parallel/test-net-server-listen-handle
+  ok parallel/test-net-server-listen-options
+  ok parallel/test-net-server-listen-options-signal
+  ok parallel/test-net-server-listen-path
+  ok parallel/test-net-server-listen-remove-callback
+  ok parallel/test-net-server-max-connections
+  ok parallel/test-net-server-max-connections-close-makes-more-available
+  ok parallel/test-net-server-nodelay
+  ok parallel/test-net-server-options
+  ok parallel/test-net-server-pause-on-connect
+  ok parallel/test-net-server-reset
+  ok parallel/test-net-server-transfer-worker
+  ok parallel/test-net-server-try-ports
+  ok parallel/test-net-server-unref
+  ok parallel/test-net-server-unref-persistent
+  ok parallel/test-net-settimeout
+  ok parallel/test-net-socket-byteswritten
+  ok parallel/test-net-socket-close-after-end
+  ok parallel/test-net-socket-connect-invalid-autoselectfamily
+  ok parallel/test-net-socket-connect-invalid-autoselectfamilyattempttimeout
+  ok parallel/test-net-socket-connect-without-cb
+  ok parallel/test-net-socket-connecting
+  ok parallel/test-net-socket-constructor
+  ok parallel/test-net-socket-destroy-send
+  ok parallel/test-net-socket-destroy-twice
+  ok parallel/test-net-socket-end-before-connect
+  ok parallel/test-net-socket-end-callback
+  ok parallel/test-net-socket-local-address
+  ok parallel/test-net-socket-no-halfopen-enforcer
+  ok parallel/test-net-socket-ready-without-cb
+  ok parallel/test-net-socket-reset-send
+  ok parallel/test-net-socket-reset-twice
+  ok parallel/test-net-socket-setnodelay
+  ok parallel/test-net-socket-timeout
+  ok parallel/test-net-socket-timeout-unref
+  ok parallel/test-net-socket-tos
+  ok parallel/test-net-socket-transfer-worker
+  ok parallel/test-net-socket-transfer-worker-http
+  ok parallel/test-net-socket-unref-timer-parent-chain
+  ok parallel/test-net-socket-write-after-close
+  ok parallel/test-net-socket-write-error
+  ok parallel/test-net-stream
+  ok parallel/test-net-sync-cork
+  ok parallel/test-net-throttle
+  ok parallel/test-net-timeout-no-handle
+  ok parallel/test-net-transfer-guards
+  ok parallel/test-net-unref-timer-parent-undefined
+  ok parallel/test-net-writable
+  ok parallel/test-net-write-after-close
+  ok parallel/test-net-write-after-end-nt
+  ok parallel/test-net-write-arguments
+  ok parallel/test-net-write-cb-on-destroy-before-connect
+  ok parallel/test-net-write-connect-write
+  ok parallel/test-net-write-fully-async-buffer
+  ok parallel/test-net-write-fully-async-hex-string
+  ok parallel/test-net-write-slow
+=== tcp: rc=0 wall=5s ok=16 notok=0 plan=1..16
+  ok parallel/test-tcp-wrap
+  ok parallel/test-tcp-wrap-connect
+  ok parallel/test-tcp-wrap-listen
+  ok sequential/test-net-GH-5504
+  ok sequential/test-net-better-error-messages-port
+  ok sequential/test-net-connect-econnrefused
+  ok sequential/test-net-connect-handle-econnrefused
+  ok sequential/test-net-connect-local-error
+  ok sequential/test-net-listen-ipv6only
+  ok sequential/test-net-listen-shared-ports
+  ok sequential/test-net-localport
+  ok sequential/test-net-reconnect-error
+  ok sequential/test-net-response-size
+  ok sequential/test-net-server-address
+  ok sequential/test-net-server-bind
+  ok sequential/test-net-server-listen-ipv6-link-local
+=== dgram failure detail
+not ok 83 parallel/test-dgram-connect-send-empty-array
+  ---
+  duration_ms: 360035.84700
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 84 parallel/test-dgram-connect-send-empty-buffer
+  ---
+  duration_ms: 360037.08200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+Failed tests:
+/boot/system/bin/node /boot/home/t899/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-array.js
+/boot/system/bin/node /boot/home/t899/node-v24.21.0/test/parallel/test-dgram-connect-send-empty-buffer.js
