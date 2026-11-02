@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-after2
+# instance: i-00c86c95b9354c124   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T152157Z   end: 20261102T152209Z   rc: 0
+# script sha256: d36ce8f04eed78d64bfdad42fa647885b0e4e747020d396f02a7cfd37d3e4834
+# ---- script ----
+# | set -u
+# | cd /boot/home/w947
+# | sha256sum udp947.c udp947
+# | echo '--- install the after2 (trunk + PR diff) modules as non-packaged overrides'
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network; mkdir -p $D/protocols
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/stack?<PRESIGNED>' stack.mod || exit 7
+# | cp stack.mod $D/stack.new && mv $D/stack.new $D/stack && sha256sum $D/stack
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/ipv4?<PRESIGNED>' ipv4.mod || exit 7
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4 && sha256sum $D/protocols/ipv4
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/ipv6?<PRESIGNED>' ipv6.mod || exit 7
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6 && sha256sum $D/protocols/ipv6
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/tcp?<PRESIGNED>' tcp.mod || exit 7
+# | cp tcp.mod $D/protocols/tcp.new && mv $D/protocols/tcp.new $D/protocols/tcp && sha256sum $D/protocols/tcp
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/udp?<PRESIGNED>' udp.mod || exit 7
+# | cp udp.mod $D/protocols/udp.new && mv $D/protocols/udp.new $D/protocols/udp && sha256sum $D/protocols/udp
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/icmp?<PRESIGNED>' icmp.mod || exit 7
+# | cp icmp.mod $D/protocols/icmp.new && mv $D/protocols/icmp.new $D/protocols/icmp && sha256sum $D/protocols/icmp
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/icmp6?<PRESIGNED>' icmp6.mod || exit 7
+# | cp icmp6.mod $D/protocols/icmp6.new && mv $D/protocols/icmp6.new $D/protocols/icmp6 && sha256sum $D/protocols/icmp6
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w947/mod/after2/unix?<PRESIGNED>' unix.mod || exit 7
+# | cp unix.mod $D/protocols/unix.new && mv $D/protocols/unix.new $D/protocols/unix && sha256sum $D/protocols/unix
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+--- install the after2 (trunk + PR diff) modules as non-packaged overrides
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+696d78bb037e457d961ab302c7ef421f6cbf131be483dffc7d1116529785c0da  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+STAGE-DONE
