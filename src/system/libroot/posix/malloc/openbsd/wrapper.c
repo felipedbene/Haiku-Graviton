@@ -167,6 +167,7 @@ static pthread_once_t sThreadedMallocInitOnce = PTHREAD_ONCE_INIT;
 static int32 sNextMallocThreadID = 1;
 
 static u_int mopts_nmutexes();
+static int mopts_threaded();
 static void _malloc_init(int from_rthreads);
 
 
@@ -241,12 +242,25 @@ __heap_thread_exit()
 }
 
 
+static void
+threaded_malloc_already_initialized()
+{
+}
+
+
 void
 __heap_before_fork()
 {
 	u_int i;
-	u_int nmutexes = mopts_nmutexes();
-	for (i = 0; i < nmutexes; i++)
+	u_int nmutexes;
+
+	// init_threaded_malloc() switches to the threaded pools under mutex 0, so
+	// only once we hold it is the number of mutexes in use settled. Counted
+	// before, a thread finishing the switch meanwhile would leave us holding
+	// fewer mutexes than __heap_after_fork_parent() unlocks.
+	_MALLOC_LOCK(0);
+	nmutexes = mopts_nmutexes();
+	for (i = 1; i < nmutexes; i++)
 		_MALLOC_LOCK(i);
 
 	__pages_allocator_before_fork();
@@ -256,10 +270,25 @@ __heap_before_fork()
 void
 __heap_after_fork_child()
 {
+	static const pthread_once_t kOnceInit = PTHREAD_ONCE_INIT;
 	u_int i;
 	u_int nmutexes = mopts_nmutexes();
 	for (i = 0; i < nmutexes; i++)
 		mutex_init(&sMallocMutexes[i], "heap mutex");
+
+	// A thread of the parent may have been inside init_threaded_malloc() when
+	// we forked -- the first thread a team creates runs it while starting, so
+	// a fork() right after pthread_create() can catch it waiting for mutex 0,
+	// which we held. That thread does not exist here, so the once control
+	// would stay "initializing" forever and every thread created in the child
+	// would block on it. As we held mutexes 0 and 1, _malloc_init() either
+	// ran completely or not at all: start the once control over, and mark it
+	// done again if the switch to the threaded pools had already happened.
+	sThreadedMallocInitOnce = kOnceInit;
+	if (mopts_threaded()) {
+		pthread_once(&sThreadedMallocInitOnce,
+			&threaded_malloc_already_initialized);
+	}
 
 	__pages_allocator_after_fork(0);
 }
