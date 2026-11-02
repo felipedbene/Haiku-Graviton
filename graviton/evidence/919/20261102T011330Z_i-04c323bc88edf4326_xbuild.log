@@ -1,0 +1,160 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-04c323bc88edf4326   region: us-west-2
+# ssm command: 647a936c-ae3d-43d9-9905-dbb7f9501d00 (agent status: Success)
+# start: 20261102T011330Z   end: 20261102T011358Z   rc: 0   log bytes: 5002
+# script sha256: 294941e65ef03d7c6cff779f39b41d961d9979bd58f7fe52d332f0ed2131a0f2
+# ---- script ----
+# | # Build libroot.so (the <revisioned> target the haiku package ships) for
+# | # trunk and for fix/919-exit-no-flush from a clean system/ object tree each,
+# | # with the revision and __DATE__/__TIME__ pinned to canonical's so trunk's
+# | # build can be compared with canonical's libroot byte for byte.
+# | set -x
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2
+# | cd /opt/t && rm -rf out && mkdir -p out
+# | cd hg && git fetch -q origin && cd generated
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | export SOURCE_DATE_EPOCH=$(date -u -d '2026-10-19 21:09:42' +%s); echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+# | aws s3 cp --quiet $B/tdeflib/canonical/libroot.so /opt/t/canonical-libroot.so && sha256sum /opt/t/canonical-libroot.so
+# | ${X}objcopy -O binary --only-section=_haiku_revision /opt/t/canonical-libroot.so /tmp/rev.bin && REV=$(tr -d '\0' < /tmp/rev.bin)
+# | echo "canonical revision section: '$REV'"
+# | rm -f haiku-revision
+# | R=objects/haiku/arm64/release/system
+# | build() {	# build <label> <git-ref>
+# | 	git -C .. checkout -q -f "$2" || { echo "CHECKOUT FAILED $2"; return 1; }
+# | 	git -C .. log -1 --format="$1 %H %s"
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION="$REV" "<revisioned>libroot.so" > ../../out/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' ../../out/jam-$1.log) updated=$(grep -o 'updated [0-9]* target' ../../out/jam-$1.log)"
+# | 	[ $rc = 0 ] || { tail -30 ../../out/jam-$1.log; return 1; }
+# | 	cp $R/libroot/revisioned/libroot.so ../../out/libroot.so.$1
+# | 	sha256sum ../../out/libroot.so.$1
+# | }
+# | build trunk origin/graviton || exit 1
+# | build fix919 origin/fix/919-exit-no-flush || exit 1
+# | git -C .. checkout -q -f origin/graviton
+# | ${X}objcopy -O binary --only-section=_haiku_revision ../../out/libroot.so.trunk /tmp/rev.bin && echo "trunk revision section: '$(tr -d '\0' < /tmp/rev.bin)'"
+# | cd ../../out
+# | echo "== does _exit still reference _IO_cleanup?"
+# | for a in trunk fix919; do
+# | 	echo "-- $a"; ${X}objdump -d --no-show-raw-insn libroot.so.$a | awk '/^[0-9a-f]+ <_exit>:/{p=1} p{print} p&&/^$/{exit}'
+# | done
+# | echo "== differing bytes canonical vs trunk: $(cmp -l /opt/t/canonical-libroot.so libroot.so.trunk | wc -l)"
+# | echo "== differing bytes trunk vs fix919: $(cmp -l libroot.so.trunk libroot.so.fix919 | wc -l)"
+# | sha256sum libroot.so.* | tee SHA256SUMS
+# | aws s3 cp --quiet libroot.so.trunk $B/w919/libroot.so.trunk && aws s3 cp --quiet libroot.so.fix919 $B/w919/libroot.so.fix919 && aws s3 ls $B/w919/
+# ---- raw output ----
+++ aws sts get-caller-identity --query Account --output text
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2
++ cd /opt/t
++ rm -rf out
++ mkdir -p out
++ cd hg
++ git fetch -q origin
++ cd generated
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+++ date -u -d '2026-10-19 21:09:42' +%s
++ export SOURCE_DATE_EPOCH=1792444182
++ SOURCE_DATE_EPOCH=1792444182
++ echo SOURCE_DATE_EPOCH=1792444182
+SOURCE_DATE_EPOCH=1792444182
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/canonical/libroot.so /opt/t/canonical-libroot.so
++ sha256sum /opt/t/canonical-libroot.so
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  /opt/t/canonical-libroot.so
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision /opt/t/canonical-libroot.so /tmp/rev.bin
+++ tr -d '\0'
++ REV=hrev59996
++ echo 'canonical revision section: '\''hrev59996'\'''
+canonical revision section: 'hrev59996'
++ rm -f haiku-revision
++ R=objects/haiku/arm64/release/system
++ build trunk origin/graviton
++ git -C .. checkout -q -f origin/graviton
++ git -C .. log -1 '--format=trunk %H %s'
+trunk fe7fef0b47685471f94fce4af712632dc129f86a libroot: keep the current time for UTIME_NOW in utimensat() (#928)
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793582014
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out/jam-trunk.log
+++ grep -o 'updated [0-9]* target' ../../out/jam-trunk.log
++ echo 'JAM trunk rc=0 wall=12s failed=0 updated=updated 1482 target'
+JAM trunk rc=0 wall=12s failed=0 updated=updated 1482 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out/libroot.so.trunk
++ sha256sum ../../out/libroot.so.trunk
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  ../../out/libroot.so.trunk
++ build fix919 origin/fix/919-exit-no-flush
++ git -C .. checkout -q -f origin/fix/919-exit-no-flush
++ git -C .. log -1 '--format=fix919 %H %s'
+fix919 819cadc70d070f69ed439e0b654346b16dce7aa1 tests: add exit919.c, a C repro for issue 919
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793582026
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out/jam-fix919.log
+++ grep -o 'updated [0-9]* target' ../../out/jam-fix919.log
++ echo 'JAM fix919 rc=0 wall=7s failed=0 updated=updated 953 target'
+JAM fix919 rc=0 wall=7s failed=0 updated=updated 953 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out/libroot.so.fix919
++ sha256sum ../../out/libroot.so.fix919
+7ca06f219cbebb1f83b71bccd20daff79eb89550355b389225b298ea9b812f1e  ../../out/libroot.so.fix919
++ git -C .. checkout -q -f origin/graviton
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision ../../out/libroot.so.trunk /tmp/rev.bin
+++ tr -d '\0'
++ echo 'trunk revision section: '\''hrev59996'\'''
+trunk revision section: 'hrev59996'
++ cd ../../out
++ echo '== does _exit still reference _IO_cleanup?'
+== does _exit still reference _IO_cleanup?
++ for a in trunk fix919
++ echo '-- trunk'
+-- trunk
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn libroot.so.trunk
++ awk '/^[0-9a-f]+ <_exit>:/{p=1} p{print} p&&/^$/{exit}'
+00000000000cad40 <_exit>:
+   cad40:	stp	x29, x30, [sp, #-32]!
+   cad44:	mov	x29, sp
+   cad48:	str	x19, [sp, #16]
+   cad4c:	mov	w19, w0
+   cad50:	bl	40ee0 <_IO_cleanup@plt>
+   cad54:	mov	w0, w19
+   cad58:	bl	40f10 <_kern_exit_team@plt>
+   cad5c:	nop
+
++ for a in trunk fix919
++ echo '-- fix919'
+-- fix919
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn libroot.so.fix919
++ awk '/^[0-9a-f]+ <_exit>:/{p=1} p{print} p&&/^$/{exit}'
+00000000000cad40 <_exit>:
+   cad40:	stp	x29, x30, [sp, #-16]!
+   cad44:	mov	x29, sp
+   cad48:	bl	40f10 <_kern_exit_team@plt>
+
+++ cmp -l /opt/t/canonical-libroot.so libroot.so.trunk
+++ wc -l
+cmp: EOF on /opt/t/canonical-libroot.so after byte 1366587
++ echo '== differing bytes canonical vs trunk: 705639'
+== differing bytes canonical vs trunk: 705639
+++ cmp -l libroot.so.trunk libroot.so.fix919
+++ wc -l
++ echo '== differing bytes trunk vs fix919: 83722'
+== differing bytes trunk vs fix919: 83722
++ sha256sum libroot.so.fix919 libroot.so.trunk
++ tee SHA256SUMS
+7ca06f219cbebb1f83b71bccd20daff79eb89550355b389225b298ea9b812f1e  libroot.so.fix919
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  libroot.so.trunk
++ aws s3 cp --quiet libroot.so.trunk s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w919/libroot.so.trunk
++ aws s3 cp --quiet libroot.so.fix919 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w919/libroot.so.fix919
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w919/
+2026-11-02 01:13:56    1366771 libroot.so.fix919
+2026-11-02 01:13:56    1366771 libroot.so.trunk

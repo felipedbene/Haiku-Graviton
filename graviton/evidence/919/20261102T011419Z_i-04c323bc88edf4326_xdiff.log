@@ -1,0 +1,100 @@
+# evidence: xdiff
+# instance: i-04c323bc88edf4326   region: us-west-2
+# ssm command: 98e7f6e2-f6c6-43e5-aa54-0d9f492a09bf (agent status: Success)
+# start: 20261102T011419Z   end: 20261102T011428Z   rc: 1   log bytes: 1338
+# script sha256: 495854e023b76885861c6504cc6cd96203a4c246e43394d135be05f9f5073520
+# ---- script ----
+# | # Where do trunk's and fix919's libroot.so differ? Per section, and in the
+# | # disassembly (addresses stripped).
+# | cd /opt/t/out
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for a in trunk fix919; do
+# | 	${X}objdump -h libroot.so.$a | awk '$1 ~ /^[0-9]+$/ {print $2, $3}' > sec.$a
+# | 	for s in $(awk '{print $1}' sec.$a); do
+# | 		${X}objcopy -O binary --only-section=$s libroot.so.$a /tmp/s.$a.bin 2>/dev/null
+# | 		echo "$s $(sha256sum < /tmp/s.$a.bin | cut -c1-16)"
+# | 	done > sechash.$a
+# | 	${X}objdump -d --no-show-raw-insn libroot.so.$a | sed -E 's/^ *[0-9a-f]+:\t//; s/[0-9a-f]{4,} <([^>+]*)(\+0x[0-9a-f]+)?>/<\1>/g' > dis.$a
+# | done
+# | echo "== sections whose content differs"; diff sechash.trunk sechash.fix919
+# | echo "== disassembly diff (addresses stripped)"; diff dis.trunk dis.fix919
+# ---- raw output ----
+== sections whose content differs
+2c2
+< .dynsym 87434b9134d60f8b
+---
+> .dynsym 51430c8a9f1b161e
+11c11
+< .text 0a76e2e37afe2b41
+---
+> .text 08d76b21c88d79b4
+14,15c14,15
+< .eh_frame_hdr 82993da44498b71a
+< .eh_frame 92d49c5e52365bf7
+---
+> .eh_frame_hdr 65bd0d2a627e9400
+> .eh_frame e977ef2b71cf0ba0
+== disassembly diff (addresses stripped)
+2c2
+< libroot.so.trunk:     file format elf64-littleaarch64
+---
+> libroot.so.fix919:     file format elf64-littleaarch64
+148921c148921
+< stp	x29, x30, [sp, #-32]!
+---
+> stp	x29, x30, [sp, #-16]!
+148923,148926d148922
+< str	x19, [sp, #16]
+< mov	w19, w0
+< bl	<_IO_cleanup@plt>
+< mov	w0, w19
+148928d148923
+< nop
+148936,148938d148930
+< nop
+< nop
+< nop
+158173c158165
+< add	x1, x1, #0x9e0
+---
+> add	x1, x1, #0x9c0
+158280c158272
+< add	x1, x1, #0x160
+---
+> add	x1, x1, #0x140
+160700c160692
+< add	x1, x1, #0xea0
+---
+> add	x1, x1, #0xe80
+160949c160941
+< add	x1, x24, #0x80
+---
+> add	x1, x24, #0x60
+160959c160951
+< add	x21, x21, #0xb0
+---
+> add	x21, x21, #0x90
+160969c160961
+< add	x1, x24, #0x80
+---
+> add	x1, x24, #0x60
+161061c161053
+< add	x1, x1, #0x80
+---
+> add	x1, x1, #0x60
+161070c161062
+< add	x1, x1, #0xb0
+---
+> add	x1, x1, #0x90
+161095c161087
+< add	x1, x1, #0x80
+---
+> add	x1, x1, #0x60
+161106c161098
+< add	x1, x1, #0xb0
+---
+> add	x1, x1, #0x90
+171360c171352
+< add	x1, x1, #0x1c4
+---
+> add	x1, x1, #0x1a4

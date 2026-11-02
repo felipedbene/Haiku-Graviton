@@ -1,0 +1,25 @@
+# evidence: rerun-getconnections
+# instance: i-0557cc9b56ed61976   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T012820Z   end: 20261102T012842Z   rc: 0
+# script sha256: f0fcf494ac68d2e8aab4b5452917c1b637717c2336b70bf2982b7e36724d7cf5
+# ---- script ----
+# | # The after run's one extra failure, parallel/test-child-process-fork-getconnections:
+# | # 20 runs each under the trunk and the fix919 libroot, alternating, same instance.
+# | cd /boot/home/td/node-v24.21.0
+# | for round in 1 2; do
+# | 	for L in lib-trunk lib-fix919; do
+# | 		export LIBRARY_PATH=/boot/home/td/$L
+# | 		: | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap --repeat 10 parallel/test-child-process-fork-getconnections > /tmp/rr.txt 2>&1
+# | 		echo "round $round $L: test.py rc=$? ok=$(grep -acE '^ok ' /tmp/rr.txt) not_ok=$(grep -acE '^not ok ' /tmp/rr.txt)"
+# | 		awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/rr.txt | grep -aE "Mismatched|Error|timeout" | sort | uniq -c
+# | 	done
+# | done
+# ---- raw output ----
+round 1 lib-trunk: test.py rc=1 ok=7 not_ok=3
+      3     Mismatched noop function calls. Expected exactly 1, actual 0.
+round 1 lib-fix919: test.py rc=1 ok=9 not_ok=1
+      1     Mismatched noop function calls. Expected exactly 1, actual 0.
+round 2 lib-trunk: test.py rc=1 ok=8 not_ok=2
+      2     Mismatched noop function calls. Expected exactly 1, actual 0.
+round 2 lib-fix919: test.py rc=1 ok=7 not_ok=3
+      3     Mismatched noop function calls. Expected exactly 1, actual 0.

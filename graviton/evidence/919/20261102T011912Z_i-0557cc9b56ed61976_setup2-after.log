@@ -1,0 +1,43 @@
+# evidence: setup2-after
+# instance: i-0557cc9b56ed61976   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T011912Z   end: 20261102T011947Z   rc: 0
+# script sha256: c8846153e00adcacbc3ae2035756679b75b806840665c1c294f055da5191f92c
+# ---- script ----
+# | # Setup, part 2: this image has no tar, so unpack the Node 24.21.0 source tree
+# | # (test runner and tests only) with Python's tarfile; check the repro binary.
+# | set -x
+# | cd /boot/home/td
+# | curl -sSfLO https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+# | echo "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  node-v24.21.0.tar.gz" | sha256sum -c || exit 1
+# | python3 -I - <<'PY'
+# | import tarfile
+# | keep = ("node-v24.21.0/test/", "node-v24.21.0/tools/test.py", "node-v24.21.0/tools/utils.py", "node-v24.21.0/deps/v8/tools/")
+# | with tarfile.open("node-v24.21.0.tar.gz") as t:
+# |     members = [m for m in t.getmembers() if m.name.startswith(keep)]
+# |     t.extractall(".", members=members, filter="data")
+# | print("extracted", len(members))
+# | PY
+# | rm -f node-v24.21.0.tar.gz; ls node-v24.21.0 node-v24.21.0/tools
+# | ls -l exit919 && sha256sum exit919.c
+# ---- raw output ----
++ cd /boot/home/td
++ curl -sSfLO https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
++ echo '622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  node-v24.21.0.tar.gz'
++ sha256sum -c
+node-v24.21.0.tar.gz: OK
++ python3 -I -
+extracted 12952
++ rm -f node-v24.21.0.tar.gz
++ ls node-v24.21.0 node-v24.21.0/tools
+node-v24.21.0:
+deps
+test
+tools
+
+node-v24.21.0/tools:
+test.py
+utils.py
++ ls -l exit919
+-rwxr-xr-x 1 baron root 137632 Nov  2 01:17 exit919
++ sha256sum exit919.c
+c34c28b5c7918fa624e09cfff55c0529b38664906f5339e1f2071fa5c5bee9d3  exit919.c
