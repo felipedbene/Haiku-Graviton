@@ -2238,7 +2238,7 @@ net_protocol_module_info gIPv4Module = {
 		0,
 		ipv4_std_ops
 	},
-	NET_PROTOCOL_ATOMIC_MESSAGES,
+	NET_PROTOCOL_ATOMIC_MESSAGES | NET_PROTOCOL_HAS_MESSAGE_QUEUED,
 
 	ipv4_init_protocol,
 	ipv4_uninit_protocol,

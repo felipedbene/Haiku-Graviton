@@ -1,0 +1,295 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: trunk-repro
+# instance: i-0ff30d54a4c913ac1   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T151157Z   end: 20261102T151317Z   rc: 0
+# script sha256: b53a0485200103700fcc604d2d0bdbe4924d1f453979a44701e380533b443ee3
+# ---- script ----
+# | cd /boot/home/t899
+# | sha256sum udp899.c udp899
+# | uname -a
+# | echo "--- packaged kernel / non-packaged network overrides"
+# | sha256sum /boot/system/kernel_arm64
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | sort | xargs sha256sum
+# | echo "--- network modules loaded by the kernel (team 1)"
+# | listimage 1 2>/dev/null | grep -E 'add-ons/kernel/network/' | awk '{print $NF}' | sort -u
+# | for run in 1 2 3; do
+# | 	echo "=== run $run"
+# | 	./udp899 > run$run.out
+# | 	echo "exit=$?"
+# | 	grep -E 'FAIL|udp899:' run$run.out
+# | done
+# | echo "=== run 1 full output"
+# | cat run1.out
+# | echo "--- syslog: panics / KDL / page faults"
+# | grep -icE "panic|kernel debugger|page fault|vm_page_fault" /var/log/syslog
+# | echo "uptime: $(uptime)"
+# ---- raw output ----
+1d6e5c7c14135a788b9d0ff9d9e26be73d003f8a5d998c8cf1c4707b963c2e0c  udp899.c
+593f479492e9f81e2b421c730d96d02f98557b743ad5f0e76fcfc6b7c38ce26b  udp899
+Haiku ip-10-128-15-14.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- packaged kernel / non-packaged network overrides
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- network modules loaded by the kernel (team 1)
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+/boot/system/add-ons/kernel/network/datalink_protocols/arp
+/boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+/boot/system/add-ons/kernel/network/datalink_protocols/loopback_frame
+/boot/system/add-ons/kernel/network/devices/ethernet
+/boot/system/add-ons/kernel/network/devices/loopback
+/boot/system/add-ons/kernel/network/notifications
+=== run 1
+exit=0
+udp899: 228 passed, 0 failed
+=== run 2
+exit=0
+udp899: 228 passed, 0 failed
+=== run 3
+exit=0
+udp899: 228 passed, 0 failed
+=== run 1 full output
+ipv4 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-before: 3 bytes                      PASS  poll=1 revents=0x1 recv=3
+ipv4 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-before: drained                      PASS  poll=0 revents=0x0
+ipv4 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-after: 3 bytes                       PASS  poll=1 revents=0x1 recv=3
+ipv4 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-after: drained                       PASS  poll=0 revents=0x0
+ipv4 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-before: 3 bytes                    PASS  select=1 isset=1 recv=3
+ipv4 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-before: drained                    PASS  poll=0 revents=0x0
+ipv4 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-after: 3 bytes                     PASS  select=1 isset=1 recv=3
+ipv4 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-after: drained                     PASS  poll=0 revents=0x0
+ipv4 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-before: 3 bytes                        PASS  poll=1 revents=0x1 recv=3
+ipv4 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-before: drained                        PASS  poll=0 revents=0x0
+ipv4 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-after: 3 bytes                         PASS  poll=1 revents=0x1 recv=3
+ipv4 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-after: drained                         PASS  poll=0 revents=0x0
+ipv4 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv4 connected select-before: 3 bytes                      PASS  select=1 isset=1 recv=3
+ipv4 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv4 connected select-before: drained                      PASS  poll=0 revents=0x0
+ipv4 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv4 connected select-after: 3 bytes                       PASS  select=1 isset=1 recv=3
+ipv4 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv4 connected select-after: drained                       PASS  poll=0 revents=0x0
+ipv4 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-before: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+ipv4 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-before: drained                   PASS  poll=0 revents=0x0
+ipv4 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-after: 3 bytes                    PASS  poll=1 revents=0x1 recv=3
+ipv4 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-after: drained                    PASS  poll=0 revents=0x0
+ipv4 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-before: 3 bytes                 PASS  select=1 isset=1 recv=3
+ipv4 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-before: drained                 PASS  poll=0 revents=0x0
+ipv4 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-after: 3 bytes                  PASS  select=1 isset=1 recv=3
+ipv4 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-after: drained                  PASS  poll=0 revents=0x0
+ipv4 queued 3+0: #1 (3 bytes)                              PASS  poll=1 revents=0x1 recv=3
+ipv4 queued 3+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv4 queued 3+0: drained                                   PASS  poll=0 revents=0x0
+ipv4 queued 0+0: #1 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv4 queued 0+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv4 queued 0+0: drained                                   PASS  poll=0 revents=0x0
+ipv4 sendmsg(msg_iovlen=0) then poll                       PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+ipv4 SO_RCVLOWAT=8, 3 bytes queued                         PASS  send=3 poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-before: 3 bytes                      PASS  poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-before: drained                      PASS  poll=0 revents=0x0
+ipv6 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-after: 3 bytes                       PASS  poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-after: drained                       PASS  poll=0 revents=0x0
+ipv6 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-before: 3 bytes                    PASS  select=1 isset=1 recv=3
+ipv6 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-before: drained                    PASS  poll=0 revents=0x0
+ipv6 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-after: 3 bytes                     PASS  select=1 isset=1 recv=3
+ipv6 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-after: drained                     PASS  poll=0 revents=0x0
+ipv6 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-before: 3 bytes                        PASS  poll=1 revents=0x1 recv=3
+ipv6 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-before: drained                        PASS  poll=0 revents=0x0
+ipv6 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-after: 3 bytes                         PASS  poll=1 revents=0x1 recv=3
+ipv6 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-after: drained                         PASS  poll=0 revents=0x0
+ipv6 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv6 connected select-before: 3 bytes                      PASS  select=1 isset=1 recv=3
+ipv6 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv6 connected select-before: drained                      PASS  poll=0 revents=0x0
+ipv6 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv6 connected select-after: 3 bytes                       PASS  select=1 isset=1 recv=3
+ipv6 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv6 connected select-after: drained                       PASS  poll=0 revents=0x0
+ipv6 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-before: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+ipv6 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-before: drained                   PASS  poll=0 revents=0x0
+ipv6 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-after: 3 bytes                    PASS  poll=1 revents=0x1 recv=3
+ipv6 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-after: drained                    PASS  poll=0 revents=0x0
+ipv6 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-before: 3 bytes                 PASS  select=1 isset=1 recv=3
+ipv6 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-before: drained                 PASS  poll=0 revents=0x0
+ipv6 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-after: 3 bytes                  PASS  select=1 isset=1 recv=3
+ipv6 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-after: drained                  PASS  poll=0 revents=0x0
+ipv6 queued 3+0: #1 (3 bytes)                              PASS  poll=1 revents=0x1 recv=3
+ipv6 queued 3+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv6 queued 3+0: drained                                   PASS  poll=0 revents=0x0
+ipv6 queued 0+0: #1 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv6 queued 0+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv6 queued 0+0: drained                                   PASS  poll=0 revents=0x0
+ipv6 sendmsg(msg_iovlen=0) then poll                       PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+ipv6 SO_RCVLOWAT=8, 3 bytes queued                         PASS  send=3 poll=1 revents=0x1 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-before: 3 bytes                PASS  poll=1 revents=0x1 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-before: drained                PASS  poll=0 revents=0x0
+v4-to-dual unconnected poll-after: 0 bytes                 PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-after: 3 bytes                 PASS  poll=1 revents=0x1 recv=3
+v4-to-dual unconnected poll-after: 0 bytes                 PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-after: drained                 PASS  poll=0 revents=0x0
+v4-to-dual unconnected select-before: 0 bytes              PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-before: 3 bytes              PASS  select=1 isset=1 recv=3
+v4-to-dual unconnected select-before: 0 bytes              PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-before: drained              PASS  poll=0 revents=0x0
+v4-to-dual unconnected select-after: 0 bytes               PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-after: 3 bytes               PASS  select=1 isset=1 recv=3
+v4-to-dual unconnected select-after: 0 bytes               PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-after: drained               PASS  poll=0 revents=0x0
+v4-to-dual connected poll-before: 0 bytes                  PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-before: 3 bytes                  PASS  poll=1 revents=0x1 recv=3
+v4-to-dual connected poll-before: 0 bytes                  PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-before: drained                  PASS  poll=0 revents=0x0
+v4-to-dual connected poll-after: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-after: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+v4-to-dual connected poll-after: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-after: drained                   PASS  poll=0 revents=0x0
+v4-to-dual connected select-before: 0 bytes                PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-before: 3 bytes                PASS  select=1 isset=1 recv=3
+v4-to-dual connected select-before: 0 bytes                PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-before: drained                PASS  poll=0 revents=0x0
+v4-to-dual connected select-after: 0 bytes                 PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-after: 3 bytes                 PASS  select=1 isset=1 recv=3
+v4-to-dual connected select-after: 0 bytes                 PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-after: drained                 PASS  poll=0 revents=0x0
+v4-to-dual self-connected poll-before: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-before: 3 bytes             PASS  poll=1 revents=0x1 recv=3
+v4-to-dual self-connected poll-before: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-before: drained             PASS  poll=0 revents=0x0
+v4-to-dual self-connected poll-after: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-after: 3 bytes              PASS  poll=1 revents=0x1 recv=3
+v4-to-dual self-connected poll-after: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-after: drained              PASS  poll=0 revents=0x0
+v4-to-dual self-connected select-before: 0 bytes           PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-before: 3 bytes           PASS  select=1 isset=1 recv=3
+v4-to-dual self-connected select-before: 0 bytes           PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-before: drained           PASS  poll=0 revents=0x0
+v4-to-dual self-connected select-after: 0 bytes            PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-after: 3 bytes            PASS  select=1 isset=1 recv=3
+v4-to-dual self-connected select-after: 0 bytes            PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-after: drained            PASS  poll=0 revents=0x0
+v4-to-dual queued 3+0: #1 (3 bytes)                        PASS  poll=1 revents=0x1 recv=3
+v4-to-dual queued 3+0: #2 (0 bytes)                        PASS  poll=1 revents=0x1 recv=0
+v4-to-dual queued 3+0: drained                             PASS  poll=0 revents=0x0
+v4-to-dual queued 0+0: #1 (0 bytes)                        PASS  poll=1 revents=0x1 recv=0
+v4-to-dual queued 0+0: #2 (0 bytes)                        PASS  poll=1 revents=0x1 recv=0
+v4-to-dual queued 0+0: drained                             PASS  poll=0 revents=0x0
+v4-to-dual sendmsg(msg_iovlen=0) then poll                 PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+v4-to-dual SO_RCVLOWAT=8, 3 bytes queued                   PASS  send=3 poll=1 revents=0x1 recv=3
+mapped-to-dual unconnected poll-before: 0 bytes            PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-before: 3 bytes            PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual unconnected poll-before: 0 bytes            PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-before: drained            PASS  poll=0 revents=0x0
+mapped-to-dual unconnected poll-after: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-after: 3 bytes             PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual unconnected poll-after: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-after: drained             PASS  poll=0 revents=0x0
+mapped-to-dual unconnected select-before: 0 bytes          PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-before: 3 bytes          PASS  select=1 isset=1 recv=3
+mapped-to-dual unconnected select-before: 0 bytes          PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-before: drained          PASS  poll=0 revents=0x0
+mapped-to-dual unconnected select-after: 0 bytes           PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-after: 3 bytes           PASS  select=1 isset=1 recv=3
+mapped-to-dual unconnected select-after: 0 bytes           PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-after: drained           PASS  poll=0 revents=0x0
+mapped-to-dual connected poll-before: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-before: 3 bytes              PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual connected poll-before: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-before: drained              PASS  poll=0 revents=0x0
+mapped-to-dual connected poll-after: 0 bytes               PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-after: 3 bytes               PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual connected poll-after: 0 bytes               PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-after: drained               PASS  poll=0 revents=0x0
+mapped-to-dual connected select-before: 0 bytes            PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-before: 3 bytes            PASS  select=1 isset=1 recv=3
+mapped-to-dual connected select-before: 0 bytes            PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-before: drained            PASS  poll=0 revents=0x0
+mapped-to-dual connected select-after: 0 bytes             PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-after: 3 bytes             PASS  select=1 isset=1 recv=3
+mapped-to-dual connected select-after: 0 bytes             PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-after: drained             PASS  poll=0 revents=0x0
+mapped-to-dual self-connected poll-before: 0 bytes         PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-before: 3 bytes         PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual self-connected poll-before: 0 bytes         PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-before: drained         PASS  poll=0 revents=0x0
+mapped-to-dual self-connected poll-after: 0 bytes          PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-after: 3 bytes          PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual self-connected poll-after: 0 bytes          PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-after: drained          PASS  poll=0 revents=0x0
+mapped-to-dual self-connected select-before: 0 bytes       PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-before: 3 bytes       PASS  select=1 isset=1 recv=3
+mapped-to-dual self-connected select-before: 0 bytes       PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-before: drained       PASS  poll=0 revents=0x0
+mapped-to-dual self-connected select-after: 0 bytes        PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-after: 3 bytes        PASS  select=1 isset=1 recv=3
+mapped-to-dual self-connected select-after: 0 bytes        PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-after: drained        PASS  poll=0 revents=0x0
+mapped-to-dual queued 3+0: #1 (3 bytes)                    PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual queued 3+0: #2 (0 bytes)                    PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual queued 3+0: drained                         PASS  poll=0 revents=0x0
+mapped-to-dual queued 0+0: #1 (0 bytes)                    PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual queued 0+0: #2 (0 bytes)                    PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual queued 0+0: drained                         PASS  poll=0 revents=0x0
+mapped-to-dual sendmsg(msg_iovlen=0) then poll             PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+mapped-to-dual SO_RCVLOWAT=8, 3 bytes queued               PASS  send=3 poll=1 revents=0x1 recv=3
+tcp: idle connection is not readable                       PASS  poll=0 revents=0x0
+tcp: 1 byte queued is readable                             PASS  poll=1 revents=0x1 recv=1
+tcp: drained connection is not readable                    PASS  poll=0 revents=0x0
+tcp: peer shutdown(SHUT_WR) is readable, recv 0 (EOF)      PASS  poll=1 revents=0x81 recv=0
+udp899: 228 passed, 0 failed
+--- syslog: panics / KDL / page faults
+10
+uptime: 
+/tmp/run-84316-74cecc.sh: line 19: uptime: command not found

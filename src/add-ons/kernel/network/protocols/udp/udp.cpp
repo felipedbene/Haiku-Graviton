@@ -1900,7 +1900,7 @@ net_protocol_module_info sUDPModule = {
 		0,
 		udp_std_ops
 	},
-	NET_PROTOCOL_ATOMIC_MESSAGES,
+	NET_PROTOCOL_ATOMIC_MESSAGES | NET_PROTOCOL_HAS_MESSAGE_QUEUED,
 
 	udp_init_protocol,
 	udp_uninit_protocol,

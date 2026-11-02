@@ -699,11 +699,17 @@ socket_read_avail(net_socket* socket)
 	socket_notify() already treats it for a waiter that is blocked when it
 	arrives. An empty datagram adds no bytes to socket_read_avail(), so that
 	cannot answer it.
+
+	The flag is checked before the member is read: a protocol module built
+	before message_queued() was added has a shorter net_protocol_module_info,
+	and reading past its end would call whatever follows it.
 */
 static bool
 socket_message_queued(net_socket* socket)
 {
-	if ((socket->first_info->flags & NET_PROTOCOL_ATOMIC_MESSAGES) == 0
+	const uint32 required = NET_PROTOCOL_ATOMIC_MESSAGES
+		| NET_PROTOCOL_HAS_MESSAGE_QUEUED;
+	if ((socket->first_info->flags & required) != required
 		|| socket->first_info->message_queued == NULL)
 		return false;
 

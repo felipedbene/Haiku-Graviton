@@ -1,0 +1,123 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules-guard
+# instance: i-0e8ec72f4e43ee3f6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T145231Z   end: 20261102T145349Z   rc: 0
+# script sha256: 11f2367920ca6470922dfd87eb670f5183a7160f465e46768a026c7b482980d5
+# ---- script ----
+# | export HOME=/root
+# | OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/t899b
+# | cd /opt/t899b/hg/generated || exit 1
+# | git -C .. fetch -q --depth 1 origin fe7fef0b47685471f94fce4af712632dc129f86a || exit 2
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | objdir_of() { dirname "$(path_of $1)"; }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		git -C .. apply --whitespace=nowarn "$patch" || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	sleep 3
+# | 	for t in "$@"; do rm -rf "$(objdir_of $t)"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'net_socket|link\.cpp|udp\.cpp|ipv4\.cpp|ipv6\.cpp|ProtocolUtilities|net_protocol' | grep -v multicast.h | head -20
+# | 	mkdir -p /opt/t899b/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/t899b/out/$label/$t && sha256sum /opt/t899b/out/$label/$t | sed "s|/opt/t899b/out/||"
+# | 	done
+# | 	return $rc
+# | }
+# | aws s3 cp --quiet $OUT/guard.patch /opt/t899b/guard.patch && sha256sum /opt/t899b/guard.patch
+# | M="stack ipv4 ipv6 tcp udp icmp icmp6 unix"
+# | build canon fe7fef0b47 none $M || exit 1
+# | CT=/opt/t899b/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | echo "--- what follows sUDPModule in canonical udp (its net_protocol_module_info)"
+# | ${CT}nm -S /opt/t899b/out/canon/udp | grep -E " sUDPModule$| module_dependencies$| modules$"
+# | ${CT}readelf -SW /opt/t899b/out/canon/udp | grep -E "\.data|\.rodata" 
+# | ${CT}readelf -rW /opt/t899b/out/canon/udp | awk "NR<4 || /R_AARCH64_(ABS64|RELATIVE)/" | head -3
+# | python3 - /opt/t899b/out/canon/udp "$CT" <<"PY"
+# | import subprocess, sys
+# | f, ct = sys.argv[1], sys.argv[2]
+# | nm = subprocess.run([ct + "nm", "-S", f], capture_output=True, text=True).stdout.split("\n")
+# | syms = {}
+# | for l in nm:
+# |     p = l.split()
+# |     if len(p) == 4:
+# |         syms[p[3]] = (int(p[0], 16), int(p[1], 16))
+# | addr, size = syms["sUDPModule"]
+# | end = addr + size
+# | print("sUDPModule at 0x%x size %d (%d pointers past the 8-byte flags/module_info head)" % (addr, size, size))
+# | rel = subprocess.run([ct + "readelf", "-rW", f], capture_output=True, text=True).stdout.split("\n")
+# | for l in rel:
+# |     p = l.split()
+# |     if len(p) >= 3 and p[0][:1] in "0123456789abcdef":
+# |         try:
+# |             off = int(p[0], 16)
+# |         except ValueError:
+# |             continue
+# |         if end <= off < end + 16:
+# |             print("relocation at end+%d (the slot a new stack reads as message_queued):" % (off - end), l.strip())
+# | for name, (a, s) in sorted(syms.items(), key=lambda x: x[1][0]):
+# |     if end <= a < end + 64:
+# |         print("symbol at end+%d: %s size %d" % (a - end, name, s))
+# | PY
+# | build trunk 4ef344f5fa none $M || exit 1
+# | build guard 4ef344f5fa /opt/t899b/guard.patch $M || exit 1
+# | for d in canon trunk guard; do
+# | 	for f in /opt/t899b/out/$d/*; do aws s3 cp --quiet "$f" "$OUT/mod/$d/$(basename $f)" || exit 6; done
+# | done
+# | aws s3 ls --recursive $OUT/mod/ | wc -l
+# | 
+# ---- raw output ----
+08db94512dfef87267d5a58948e21dcb6ea2c5b8107036eb9b4a74348ae3515f  /opt/t899b/guard.patch
+JAM canon ref=fe7fef0b47 head=fe7fef0b patch=none rc=0 wall=21s failed=0 warnings=122
+41d989d30a9389d1f54ea14aa7d2b860b6f63ac5bd49746e45813dd7fa68d392  canon/stack
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  canon/ipv4
+cd4b81a95f6c984d1d84eed4d03fc875b040f64b0ddc37565db212fe2a84ec28  canon/ipv6
+5d1fdabccc1ad4159f2145b0299e785bef94a22ece12687e4933b4490488d80c  canon/tcp
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  canon/udp
+598939307eda99d637dacb2e1ca9d5d8cdd54eaae83dd93a670865b938b77bf2  canon/icmp
+79f042caabd0790bbec4724c740c179297898d742084de4c91f4ad4acf71289b  canon/icmp6
+a785cbd003afecda86cd9312863263679e23e3868bf0d88087bf1ed0cec865b9  canon/unix
+--- what follows sUDPModule in canonical udp (its net_protocol_module_info)
+0000000000007cd8 0000000000000050 D module_dependencies
+0000000000007cc8 0000000000000010 D modules
+0000000000007d28 0000000000000110 D sUDPModule
+  [10] .rodata           PROGBITS        0000000000006500 006500 0003d6 00   A  0   0  8
+  [14] .data.rel.ro      PROGBITS        00000000000078f0 0068f0 0000d0 00  WA  0   0  8
+  [18] .data             PROGBITS        0000000000007cb8 006cb8 000180 00  WA  0   0  8
+
+Relocation section '.rela.dyn' at offset 0x24f0 contains 71 entries:
+    Offset             Info             Type               Symbol's Value  Symbol's Name + Addend
+sUDPModule at 0x7d28 size 272 (272 pointers past the 8-byte flags/module_info head)
+symbol at end+0: completed.1 size 1
+symbol at end+8: object.0 size 48
+symbol at end+56: _ZL19sUdpEndpointManager size 8
+JAM trunk ref=4ef344f5fa head=4ef344f5 patch=none rc=0 wall=13s failed=0 warnings=103
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  trunk/stack
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  trunk/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  trunk/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  trunk/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  trunk/udp
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  trunk/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  trunk/icmp6
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  trunk/unix
+JAM guard ref=4ef344f5fa head=4ef344f5 patch=/opt/t899b/guard.patch rc=0 wall=9s failed=0 warnings=2
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  guard/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  guard/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  guard/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  guard/tcp
+1b2dcef6bd970a374ecf36c6f86d2bb9e597c5088b88dcdeb065b513f8a31d3b  guard/udp
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  guard/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  guard/icmp6
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  guard/unix
+24

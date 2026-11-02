@@ -1,0 +1,646 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: mixed-guard-repro
+# instance: i-052438a560bebc427   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T151415Z   end: 20261102T152028Z   rc: 0
+# script sha256: 1906aacd57255abed4076411fcf1c53fd706fc84b76aaeb4995e6d8888dab88d
+# ---- script ----
+# | cd /boot/home/t899
+# | sha256sum udp899.c udp899
+# | uname -a
+# | echo "--- packaged kernel / non-packaged network overrides"
+# | sha256sum /boot/system/kernel_arm64
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | sort | xargs sha256sum
+# | echo "--- network modules loaded by the kernel (team 1)"
+# | listimage 1 2>/dev/null | grep -E 'add-ons/kernel/network/' | awk '{print $NF}' | sort -u
+# | for run in 1 2 3; do
+# | 	echo "=== run $run"
+# | 	./udp899 > run$run.out
+# | 	echo "exit=$?"
+# | 	grep -E 'FAIL|udp899:' run$run.out
+# | done
+# | echo "=== run 1 full output"
+# | cat run1.out
+# | echo "--- syslog: panics / KDL / page faults"
+# | grep -iE "panic|kernel debugger|page fault|vm_page_fault" /var/log/syslog | cut -c1-200
+# | echo "boot-relative: $(ps -o etime= 1 2>/dev/null) syslog lines: $(wc -l < /var/log/syslog)"
+# ---- raw output ----
+1d6e5c7c14135a788b9d0ff9d9e26be73d003f8a5d998c8cf1c4707b963c2e0c  udp899.c
+593f479492e9f81e2b421c730d96d02f98557b743ad5f0e76fcfc6b7c38ce26b  udp899
+Haiku ip-10-128-10-128.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- packaged kernel / non-packaged network overrides
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- network modules loaded by the kernel (team 1)
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+/boot/system/add-ons/kernel/network/datalink_protocols/arp
+/boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+/boot/system/add-ons/kernel/network/datalink_protocols/loopback_frame
+/boot/system/add-ons/kernel/network/devices/ethernet
+/boot/system/add-ons/kernel/network/devices/loopback
+/boot/system/add-ons/kernel/network/notifications
+/boot/system/add-ons/kernel/network/protocols/udp
+=== run 1
+exit=116
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv4 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv6 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 3 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 3 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 3 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 3 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 0 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 3 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 0 bytes                  FAIL  send(0)=-1 Connection refused
+v4-to-dual connected poll-after: 0 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 3 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 0 bytes                   FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-before: 0 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 3 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 0 bytes                FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-after: 0 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 3 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 0 bytes                 FAIL  send(0)=-1 Connection refused
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual queued 3+0: #1 (3 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 3+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: #1 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual sendmsg(msg_iovlen=0) then poll                 FAIL  sendmsg=0 poll=0 revents=0x0 recv=-1
+v4-to-dual SO_RCVLOWAT=8, 3 bytes queued                   FAIL  send=3 poll=0 revents=0x0 recv=-1
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 3 bytes               FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 3 bytes         FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 3 bytes       FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 3 bytes        FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual queued 3+0: send 3                          FAIL  send=-1 Network is unreachable
+mapped-to-dual queued 0+0: send 0                          FAIL  send=-1 Network is unreachable
+mapped-to-dual sendmsg(msg_iovlen=0) then poll             FAIL  sendmsg=-1 Network is unreachable
+mapped-to-dual SO_RCVLOWAT=8, 3 bytes queued               FAIL  send=-1 poll=0 revents=0x0 recv=-1
+udp899: 108 passed, 116 failed
+=== run 2
+exit=116
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv4 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv6 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 3 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 3 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 3 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 3 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 0 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 3 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 0 bytes                  FAIL  send(0)=-1 Connection refused
+v4-to-dual connected poll-after: 0 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 3 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 0 bytes                   FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-before: 0 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 3 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 0 bytes                FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-after: 0 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 3 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 0 bytes                 FAIL  send(0)=-1 Connection refused
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual queued 3+0: #1 (3 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 3+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: #1 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual sendmsg(msg_iovlen=0) then poll                 FAIL  sendmsg=0 poll=0 revents=0x0 recv=-1
+v4-to-dual SO_RCVLOWAT=8, 3 bytes queued                   FAIL  send=3 poll=0 revents=0x0 recv=-1
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 3 bytes               FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 3 bytes         FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 3 bytes       FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 3 bytes        FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual queued 3+0: send 3                          FAIL  send=-1 Network is unreachable
+mapped-to-dual queued 0+0: send 0                          FAIL  send=-1 Network is unreachable
+mapped-to-dual sendmsg(msg_iovlen=0) then poll             FAIL  sendmsg=-1 Network is unreachable
+mapped-to-dual SO_RCVLOWAT=8, 3 bytes queued               FAIL  send=-1 poll=0 revents=0x0 recv=-1
+udp899: 108 passed, 116 failed
+=== run 3
+exit=116
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv4 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv6 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 3 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 3 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 3 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 3 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 0 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 3 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 0 bytes                  FAIL  send(0)=-1 Connection refused
+v4-to-dual connected poll-after: 0 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 3 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 0 bytes                   FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-before: 0 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 3 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 0 bytes                FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-after: 0 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 3 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 0 bytes                 FAIL  send(0)=-1 Connection refused
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual queued 3+0: #1 (3 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 3+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: #1 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual sendmsg(msg_iovlen=0) then poll                 FAIL  sendmsg=0 poll=0 revents=0x0 recv=-1
+v4-to-dual SO_RCVLOWAT=8, 3 bytes queued                   FAIL  send=3 poll=0 revents=0x0 recv=-1
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 3 bytes               FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 3 bytes         FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 3 bytes       FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 3 bytes        FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual queued 3+0: send 3                          FAIL  send=-1 Network is unreachable
+mapped-to-dual queued 0+0: send 0                          FAIL  send=-1 Network is unreachable
+mapped-to-dual sendmsg(msg_iovlen=0) then poll             FAIL  sendmsg=-1 Network is unreachable
+mapped-to-dual SO_RCVLOWAT=8, 3 bytes queued               FAIL  send=-1 poll=0 revents=0x0 recv=-1
+udp899: 108 passed, 116 failed
+=== run 1 full output
+ipv4 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-before: 3 bytes                      PASS  poll=1 revents=0x1 recv=3
+ipv4 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-before: drained                      PASS  poll=0 revents=0x0
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected poll-after: 3 bytes                       PASS  poll=1 revents=0x1 recv=3
+ipv4 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv4 unconnected poll-after: drained                       PASS  poll=0 revents=0x0
+ipv4 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-before: 3 bytes                    PASS  select=1 isset=1 recv=3
+ipv4 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-before: drained                    PASS  poll=0 revents=0x0
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 unconnected select-after: 3 bytes                     PASS  select=1 isset=1 recv=3
+ipv4 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv4 unconnected select-after: drained                     PASS  poll=0 revents=0x0
+ipv4 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-before: 3 bytes                        PASS  poll=1 revents=0x1 recv=3
+ipv4 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-before: drained                        PASS  poll=0 revents=0x0
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected poll-after: 3 bytes                         PASS  poll=1 revents=0x1 recv=3
+ipv4 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv4 connected poll-after: drained                         PASS  poll=0 revents=0x0
+ipv4 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv4 connected select-before: 3 bytes                      PASS  select=1 isset=1 recv=3
+ipv4 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv4 connected select-before: drained                      PASS  poll=0 revents=0x0
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 connected select-after: 3 bytes                       PASS  select=1 isset=1 recv=3
+ipv4 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv4 connected select-after: drained                       PASS  poll=0 revents=0x0
+ipv4 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-before: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+ipv4 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-before: drained                   PASS  poll=0 revents=0x0
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected poll-after: 3 bytes                    PASS  poll=1 revents=0x1 recv=3
+ipv4 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv4 self-connected poll-after: drained                    PASS  poll=0 revents=0x0
+ipv4 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-before: 3 bytes                 PASS  select=1 isset=1 recv=3
+ipv4 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-before: drained                 PASS  poll=0 revents=0x0
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 self-connected select-after: 3 bytes                  PASS  select=1 isset=1 recv=3
+ipv4 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv4 self-connected select-after: drained                  PASS  poll=0 revents=0x0
+ipv4 queued 3+0: #1 (3 bytes)                              PASS  poll=1 revents=0x1 recv=3
+ipv4 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 3+0: drained                                   PASS  poll=0 revents=0x0
+ipv4 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv4 queued 0+0: drained                                   PASS  poll=0 revents=0x0
+ipv4 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv4 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+ipv6 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-before: 3 bytes                      PASS  poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-before: drained                      PASS  poll=0 revents=0x0
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected poll-after: 3 bytes                       PASS  poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-after: 0 bytes                       FAIL  poll=0 revents=0x0 recv=0
+ipv6 unconnected poll-after: drained                       PASS  poll=0 revents=0x0
+ipv6 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-before: 3 bytes                    PASS  select=1 isset=1 recv=3
+ipv6 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-before: drained                    PASS  poll=0 revents=0x0
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 unconnected select-after: 3 bytes                     PASS  select=1 isset=1 recv=3
+ipv6 unconnected select-after: 0 bytes                     FAIL  select=0 isset=0 recv=0
+ipv6 unconnected select-after: drained                     PASS  poll=0 revents=0x0
+ipv6 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-before: 3 bytes                        PASS  poll=1 revents=0x1 recv=3
+ipv6 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-before: drained                        PASS  poll=0 revents=0x0
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected poll-after: 3 bytes                         PASS  poll=1 revents=0x1 recv=3
+ipv6 connected poll-after: 0 bytes                         FAIL  poll=0 revents=0x0 recv=0
+ipv6 connected poll-after: drained                         PASS  poll=0 revents=0x0
+ipv6 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv6 connected select-before: 3 bytes                      PASS  select=1 isset=1 recv=3
+ipv6 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv6 connected select-before: drained                      PASS  poll=0 revents=0x0
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 connected select-after: 3 bytes                       PASS  select=1 isset=1 recv=3
+ipv6 connected select-after: 0 bytes                       FAIL  select=0 isset=0 recv=0
+ipv6 connected select-after: drained                       PASS  poll=0 revents=0x0
+ipv6 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-before: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+ipv6 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-before: drained                   PASS  poll=0 revents=0x0
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected poll-after: 3 bytes                    PASS  poll=1 revents=0x1 recv=3
+ipv6 self-connected poll-after: 0 bytes                    FAIL  poll=0 revents=0x0 recv=0
+ipv6 self-connected poll-after: drained                    PASS  poll=0 revents=0x0
+ipv6 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-before: 3 bytes                 PASS  select=1 isset=1 recv=3
+ipv6 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-before: drained                 PASS  poll=0 revents=0x0
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 self-connected select-after: 3 bytes                  PASS  select=1 isset=1 recv=3
+ipv6 self-connected select-after: 0 bytes                  FAIL  select=0 isset=0 recv=0
+ipv6 self-connected select-after: drained                  PASS  poll=0 revents=0x0
+ipv6 queued 3+0: #1 (3 bytes)                              PASS  poll=1 revents=0x1 recv=3
+ipv6 queued 3+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 3+0: drained                                   PASS  poll=0 revents=0x0
+ipv6 queued 0+0: #1 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: #2 (0 bytes)                              FAIL  poll=0 revents=0x0 recv=0
+ipv6 queued 0+0: drained                                   PASS  poll=0 revents=0x0
+ipv6 sendmsg(msg_iovlen=0) then poll                       FAIL  sendmsg=0 poll=0 revents=0x0 recv=0
+ipv6 SO_RCVLOWAT=8, 3 bytes queued                         FAIL  send=3 poll=0 revents=0x0 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 3 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: 0 bytes                FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-before: drained                PASS  poll=0 revents=0x0
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 3 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: 0 bytes                 FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual unconnected poll-after: drained                 PASS  poll=0 revents=0x0
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 3 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: 0 bytes              FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-before: drained              PASS  poll=0 revents=0x0
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 3 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: 0 bytes               FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual unconnected select-after: drained               PASS  poll=0 revents=0x0
+v4-to-dual connected poll-before: 0 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 3 bytes                  FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-before: 0 bytes                  FAIL  send(0)=-1 Connection refused
+v4-to-dual connected poll-before: drained                  PASS  poll=0 revents=0x0
+v4-to-dual connected poll-after: 0 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 3 bytes                   FAIL  poll=0 revents=0x0 recv=-1 (Operation would block)
+v4-to-dual connected poll-after: 0 bytes                   FAIL  send(0)=-1 Connection refused
+v4-to-dual connected poll-after: drained                   PASS  poll=0 revents=0x0
+v4-to-dual connected select-before: 0 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 3 bytes                FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-before: 0 bytes                FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-before: drained                PASS  poll=0 revents=0x0
+v4-to-dual connected select-after: 0 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 3 bytes                 FAIL  select=0 isset=0 recv=-1 (Operation would block)
+v4-to-dual connected select-after: 0 bytes                 FAIL  send(0)=-1 Connection refused
+v4-to-dual connected select-after: drained                 PASS  poll=0 revents=0x0
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-before: drained             PASS  poll=0 revents=0x0
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected poll-after: drained              PASS  poll=0 revents=0x0
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-before: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-before: drained           PASS  poll=0 revents=0x0
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+v4-to-dual self-connected select-after: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+v4-to-dual self-connected select-after: drained            PASS  poll=0 revents=0x0
+v4-to-dual queued 3+0: #1 (3 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 3+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 3+0: drained                             PASS  poll=0 revents=0x0
+v4-to-dual queued 0+0: #1 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: #2 (0 bytes)                        FAIL  poll=0 revents=0x0 recv=-1
+v4-to-dual queued 0+0: drained                             PASS  poll=0 revents=0x0
+v4-to-dual sendmsg(msg_iovlen=0) then poll                 FAIL  sendmsg=0 poll=0 revents=0x0 recv=-1
+v4-to-dual SO_RCVLOWAT=8, 3 bytes queued                   FAIL  send=3 poll=0 revents=0x0 recv=-1
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-before: drained            PASS  poll=0 revents=0x0
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected poll-after: drained             PASS  poll=0 revents=0x0
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-before: drained          PASS  poll=0 revents=0x0
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 3 bytes           FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: 0 bytes           FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual unconnected select-after: drained           PASS  poll=0 revents=0x0
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 3 bytes              FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-before: 0 bytes              FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-before: drained              PASS  poll=0 revents=0x0
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 3 bytes               FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected poll-after: 0 bytes               FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected poll-after: drained               PASS  poll=0 revents=0x0
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: 3 bytes            FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-before: 0 bytes            FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-before: drained            PASS  poll=0 revents=0x0
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: 3 bytes             FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual connected select-after: 0 bytes             FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual connected select-after: drained             PASS  poll=0 revents=0x0
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 3 bytes         FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: 0 bytes         FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-before: drained         PASS  poll=0 revents=0x0
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 3 bytes          FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: 0 bytes          FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected poll-after: drained          PASS  poll=0 revents=0x0
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 3 bytes       FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: 0 bytes       FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-before: drained       PASS  poll=0 revents=0x0
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 3 bytes        FAIL  send(3)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: 0 bytes        FAIL  send(0)=-1 Network is unreachable
+mapped-to-dual self-connected select-after: drained        PASS  poll=0 revents=0x0
+mapped-to-dual queued 3+0: send 3                          FAIL  send=-1 Network is unreachable
+mapped-to-dual queued 0+0: send 0                          FAIL  send=-1 Network is unreachable
+mapped-to-dual sendmsg(msg_iovlen=0) then poll             FAIL  sendmsg=-1 Network is unreachable
+mapped-to-dual SO_RCVLOWAT=8, 3 bytes queued               FAIL  send=-1 poll=0 revents=0x0 recv=-1
+tcp: idle connection is not readable                       PASS  poll=0 revents=0x0
+tcp: 1 byte queued is readable                             PASS  poll=1 revents=0x1 recv=1
+tcp: drained connection is not readable                    PASS  poll=0 revents=0x0
+tcp: peer shutdown(SHUT_WR) is readable, recv 0 (EOF)      PASS  poll=1 revents=0x81 recv=0
+udp899: 108 passed, 116 failed
+--- syslog: panics / KDL / page faults
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+boot-relative:  syslog lines: 2186

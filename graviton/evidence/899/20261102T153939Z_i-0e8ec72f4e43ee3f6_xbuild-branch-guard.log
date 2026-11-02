@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-branch-guard
+# instance: i-0e8ec72f4e43ee3f6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153939Z   end: 20261102T154002Z   rc: 0
+# script sha256: 9fbf54fdfc859492c1f617880a3fd7185f0174e399ad091354f110790bc03dd3
+# ---- script ----
+# | export HOME=/root
+# | cd /opt/t899b/hg/generated || exit 1
+# | git -C .. fetch -q --depth 5 origin fix/899-message-queued-guard || exit 2
+# | git -C .. checkout -q -f --detach FETCH_HEAD || exit 2
+# | git -C .. clean -q -fd -- src headers
+# | git -C .. log -3 --format='%h %s'
+# | M="stack ipv4 ipv6 tcp udp icmp icmp6 unix"
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | sleep 3
+# | for t in $M; do rm -rf "$(dirname $(path_of $t))"; done
+# | jam -q -j32 $M > jam-branch.log 2>&1; rc=$?
+# | echo "JAM branch rc=$rc failed=$(grep -cE '\.\.\.failed' jam-branch.log) warnings=$(grep -c 'warning:' jam-branch.log)"
+# | grep 'warning:' jam-branch.log | grep -v multicast.h | head
+# | for t in $M; do
+# | 	a=$(sha256sum "$(path_of $t)" | cut -d' ' -f1); b=$(sha256sum /opt/t899b/out/guard/$t | cut -d' ' -f1)
+# | 	[ "$a" = "$b" ] && echo "IDENTICAL $t $a" || echo "DIFFERENT $t branch=$a tested=$b"
+# | done
+# | [ $rc = 0 ] || exit 1
+# ---- raw output ----
+7b5ce3f6 net: read message_queued() only from a module that says it has one
+4ef344f5 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+53d409e3 net: report a queued empty datagram to a poll()/select() entered after it (#953)
+JAM branch rc=0 failed=0 warnings=2
+IDENTICAL stack 4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633
+IDENTICAL ipv4 095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0
+IDENTICAL ipv6 3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192
+IDENTICAL tcp 5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff
+IDENTICAL udp 1b2dcef6bd970a374ecf36c6f86d2bb9e597c5088b88dcdeb065b513f8a31d3b
+IDENTICAL icmp c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7
+IDENTICAL icmp6 4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2
+IDENTICAL unix 883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200
