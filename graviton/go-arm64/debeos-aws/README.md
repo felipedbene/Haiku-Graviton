@@ -68,6 +68,19 @@ GOROOT_HAIKU=/opt/korli-go ./build.sh
 
 `go.mod`/`go.sum` pin aws-sdk-go-v2 (S3 + CloudFront + s3/manager + config).
 
+## Native build and package (issue 867)
+
+`package/build-hpkg.sh` builds this module **on** a DeBeOS arm64 box with the
+DeBeOS `golang` package (`GOFLAGS=-mod=readonly`, so only what `go.mod`/`go.sum`
+pin can be fetched) and packages it as `debeos_aws`, which installs the binary at
+`/boot/system/bin/debeos-aws`, the first S3 client the build-wave wrapper
+(`pipeline/ops-lambdas/run_ssm.py`), `haiku-nativebuild` and the provisioner
+resolve. `graviton/scripts/haiku-builder-s3-client install <iid>` stages the
+inputs and runs it; `haiku-bake-builder` does that on every builder bake and then
+refuses to create an AMI unless `haiku-builder-s3-client check` round-trips a
+nonce through the client to the work bucket. The package description carries
+`DeBeOS-Source-Digest` from `graviton/scripts/hpkg-source-manifest debeos_aws`.
+
 ## Proven (2026-09-18, Graviton c7g.large, canonical ami-04493ac7c3fe0d304)
 
 Running natively on Haiku (hrev59996), authenticating **only** via the EC2

@@ -1,8 +1,9 @@
 #!/bin/sh
 # hpkg-source-manifest -- print the source manifest of an in-tree Go hpkg
-# (amazon_ssm_agent or golang), or the digest of that manifest. Issue #846.
+# (amazon_ssm_agent, golang or debeos_aws), or the digest of that manifest.
+# Issue #846.
 #
-#   hpkg-source-manifest [--top DIR] [--digest] amazon_ssm_agent|golang
+#   hpkg-source-manifest [--top DIR] [--digest] amazon_ssm_agent|golang|debeos_aws
 #
 # WHY. These two hpkgs are built by hand, outside any pipeline, and the bakes
 # consume whatever prebuilt file sits in a pool. Nothing tied the file to the
@@ -19,6 +20,9 @@
 #     because the agent is a static Go binary: a runtime fix (patch 0005,
 #     issue 843) reaches the agent only by rebuilding it.
 #   golang: the fork ref, every patches/0*.patch, and profile.d/go.sh.
+#   debeos_aws: the module source (main.go, go.mod, go.sum -- go.sum pins every
+#     dependency by hash) and the Go toolchain, for the same static-binary
+#     reason as the agent (issue 867).
 # Build scripts are deliberately NOT inputs: editing build-hpkg.sh does not
 # change what is in the package, and must not demand a rebuild.
 #
@@ -39,7 +43,7 @@ while [ $# -gt 0 ]; do
 	*) break ;;
 	esac
 done
-[ $# -eq 1 ] || { echo "usage: hpkg-source-manifest [--top DIR] [--digest] amazon_ssm_agent|golang" >&2; exit 2; }
+[ $# -eq 1 ] || { echo "usage: hpkg-source-manifest [--top DIR] [--digest] amazon_ssm_agent|golang|debeos_aws" >&2; exit 2; }
 PKG="$1"
 [ -n "$TOP" ] || TOP="$(cd "$(dirname "$0")/../.." && pwd)"
 GO="$TOP/graviton/go-arm64"
@@ -95,8 +99,14 @@ manifest() {
 		toolchain_lines
 		file_line package/profile.d/go.sh
 		;;
+	debeos_aws)
+		toolchain_lines
+		file_line debeos-aws/main.go
+		file_line debeos-aws/go.mod
+		file_line debeos-aws/go.sum
+		;;
 	*)
-		echo "hpkg-source-manifest: unknown package '$PKG' (amazon_ssm_agent|golang)" >&2
+		echo "hpkg-source-manifest: unknown package '$PKG' (amazon_ssm_agent|golang|debeos_aws)" >&2
 		exit 2
 		;;
 	esac

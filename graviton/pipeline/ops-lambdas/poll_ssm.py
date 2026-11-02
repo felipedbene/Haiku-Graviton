@@ -6,7 +6,8 @@ Output: adds {done: bool, ok: bool, error_class: str|None, ssm_status: str,
               Choice(done) until done, then branches on ok.
 
 The wrapper (run_ssm._wrapper) prints exactly one line:
-    VERDICT=<OK|CAPACITY|STALE|NOS3CLIENT|UNRESOLVABLE|FAIL> RC=<n> LOG=s3://.../<name>.log.gz
+    VERDICT=<OK|CAPACITY|STALE|NOS3CLIENT|TRANSFER|UNRESOLVABLE|FAIL> RC=<n>
+        LOG=<s3://.../<name>.log.gz|none|UPLOAD_FAILED>
 so we classify from that (reliable, tiny) rather than scraping a truncated log.
 Falls back to SSM's own status if the verdict line is somehow absent (e.g. the
 instance died before printing it -> treat as timeout/build-error).
@@ -35,7 +36,15 @@ _ERROR_CLASS = {
     # Issue 867: the builder image has no S3 client the wrapper can stage or upload
     # with (only amazon-ssm-agent, which has no s3 verbs). Nothing was built.
     "NOS3CLIENT": "no-s3-client",
+    # Issue 867: an overlay file could not be staged, so the build was skipped
+    # instead of running the stock recipe.
+    "TRANSFER": "s3-transfer",
 }
+
+# The wrapper's LOG= value when the log upload itself failed (run_ssm.LOG_UPLOAD_FAILED).
+# Recorded as log_url="upload-failed" so the row says there is no log, rather than
+# carrying an S3 key that was never written.
+_LOG_UPLOAD_FAILED = "UPLOAD_FAILED"
 
 
 def handler(event, context):
@@ -59,6 +68,8 @@ def handler(event, context):
     log_url = None
     if m:
         verdict, rc, log_url = m.group(1), int(m.group(2)), m.group(3)
+        if log_url == _LOG_UPLOAD_FAILED:
+            log_url = "upload-failed"
         ok = (verdict == "OK" and rc == 0)
         if not ok:
             err = _ERROR_CLASS.get(verdict, "build-error")

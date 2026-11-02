@@ -53,6 +53,13 @@ S3_CLIENTS = os.environ.get(
 # Shell reference to the client the wrapper resolved; every S3 call below uses it.
 AGENT = '"$S3C"'
 NO_S3_CLIENT_RC = 4
+# Issue 867: an S3 transfer the build depends on (an overlay file) failed, so the
+# build was skipped. Distinct from 3 (stale driver), 4 (no client) and 9 (capacity).
+TRANSFER_RC = 5
+# The LOG= value when the log itself could not be uploaded. The verdict still
+# describes the build; this only says there is no log to fetch, instead of naming
+# an S3 key that was never written. poll_ssm records it as log_url=upload-failed.
+LOG_UPLOAD_FAILED = "UPLOAD_FAILED"
 HP_TREE = os.environ.get("HP_TREE", "/boot/home/haikuports")
 OVERLAY_PREFIX = os.environ.get("OVERLAY_PREFIX", "debeos-overlay")
 # Version of graviton/scripts/haiku-nativebuild this deployment was built against.
@@ -144,7 +151,14 @@ def _overlay_stage(pkg, bucket):
              f'echo "overlay: staging {pkg} into $D" >> "$LOG"']
     for key, base in files:
         dest = '"$D/patches/"' if base.endswith(".patchset") else '"$D/"'
-        lines.append(f'{AGENT} s3 cp "s3://{bucket}/{key}" {dest}{base} || true')
+        # Issue 867: a failed transfer used to be `|| true`, so the build went on
+        # with the stock (or a half-staged) recipe and reported a result about code
+        # the overlay never reached. Now it sets XFER=1, which skips the build and
+        # yields VERDICT=TRANSFER -- loud, and not charged to the port.
+        src = f"s3://{bucket}/{key}"
+        lines.append(f'if ! {AGENT} s3 cp "{src}" {dest}{base} >> "$LOG" 2>&1; then XFER=1; '
+                     f'echo "overlay: FATAL could not stage {src} (issue 867)" >> "$LOG"; '
+                     f'echo "#867 S3 TRANSFER FAILED: overlay {src}" >&2; fi')
     lines += ['else',
               f'echo "overlay: WARNING no port dir for {pkg} under {HP_TREE} -- '
               f'overlay NOT staged, building the stock recipe" >> "$LOG"',
@@ -199,26 +213,43 @@ def _wrapper(cmd, bucket, run_id, name, ok_grep, refresh="", prelude=""):
     or hand-edited copy can get wrong, whereas the banner is printed by the code that
     made the finding. And it is tested BEFORE the ok_grep on purpose -- a multi-port run
     that built its first port and then hit the wall has both `<pkg>: BUILD_OK` and the
-    abort banner in one log, and the run is not OK."""
+    abort banner in one log, and the run is not OK.
+
+    VERDICT=TRANSFER (issue 867) means an overlay file could not be staged, so the build
+    was skipped rather than run against the stock recipe; like STALE it is a fact about
+    the infrastructure, re-queued with no attempt counted. A failed LOG upload does not
+    change the verdict -- the build result is still real -- but the line then says
+    LOG=UPLOAD_FAILED and the transfer error goes to stderr, instead of pointing at a
+    key that does not exist."""
     return f"""set -u
 LOG=/tmp/{name}.$$.log
 : > "$LOG"
 STALE=0
+XFER=0
 {_resolve_s3_client(bucket)}{refresh}{prelude}if [ "$STALE" = 1 ]; then
 RC=3
+elif [ "$XFER" = 1 ]; then
+RC={TRANSFER_RC}
 else
 {cmd} >> "$LOG" 2>&1
 RC=$?
 fi
 if [ "$STALE" = 1 ]; then V=STALE
+elif [ "$XFER" = 1 ]; then V=TRANSFER
 elif grep -qE "CAPACITY ABORT|CAPACITY_ABORT|BUILD_ABORTED_ENOSPC" "$LOG"; then V=CAPACITY
 elif grep -q {ok_grep} "$LOG"; then V=OK
 elif grep -q UNRESOLVABLE "$LOG"; then V=UNRESOLVABLE
 else V=FAIL; fi
 KEY=logs/{run_id}/{name}.log.gz
 gzip -9 -c "$LOG" > "$LOG.gz" 2>/dev/null || cp "$LOG" "$LOG.gz"
-{AGENT} s3 cp "$LOG.gz" "s3://{bucket}/$KEY" >/dev/null 2>&1 || true
-echo "VERDICT=$V RC=$RC LOG=s3://{bucket}/$KEY"
+if {AGENT} s3 cp "$LOG.gz" "s3://{bucket}/$KEY" > "$LOG.up" 2>&1; then
+LOGREF="s3://{bucket}/$KEY"
+else
+echo "#867 LOG UPLOAD FAILED to s3://{bucket}/$KEY:" >&2
+cat "$LOG.up" >&2
+LOGREF={LOG_UPLOAD_FAILED}
+fi
+echo "VERDICT=$V RC=$RC LOG=$LOGREF"
 exit $RC
 """
 
