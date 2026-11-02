@@ -10028,34 +10028,44 @@ _user_create_pipe(int* userFDs, int flags)
 	}
 
 	// Everything looks good so far. Open two FDs for reading respectively
-	// writing, O_NONBLOCK to avoid blocking on open with O_RDONLY
+	// writing, O_NONBLOCK to avoid blocking on open with O_RDONLY.
+	// Each FD that gets opened takes over one of our two vnode references;
+	// the reference of an end that could not be opened is ours to put.
 	int fds[2];
 	fds[0] = open_vnode(vnode, O_RDONLY | O_NONBLOCK | flags, false);
+	if (fds[0] < 0) {
+		// Typically EMFILE. Do not go on to the write end: a blocking
+		// O_WRONLY open of a FIFO waits for a reader, and nobody else can
+		// ever open this one, so the caller would wait forever.
+		put_vnode(vnode);
+		put_vnode(vnode);
+		return fds[0];
+	}
+	FDCloser closer0(fds[0], false);
+
 	fds[1] = open_vnode(vnode, O_WRONLY | flags, false);
+	if (fds[1] < 0) {
+		// closer0 puts the read end's reference
+		put_vnode(vnode);
+		return fds[1];
+	}
+	FDCloser closer1(fds[1], false);
+
 	// Reset O_NONBLOCK if requested
 	if ((flags & O_NONBLOCK) == 0)
 		common_fcntl(fds[0], F_SETFL, flags & O_NONBLOCK, false);
 
-	FDCloser closer0(fds[0], false);
-	FDCloser closer1(fds[1], false);
-
-	status = (fds[0] >= 0 ? (fds[1] >= 0 ? B_OK : fds[1]) : fds[0]);
-
 	// copy FDs to userland
-	if (status == B_OK) {
-		if (!IS_USER_ADDRESS(userFDs)
-			|| user_memcpy(userFDs, fds, sizeof(fds)) != B_OK) {
-			status = B_BAD_ADDRESS;
-		}
+	if (!IS_USER_ADDRESS(userFDs)
+		|| user_memcpy(userFDs, fds, sizeof(fds)) != B_OK) {
+		return B_BAD_ADDRESS;
 	}
 
-	// keep FDs, if everything went fine
-	if (status == B_OK) {
-		closer0.Detach();
-		closer1.Detach();
-	}
+	// keep FDs, everything went fine
+	closer0.Detach();
+	closer1.Detach();
 
-	return status;
+	return B_OK;
 }
 
 
