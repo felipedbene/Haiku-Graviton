@@ -454,3 +454,95 @@ which truncates it back to the correct 32 bits.
  
 -- 
 2.54.0
+
+From 6b1d0c1f7a2e4f9c8d3b5a6e7f8091a2b3c4d5e6 Mon Sep 17 00:00:00 2001
+From: Felipe De Bene <benfelip@amazon.com>
+Date: Mon, 2 Nov 2026 15:20:00 +0000
+Subject: Haiku: add the haiku-aarch64 target
+
+There was no arm64 entry, so ./config on arm64 Haiku (uname -m "arm64")
+matched the '.*-.*-haiku' catch-all and configured haiku-x86: 32-bit
+bignum limbs (BN_LLONG, "bn(64,32)") on a 64-bit CPU, and, with the
+recipe's no-asm, none of the ARMv8 AES, PMULL, SHA or bignum assembly.
+
+haiku-aarch64 takes linux-aarch64's asm_arch and linux64 perlasm flavour
+(plain GNU-as ELF) on haiku-common. bn_ops is SIXTY_FOUR_BIT_LONG alone,
+as for haiku-x86_64: linux-aarch64's RC4_CHAR would also change the
+public RC4_KEY layout, and buys nothing here.
+
+armcap.c detects the crypto extensions with getauxval() where the
+platform has one. DeBeOS's libroot answers AT_HWCAP/AT_HWCAP2 in the
+Linux bit layout from the ID registers EL0 cannot read. It leaves
+HWCAP_CPUID and HWCAP_SVE clear, so OpenSSL neither executes an EL0 MRS
+of MIDR_EL1 nor turns on SVE paths the kernel has not advertised. The
+include is unconditional on Haiku: the SIGILL-probe fallback would
+probe SVE successfully and enable it.
+
+os-dep/haiku.h, which haiku-common force-includes into every compile,
+is skipped under __ASSEMBLER__. The aarch64 perlasm output is .S, run
+through the preprocessor, and the C declarations from <sys/select.h>
+were assembler errors (x86_64's perlasm emits plain .s, so it never
+hit this).
+---
+diff --git a/Configurations/50-haiku.conf b/Configurations/50-haiku.conf
+--- a/Configurations/50-haiku.conf
++++ b/Configurations/50-haiku.conf
+@@ -28,4 +28,10 @@
+         bn_ops           => "SIXTY_FOUR_BIT_LONG",
+         asm_arch         => 'x86_64',
+     },
++    "haiku-aarch64" => {
++        inherit_from     => [ "haiku-common" ],
++        bn_ops           => "SIXTY_FOUR_BIT_LONG",
++        asm_arch         => 'aarch64',
++        perlasm_scheme   => 'linux64',
++    },
+ );
+diff --git a/util/perl/OpenSSL/config.pm b/util/perl/OpenSSL/config.pm
+--- a/util/perl/OpenSSL/config.pm
++++ b/util/perl/OpenSSL/config.pm
+@@ -832,6 +832,7 @@
+       [ '.*-.*-openbsd.*',        { target => "BSD-nodef-generic32" } ],
+       [ '.*-.*-.*bsd.*',          { target => "BSD-generic32" } ],
+       [ 'x86_64-.*-haiku',        { target => "haiku-x86_64" } ],
++      [ '(aarch64|arm64)-.*-haiku', { target => "haiku-aarch64" } ],
+       [ '.*-.*-haiku',            { target => "haiku-x86" } ],
+       [ '.*-.*-osf',              { target => "osf1-alpha" } ],
+       [ '.*-.*-tru64',            { target => "tru64-alpha" } ],
+diff --git a/crypto/armcap.c b/crypto/armcap.c
+--- a/crypto/armcap.c
++++ b/crypto/armcap.c
+@@ -94,6 +94,16 @@
+     return val;
+ }
+ #endif
++#endif
++
++/*
++ * DeBeOS (Haiku arm64) answers getauxval(AT_HWCAP/AT_HWCAP2) in the Linux bit
++ * layout, from the ID registers EL0 cannot read. Required, not optional: the
++ * SIGILL probes would enable SVE, which the kernel does not advertise.
++ */
++#if defined(__HAIKU__)
++#include <sys/auxv.h>
++#define OSSL_IMPLEMENT_GETAUXVAL
+ #endif
+ 
+ /*
+diff --git a/os-dep/haiku.h b/os-dep/haiku.h
+--- a/os-dep/haiku.h
++++ b/os-dep/haiku.h
+@@ -7,5 +7,11 @@
+  * https://www.openssl.org/source/license.html
+  */
+ 
++/*
++ * Force-included into every compile, which on aarch64 includes the perlasm
++ * .S files: C declarations there are assembler errors.
++ */
++#ifndef __ASSEMBLER__
+ #include <sys/select.h>
+ #include <sys/time.h>
++#endif
+-- 
+2.54.0

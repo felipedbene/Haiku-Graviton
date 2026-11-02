@@ -19,7 +19,9 @@ LICENSE="OpenSSL"
 # haikuports' 3.5.9-1 does not have (issue 790 -- ERR_GET_REASON strips the sign
 # of a negative Haiku errno). Same version, different binary, so it must not
 # claim the same revision as the unpatched build.
-REVISION="2"
+# 3: an eleventh commit adds the haiku-aarch64 target, and BUILD() no longer
+# passes no-asm on arm64 (issue 930). Before it, arm64 configured as haiku-x86.
+REVISION="3"
 SOURCE_URI="https://www.openssl.org/source/openssl-$portVersion.tar.gz"
 CHECKSUM_SHA256="603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
 SOURCE_DIR="openssl-$portVersion"
@@ -117,12 +119,23 @@ PATCH()
 
 BUILD()
 {
+	# x86_64 and arm64 have a 64-bit Haiku target with assembly; everything
+	# else falls back to haiku-x86 and has to build without it. arm64 names
+	# its target: ./config guesses from uname and turns any machine name it
+	# does not know into haiku-x86, which would then be built with asm on.
+	local configure=./config
 	local configFlags=no-asm
-	if [ "$targetArchitecture" = x86_64 ]; then
-		configFlags=
-	fi
+	case "$targetArchitecture" in
+		x86_64)
+			configFlags=
+			;;
+		arm64)
+			configure="./Configure haiku-aarch64"
+			configFlags=
+			;;
+	esac
 
-	./config --prefix=$prefix --libdir=$relativeLibDir \
+	$configure --prefix=$prefix --libdir=$relativeLibDir \
 		--openssldir=$dataRootDir/ssl \
 		enable-zlib enable-zstd shared $configFlags -g
 	make $jobArgs
