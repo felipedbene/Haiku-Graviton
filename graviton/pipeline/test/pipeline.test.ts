@@ -2051,8 +2051,11 @@ test('#506: run_ssm refreshes the driver from S3 and refuses a stale copy before
 // staged driver and REFUSE (RC=3) on a stale one. This runs the real _wrapper output
 // under /bin/sh with a stub agent that "stages" a chosen fixture -- the discriminating
 // check the issue asks for, exercised without a builder.
-function runGuard(fixtureVersion: string, driverBody?: string):
-    { rc: number; verdict: string; log: string } {
+// `clients` (issue 867) maps the stub agent's path to the S3_CLIENT_CANDIDATES list the
+// wrapper resolves from; default: the stub alone, i.e. a builder that has a client.
+function runGuard(fixtureVersion: string, driverBody?: string,
+    clients?: (agent: string, tmp: string) => string[]):
+    { rc: number; verdict: string; log: string; out: string; err: string; ran: boolean } {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nb506run-'));
   const nb = path.join(tmp, 'nb.sh');
   const agent = path.join(tmp, 'stub-agent');
@@ -2078,7 +2081,7 @@ function runGuard(fixtureVersion: string, driverBody?: string):
   const py = [
     'import os,sys',
     `os.environ["NATIVEBUILD_PATH"]=${JSON.stringify(nb)}`,
-    `os.environ["SSM_AGENT_PATH"]=${JSON.stringify(agent)}`,
+    `os.environ["S3_CLIENT_CANDIDATES"]=${JSON.stringify((clients ? clients(agent, tmp) : [agent]).join(' '))}`,
     `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
     'import run_ssm',
     `refresh=run_ssm._refresh_and_assert("b",${JSON.stringify(expected)})`,
@@ -2087,10 +2090,9 @@ function runGuard(fixtureVersion: string, driverBody?: string):
     'sys.stdout.write(script)',
   ].join('\n');
   const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
-  let rc = 0; let out = '';
-  try {
-    out = child_process.execFileSync('sh', ['-c', script], { encoding: 'utf8' });
-  } catch (e: any) { rc = e.status; out = e.stdout || ''; }
+  const res = child_process.spawnSync('sh', ['-c', script], { encoding: 'utf8' });
+  const out = res.stdout || ''; const err = res.stderr || '';
+  let rc = res.status ?? -1;
   const m = out.match(/VERDICT=(\S+) RC=(-?\d+)/);
   const verdict = m ? m[1] : '';
   if (m) rc = parseInt(m[2], 10);
@@ -2098,8 +2100,11 @@ function runGuard(fixtureVersion: string, driverBody?: string):
   try {
     log = child_process.execFileSync('gunzip', ['-c', captured], { encoding: 'utf8' });
   } catch { /* no log */ }
+  // Whether the driver was ever staged: the refresh is the first thing that would
+  // write it, so its absence proves nothing past the S3-client check ran.
+  const ran = fs.existsSync(nb);
   fs.rmSync(tmp, { recursive: true, force: true });
-  return { rc, verdict, log };
+  return { rc, verdict, log, out, err, ran };
 }
 
 test('#506 mutation: a CURRENT staged driver proceeds to build (VERDICT=OK)', () => {
@@ -2752,7 +2757,7 @@ function runOverlayStage(pkg: string, overlay: string[], tree: string[]):
   fs.chmodSync(agent, 0o755);
   const py = [
     'import os,sys,types',
-    `os.environ["SSM_AGENT_PATH"]=${JSON.stringify(agent)}`,
+    `os.environ["S3_CLIENT_CANDIDATES"]=${JSON.stringify(agent)}`,
     `os.environ["HP_TREE"]=${JSON.stringify(hp)}`,
     `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
     `KEYS=${JSON.stringify(overlay.map(b => 'debeos-overlay/' + b))}`,
@@ -3386,6 +3391,137 @@ test('845: the not-the-port branch stayed narrow -- unknown classes still count'
     expect([cls, r.state]).toEqual([cls, 'failed']);
     expect(r.exprs[0]).toContain('attempt_count=if_not_exists');
   }
+});
+
+// ---------------------------------------------------------------------------
+// Issue 867: run_ssm hard-coded /boot/system/bin/debeos-ssm-agent as the builder's S3
+// client. A builder baked from a current canonical carries only the real agent, whose
+// package (go-arm64/ssm-agent/package) installs /boot/system/bin/amazon-ssm-agent and
+// has no s3 verbs, so wave wd-10301557 died with `debeos-ssm-agent: No such file or
+// directory` and charged nodejs24 an attempt for a build that never ran.
+// ---------------------------------------------------------------------------
+
+function s3ClientDefaults(): string[] {
+  const py = [
+    'import json,os,sys',
+    'os.environ.pop("S3_CLIENT_CANDIDATES", None)',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'import run_ssm',
+    'print(json.dumps(run_ssm.S3_CLIENTS))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return JSON.parse(out.trimEnd().split('\n').pop() as string);
+}
+
+test('867: the default S3 clients are debeos-aws then debeos-ssm-agent -- never amazon-ssm-agent', () => {
+  // Same order haiku-nativebuild and haiku-provision-native-builder resolve theirs, so
+  // a box resolves the same client in the wrapper as in the driver it runs.
+  expect(s3ClientDefaults()).toEqual(
+    ['/boot/system/bin/debeos-aws', '/boot/system/bin/debeos-ssm-agent']);
+  for (const f of ['haiku-nativebuild', 'haiku-provision-native-builder']) {
+    expect(fs.readFileSync(path.join(SCRIPTS_DIR, f), 'utf8')).toContain(
+      'for _c in /boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent; do');
+  }
+  // The real agent is not a candidate: it is what a current image HAS, and it cannot
+  // `s3 cp`. Pinned against the package's own file list so the two cannot drift.
+  const pkg = fs.readFileSync(path.join(__dirname, '..', '..', 'go-arm64', 'ssm-agent',
+    'package', 'build-hpkg.sh'), 'utf8');
+  expect(pkg).toContain('BINARIES="amazon-ssm-agent ');
+  expect(pkg).not.toMatch(/debeos-aws|debeos-ssm-agent/);
+  expect(s3ClientDefaults().some(c => c.endsWith('/amazon-ssm-agent'))).toBe(false);
+});
+
+test('867: no S3 call in the generated script uses a hard-coded client path', () => {
+  const src = fs.readFileSync(path.join(OPS_LAMBDAS, 'run_ssm.py'), 'utf8');
+  expect(src).not.toMatch(/SSM_AGENT_PATH/);
+  const r = runGuard(readNativebuildVersion());
+  expect(r.verdict).toBe('OK');
+  // Every s3 cp the wrapper emits goes through the resolved $S3C.
+  const py = [
+    'import os,sys,types',
+    'os.environ.pop("S3_CLIENT_CANDIDATES", None)',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'import run_ssm',
+    'sys.stdout.write(run_ssm._wrapper("true","b","r","p",ok_grep="x",',
+    '  refresh=run_ssm._refresh_and_assert("b","v"),prelude=""))',
+  ].join('\n');
+  const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  const cps = script.split('\n').filter(l => / s3 cp /.test(l));
+  expect(cps.length).toBeGreaterThanOrEqual(2);
+  for (const l of cps) expect(l.trimStart().startsWith('"$S3C" s3 cp ')).toBe(true);
+});
+
+test('867: an old image (interim debeos-ssm-agent only) resolves it and builds', () => {
+  const r = runGuard(readNativebuildVersion(), undefined,
+    (agent, tmp) => [path.join(tmp, 'absent-debeos-aws'), agent]);
+  expect(r.verdict).toBe('OK');
+  expect(r.rc).toBe(0);
+  expect(r.log).toMatch(/#867 S3 client: .*stub-agent/);
+});
+
+test('867: debeos-aws is preferred when both clients are present', () => {
+  const r = runGuard(readNativebuildVersion(), undefined, (agent, tmp) => {
+    const other = path.join(tmp, 'second-client');
+    fs.writeFileSync(other, '#!/bin/sh\nexit 1\n');
+    fs.chmodSync(other, 0o755);
+    return [agent, other];
+  });
+  expect(r.verdict).toBe('OK');
+  expect(r.log).toMatch(/#867 S3 client: .*stub-agent/);
+  expect(r.log).not.toContain('second-client');
+});
+
+test('867: a current image with neither client refuses loudly: NOS3CLIENT RC=4, nothing run', () => {
+  const r = runGuard(readNativebuildVersion(), undefined, (_agent, tmp) => {
+    // A present-but-not-executable file does not count as a client either.
+    const dud = path.join(tmp, 'not-executable');
+    fs.writeFileSync(dud, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(dud, 0o644);
+    return [path.join(tmp, 'absent-debeos-aws'), dud];
+  });
+  expect(r.verdict).toBe('NOS3CLIENT');
+  expect(r.verdict).not.toBe('FAIL');
+  expect(r.rc).toBe(4);
+  // LOG=none: there is no client to upload one with, so the verdict must not point
+  // at an S3 key that was never written.
+  expect(r.out).toMatch(/^VERDICT=NOS3CLIENT RC=4 LOG=none$/m);
+  expect(r.err).toContain('#867 NO S3 CLIENT');
+  expect(r.err).toContain('absent-debeos-aws');
+  expect(r.err).toContain('REFUSING TO BUILD');
+  // It stopped before the driver refresh, so no driver was staged and none was run.
+  expect(r.ran).toBe(false);
+  expect(r.log).toBe('');
+});
+
+test('867: poll_ssm classifies NOS3CLIENT as no-s3-client, not build-error', () => {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'class SSM:',
+    '    class exceptions:',
+    '        class InvocationDoesNotExist(Exception): pass',
+    '    def get_command_invocation(self, CommandId=None, InstanceId=None):',
+    '        return {"Status": "Failed",',
+    '                "StandardOutputContent": "VERDICT=NOS3CLIENT RC=4 LOG=none\\n"}',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: SSM()',
+    'sys.modules["boto3"]=fake',
+    'import poll_ssm',
+    'ev=poll_ssm.handler({"command_id":"c","instance_id":"i"}, None)',
+    'print(json.dumps([ev["done"], ev["ok"], ev["error_class"], ev["log_url"]]))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  expect(JSON.parse(out.trimEnd().split('\n').pop() as string))
+    .toEqual([true, false, 'no-s3-client', 'none']);
+});
+
+test('867: a no-s3-client outcome re-queues the port without counting an attempt', () => {
+  const r = recordCapacity('no-s3-client');
+  expect(r.state).toBe('queued');
+  expect(r.exprs).toHaveLength(1);
+  expect(r.exprs[0]).not.toContain('attempt_count');
+  expect(r.exprs[0]).not.toContain('last_error_class');
+  expect(r.values[0][':o']).toBe('no-s3-client-requeued');
 });
 
 // The pre-flight: one read before the first StartExecution, instead of 96 refusals on

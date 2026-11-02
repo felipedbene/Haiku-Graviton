@@ -6,7 +6,7 @@ Output: adds {done: bool, ok: bool, error_class: str|None, ssm_status: str,
               Choice(done) until done, then branches on ok.
 
 The wrapper (run_ssm._wrapper) prints exactly one line:
-    VERDICT=<OK|CAPACITY|UNRESOLVABLE|FAIL> RC=<n> LOG=s3://.../<name>.log.gz
+    VERDICT=<OK|CAPACITY|STALE|NOS3CLIENT|UNRESOLVABLE|FAIL> RC=<n> LOG=s3://.../<name>.log.gz
 so we classify from that (reliable, tiny) rather than scraping a truncated log.
 Falls back to SSM's own status if the verdict line is somehow absent (e.g. the
 instance died before printing it -> treat as timeout/build-error).
@@ -32,6 +32,9 @@ _ERROR_CLASS = {
     "UNRESOLVABLE": "unresolvable",
     "CAPACITY": "capacity",
     "STALE": "stale-driver",
+    # Issue 867: the builder image has no S3 client the wrapper can stage or upload
+    # with (only amazon-ssm-agent, which has no s3 verbs). Nothing was built.
+    "NOS3CLIENT": "no-s3-client",
 }
 
 

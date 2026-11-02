@@ -14,10 +14,10 @@ Output: adds {command_id}.
 LOG HANDLING (why a wrapper, not SSM OutputS3): SSM's native OutputS3 writes the
 full log UNCOMPRESSED, and get-command-invocation truncates the inline copy at
 24 KB -- unreliable for a multi-MB haikuporter log. Instead a tiny POSIX wrapper
-runs the command, **gzips the full log and uploads it via the on-instance
-debeos-ssm-agent**, and prints only a compact one-line verdict to stdout:
+runs the command, **gzips the full log and uploads it via the on-instance S3
+client** (see S3_CLIENTS), and prints only a compact one-line verdict to stdout:
 
-    VERDICT=<OK|UNRESOLVABLE|FAIL> RC=<n> LOG=s3://<bucket>/logs/<run>/<name>.log.gz
+    VERDICT=<OK|UNRESOLVABLE|FAIL|...> RC=<n> LOG=s3://<bucket>/logs/<run>/<name>.log.gz
 
 That verdict is a few dozen bytes, so the inline StandardOutputContent poll_ssm
 reads is always complete. We deliberately do NOT set OutputS3BucketName (stdout
@@ -30,7 +30,29 @@ import re
 import boto3
 
 NATIVEBUILD = os.environ.get("NATIVEBUILD_PATH", "/boot/home/haiku-nativebuild")
-AGENT = os.environ.get("SSM_AGENT_PATH", "/boot/system/bin/debeos-ssm-agent")
+# The builder-side S3 client, RESOLVED ON THE BOX, never one hard-coded path (issue
+# 867). This used to be the single default /boot/system/bin/debeos-ssm-agent, which
+# no deployed stack overrides. That is the interim custom agent, the only one with an
+# `s3 cp` verb, and issue #302 replaced it with the real amazon-ssm-agent. The real
+# agent's package (graviton/go-arm64/ssm-agent/package/) installs
+# /boot/system/bin/amazon-ssm-agent plus the ssm-* workers and has NO S3 verbs, so on
+# a builder baked from a current canonical the old path is simply absent and every
+# build died with `debeos-ssm-agent: No such file or directory`.
+#
+# Two layouts carry a client with the `s3 cp <src> <dst>` verb this wrapper uses:
+# debeos-aws (go-arm64/debeos-aws, the designed replacement) and the interim
+# debeos-ssm-agent (September-era builder AMIs). Both are checked explicitly, in the
+# same order haiku-nativebuild and haiku-provision-native-builder resolve theirs. If
+# neither exists the wrapper refuses before touching anything (VERDICT=NOS3CLIENT),
+# because haiku-nativebuild harvests through the same client and a build there could
+# only produce hpkgs that never reach the pool. Space-separated; overridable only so
+# the tests can point it at stubs.
+S3_CLIENTS = os.environ.get(
+    "S3_CLIENT_CANDIDATES",
+    "/boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent").split()
+# Shell reference to the client the wrapper resolved; every S3 call below uses it.
+AGENT = '"$S3C"'
+NO_S3_CLIENT_RC = 4
 HP_TREE = os.environ.get("HP_TREE", "/boot/home/haikuports")
 OVERLAY_PREFIX = os.environ.get("OVERLAY_PREFIX", "debeos-overlay")
 # Version of graviton/scripts/haiku-nativebuild this deployment was built against.
@@ -130,6 +152,35 @@ def _overlay_stage(pkg, bucket):
     return "\n".join(lines) + "\n"
 
 
+def _resolve_s3_client(bucket):
+    """Emit shell that sets S3C to the first S3_CLIENTS entry that is executable, or
+    refuses the whole command (issue 867).
+
+    The refusal is its own verdict, NOS3CLIENT, not FAIL: no S3 client is a fact
+    about the BUILDER IMAGE, not the package -- nothing was staged or built -- so
+    poll_ssm names it `no-s3-client` and record.py re-queues the row without counting
+    an attempt, exactly as it does for a stale driver (845). It is loud on every
+    channel that still works without S3: the diagnostic goes to stderr (SSM's
+    StandardErrorContent) and the verdict line says LOG=none, because there is no
+    client to upload a log with."""
+    cands = " ".join(S3_CLIENTS)
+    return f"""S3C=""
+for _c in {cands}; do
+if [ -x "$_c" ]; then S3C="$_c"; break; fi
+done
+if [ -z "$S3C" ]; then
+echo "#867 NO S3 CLIENT on this builder: none of [{cands}] is executable." >&2
+echo "  The image carries only amazon-ssm-agent, which has no s3 verbs, so the driver" >&2
+echo "  cannot be staged and built hpkgs could not be harvested to s3://{bucket}/." >&2
+echo "  REFUSING TO BUILD. Bake the builder with debeos-aws, or point" >&2
+echo "  /haiku-graviton/builder-ami-id at an AMI that has one of the clients above." >&2
+echo "VERDICT=NOS3CLIENT RC={NO_S3_CLIENT_RC} LOG=none"
+exit {NO_S3_CLIENT_RC}
+fi
+echo "#867 S3 client: $S3C" >> "$LOG"
+"""
+
+
 def _wrapper(cmd, bucket, run_id, name, ok_grep, refresh="", prelude=""):
     """POSIX-sh: refresh+assert the driver (#506), optional prelude (overlay staging),
     then run cmd, classify, gzip+upload the full log, echo the compact verdict.
@@ -153,7 +204,7 @@ def _wrapper(cmd, bucket, run_id, name, ok_grep, refresh="", prelude=""):
 LOG=/tmp/{name}.$$.log
 : > "$LOG"
 STALE=0
-{refresh}{prelude}if [ "$STALE" = 1 ]; then
+{_resolve_s3_client(bucket)}{refresh}{prelude}if [ "$STALE" = 1 ]; then
 RC=3
 else
 {cmd} >> "$LOG" 2>&1
