@@ -1,0 +1,63 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-fragprobe
+# instance: i-0371712ef16affb77   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153013Z   end: 20261102T153035Z   rc: 11
+# script sha256: f3cba1b3682ed298273bec58bed630ceb04971154ed3a50c22f39099eb78b18a
+# ---- script ----
+# | set -u
+# | cd /boot/home/tw || exit 3
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\).*/\1/p' | head -1)
+# | echo "own address: $OWN"
+# | echo 'LyogdWRwZnJhZy5jIC0tIHNlbmQgb25lIFVEUCBkYXRhZ3JhbSBvZiA8c2l6ZT4gcGF5bG9hZCBieXRlcyB0byA8YWRkcmVzcz4KICogb24gdGhlIGhvc3QgaXRzZWxmIGFuZCByZXBvcnQgd2hldGhlciBpdCBhcnJpdmVzIHdpdGhpbiAyIHMuCiAqIFVzYWdlOiB1ZHBmcmFnIDxhZGRyZXNzPiA8c2l6ZT4uIEV4aXQgMCBkZWxpdmVyZWQsIDEgbm90IGRlbGl2ZXJlZC4gKi8KI2luY2x1ZGUgPGFycGEvaW5ldC5oPgojaW5jbHVkZSA8bmV0aW5ldC9pbi5oPgojaW5jbHVkZSA8cG9sbC5oPgojaW5jbHVkZSA8c3RkaW8uaD4KI2luY2x1ZGUgPHN0ZGxpYi5oPgojaW5jbHVkZSA8c3RyaW5nLmg+CiNpbmNsdWRlIDxzeXMvc29ja2V0Lmg+CiNpbmNsdWRlIDxlcnJuby5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CgppbnQKbWFpbihpbnQgYXJnYywgY2hhcioqIGFyZ3YpCnsKCXN0cnVjdCBzb2NrYWRkcl9zdG9yYWdlIHRvOwoJc29ja2xlbl90IGxlbmd0aDsKCW1lbXNldCgmdG8sIDAsIHNpemVvZih0bykpOwoJaW50IGZhbWlseSA9IHN0cmNocihhcmd2WzFdLCAnOicpID8gQUZfSU5FVDYgOiBBRl9JTkVUOwoJaWYgKGZhbWlseSA9PSBBRl9JTkVUKSB7CgkJc3RydWN0IHNvY2thZGRyX2luKiBhID0gKHN0cnVjdCBzb2NrYWRkcl9pbiopJnRvOwoJCWEtPnNpbl9mYW1pbHkgPSBBRl9JTkVUOwoJCWluZXRfcHRvbihBRl9JTkVULCBhcmd2WzFdLCAmYS0+c2luX2FkZHIpOwoJCWxlbmd0aCA9IHNpemVvZigqYSk7Cgl9IGVsc2UgewoJCXN0cnVjdCBzb2NrYWRkcl9pbjYqIGEgPSAoc3RydWN0IHNvY2thZGRyX2luNiopJnRvOwoJCWEtPnNpbjZfZmFtaWx5ID0gQUZfSU5FVDY7CgkJaW5ldF9wdG9uKEFGX0lORVQ2LCBhcmd2WzFdLCAmYS0+c2luNl9hZGRyKTsKCQlsZW5ndGggPSBzaXplb2YoKmEpOwoJfQoJc2l6ZV90IHNpemUgPSBzdHJ0b3VsKGFyZ3ZbMl0sIE5VTEwsIDApOwoJaW50IHJlY2VpdmVyID0gc29ja2V0KGZhbWlseSwgU09DS19ER1JBTSwgMCk7CglpbnQgc2VuZGVyID0gc29ja2V0KGZhbWlseSwgU09DS19ER1JBTSwgMCk7CglpbnQgYnVmZmVyID0gMSA8PCAyMDsKCXNldHNvY2tvcHQocmVjZWl2ZXIsIFNPTF9TT0NLRVQsIFNPX1JDVkJVRiwgJmJ1ZmZlciwgc2l6ZW9mKGJ1ZmZlcikpOwoJc2V0c29ja29wdChzZW5kZXIsIFNPTF9TT0NLRVQsIFNPX1NOREJVRiwgJmJ1ZmZlciwgc2l6ZW9mKGJ1ZmZlcikpOwoJaWYgKGJpbmQocmVjZWl2ZXIsIChzdHJ1Y3Qgc29ja2FkZHIqKSZ0bywgbGVuZ3RoKSAhPSAwCgkJfHwgZ2V0c29ja25hbWUocmVjZWl2ZXIsIChzdHJ1Y3Qgc29ja2FkZHIqKSZ0bywgJmxlbmd0aCkgIT0gMCkgewoJCXByaW50ZigiYmluZDogJXNcbiIsIHN0cmVycm9yKGVycm5vKSk7CgkJcmV0dXJuIDI7Cgl9CgljaGFyKiBkYXRhID0gY2FsbG9jKDEsIHNpemUgKyAxKTsKCXNzaXplX3Qgc2VudCA9IHNlbmR0byhzZW5kZXIsIGRhdGEsIHNpemUsIDAsIChzdHJ1Y3Qgc29ja2FkZHIqKSZ0bywgbGVuZ3RoKTsKCWlmIChzZW50IDwgMCkgewoJCXByaW50ZigidWRwICUtMTBzICU2enUgYnl0ZXM6IHNlbmR0byByZWZ1c2VkOiAlc1xuIiwgYXJndlsxXSwgc2l6ZSwKCQkJc3RyZXJyb3IoZXJybm8pKTsKCQlyZXR1cm4gMzsKCX0KCXN0cnVjdCBwb2xsZmQgcCA9IHsgcmVjZWl2ZXIsIFBPTExJTiwgMCB9OwoJaWYgKHBvbGwoJnAsIDEsIDIwMDApICE9IDEpIHsKCQlwcmludGYoInVkcCAlLTEwcyAlNnp1IGJ5dGVzOiBzZW50ICV6ZCwgTk9UIERFTElWRVJFRCB3aXRoaW4gMiBzXG4iLAoJCQlhcmd2WzFdLCBzaXplLCBzZW50KTsKCQlyZXR1cm4gMTsKCX0KCXNzaXplX3QgZ290ID0gcmVjdihyZWNlaXZlciwgZGF0YSwgc2l6ZSArIDEsIDApOwoJcHJpbnRmKCJ1ZHAgJS0xMHMgJTZ6dSBieXRlczogc2VudCAlemQsIGRlbGl2ZXJlZCAlemRcbiIsIGFyZ3ZbMV0sIHNpemUsCgkJc2VudCwgZ290KTsKCXJldHVybiAwOwp9Cg==' | base64 -d > udpfrag.c && gcc -O2 -Wall -o udpfrag udpfrag.c -lnetwork || exit 6; sha256sum udpfrag.c udpfrag
+# | consumer() { ps -a | grep -E "loop consumer"; }
+# | alive() { ./udpfrag 127.0.0.1 100 > /dev/null && ./udpfrag ::1 100 > /dev/null && echo "  loopback alive" || { echo "  LOOPBACK DEAD"; consumer; sleep 2; consumer; return 1; }; }
+# | ifconfig loop mtu 9001; ifconfig loop | grep MTU
+# | alive || exit 10
+# | for t in "127.0.0.1 8900" "127.0.0.1 20000" "127.0.0.1 65507" "::1 8900" "::1 20000" "::1 60000" "::1 65000" "::1 65487"; do
+# | 	./udpfrag $t
+# | 	alive || { echo "WEDGED after: udp $t"; exit 11; }
+# | done
+# | ifconfig loop mtu 65536
+# | echo "no wedge"
+# ---- raw output ----
+Haiku ip-10-128-9-151.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- non-packaged overrides
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2440 0xffff0000024be000 0xffff0000024e0000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2486 0xffff00000247f000 0xffff000002487000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2487 0xffff000002488000 0xffff000002493000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2490 0xffff000002495000 0xffff0000024a7000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2505 0xffff0000024a8000 0xffff0000024b6000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+ 2514 0xffff0000024e2000 0xffff0000024ed000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+own address: 10.128.9.151
+c4b4c9dc25c9200524dabf95082f1ed6aaa2cd4b83462bdebe771e153ed06c3f  udpfrag.c
+c7a08fdcc9f67e0d692fa94d053c2f7ccd938bf7567aa6125105af3662c38ea6  udpfrag
+	MTU: 9001, Metric: 0, up loopback link
+  loopback alive
+udp 127.0.0.1    8900 bytes: sent 8900, delivered 8900
+  loopback alive
+udp 127.0.0.1   20000 bytes: sent 20000, delivered 20000
+  loopback alive
+udp 127.0.0.1   65507 bytes: sent 65507, delivered 65507
+  loopback alive
+udp ::1          8900 bytes: sent 8900, delivered 8900
+  loopback alive
+udp ::1         20000 bytes: sent 20000, NOT DELIVERED within 2 s
+  LOOPBACK DEAD
+loop consumer                           108      run   15        0     4006 
+/boot/system/bin/grep -E loop consumer               425        1    0    0 
+loop consumer                           108      run   15        0     6011 
+/boot/system/bin/grep -E loop consumer               428        1    0    0 
+WEDGED after: udp ::1 20000
+failed to run commands: exit status 11

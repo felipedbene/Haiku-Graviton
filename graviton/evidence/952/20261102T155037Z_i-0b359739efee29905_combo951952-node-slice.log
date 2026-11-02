@@ -1,0 +1,44 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: combo951952-node-slice
+# instance: i-0b359739efee29905   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T155037Z   end: 20261102T155124Z   rc: 0
+# script sha256: 58ebdd7114846218012347f8ffa68f0b219e002e3dcacadda9426ed766c506af
+# ---- script ----
+# | set -u
+# | cd /boot/home/tw || exit 3
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\).*/\1/p' | head -1)
+# | echo "own address: $OWN"
+# | cd /boot/home/tw/node-v24.21.0 || exit 7
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap parallel/test-net* > /boot/home/tw/slice-net.tap 2>&1
+# | echo "test-net* rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /boot/home/tw/slice-net.tap) notok=$(grep -c '^not ok ' /boot/home/tw/slice-net.tap)"
+# | grep '^not ok ' /boot/home/tw/slice-net.tap
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap parallel/test-http-* > /boot/home/tw/slice-http.tap 2>&1
+# | echo "test-http-* rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /boot/home/tw/slice-http.tap) notok=$(grep -c '^not ok ' /boot/home/tw/slice-http.tap)"
+# | grep '^not ok ' /boot/home/tw/slice-http.tap
+# ---- raw output ----
+Haiku ip-10-128-5-246.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- non-packaged overrides
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+bee07190362e0c849505433af54f553572e0ab75b706fc1a4649eeb96497ddc1  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2267 0xffff00000233d000 0xffff00000235f000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2303 0xffff0000020fb000 0xffff000002103000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2305 0xffff0000022c9000 0xffff0000022d4000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2306 0xffff000002361000 0xffff000002373000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2315 0xffff000002110000 0xffff00000211b000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2414 0xffff0000022db000 0xffff0000022e9000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+own address: 10.128.5.246
+test-net* rc=0 wall=11s ok=159 notok=0
+test-http-* rc=1 wall=30s ok=401 notok=1
+not ok 380 parallel/test-http-writable-true-after-close
