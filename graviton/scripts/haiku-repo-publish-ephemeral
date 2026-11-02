@@ -77,6 +77,15 @@ SSM_RUN="$HERE/ssm-run"
 log() { echo "haiku-repo-publish-ephemeral: $*"; }
 die() { echo "haiku-repo-publish-ephemeral: $*" >&2; exit 1; }
 
+# Encode stdin as one unwrapped base64 line, identically under GNU coreutils and
+# BSD/macOS base64 (issue 875). The two agree on exactly one interface: no
+# arguments, input on stdin, output on stdout. Everything else differs -- GNU
+# takes a positional file and wraps at 76 unless given -w0; BSD rejects a
+# positional file (rc 64, "invalid argument"), spells "no wrap" -b 0 and reads a
+# file only via -i. So pass no flags at all and strip the newlines ourselves.
+# Under pipefail a failing base64 fails the call, and set -e ends the run.
+b64() { base64 | tr -d '\n'; }
+
 : "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
 : "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix>}"
 [ $# -ge 1 ] || die "usage: $(basename "$0") <pkg.hpkg> [pkg.hpkg ...]"
@@ -160,7 +169,7 @@ launch_peer() {
 	# run ON the peer; region/HOST_TOOLS_S3 are expanded HERE. set -e aborts the
 	# boot if any step fails, surfacing as the ready sentinel never appearing.
 	local userdata
-	userdata=$(base64 -w0 <<-UD
+	userdata=$(b64 <<-UD
 		#!/bin/bash
 		set -e
 		export DEBIAN_FRONTEND=noninteractive
@@ -268,6 +277,21 @@ wait_for_ready() {
   and that the banked host tools run on Ubuntu (ldd)."
 }
 
+# ------------------------------------------- encode the payload, pre-launch
+# Everything shipped to the peer is encoded HERE, before an instance exists. The
+# encode is the one workstation-portability hazard on this path, and it used to
+# sit after the launch and the bootstrap wait, so a base64 that could not encode
+# (issue 875: BSD base64 given GNU's positional-file form) ended the publish only
+# once a peer had been paid for and booted. Failing now costs nothing.
+addb64=$(b64 < "$HERE/haiku-repo-add")
+lockb64=$(b64 < "$HERE/haiku-publish-lock.sh")
+cohb64=$(b64 < "$HERE/haiku-repo-coherence")
+metab64=$(b64 < "$HERE/hpkg_meta.py")
+baseb64=$(b64 < "$HERE/haiku-repo-coherence.baseline")
+for v in addb64 lockb64 cohb64 metab64 baseb64; do
+	[ -n "${!v}" ] || die "encoding the peer payload produced nothing for $v; refusing to launch"
+done
+
 case "$PUBLISHER" in
 	"") launch_peer ;;
 	*)  log "using caller-supplied publisher $PUBLISHER (will not terminate it)" ;;
@@ -286,11 +310,6 @@ done
 # PACKAGE_REPO_TOOL point at the fetched Linux host tools (haiku-repo-add's
 # auto-detect globs the /opt/haiku cross-build tree, absent on a stock peer).
 log "running haiku-repo-add on the publisher over SSM"
-addb64=$(base64 -w0 "$HERE/haiku-repo-add"         2>/dev/null || base64 "$HERE/haiku-repo-add"        | tr -d '\n')
-lockb64=$(base64 -w0 "$HERE/haiku-publish-lock.sh" 2>/dev/null || base64 "$HERE/haiku-publish-lock.sh" | tr -d '\n')
-cohb64=$(base64  -w0 "$HERE/haiku-repo-coherence"  2>/dev/null || base64 "$HERE/haiku-repo-coherence" | tr -d '\n')
-metab64=$(base64 -w0 "$HERE/hpkg_meta.py"          2>/dev/null || base64 "$HERE/hpkg_meta.py"         | tr -d '\n')
-baseb64=$(base64 -w0 "$HERE/haiku-repo-coherence.baseline" 2>/dev/null || base64 "$HERE/haiku-repo-coherence.baseline" | tr -d '\n')
 "$SSM_RUN" "$PUBLISHER" -t 2400 <<EOF
 set -e
 export HG_REPO_S3='$HG_REPO_S3'

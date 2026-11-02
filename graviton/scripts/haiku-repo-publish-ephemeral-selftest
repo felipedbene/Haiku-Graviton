@@ -1,0 +1,363 @@
+#!/usr/bin/env python3
+"""haiku-repo-publish-ephemeral-selftest [--script PATH] [--native-script PATH]
+
+Offline test that the workstation side of the two remote publishers encodes its
+payload with whatever `base64` the host has -- GNU coreutils or BSD/macOS -- and
+that a base64 which cannot encode stops the ephemeral publish BEFORE it launches
+a peer. No AWS, no network: `aws` and `ssm-run` are replaced by recording stubs.
+
+WHY IT EXISTS (issue 875). On 2026-11-01 a publish from a macOS workstation
+launched and bootstrapped an Ubuntu peer and then died with
+
+    base64: invalid argument .../haiku-repo-add
+    rc=64
+
+The encode was `base64 -w0 FILE || base64 FILE | tr -d '\\n'`. BSD base64 takes
+no positional file, so both halves failed. The encode also sat AFTER the launch
+and the bootstrap wait, so the failure was only reached once an instance had
+been paid for. The workaround was a GNU base64 shimmed first on PATH. This test
+runs with no shim: each base64 found on the host is put first on a PATH of
+otherwise only /usr/bin:/bin.
+
+What it checks, for every base64 implementation it finds (GNU and/or BSD):
+  1. a binary round trip through the publishers' own `b64` helper (the function
+     is lifted out of the script, not re-typed here) gives ONE unwrapped line
+     equal to the canonical RFC 4648 encoding, and decodes back byte-for-byte.
+     The sha256 of the encoded line is printed so runs on different hosts can be
+     compared for byte identity.
+  2. the ephemeral publisher, run end to end against the stubs, gets past the
+     encode, launches exactly one peer, ships five payloads that each decode to
+     the tracked file byte-for-byte, ships user data that decodes to the
+     bootstrap script, and terminates the peer it launched.
+  3. with a base64 that encodes the bootstrap user data but fails (exit 64) on
+     the peer payload -- how BSD base64 met the pre-fix script -- the ephemeral
+     publisher exits non-zero having called NEITHER run-instances NOR
+     terminate-instances: nothing was launched, so nothing can be orphaned.
+And statically, for both publishers: no workstation-side base64 call passes a
+positional file or a GNU-only wrap flag.
+
+  --script PATH         the ephemeral publisher to test (default: the sibling).
+                        Pointing it at the pre-fix script must make this FAIL.
+  --native-script PATH  the native publisher for the static check.
+
+Exit status: 0 pass; 1 an assertion failed; 2 no base64 implementation found.
+"""
+import argparse
+import base64
+import hashlib
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Shipped beside the ephemeral publisher, and decoded on the peer.
+PAYLOAD = {
+    "addb64": "haiku-repo-add",
+    "lockb64": "haiku-publish-lock.sh",
+    "cohb64": "haiku-repo-coherence",
+    "metab64": "hpkg_meta.py",
+    "baseb64": "haiku-repo-coherence.baseline",
+}
+
+FAILURES = []
+
+
+def check(cond, msg):
+    print("  %s %s" % ("ok  " if cond else "FAIL", msg))
+    if not cond:
+        FAILURES.append(msg)
+
+
+def blob():
+    """A deterministic 64 KiB binary blob with every byte value present, sized
+    so a wrapping encoder would wrap it many times over."""
+    out = bytearray(range(256))
+    h = b"issue-875"
+    while len(out) < 65536 + 7:     # +7: not a multiple of 3, exercises padding
+        h = hashlib.sha256(h).digest()
+        out += h
+    return bytes(out[:65536 + 7])
+
+
+def flavour(path):
+    try:
+        r = subprocess.run([path, "--version"], capture_output=True, text=True)
+    except OSError:
+        return None
+    if "GNU coreutils" in r.stdout:
+        return "GNU"
+    # BSD base64 has no --version; it prints usage and exits non-zero.
+    probe = subprocess.run([path, "-h"], capture_output=True, text=True)
+    if "-b num" in (probe.stdout + probe.stderr) or "-i in_file" in (probe.stdout + probe.stderr):
+        return "BSD"
+    return None
+
+
+def implementations():
+    seen, out = set(), []
+    cands = ["/usr/bin/base64", "/bin/base64"]
+    for name in ("gbase64", "base64"):
+        p = shutil.which(name)
+        if p:
+            cands.append(p)
+    cands.append("/opt/homebrew/bin/gbase64")
+    for c in cands:
+        if not os.path.exists(c):
+            continue
+        real = os.path.realpath(c)
+        if real in seen:
+            continue
+        f = flavour(c)
+        if f:
+            seen.add(real)
+            out.append((f, c))
+    return out
+
+
+def write_exec(path, body):
+    with open(path, "w") as fh:
+        fh.write(body)
+    os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def lift_helper(src):
+    m = re.search(r"^b64\(\) \{.*\}$", src, re.M)
+    return m.group(0) if m else None
+
+
+FAKE_AWS = r'''#!/bin/bash
+# Recording stub for the aws CLI. Logs every call; answers just enough.
+echo "aws $*" >> "$STUB_LOG"
+args=" $* "
+case "$args" in
+	*" ssm get-parameter "*) echo ami-0fake875 ;;
+	*" ec2 run-instances "*)
+		while [ $# -gt 0 ]; do
+			[ "$1" = --user-data ] && { printf '%s' "$2" > "$STUB_DIR/userdata.b64"; }
+			shift
+		done
+		echo i-0fake875 ;;
+	*" ec2 describe-instances "*) echo running ;;
+	*" ec2 terminate-instances "*) echo shutting-down ;;
+	*" s3 "*) : ;;
+	*) echo "fake aws: unexpected call: $*" >&2; exit 1 ;;
+esac
+'''
+
+FAKE_SSM_RUN = r'''#!/bin/bash
+# Recording stub for ssm-run: answers the readiness probe, captures the publish.
+body=$(cat)
+echo "ssm-run $*" >> "$STUB_LOG"
+case "$body" in
+	*PUBLISHER_READY*) echo PUBLISHER_READY ;;
+	*) printf '%s' "$body" > "$STUB_DIR/publish.sh" ;;
+esac
+'''
+
+FAILING_BASE64 = r'''#!/bin/bash
+# Stands in for a base64 that can encode the bootstrap user data but NOT the
+# peer payload -- exactly how BSD base64 met the pre-fix script: its stdin
+# user-data encode worked, its positional-file payload encode died rc 64. So the
+# test separates "fails before launch" from "fails after launch" for any order
+# the publisher might put the two encodes in.
+[ $# -eq 0 ] || [ "$*" = "-w0" ] || { echo "base64: invalid argument $*" >&2; exit 64; }
+in=$(cat)
+case "$in" in
+	*haiku-publisher-ready*) printf '%s' "$in" | /usr/bin/base64 ;;
+	*) echo "base64: cannot encode the peer payload (selftest stand-in)" >&2; exit 64 ;;
+esac
+'''
+
+
+def sandbox(script, base64_path):
+    """Scratch copy of the publisher + its siblings, a fake ssm-run beside it,
+    a stub dir holding only `aws`, and a dir holding only the chosen base64."""
+    d = tempfile.mkdtemp(prefix="hrpe-selftest-")
+    tree = os.path.join(d, "scripts")
+    os.mkdir(tree)
+    shutil.copy2(script, os.path.join(tree, "haiku-repo-publish-ephemeral"))
+    for f in PAYLOAD.values():
+        shutil.copy2(os.path.join(HERE, f), os.path.join(tree, f))
+    write_exec(os.path.join(tree, "ssm-run"), FAKE_SSM_RUN)
+    stubs = os.path.join(d, "stubs")
+    os.mkdir(stubs)
+    write_exec(os.path.join(stubs, "aws"), FAKE_AWS)
+    b64dir = os.path.join(d, "b64")
+    os.mkdir(b64dir)
+    if base64_path is None:
+        write_exec(os.path.join(b64dir, "base64"), FAILING_BASE64)
+    else:
+        os.symlink(base64_path, os.path.join(b64dir, "base64"))
+    pkg = os.path.join(d, "demo-1.0-1-arm64.hpkg")
+    with open(pkg, "wb") as fh:
+        fh.write(b"hpkg\0fake")
+    return d, tree, stubs, b64dir, pkg
+
+
+def run_publisher(script, base64_path):
+    d, tree, stubs, b64dir, pkg = sandbox(script, base64_path)
+    env = {
+        # The chosen base64 first, then ONLY the system dirs -- no GNU shim.
+        "PATH": ":".join([b64dir, stubs, "/usr/bin", "/bin"]),
+        "HOME": d,
+        "STUB_LOG": os.path.join(d, "calls.log"),
+        "STUB_DIR": d,
+        "HG_REPO_S3": "s3://selftest-bucket/repo/arm64",
+        "HG_INCOMING_S3": "s3://selftest-bucket/incoming",
+        "HG_HOST_TOOLS_S3": "s3://selftest-bucket/host-tools",
+        "HG_PUBLISHER_PROFILE": "selftest-profile",
+        "HG_PUBLISHER_SUBNET": "subnet-0fake",
+        "HG_PUBLISHER_SG": "sg-0fake",
+        "AWS_DEFAULT_REGION": "us-west-2",
+    }
+    r = subprocess.run(["bash", os.path.join(tree, "haiku-repo-publish-ephemeral"), pkg],
+                       env=env, capture_output=True, text=True, timeout=120)
+    calls = ""
+    if os.path.exists(env["STUB_LOG"]):
+        calls = open(env["STUB_LOG"]).read()
+    return d, r, calls
+
+
+def test_roundtrip(helper, label, path):
+    print("== [%s %s] binary round trip through the publishers' b64 helper" % (label, path))
+    data = blob()
+    d = tempfile.mkdtemp(prefix="hrpe-rt-")
+    try:
+        src = os.path.join(d, "blob.bin")
+        with open(src, "wb") as fh:
+            fh.write(data)
+        b64dir = os.path.join(d, "b64")
+        os.mkdir(b64dir)
+        os.symlink(path, os.path.join(b64dir, "base64"))
+        env = {"PATH": b64dir + ":/usr/bin:/bin", "HOME": d}
+        enc = subprocess.run(["bash", "-c", "set -euo pipefail; %s; b64 < \"$1\"" % helper,
+                              "rt", src], env=env, capture_output=True, timeout=60)
+        check(enc.returncode == 0, "b64 exits 0 (rc=%d %s)" % (enc.returncode,
+                                                              enc.stderr.decode().strip()))
+        out = enc.stdout
+        check(b"\n" not in out, "encoded output is one unwrapped line (%d bytes)" % len(out))
+        check(out == base64.b64encode(data), "encoded output equals canonical RFC 4648 base64")
+        print("       sha256(encoded)=%s" % hashlib.sha256(out).hexdigest())
+        dec = subprocess.run([path, "-d"], input=out, capture_output=True, timeout=60)
+        check(dec.returncode == 0 and dec.stdout == data,
+              "%s -d restores the %d-byte blob byte-for-byte" % (label, len(data)))
+    finally:
+        shutil.rmtree(d)
+
+
+def test_publish(script, label, path):
+    print("== [%s %s] ephemeral publish end to end, no shim on PATH" % (label, path))
+    d, r, calls = run_publisher(script, path)
+    try:
+        check(r.returncode == 0, "publisher exits 0 (rc=%d)" % r.returncode)
+        if r.returncode != 0:
+            print("       --- publisher stderr ---")
+            for l in r.stderr.strip().splitlines()[-8:]:
+                print("       " + l)
+        check(calls.count("ec2 run-instances") == 1, "exactly one peer launched")
+        check("ec2 terminate-instances --instance-ids i-0fake875" in calls,
+              "the launched peer is terminated on exit")
+        ud = os.path.join(d, "userdata.b64")
+        if os.path.exists(ud):
+            raw = open(ud, "rb").read()
+            check(b"\n" not in raw, "user data is one unwrapped base64 line")
+            text = base64.b64decode(raw, validate=True).decode()
+            check(text.startswith("#!/bin/bash") and "touch /var/lib/haiku-publisher-ready" in text,
+                  "user data decodes to the bootstrap script")
+        else:
+            check(False, "run-instances was given user data")
+        pub = os.path.join(d, "publish.sh")
+        if not os.path.exists(pub):
+            check(False, "the publish command reached ssm-run")
+            return
+        body = open(pub).read()
+        shipped = {name: enc for enc, name in
+                   re.findall(r"^printf '%s' '([A-Za-z0-9+/=]*)' *\| base64 -d > /tmp/(\S+)$",
+                              body, re.M)}
+        digest = hashlib.sha256()
+        for name in PAYLOAD.values():
+            digest.update(shipped.get(name, "").encode() + b"\0")
+        digest.update(open(ud, "rb").read() if os.path.exists(ud) else b"")
+        print("       sha256(shipped payloads + user data)=%s" % digest.hexdigest())
+        for var, name in PAYLOAD.items():
+            enc = shipped.get(name)
+            if enc is None:
+                check(False, "%s is shipped to the peer" % name)
+                continue
+            want = open(os.path.join(HERE, name), "rb").read()
+            check(base64.b64decode(enc, validate=True) == want,
+                  "%s decodes to the tracked file byte-for-byte (%d bytes)" % (name, len(want)))
+    finally:
+        shutil.rmtree(d)
+
+
+def test_fail_before_launch(script):
+    print("== a base64 that cannot encode stops the publish BEFORE a peer exists")
+    d, r, calls = run_publisher(script, None)
+    try:
+        check(r.returncode != 0, "publisher exits non-zero (rc=%d)" % r.returncode)
+        check("ec2 run-instances" not in calls, "run-instances was never called")
+        check("ec2 terminate-instances" not in calls,
+              "nothing needed terminating (no instance was created)")
+        check("s3 cp" not in calls and "s3 rm" not in calls,
+              "the incoming prefix was not touched")
+    finally:
+        shutil.rmtree(d)
+
+
+def test_static(path, name):
+    print("== %s: workstation-side base64 is the portable form" % name)
+    src = open(path).read()
+    check(lift_helper(src) is not None, "defines the b64() stdin helper")
+    bad = []
+    for n, line in enumerate(src.splitlines(), 1):
+        code = line.split("#", 1)[0] if not line.lstrip().startswith("printf") else line
+        # Peer-side decodes (`| base64 -d`) run on GNU hosts and are fine.
+        if re.search(r"\bbase64\b", code) and "base64 -d" not in code \
+                and not code.strip().startswith("b64()"):
+            bad.append("%d: %s" % (n, line.strip()))
+    check(not bad, "no other base64 invocation (positional file / -w0)" +
+          ("" if not bad else ": " + "; ".join(bad)))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--script", default=os.path.join(HERE, "haiku-repo-publish-ephemeral"))
+    ap.add_argument("--native-script", default=os.path.join(HERE, "haiku-repo-publish-native"))
+    a = ap.parse_args()
+
+    impls = implementations()
+    if not impls:
+        print("no GNU or BSD base64 found on this host")
+        return 2
+    print("base64 implementations found: %s" %
+          ", ".join("%s=%s" % (f, p) for f, p in impls))
+    print()
+    src = open(a.script).read()
+    helper = lift_helper(src)
+    for f, p in impls:
+        if helper:
+            test_roundtrip(helper, f, p)
+        else:
+            check(False, "%s defines the b64() helper to round-trip" % a.script)
+        test_publish(a.script, f, p)
+        print()
+    test_fail_before_launch(a.script)
+    print()
+    test_static(a.script, "haiku-repo-publish-ephemeral")
+    test_static(a.native_script, "haiku-repo-publish-native")
+    print()
+    if FAILURES:
+        print("FAILED: %d assertion(s)" % len(FAILURES))
+        return 1
+    print("PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,40 @@
+# host: workstation finch container Debian GNU/Linux 12 (bookworm) aarch64; utc 2026-11-02T01:09:49Z
+$ /usr/bin/base64 --version | head -1
+base64 (GNU coreutils) 9.1
+$ python3 graviton/scripts/haiku-repo-publish-ephemeral-selftest
+base64 implementations found: GNU=/usr/bin/base64
+
+== [GNU /usr/bin/base64] binary round trip through the publishers' b64 helper
+  ok   b64 exits 0 (rc=0 )
+  ok   encoded output is one unwrapped line (87392 bytes)
+  ok   encoded output equals canonical RFC 4648 base64
+       sha256(encoded)=f6e1d37c3dd8ccdbca70125de4685187a139e0e13626fcdd58bc3dc1da608cb9
+  ok   GNU -d restores the 65543-byte blob byte-for-byte
+== [GNU /usr/bin/base64] ephemeral publish end to end, no shim on PATH
+  ok   publisher exits 0 (rc=0)
+  ok   exactly one peer launched
+  ok   the launched peer is terminated on exit
+  ok   user data is one unwrapped base64 line
+  ok   user data decodes to the bootstrap script
+       sha256(shipped payloads + user data)=9b454c74c1ab62aba36771d0fbfd38c3c8dd61fbea1dc8dfce01b5d77361fda6
+  ok   haiku-repo-add decodes to the tracked file byte-for-byte (37497 bytes)
+  ok   haiku-publish-lock.sh decodes to the tracked file byte-for-byte (11982 bytes)
+  ok   haiku-repo-coherence decodes to the tracked file byte-for-byte (12460 bytes)
+  ok   hpkg_meta.py decodes to the tracked file byte-for-byte (21477 bytes)
+  ok   haiku-repo-coherence.baseline decodes to the tracked file byte-for-byte (4416 bytes)
+
+== a base64 that cannot encode stops the publish BEFORE a peer exists
+  ok   publisher exits non-zero (rc=64)
+  ok   run-instances was never called
+  ok   nothing needed terminating (no instance was created)
+  ok   the incoming prefix was not touched
+
+== haiku-repo-publish-ephemeral: workstation-side base64 is the portable form
+  ok   defines the b64() stdin helper
+  ok   no other base64 invocation (positional file / -w0)
+== haiku-repo-publish-native: workstation-side base64 is the portable form
+  ok   defines the b64() stdin helper
+  ok   no other base64 invocation (positional file / -w0)
+
+PASS
+rc=0
