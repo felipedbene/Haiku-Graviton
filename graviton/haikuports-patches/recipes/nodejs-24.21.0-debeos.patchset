@@ -92,3 +92,58 @@ diff --git a/src/api/utils.cc b/src/api/utils.cc
  #ifdef SIGSYS
      SIGNO_CASE(SIGSYS);
  #endif
+From: DeBeOS <noreply@debeos>
+Subject: [PATCH] haiku: restore os.cpus(), which the HaikuPorts patchset emptied
+
+The HaikuPorts patchset comments out the body of GetCPUInfo() (debugging
+std::cout lines left in a /* */ block, and the GetReturnValue().Set() call
+commented out). The binding then returns undefined, lib/os.js turns that into
+[], and os.cpus() is empty on every Haiku architecture even though
+uv_cpu_info() succeeds: on a c7g.2xlarge it returns 0 with 8 entries inside
+the node process (DeBeOS issue 917, graviton/evidence/917/). Restore the
+upstream body.
+
+Applies on top of nodejs-24.21.0.patchset.
+
+diff --git a/src/node_os.cc b/src/node_os.cc
+--- a/src/node_os.cc
++++ b/src/node_os.cc
+@@ -36,7 +36,6 @@
+ #include <cerrno>
+ #include <cstring>
+ 
+-#include <iostream>
+ namespace node {
+ namespace os {
+ 
+@@ -124,17 +123,7 @@
+   LocalVector<Value> result(isolate);
+   result.reserve(count * 7);
+   for (int i = 0; i < count; i++) {
+-  	/*
+     uv_cpu_info_t* ci = cpu_infos + i;
+-
+-    std::cout << ci->speed << std::endl;
+-    std::cout << ci->model << std::endl;
+-    std::cout << ci->cpu_times.user << std::endl;
+-    std::cout << ci->cpu_times.nice << std::endl;
+-    std::cout << ci->cpu_times.sys << std::endl;
+-    std::cout << ci->cpu_times.idle << std::endl;
+-    std::cout << ci->cpu_times.irq << std::endl;
+-
+     result.emplace_back(OneByteString(isolate, ci->model));
+     result.emplace_back(Number::New(isolate, ci->speed));
+     result.emplace_back(
+@@ -147,11 +136,10 @@
+         Number::New(isolate, static_cast<double>(ci->cpu_times.idle)));
+     result.emplace_back(
+         Number::New(isolate, static_cast<double>(ci->cpu_times.irq)));
+-    */
+   }
+ 
+   uv_free_cpu_info(cpu_infos, count);
+-  // args.GetReturnValue().Set(Array::New(isolate, result.data(), result.size()));
++  args.GetReturnValue().Set(Array::New(isolate, result.data(), result.size()));
+ }
+ 
+ 

@@ -136,6 +136,7 @@ the vector counts are the last run's. Anything not listed is absent, never a stu
 | ID | File | What | Why | Upstream-able |
 |---|---|---|---|---|
 | K1 | `haikuports-patches/recipes/nodejs24-24.21.0.recipe` | upstream HaikuPorts recipe (`21c227aca765`) with `devel:libicu* >= 74` → `>= 78` | Forces full ICU 78 instead of the `icu74` **bootstrap** build (incomplete locale data; `Intl.NumberFormat('de-DE')` throws, PR #386). | y, if upstream wants full ICU |
+| K2 | `haikuports-patches/recipes/nodejs-24.21.0-debeos.patchset` · `src/node_os.cc` `GetCPUInfo()` (nodejs24 rev 3) | restores the upstream function body | HaikuPorts' `nodejs-24.21.0.patchset`, carrying a hunk from the 2019 initial port, wraps the loop body in `/* */` with debugging `std::cout` lines and comments out `GetReturnValue().Set()`. The binding returns `undefined`, `lib/os.js` turns that into `[]`, so `os.cpus()` was empty and `parallel/test-os` failed at line 104 — while `uv_cpu_info()` returns 0 with 8 entries inside the same node process on a c7g.2xlarge (issue 917, `graviton/evidence/917/`). With it, node reports what libuv reads from the kernel: the CPU count, the core clock the kernel measured, and model `unknown`, which is also what Linux's libuv reports on Graviton | y, optional (a revert of a HaikuPorts debugging hunk) |
 
 ## D. Pipeline (separate PR, needed to build K1)
 
