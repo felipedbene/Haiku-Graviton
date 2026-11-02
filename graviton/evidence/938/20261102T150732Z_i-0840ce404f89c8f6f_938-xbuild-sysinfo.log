@@ -1,0 +1,58 @@
+# evidence: 938-xbuild-sysinfo
+# instance: i-0840ce404f89c8f6f   region: us-west-2
+# ssm command: 1111d66c-116b-4e4c-bf7c-8213d68adf37 (agent status: Success)
+# start: 20261102T150732Z   end: 20261102T150800Z   rc: 0   log bytes: 1999
+# script sha256: 68703b7a4385096db3c73b91347c3f1dda0e853b42d0633bc710d95b674fea9e
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/agent-938
+# | cd /opt/t938/hg/generated || exit 1
+# | aws s3 cp --quiet $OUT/fix.patch /opt/t938/fix.patch && sha256sum /opt/t938/fix.patch
+# | B=objects/haiku/arm64/release/bin/sysinfo
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f origin/graviton -- src headers 2>/dev/null || git -C .. checkout -q -f -- src headers
+# | 	if [ "$patch" != none ]; then git -C .. apply "$patch" || { echo "apply failed"; return 1; }; fi
+# | 	git -C .. diff --stat
+# | 	rm -f $B $B.o objects/haiku/arm64/release/bin/sysinfo.o
+# | 	local s=$(date +%s)
+# | 	jam -q -j16 sysinfo > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s"
+# | 	grep -E 'sysinfo\.cpp.*(warning|error)' jam-$label.log | head -20
+# | 	[ $rc = 0 ] || { tail -40 jam-$label.log; return 1; }
+# | 	grep -E '^(C\+\+|Link|Cc) .*sysinfo' jam-$label.log | head
+# | 	mkdir -p /opt/t938/out/$label && cp $B /opt/t938/out/$label/sysinfo && sha256sum /opt/t938/out/$label/sysinfo
+# | 	file /opt/t938/out/$label/sysinfo
+# | 	aws s3 cp --quiet /opt/t938/out/$label/sysinfo $OUT/$label/sysinfo
+# | }
+# | build trunk none || exit 1
+# | build fix /opt/t938/fix.patch || exit 1
+# | strings /opt/t938/out/fix/sysinfo | grep -E '^(ARM \(64 bit\)|RISC-V|IntelArchitecture)'
+# ---- raw output ----
+d45ffe340d9707773fc456942da051e0844ef6672044f3c6f12c01e13cc32941  /opt/t938/fix.patch
+JAM trunk head=4ef344f5 patch=none rc=0 wall=16s
+../src/bin/sysinfo.cpp:454:1: warning: 'void print_features(const char**, uint32)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:362:1: warning: 'void print_level1_cache(uint32, const char*)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:341:1: warning: 'void print_level2_cache(uint32, const char*)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:317:1: warning: 'void print_TLB(uint32, const char*)' defined but not used [-Wunused-function]
+C++ objects/haiku/arm64/release/bin/sysinfo.o 
+Link objects/haiku/arm64/release/bin/sysinfo 
+ce6d379ea5cd9bd97bec7f4ad41a5b2efe9b8123a530f2da4f3c53c3678e9936  /opt/t938/out/trunk/sysinfo
+/opt/t938/out/trunk/sysinfo: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, not stripped
+ src/bin/sysinfo.cpp | 63 ++++++++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 60 insertions(+), 3 deletions(-)
+JAM fix head=4ef344f5 patch=/opt/t938/fix.patch rc=0 wall=4s
+../src/bin/sysinfo.cpp:454:1: warning: 'void print_features(const char**, uint32)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:362:1: warning: 'void print_level1_cache(uint32, const char*)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:341:1: warning: 'void print_level2_cache(uint32, const char*)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:317:1: warning: 'void print_TLB(uint32, const char*)' defined but not used [-Wunused-function]
+C++ objects/haiku/arm64/release/bin/sysinfo.o 
+Link objects/haiku/arm64/release/bin/sysinfo 
+908757e8e9b2e539cf380fba91d922332ccc05aaf75a2fe64c6749229dd3da8c  /opt/t938/out/fix/sysinfo
+/opt/t938/out/fix/sysinfo: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, not stripped
+IntelArchitecture
+IntelArchitecture (64 bit)
+ARM (64 bit)
+RISC-V

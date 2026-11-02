@@ -1,0 +1,41 @@
+# evidence: 938-xbuild-sysinfo-v2
+# instance: i-0840ce404f89c8f6f   region: us-west-2
+# ssm command: 006043cb-1214-4000-b891-d5b3c87ea26b (agent status: Success)
+# start: 20261102T151120Z   end: 20261102T151141Z   rc: 0   log bytes: 994
+# script sha256: 7c871af4795378113b2593fa2d8ab03160f5362e68caef84289f4c0d375bb9bc
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/agent-938
+# | cd /opt/t938/hg/generated || exit 1
+# | aws s3 cp --quiet $OUT/fix-v2.patch /opt/t938/fix-v2.patch && sha256sum /opt/t938/fix-v2.patch
+# | aws s3 cp --quiet $OUT/sysinfo-nosh.cpp /opt/t938/sysinfo-nosh.cpp
+# | B=objects/haiku/arm64/release/bin/sysinfo
+# | git -C .. checkout -q -f -- src headers
+# | git -C .. apply /opt/t938/fix-v2.patch || exit 1
+# | git -C .. diff --stat
+# | rm -f $B objects/haiku/arm64/release/bin/sysinfo.o
+# | jam -q -j16 sysinfo > jam-v2.log 2>&1; rc=$?
+# | echo "JAM v2 rc=$rc"; grep -E 'sysinfo\.cpp.*(warning|error)' jam-v2.log
+# | [ $rc = 0 ] || { tail -30 jam-v2.log; exit 1; }
+# | mkdir -p /opt/t938/out/v2 && cp $B /opt/t938/out/v2/sysinfo && sha256sum /opt/t938/out/v2/sysinfo
+# | aws s3 cp --quiet /opt/t938/out/v2/sysinfo $OUT/v2/sysinfo
+# | echo "== -Wswitch check: same file with the B_CPU_SH case deleted"
+# | cp /opt/t938/sysinfo-nosh.cpp ../src/bin/sysinfo.cpp
+# | rm -f objects/haiku/arm64/release/bin/sysinfo.o
+# | jam -q -j16 sysinfo > jam-nosh.log 2>&1; echo "JAM nosh rc=$?"
+# | grep -E 'sysinfo\.cpp.*Wswitch' jam-nosh.log
+# | git -C .. checkout -q -f -- src
+# ---- raw output ----
+784bae4f9505e4b5e05be6f528cbcc923e750403f1f025df624feecf6c2355ad  /opt/t938/fix-v2.patch
+ src/bin/sysinfo.cpp | 59 ++++++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 file changed, 54 insertions(+), 5 deletions(-)
+JAM v2 rc=0
+../src/bin/sysinfo.cpp:454:1: warning: 'void print_features(const char**, uint32)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:362:1: warning: 'void print_level1_cache(uint32, const char*)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:341:1: warning: 'void print_level2_cache(uint32, const char*)' defined but not used [-Wunused-function]
+../src/bin/sysinfo.cpp:317:1: warning: 'void print_TLB(uint32, const char*)' defined but not used [-Wunused-function]
+1db1c64a1fdb028a74b4943ccc8f9b42970a79626f20105e3eb3b55e6f080a8e  /opt/t938/out/v2/sysinfo
+== -Wswitch check: same file with the B_CPU_SH case deleted
+JAM nosh rc=0
+../src/bin/sysinfo.cpp:524:16: warning: enumeration value 'B_CPU_SH' not handled in switch [-Wswitch]

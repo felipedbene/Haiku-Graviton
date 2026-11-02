@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 938-after
+# instance: i-0e2176be6b155d35b   region: us-west-2
+# ssm command: 939aa275-b389-40bf-8491-f0af59103753 (agent status: Success)
+# start: 20261102T150825Z   end: 20261102T150834Z   rc: 0   log bytes: 879
+# script sha256: 2f67b843988dc17849a79bc27e759e2fb1034b325530fda5d96db7887db0cf57
+# ---- script ----
+# | uname -a
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | command -v curl >/dev/null || { feed | pkgman install cmd:curl 2>&1 | tail -1; }
+# | mkdir -p /boot/home/t938 && cd /boot/home/t938
+# | curl -sSfo sysinfo 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-938/fix/sysinfo?<PRESIGNED>' || exit 1
+# | echo '908757e8e9b2e539cf380fba91d922332ccc05aaf75a2fe64c6749229dd3da8c  sysinfo' | sha256sum -c - || exit 1
+# | chmod +x sysinfo
+# | echo '== stock /boot/system/bin/sysinfo'; sha256sum /boot/system/bin/sysinfo
+# | echo '$ sysinfo -platform'; /boot/system/bin/sysinfo -platform
+# | echo '== fixed ./sysinfo'
+# | echo '$ ./sysinfo -platform'; ./sysinfo -platform; echo "rc=$?"
+# | echo '$ uname -m'; uname -m
+# | echo '$ ./sysinfo -cpu'; ./sysinfo -cpu; echo "rc=$?"
+# | echo '== -cpu unchanged vs stock:'; /boot/system/bin/sysinfo -cpu > a.txt; ./sysinfo -cpu > b.txt; cmp a.txt b.txt && echo identical
+# | echo '== full default output diff vs stock (expect only volatile counters):'
+# | /boot/system/bin/sysinfo > fa.txt; ./sysinfo > fb.txt; diff fa.txt fb.txt; echo "diff rc=$?"
+# | echo '$ ./sysinfo -platform x (bad usage path still works)'; ./sysinfo -bogus; echo "rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-13-28.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+2026-11-02T15:08:25Z
+[system] Done.
+sysinfo: OK
+== stock /boot/system/bin/sysinfo
+ce6d379ea5cd9bd97bec7f4ad41a5b2efe9b8123a530f2da4f3c53c3678e9936  /boot/system/bin/sysinfo
+$ sysinfo -platform
+unknown
+== fixed ./sysinfo
+$ ./sysinfo -platform
+ARM (64 bit)
+rc=0
+$ uname -m
+arm64
+$ ./sysinfo -cpu
+8 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+
+rc=0
+== -cpu unchanged vs stock:
+/tmp/ccrun/cc-20261102T150825Z-80397.sh: line 15: cmp: command not found
+== full default output diff vs stock (expect only volatile counters):
+/tmp/ccrun/cc-20261102T150825Z-80397.sh: line 17: diff: command not found
+diff rc=127
+$ ./sysinfo -platform x (bad usage path still works)
+Usage:
+  sysinfo [-id|-cpu|-mem|-semaphore|-ports|-threads|-teams|-platform|-disable_cpu_sn|-kinfo]
+rc=0
