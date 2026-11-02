@@ -1,0 +1,126 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: trunk-dgram-slice
+# instance: i-0ff30d54a4c913ac1   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T151348Z   end: 20261102T151412Z   rc: 0
+# script sha256: 07d7807ffaa5ebccf4f58b791d44207d650bb0153f8431a2f6869fc29b77546f
+# ---- script ----
+# | cd /boot/home/t899/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/)' | awk '{print $NF}' | sort -u
+# | for r in 1 2 3; do
+# | 	s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap 'parallel/test-dgram-*' 'sequential/test-dgram-*' > /tmp/dgram-$r.tap 2>&1
+# | 	echo "=== dgram round $r: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/dgram-$r.tap) notok=$(grep -c '^not ok ' /tmp/dgram-$r.tap) plan=$(grep -E '^1\.\.' /tmp/dgram-$r.tap)"
+# | 	grep -E '^not ok ' /tmp/dgram-$r.tap | sed 's/^/  /'
+# | done
+# | echo "=== round 1 results"
+# | grep -E '^(ok|not ok) ' /tmp/dgram-1.tap | sed -E 's/^(ok|not ok) [0-9]+ /\1 /' | sort -k2
+# | echo "--- syslog: panics / KDL / page faults"
+# | grep -iE "panic|kernel debugger|page fault|vm_page_fault" /var/log/syslog | cut -c1-200
+# | echo "boot-relative: $(ps -o etime= 1 2>/dev/null) syslog lines: $(wc -l < /var/log/syslog)"
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+=== dgram round 1: rc=0 wall=8s ok=84 notok=0 plan=1..84
+=== dgram round 2: rc=0 wall=3s ok=84 notok=0 plan=1..84
+=== dgram round 3: rc=0 wall=3s ok=84 notok=0 plan=1..84
+=== round 1 results
+ok parallel/test-dgram-abort-closed
+ok parallel/test-dgram-address
+ok parallel/test-dgram-async-dispose
+ok parallel/test-dgram-bind
+ok parallel/test-dgram-bind-default-address
+ok parallel/test-dgram-bind-error-callback
+ok parallel/test-dgram-bind-error-repeat
+ok parallel/test-dgram-bind-fd
+ok parallel/test-dgram-bind-fd-error
+ok parallel/test-dgram-bind-socket-close-before-cluster-reply
+ok parallel/test-dgram-bind-socket-close-before-lookup
+ok parallel/test-dgram-bind-sync
+ok parallel/test-dgram-blocklist
+ok parallel/test-dgram-bytes-length
+ok parallel/test-dgram-close
+ok parallel/test-dgram-close-during-bind
+ok parallel/test-dgram-close-in-listening
+ok parallel/test-dgram-close-is-not-callback
+ok parallel/test-dgram-close-signal
+ok parallel/test-dgram-cluster-bind-error
+ok parallel/test-dgram-cluster-close-during-bind
+ok parallel/test-dgram-cluster-close-in-listening
+ok parallel/test-dgram-connect
+ok parallel/test-dgram-connect-send-callback-buffer
+ok parallel/test-dgram-connect-send-callback-buffer-length
+ok parallel/test-dgram-connect-send-callback-multi-buffer
+ok parallel/test-dgram-connect-send-default-host
+ok parallel/test-dgram-connect-send-empty-array
+ok parallel/test-dgram-connect-send-empty-buffer
+ok parallel/test-dgram-connect-send-empty-packet
+ok parallel/test-dgram-connect-send-multi-buffer-copy
+ok parallel/test-dgram-connect-send-multi-string-array
+ok parallel/test-dgram-connect-sync
+ok parallel/test-dgram-create-socket-handle
+ok parallel/test-dgram-create-socket-handle-fd
+ok parallel/test-dgram-createSocket-type
+ok parallel/test-dgram-custom-lookup
+ok parallel/test-dgram-default-lookup-ip
+ok parallel/test-dgram-deprecation-error
+ok parallel/test-dgram-error-message-address
+ok parallel/test-dgram-exclusive-implicit-bind
+ok parallel/test-dgram-implicit-bind
+ok parallel/test-dgram-ipv6only
+ok parallel/test-dgram-listen-after-bind
+ok parallel/test-dgram-membership
+ok parallel/test-dgram-msgsize
+ok parallel/test-dgram-multicast-loopback
+ok parallel/test-dgram-multicast-set-interface
+ok parallel/test-dgram-multicast-setTTL
+ok parallel/test-dgram-oob-buffer
+ok parallel/test-dgram-recv-error
+ok parallel/test-dgram-ref
+ok parallel/test-dgram-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-dgram-send-address-types
+ok parallel/test-dgram-send-bad-arguments
+ok parallel/test-dgram-send-callback-buffer
+ok parallel/test-dgram-send-callback-buffer-empty-address
+ok parallel/test-dgram-send-callback-buffer-length
+ok parallel/test-dgram-send-callback-buffer-length-empty-address
+ok parallel/test-dgram-send-callback-multi-buffer
+ok parallel/test-dgram-send-callback-multi-buffer-empty-address
+ok parallel/test-dgram-send-callback-recursive
+ok parallel/test-dgram-send-cb-quelches-error
+ok parallel/test-dgram-send-default-host
+ok parallel/test-dgram-send-empty-array
+ok parallel/test-dgram-send-empty-buffer
+ok parallel/test-dgram-send-empty-packet
+ok parallel/test-dgram-send-error
+ok parallel/test-dgram-send-invalid-msg-type
+ok parallel/test-dgram-send-multi-buffer-copy
+ok parallel/test-dgram-send-multi-string-array
+ok parallel/test-dgram-send-queue-info
+ok parallel/test-dgram-sendto
+ok parallel/test-dgram-setBroadcast
+ok parallel/test-dgram-setTTL
+ok parallel/test-dgram-socket-buffer-size
+ok parallel/test-dgram-udp4
+ok parallel/test-dgram-udp6-link-local-address # skip cannot find any IPv6 interfaces with a link local address
+ok parallel/test-dgram-udp6-send-default-host
+ok parallel/test-dgram-unref
+ok parallel/test-dgram-unref-in-cluster
+ok sequential/test-dgram-bind-shared-ports
+ok sequential/test-dgram-implicit-bind-failure
+ok sequential/test-dgram-pingpong
+--- syslog: panics / KDL / page faults
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+boot-relative:  syslog lines: 2197

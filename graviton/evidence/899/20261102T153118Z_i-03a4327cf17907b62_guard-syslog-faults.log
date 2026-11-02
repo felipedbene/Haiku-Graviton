@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: guard-syslog-faults
+# instance: i-03a4327cf17907b62   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153118Z   end: 20261102T153129Z   rc: 0
+# script sha256: 6e25cdf1aa43c6be921dc5abbc672c54bc955ff575f05fe4560a1db22f19068d
+# ---- script ----
+# | ls -la /var/log/
+# | for f in /var/log/syslog.old /var/log/syslog; do [ -f $f ] && { echo "== $f"; grep -iE "panic|kernel debugger|page fault|vm_page_fault" $f | cut -c1-220; }; done
+# ---- raw output ----
+total 150
+drwxr-xr-x 1 baron root   2048 Nov  2 14:49 .
+drwxr-xr-x 1 baron root   2048 Nov  2 14:49 ..
+drwx------ 1 baron root   2048 Nov  2 14:49 amazon
+-rw-r--r-- 1 baron root   2058 Nov  2 15:00 debeos-cloudwatch.log
+-rw-r--r-- 1 baron root 116435 Nov  2 15:30 syslog
+== /var/log/syslog
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
+KERN: Welcome to kernel debugger output!
+KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+KERN: kernel debugger extension "debugger/hangman/v1": loaded
