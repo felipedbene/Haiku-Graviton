@@ -1,0 +1,111 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-canonical-pipe
+# instance: i-007383596d18f7987   region: us-west-2   transport: SSM AWS-RunShellScript
+# ssm command: ea20db29-7e5f-41aa-a4cf-3a28c1c69791 (agent status: Success)
+# start: 20261102T150756Z   end: 20261102T150820Z   rc: 0
+# script sha256: 1ce6cb9b0be973cf36afc9d3ee67a059fcea0657140afb004c7c3dfb0b5e94e8
+# ---- script ----
+# | set +e
+# | echo "== identity"
+# | uname -v
+# | sha256sum /boot/system/kernel_arm64
+# | echo "== toolchain"
+# | command -v gcc > /dev/null || pkgman install -y gcc binutils haiku_devel 2>&1 | tail -2
+# | gcc --version | head -1
+# | mkdir -p /boot/home/t943 && cd /boot/home/t943
+# | echo 'LyoKICogcGlwZTkxOCAtLSB3aGF0IHBpcGUoKSBkb2VzIHdoZW4gdGhlIGZkIHRhYmxlIGlzIChuZWFybHkpIGZ1bGwgKGlzc3VlIDkxOCkuCiAqCiAqICAgcGlwZTkxOCBmdWxsICAgICAgbm8gZnJlZSBmZDogcGlwZSgpIG11c3QgZmFpbCB3aXRoIEVNRklMRS4gQmVmb3JlIHRoZSBmaXgKICogICAgICAgICAgICAgICAgICAgICBIYWlrdSBibG9ja2VkIGZvcmV2ZXIgb3BlbmluZyB0aGUgd3JpdGUgZW5kIG9mIGEgRklGTwogKiAgICAgICAgICAgICAgICAgICAgIHdob3NlIHJlYWQgZW5kIGhhZCBhbHJlYWR5IGZhaWxlZC4KICogICBwaXBlOTE4IGZ1bGwyICAgICB0aGUgc2FtZSB3aXRoIHBpcGUyKE9fTk9OQkxPQ0spLiBJdHMgd3JpdGUgZW5kIG5ldmVyCiAqICAgICAgICAgICAgICAgICAgICAgYmxvY2tlZCwgc28gaXQgYWxyZWFkeSBmYWlsZWQgd2l0aCBFTUZJTEU7IGl0IHN0YXlzIGFzCiAqICAgICAgICAgICAgICAgICAgICAgYSBjaGVjayB0aGF0IGl0IHN0aWxsIGRvZXMuCiAqICAgcGlwZTkxOCBvbmUgICAgICAgb25lIGZyZWUgZmQ6IHRoZSByZWFkIGVuZCBmaXRzLCB0aGUgd3JpdGUgZW5kIGRvZXMgbm90OwogKiAgICAgICAgICAgICAgICAgICAgIHBpcGUoKSBtdXN0IGZhaWwgd2l0aCBFTUZJTEUgYW5kIGxlYXZlIHRoZSB0YWJsZSBhcyBpdAogKiAgICAgICAgICAgICAgICAgICAgIHdhcy4KICogICBwaXBlOTE4IGxlYWsgPG4+ICBuIHBpcGUoKSBjYWxscyBpbiB0aGUgIm9uZSIgc3RhdGUsIHRoZW4gdGhlIGNoYW5nZSBpbgogKiAgICAgICAgICAgICAgICAgICAgIHVzZWQgbWVtb3J5IHBhZ2VzOyBhIHZub2RlIHJlZmVyZW5jZSBsZWFrZWQgcGVyIGZhaWxlZAogKiAgICAgICAgICAgICAgICAgICAgIGNhbGwgc2hvd3MgdXAgYXMgZ3Jvd3RoIHByb3BvcnRpb25hbCB0byBuLgogKgogKiBwaXBlKCkgcnVucyBvbiBhIHNlY29uZCB0aHJlYWQgYW5kIGlzIGdpdmVuIDUgcywgc28gYSBoYW5nIGlzIHJlcG9ydGVkCiAqIHJhdGhlciB0aGFuIGluaGVyaXRlZC4gTGludXggcmVmZXJlbmNlOiBzYW1lIHNvdXJjZSwgLURMSU5VWF9SRUYuCiAqLwoKI2lmZGVmIExJTlVYX1JFRgojCWRlZmluZSBfR05VX1NPVVJDRQoJCS8qIHBpcGUyKCkgKi8KI2VuZGlmCgojaW5jbHVkZSA8ZXJybm8uaD4KI2luY2x1ZGUgPGZjbnRsLmg+CiNpbmNsdWRlIDxwdGhyZWFkLmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RkbGliLmg+CiNpbmNsdWRlIDxzdHJpbmcuaD4KI2luY2x1ZGUgPHN5cy9yZXNvdXJjZS5oPgojaW5jbHVkZSA8dGltZS5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CiNpZm5kZWYgTElOVVhfUkVGCiMJaW5jbHVkZSA8T1MuaD4KI2VuZGlmCgpzdGF0aWMgaW50IHNSZXN1bHQgPSAtMjsKc3RhdGljIGludCBzRmxhZ3MgPSAwOwpzdGF0aWMgaW50IHNFcnJubyA9IDA7CnN0YXRpYyBpbnQgc0Zkc1syXSA9IHsgLTEsIC0xIH07CgoKc3RhdGljIHZvaWQqCmRvX3BpcGUodm9pZCogdW51c2VkKQp7CglpbnQgciA9IHNGbGFncyAhPSAwID8gcGlwZTIoc0Zkcywgc0ZsYWdzKSA6IHBpcGUoc0Zkcyk7CglzRXJybm8gPSBlcnJubzsKCV9fYXRvbWljX3N0b3JlX24oJnNSZXN1bHQsIHIsIF9fQVRPTUlDX1NFUV9DU1QpOwoJcmV0dXJuIE5VTEw7Cn0KCgovKiBmaWxsIHRoZSB0YWJsZSwgbGVhdmluZyBgZnJlZWAgZGVzY3JpcHRvcnMgdW51c2VkOyByZXR1cm5zIHRoZSBmaXJzdCBmZAogKiB0aGF0IHdhcyBvcGVuZWQsIHNvIHRoZSBjYWxsZXIgY2FuIHRlbGwgd2hpY2ggc2xvdHMgYXJlIGZyZWUgKi8Kc3RhdGljIGludApmaWxsKGludCBmcmVlKQp7CglpbnQgbGFzdCA9IC0xOwoJZm9yICg7OykgewoJCWludCBmZCA9IGR1cCgwKTsKCQlpZiAoZmQgPCAwKQoJCQlicmVhazsKCQlsYXN0ID0gZmQ7Cgl9Cglmb3IgKGludCBpID0gMDsgaSA8IGZyZWU7IGkrKykKCQljbG9zZShsYXN0IC0gaSk7CglyZXR1cm4gbGFzdDsKfQoKCnN0YXRpYyBpbnQKdGltZWRfcGlwZShjb25zdCBjaGFyKiBsYWJlbCkKewoJcHRocmVhZF90IHRocmVhZDsKCXNSZXN1bHQgPSAtMjsKCXB0aHJlYWRfY3JlYXRlKCZ0aHJlYWQsIE5VTEwsIGRvX3BpcGUsIE5VTEwpOwoJZm9yIChpbnQgaSA9IDA7IGkgPCA1MDA7IGkrKykgewoJCWlmIChfX2F0b21pY19sb2FkX24oJnNSZXN1bHQsIF9fQVRPTUlDX1NFUV9DU1QpICE9IC0yKQoJCQlicmVhazsKCQl1c2xlZXAoMTAwMDApOwoJfQoJaW50IHIgPSBfX2F0b21pY19sb2FkX24oJnNSZXN1bHQsIF9fQVRPTUlDX1NFUV9DU1QpOwoJaWYgKHIgPT0gLTIpIHsKCQlwcmludGYoIiVzOiBwaXBlKCkgc3RpbGwgYmxvY2tlZCBhZnRlciA1IHMgIC0+IEhBTkdcbiIsIGxhYmVsKTsKCQlyZXR1cm4gMjsKCX0KCXB0aHJlYWRfam9pbih0aHJlYWQsIE5VTEwpOwoJaWYgKHIgPT0gMCkgewoJCXByaW50ZigiJXM6IHBpcGUoKSBzdWNjZWVkZWQgZmRzICVkICVkXG4iLCBsYWJlbCwgc0Zkc1swXSwgc0Zkc1sxXSk7CgkJcmV0dXJuIDE7Cgl9CglwcmludGYoIiVzOiBwaXBlKCkgPSAtMSBlcnJubyAlZCAoJXMpJXNcbiIsIGxhYmVsLCBzRXJybm8sIHN0cmVycm9yKHNFcnJubyksCgkJc0Vycm5vID09IEVNRklMRSA/ICIgIC0+IG9rIiA6ICIgIC0+IFdST05HIEVSUk5PIik7CglyZXR1cm4gc0Vycm5vID09IEVNRklMRSA/IDAgOiAxOwp9CgoKaW50Cm1haW4oaW50IGFyZ2MsIGNoYXIqKiBhcmd2KQp7Cgljb25zdCBjaGFyKiBtb2RlID0gYXJnYyA+IDEgPyBhcmd2WzFdIDogImZ1bGwiOwoJc3RydWN0IHJsaW1pdCBybCA9IHsgNjQsIDY0IH07CglpZiAoc2V0cmxpbWl0KFJMSU1JVF9OT0ZJTEUsICZybCkgIT0gMCkgewoJCXBlcnJvcigic2V0cmxpbWl0Iik7CgkJcmV0dXJuIDE7Cgl9CgoJaWYgKHN0cmNtcChtb2RlLCAiZnVsbCIpID09IDApIHsKCQkvKiB0aGUgaGVscGVyIHRocmVhZCBpdHNlbGYgbmVlZHMgbm8gZmQ7IGZpbGwgY29tcGxldGVseSAqLwoJCWZpbGwoMCk7CgkJcmV0dXJuIHRpbWVkX3BpcGUoImZ1bGwgdGFibGUiKTsKCX0KCglpZiAoc3RyY21wKG1vZGUsICJmdWxsMiIpID09IDApIHsKCQlzRmxhZ3MgPSBPX05PTkJMT0NLOwoJCWZpbGwoMCk7CgkJcmV0dXJuIHRpbWVkX3BpcGUoImZ1bGwgdGFibGUsIHBpcGUyKE9fTk9OQkxPQ0spIik7Cgl9CgoJaWYgKHN0cmNtcChtb2RlLCAib25lIikgPT0gMCkgewoJCWludCBsYXN0ID0gZmlsbCgxKTsKCQlpbnQgciA9IHRpbWVkX3BpcGUoIm9uZSBmcmVlIGZkIik7CgkJLyogdGhlIGZyZWUgc2xvdCBtdXN0IHN0aWxsIGJlIGZyZWU6IGR1cCgpIG11c3QgbGFuZCBvbiBpdCAqLwoJCWludCBmZCA9IGR1cCgwKTsKCQlwcmludGYoImFmdGVyOiBkdXAoKSA9ICVkIChleHBlY3RlZCAlZCwgdGhlIHNsb3QgcGlwZSgpIG11c3Qgbm90ICIKCQkJImtlZXApXG4iLCBmZCwgbGFzdCk7CgkJcmV0dXJuIHIgIT0gMCB8fCBmZCAhPSBsYXN0OwoJfQoKCWlmIChzdHJjbXAobW9kZSwgImxlYWsiKSA9PSAwKSB7CgkJbG9uZyBuID0gYXJnYyA+IDIgPyBhdG9sKGFyZ3ZbMl0pIDogMTAwMDAwOwoJCWZpbGwoMSk7CiNpZm5kZWYgTElOVVhfUkVGCgkJc3lzdGVtX2luZm8gYmVmb3JlLCBhZnRlcjsKCQlnZXRfc3lzdGVtX2luZm8oJmJlZm9yZSk7CiNlbmRpZgoJCWxvbmcgZW1maWxlID0gMCwgb3RoZXIgPSAwOwoJCWZvciAobG9uZyBpID0gMDsgaSA8IG47IGkrKykgewoJCQlpbnQgZmRzWzJdOwoJCQlpZiAocGlwZShmZHMpID09IDApIHsKCQkJCWNsb3NlKGZkc1swXSk7CgkJCQljbG9zZShmZHNbMV0pOwoJCQl9IGVsc2UgaWYgKGVycm5vID09IEVNRklMRSkKCQkJCWVtZmlsZSsrOwoJCQllbHNlCgkJCQlvdGhlcisrOwoJCX0KI2lmbmRlZiBMSU5VWF9SRUYKCQlnZXRfc3lzdGVtX2luZm8oJmFmdGVyKTsKCQlwcmludGYoIiVsZCBwaXBlKCkgY2FsbHM6ICVsZCBFTUZJTEUsICVsZCBvdGhlcjsgdXNlZCBwYWdlcyAlbGxkIC0+ICIKCQkJIiVsbGQgKGRlbHRhICVsbGQsICVsbGQgYnl0ZXMgcGVyIGNhbGwpXG4iLCBuLCBlbWZpbGUsIG90aGVyLAoJCQkobG9uZyBsb25nKWJlZm9yZS51c2VkX3BhZ2VzLCAobG9uZyBsb25nKWFmdGVyLnVzZWRfcGFnZXMsCgkJCShsb25nIGxvbmcpKGFmdGVyLnVzZWRfcGFnZXMgLSBiZWZvcmUudXNlZF9wYWdlcyksCgkJCShsb25nIGxvbmcpKChhZnRlci51c2VkX3BhZ2VzIC0gYmVmb3JlLnVzZWRfcGFnZXMpICogQl9QQUdFX1NJWkUKCQkJCS8gbikpOwojZWxzZQoJCXByaW50ZigiJWxkIHBpcGUoKSBjYWxsczogJWxkIEVNRklMRSwgJWxkIG90aGVyXG4iLCBuLCBlbWZpbGUsIG90aGVyKTsKI2VuZGlmCgkJcmV0dXJuIG90aGVyICE9IDA7Cgl9CgoJZnByaW50ZihzdGRlcnIsICJ1c2FnZTogJXMgZnVsbHxmdWxsMnxvbmV8bGVhayBbbl1cbiIsIGFyZ3ZbMF0pOwoJcmV0dXJuIDI7Cn0K' | base64 -d > pipe918.c
+# | sha256sum pipe918.c
+# | cat > pipe943.c <<'CEOF'
+# | /* pipe943 -- the read-end failure path of pipe(): no free fd at all, so the
+# |  * read end fails first. pipe2(O_NONBLOCK) is used so that a kernel which goes
+# |  * on to open the write end (pre-#944) does not block; it fails with ENXIO or
+# |  * EMFILE. Reports the change in used pages over n calls. */
+# | #include <errno.h>
+# | #include <fcntl.h>
+# | #include <stdio.h>
+# | #include <stdlib.h>
+# | #include <unistd.h>
+# | #include <sys/resource.h>
+# | #include <OS.h>
+# | int
+# | main(int argc, char** argv)
+# | {
+# | 	long n = argc > 1 ? atol(argv[1]) : 100000;
+# | 	struct rlimit rl = { 64, 64 };
+# | 	if (setrlimit(RLIMIT_NOFILE, &rl) != 0) {
+# | 		perror("setrlimit");
+# | 		return 1;
+# | 	}
+# | 	int filled = 0;
+# | 	while (dup(0) >= 0)
+# | 		filled++;
+# | 	if (errno != EMFILE) {
+# | 		perror("dup");
+# | 		return 1;
+# | 	}
+# | 	system_info before, after;
+# | 	get_system_info(&before);
+# | 	long emfile = 0, other = 0, ok = 0;
+# | 	for (long i = 0; i < n; i++) {
+# | 		int fds[2];
+# | 		if (pipe2(fds, O_NONBLOCK) == 0) {
+# | 			ok++;
+# | 			close(fds[0]);
+# | 			close(fds[1]);
+# | 		} else if (errno == EMFILE)
+# | 			emfile++;
+# | 		else
+# | 			other++;
+# | 	}
+# | 	get_system_info(&after);
+# | 	printf("filled %d; %ld pipe2() calls: %ld EMFILE, %ld other, %ld ok; "
+# | 		"used pages %lld -> %lld (delta %lld, %lld bytes per call)\n",
+# | 		filled, n, emfile, other, ok, (long long)before.used_pages,
+# | 		(long long)after.used_pages,
+# | 		(long long)(after.used_pages - before.used_pages),
+# | 		(long long)((after.used_pages - before.used_pages) * B_PAGE_SIZE / n));
+# | 	return other != 0 || ok != 0;
+# | }
+# | CEOF
+# | gcc -O2 -Wall -o pipe918 pipe918.c 2>&1; echo "gcc pipe918 rc=$?"
+# | gcc -O2 -Wall -o pipe943 pipe943.c 2>&1; echo "gcc pipe943 rc=$?"
+# | echo "== write end fails (one free fd): pipe918 leak 200000, twice"
+# | ./pipe918 leak 200000; echo "rc=$?"
+# | ./pipe918 leak 200000; echo "rc=$?"
+# | echo "== read end fails (no free fd): pipe943 200000, twice"
+# | ./pipe943 200000; echo "rc=$?"
+# | ./pipe943 200000; echo "rc=$?"
+# | echo "== control: pipe918 full / one"
+# | ./pipe918 full; echo "rc=$?"
+# | ./pipe918 one; echo "rc=$?"
+# | echo T943_DONE
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+== identity
+hrev59996 Nov  2 2026 00:47:18
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+== toolchain
+[system] Cleaning up ...
+[system] Done.
+gcc (2026_03_29) 13.3.0
+cd061d78a0cd3535c1f8f84bfcd21b8575a9aa975bc7ed960137a488aabdc4f1  pipe918.c
+gcc pipe918 rc=0
+gcc pipe943 rc=0
+== write end fails (one free fd): pipe918 leak 200000, twice
+200000 pipe() calls: 200000 EMFILE, 0 other; used pages 214372 -> 248276 (delta 33904, 694 bytes per call)
+rc=0
+200000 pipe() calls: 200000 EMFILE, 0 other; used pages 248275 -> 282140 (delta 33865, 693 bytes per call)
+rc=0
+== read end fails (no free fd): pipe943 200000, twice
+filled 61; 200000 pipe2() calls: 200000 EMFILE, 0 other, 0 ok; used pages 282140 -> 316978 (delta 34838, 713 bytes per call)
+rc=0
+filled 61; 200000 pipe2() calls: 200000 EMFILE, 0 other, 0 ok; used pages 316979 -> 349919 (delta 32940, 674 bytes per call)
+rc=0
+== control: pipe918 full / one
+full table: pipe() still blocked after 5 s  -> HANG
+rc=2
+one free fd: pipe() = -1 errno -2147459062 (Too many open files)  -> ok
+after: dup() = 63 (expected 63, the slot pipe() must not keep)
+rc=0
+T943_DONE
+# ---- raw stderr ----
+
