@@ -3448,7 +3448,8 @@ test('867: no S3 call in the generated script uses a hard-coded client path', ()
   const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
   const cps = script.split('\n').filter(l => / s3 cp /.test(l));
   expect(cps.length).toBeGreaterThanOrEqual(2);
-  for (const l of cps) expect(l.trimStart().startsWith('"$S3C" s3 cp ')).toBe(true);
+  // (Since the transfer checks, a cp may sit inside `if [!] ... ; then`.)
+  for (const l of cps) expect(l.trimStart()).toMatch(/^(if !? ?)?"\$S3C" s3 cp /);
 });
 
 test('867: an old image (interim debeos-ssm-agent only) resolves it and builds', () => {
@@ -3522,6 +3523,155 @@ test('867: a no-s3-client outcome re-queues the port without counting an attempt
   expect(r.exprs[0]).not.toContain('attempt_count');
   expect(r.exprs[0]).not.toContain('last_error_class');
   expect(r.values[0][':o']).toBe('no-s3-client-requeued');
+});
+
+// ---------------------------------------------------------------------------
+// Issue 867, part 2: a transfer the build depends on must not fail silently. The
+// overlay `s3 cp` and the log upload both ended in `|| true`, so a failed overlay
+// staged nothing and the build ran the stock recipe, and a failed log upload left
+// the verdict pointing at an S3 key that was never written.
+// ---------------------------------------------------------------------------
+
+// Runs the real _wrapper around the real _overlay_stage with a stub client that
+// fails whichever transfers `failOn` matches (a shell `case` pattern on the s3 side).
+function runTransfer(failOn: string): {
+  verdict: string; rc: number; logRef: string; out: string; err: string; built: boolean;
+} {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'xfer867-'));
+  const hp = path.join(tmp, 'haikuports');
+  fs.mkdirSync(path.join(hp, 'dev-libs', 'sdl2'), { recursive: true });
+  fs.writeFileSync(path.join(hp, 'dev-libs', 'sdl2', 'sdl2-2.30.0.recipe'), 'stock\n');
+  const agent = path.join(tmp, 'stub-client');
+  fs.writeFileSync(agent,
+    `#!/bin/sh\n` +
+    `[ "$1" = s3 ] && [ "$2" = cp ] || exit 2\n` +
+    `case "$3 $4" in\n` +
+    `  ${failOn}) echo "stub: AccessDenied for $3 -> $4" >&2; exit 1 ;;\n` +
+    `esac\n` +
+    `case "$3" in s3://*) echo overlay > "$4" ;; esac\n` +
+    `exit 0\n`);
+  fs.chmodSync(agent, 0o755);
+  const marker = path.join(tmp, 'built');
+  const py = [
+    'import os,sys,types',
+    `os.environ["S3_CLIENT_CANDIDATES"]=${JSON.stringify(agent)}`,
+    `os.environ["HP_TREE"]=${JSON.stringify(hp)}`,
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'KEYS=["debeos-overlay/sdl2-2.30.0.recipe","debeos-overlay/sdl2-2.30.0.patchset"]',
+    'class Pg:',
+    '    def paginate(self, Bucket=None, Prefix=None):',
+    '        return [{"Contents": [{"Key": k} for k in KEYS]}]',
+    'class S3:',
+    '    def get_paginator(self, name): return Pg()',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: S3()',
+    'sys.modules["boto3"]=fake',
+    'import run_ssm',
+    'prelude=run_ssm._overlay_stage("sdl2","b")',
+    `script=run_ssm._wrapper("touch ${marker} && echo \\"sdl2: BUILD_OK\\"","b","r","sdl2",`,
+    '  ok_grep=\'"^sdl2: BUILD_OK"\',refresh="",prelude=prelude)',
+    'sys.stdout.write(script)',
+  ].join('\n');
+  const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  const res = child_process.spawnSync('sh', ['-c', script], { encoding: 'utf8' });
+  const out = res.stdout || ''; const err = res.stderr || '';
+  const m = out.match(/VERDICT=(\S+) RC=(-?\d+) LOG=(\S+)/);
+  const built = fs.existsSync(marker);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return { verdict: m ? m[1] : '', rc: m ? parseInt(m[2], 10) : -1,
+           logRef: m ? m[3] : '', out, err, built };
+}
+
+test('867: every s3 cp the wrapper emits is checked -- none ends in || true', () => {
+  const py = [
+    'import os,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'class Pg:',
+    '    def paginate(self, Bucket=None, Prefix=None):',
+    '        return [{"Contents": [{"Key": "debeos-overlay/sdl2-1.recipe"}]}]',
+    'class S3:',
+    '    def get_paginator(self, name): return Pg()',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: S3()',
+    'sys.modules["boto3"]=fake',
+    'import run_ssm',
+    'sys.stdout.write(run_ssm._wrapper("true","b","r","sdl2",ok_grep="x",',
+    '  refresh=run_ssm._refresh_and_assert("b","v"),prelude=run_ssm._overlay_stage("sdl2","b")))',
+  ].join('\n');
+  const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  const cps = script.split('\n').filter(l => / s3 cp /.test(l));
+  expect(cps.length).toBe(3);   // driver refresh, one overlay file, log upload
+  for (const l of cps) expect(l).not.toMatch(/\|\|\s*true/);
+});
+
+test('867: the healthy path still stages the overlay, builds and uploads the log', () => {
+  const r = runTransfer('__never__');
+  expect(r.verdict).toBe('OK');
+  expect(r.rc).toBe(0);
+  expect(r.built).toBe(true);
+  expect(r.logRef).toBe('s3://b/logs/r/sdl2.log.gz');
+  expect(r.err).toBe('');
+});
+
+test('867: a failed overlay transfer skips the build: VERDICT=TRANSFER RC=5, not FAIL', () => {
+  const r = runTransfer('*sdl2-2.30.0.patchset*');
+  expect(r.verdict).toBe('TRANSFER');
+  expect(r.rc).toBe(5);
+  // The build did NOT run against the stock (or half-staged) recipe.
+  expect(r.built).toBe(false);
+  expect(r.err).toContain('#867 S3 TRANSFER FAILED: overlay s3://b/debeos-overlay/sdl2-2.30.0.patchset');
+  // The log still went up, and the verdict points at it.
+  expect(r.logRef).toBe('s3://b/logs/r/sdl2.log.gz');
+});
+
+test('867: a failed log upload keeps the build verdict but says LOG=UPLOAD_FAILED, loudly', () => {
+  const r = runTransfer('*.log.gz*');
+  expect(r.verdict).toBe('OK');
+  expect(r.rc).toBe(0);
+  expect(r.built).toBe(true);
+  expect(r.logRef).toBe('UPLOAD_FAILED');
+  expect(r.err).toContain('#867 LOG UPLOAD FAILED to s3://b/logs/r/sdl2.log.gz');
+  // The client's own error reaches stderr verbatim.
+  expect(r.err).toContain('stub: AccessDenied');
+});
+
+test('867: poll_ssm names TRANSFER and records a failed log upload as upload-failed', () => {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'OUT={}',
+    'class SSM:',
+    '    class exceptions:',
+    '        class InvocationDoesNotExist(Exception): pass',
+    '    def get_command_invocation(self, CommandId=None, InstanceId=None):',
+    '        return {"Status": "Failed", "StandardOutputContent": OUT["out"]}',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: SSM()',
+    'sys.modules["boto3"]=fake',
+    'import poll_ssm',
+    'res=[]',
+    'for o in ("VERDICT=TRANSFER RC=5 LOG=s3://b/k.log.gz", "VERDICT=FAIL RC=1 LOG=UPLOAD_FAILED",',
+    '          "VERDICT=OK RC=0 LOG=UPLOAD_FAILED"):',
+    '    OUT["out"]=o',
+    '    ev=poll_ssm.handler({"command_id":"c","instance_id":"i"}, None)',
+    '    res.append([ev["ok"], ev["error_class"], ev["log_url"]])',
+    'print(json.dumps(res))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  expect(JSON.parse(out.trimEnd().split('\n').pop() as string)).toEqual([
+    [false, 's3-transfer', 's3://b/k.log.gz'],
+    // A real build failure is still a build failure; only the log reference changes.
+    [false, 'build-error', 'upload-failed'],
+    [true, null, 'upload-failed'],
+  ]);
+});
+
+test('867: an s3-transfer outcome re-queues the port without counting an attempt', () => {
+  const r = recordCapacity('s3-transfer');
+  expect(r.state).toBe('queued');
+  expect(r.exprs).toHaveLength(1);
+  expect(r.exprs[0]).not.toContain('attempt_count');
+  expect(r.values[0][':o']).toBe('s3-transfer-requeued');
 });
 
 // The pre-flight: one read before the first StartExecution, instead of 96 refusals on

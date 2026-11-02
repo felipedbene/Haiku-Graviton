@@ -10,7 +10,8 @@ Output: adds {recorded_state} to the event.
 - ok=False, error_class in _NOT_THE_PORT -> the recipe was never tested, because the
               BUILDER ran out of disk (capacity, issue 769) or the #506 guard refused
               a driver that disagrees with this deployment (stale-driver, issue 845)
-              or the builder image has no S3 client (no-s3-client, issue 867):
+              or the builder image has no S3 client (no-s3-client, issue 867) or an
+              overlay transfer failed and the build was skipped (s3-transfer, 867):
               build_state=queued, lease released, and NO attempt counted. See that
               branch in handler() for why it is not leniency.
 - ok=False -> attempt_count++, last_error_class, last_attempt_at, log_url.
@@ -111,6 +112,7 @@ _NOT_THE_PORT = {
     "capacity": "capacity-requeued",          # issue 769: builder out of disk
     "stale-driver": "stale-driver-requeued",  # issue 845: #506 refused to build
     "no-s3-client": "no-s3-client-requeued",  # issue 867: builder image has no S3 client
+    "s3-transfer": "s3-transfer-requeued",    # issue 867: overlay staging failed, build skipped
 }
 
 
@@ -207,13 +209,15 @@ def handler(event, context):
         return event
 
     # INFRASTRUCTURE, NOT THE PORT: the recipe was never tested, so the row must not be
-    # charged for it. Three classes reach here (_NOT_THE_PORT above):
+    # charged for it. Four classes reach here (_NOT_THE_PORT above):
     #
     #   capacity      (769) -- the builder ran out of disk mid-chain.
     #   stale-driver  (845) -- the #506 guard found the driver in S3 disagreeing with
     #                          this deployment's NATIVEBUILD_VERSION and refused to run.
     #   no-s3-client  (867) -- the builder image carries no S3 client (only the real
     #                          amazon-ssm-agent), so nothing could be staged or harvested.
+    #   s3-transfer   (867) -- an overlay file could not be staged, so the build was
+    #                          skipped rather than run against the stock recipe.
     #
     # Checked before the failure path, and it writes NONE of the failure attributes --
     # not attempt_count, not last_error_class, not build_state=failed. That is the whole
