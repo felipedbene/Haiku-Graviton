@@ -1,0 +1,55 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-08b8575e96d1bc8bc   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T013713Z   end: 20261102T013736Z   rc: 0
+# script sha256: 2463fea14685f1300d1834b34aa0db2b01c589055645a72054c22af64f5001db
+# ---- script ----
+# | set -u
+# | mkdir -p /opt/lr && cd /opt/lr
+# | echo 'LyoKICogcGlwZTkxOCAtLSB3aGF0IHBpcGUoKSBkb2VzIHdoZW4gdGhlIGZkIHRhYmxlIGlzIChuZWFybHkpIGZ1bGwgKGlzc3VlIDkxOCkuCiAqCiAqICAgcGlwZTkxOCBmdWxsICAgICAgbm8gZnJlZSBmZDogcGlwZSgpIG11c3QgZmFpbCB3aXRoIEVNRklMRS4gQmVmb3JlIHRoZSBmaXgKICogICAgICAgICAgICAgICAgICAgICBIYWlrdSBibG9ja2VkIGZvcmV2ZXIgb3BlbmluZyB0aGUgd3JpdGUgZW5kIG9mIGEgRklGTwogKiAgICAgICAgICAgICAgICAgICAgIHdob3NlIHJlYWQgZW5kIGhhZCBhbHJlYWR5IGZhaWxlZC4KICogICBwaXBlOTE4IG9uZSAgICAgICBvbmUgZnJlZSBmZDogdGhlIHJlYWQgZW5kIGZpdHMsIHRoZSB3cml0ZSBlbmQgZG9lcyBub3Q7CiAqICAgICAgICAgICAgICAgICAgICAgcGlwZSgpIG11c3QgZmFpbCB3aXRoIEVNRklMRSBhbmQgbGVhdmUgdGhlIHRhYmxlIGFzIGl0CiAqICAgICAgICAgICAgICAgICAgICAgd2FzLgogKiAgIHBpcGU5MTggbGVhayA8bj4gIG4gcGlwZSgpIGNhbGxzIGluIHRoZSAib25lIiBzdGF0ZSwgdGhlbiB0aGUgY2hhbmdlIGluCiAqICAgICAgICAgICAgICAgICAgICAgdXNlZCBtZW1vcnkgcGFnZXM7IGEgdm5vZGUgcmVmZXJlbmNlIGxlYWtlZCBwZXIgZmFpbGVkCiAqICAgICAgICAgICAgICAgICAgICAgY2FsbCBzaG93cyB1cCBhcyBncm93dGggcHJvcG9ydGlvbmFsIHRvIG4uCiAqCiAqIHBpcGUoKSBydW5zIG9uIGEgc2Vjb25kIHRocmVhZCBhbmQgaXMgZ2l2ZW4gNSBzLCBzbyBhIGhhbmcgaXMgcmVwb3J0ZWQKICogcmF0aGVyIHRoYW4gaW5oZXJpdGVkLiBMaW51eCByZWZlcmVuY2U6IHNhbWUgc291cmNlLCAtRExJTlVYX1JFRi4KICovCgojaW5jbHVkZSA8ZXJybm8uaD4KI2luY2x1ZGUgPHB0aHJlYWQuaD4KI2luY2x1ZGUgPHN0ZGlvLmg+CiNpbmNsdWRlIDxzdGRsaWIuaD4KI2luY2x1ZGUgPHN0cmluZy5oPgojaW5jbHVkZSA8c3lzL3Jlc291cmNlLmg+CiNpbmNsdWRlIDx0aW1lLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KI2lmbmRlZiBMSU5VWF9SRUYKIwlpbmNsdWRlIDxPUy5oPgojZW5kaWYKCnN0YXRpYyBpbnQgc1Jlc3VsdCA9IC0yOwpzdGF0aWMgaW50IHNFcnJubyA9IDA7CnN0YXRpYyBpbnQgc0Zkc1syXSA9IHsgLTEsIC0xIH07CgoKc3RhdGljIHZvaWQqCmRvX3BpcGUodm9pZCogdW51c2VkKQp7CglpbnQgciA9IHBpcGUoc0Zkcyk7CglzRXJybm8gPSBlcnJubzsKCV9fYXRvbWljX3N0b3JlX24oJnNSZXN1bHQsIHIsIF9fQVRPTUlDX1NFUV9DU1QpOwoJcmV0dXJuIE5VTEw7Cn0KCgovKiBmaWxsIHRoZSB0YWJsZSwgbGVhdmluZyBgZnJlZWAgZGVzY3JpcHRvcnMgdW51c2VkOyByZXR1cm5zIHRoZSBmaXJzdCBmZAogKiB0aGF0IHdhcyBvcGVuZWQsIHNvIHRoZSBjYWxsZXIgY2FuIHRlbGwgd2hpY2ggc2xvdHMgYXJlIGZyZWUgKi8Kc3RhdGljIGludApmaWxsKGludCBmcmVlKQp7CglpbnQgbGFzdCA9IC0xOwoJZm9yICg7OykgewoJCWludCBmZCA9IGR1cCgwKTsKCQlpZiAoZmQgPCAwKQoJCQlicmVhazsKCQlsYXN0ID0gZmQ7Cgl9Cglmb3IgKGludCBpID0gMDsgaSA8IGZyZWU7IGkrKykKCQljbG9zZShsYXN0IC0gaSk7CglyZXR1cm4gbGFzdDsKfQoKCnN0YXRpYyBpbnQKdGltZWRfcGlwZShjb25zdCBjaGFyKiBsYWJlbCkKewoJcHRocmVhZF90IHRocmVhZDsKCXNSZXN1bHQgPSAtMjsKCXB0aHJlYWRfY3JlYXRlKCZ0aHJlYWQsIE5VTEwsIGRvX3BpcGUsIE5VTEwpOwoJZm9yIChpbnQgaSA9IDA7IGkgPCA1MDA7IGkrKykgewoJCWlmIChfX2F0b21pY19sb2FkX24oJnNSZXN1bHQsIF9fQVRPTUlDX1NFUV9DU1QpICE9IC0yKQoJCQlicmVhazsKCQl1c2xlZXAoMTAwMDApOwoJfQoJaW50IHIgPSBfX2F0b21pY19sb2FkX24oJnNSZXN1bHQsIF9fQVRPTUlDX1NFUV9DU1QpOwoJaWYgKHIgPT0gLTIpIHsKCQlwcmludGYoIiVzOiBwaXBlKCkgc3RpbGwgYmxvY2tlZCBhZnRlciA1IHMgIC0+IEhBTkdcbiIsIGxhYmVsKTsKCQlyZXR1cm4gMjsKCX0KCXB0aHJlYWRfam9pbih0aHJlYWQsIE5VTEwpOwoJaWYgKHIgPT0gMCkgewoJCXByaW50ZigiJXM6IHBpcGUoKSBzdWNjZWVkZWQgZmRzICVkICVkXG4iLCBsYWJlbCwgc0Zkc1swXSwgc0Zkc1sxXSk7CgkJcmV0dXJuIDE7Cgl9CglwcmludGYoIiVzOiBwaXBlKCkgPSAtMSBlcnJubyAlZCAoJXMpJXNcbiIsIGxhYmVsLCBzRXJybm8sIHN0cmVycm9yKHNFcnJubyksCgkJc0Vycm5vID09IEVNRklMRSA/ICIgIC0+IG9rIiA6ICIgIC0+IFdST05HIEVSUk5PIik7CglyZXR1cm4gc0Vycm5vID09IEVNRklMRSA/IDAgOiAxOwp9CgoKaW50Cm1haW4oaW50IGFyZ2MsIGNoYXIqKiBhcmd2KQp7Cgljb25zdCBjaGFyKiBtb2RlID0gYXJnYyA+IDEgPyBhcmd2WzFdIDogImZ1bGwiOwoJc3RydWN0IHJsaW1pdCBybCA9IHsgNjQsIDY0IH07CglpZiAoc2V0cmxpbWl0KFJMSU1JVF9OT0ZJTEUsICZybCkgIT0gMCkgewoJCXBlcnJvcigic2V0cmxpbWl0Iik7CgkJcmV0dXJuIDE7Cgl9CgoJaWYgKHN0cmNtcChtb2RlLCAiZnVsbCIpID09IDApIHsKCQkvKiB0aGUgaGVscGVyIHRocmVhZCBpdHNlbGYgbmVlZHMgbm8gZmQ7IGZpbGwgY29tcGxldGVseSAqLwoJCWZpbGwoMCk7CgkJcmV0dXJuIHRpbWVkX3BpcGUoImZ1bGwgdGFibGUiKTsKCX0KCglpZiAoc3RyY21wKG1vZGUsICJvbmUiKSA9PSAwKSB7CgkJaW50IGxhc3QgPSBmaWxsKDEpOwoJCWludCByID0gdGltZWRfcGlwZSgib25lIGZyZWUgZmQiKTsKCQkvKiB0aGUgZnJlZSBzbG90IG11c3Qgc3RpbGwgYmUgZnJlZTogZHVwKCkgbXVzdCBsYW5kIG9uIGl0ICovCgkJaW50IGZkID0gZHVwKDApOwoJCXByaW50ZigiYWZ0ZXI6IGR1cCgpID0gJWQgKGV4cGVjdGVkICVkLCB0aGUgc2xvdCBwaXBlKCkgbXVzdCBub3QgIgoJCQkia2VlcClcbiIsIGZkLCBsYXN0KTsKCQlyZXR1cm4gciAhPSAwIHx8IGZkICE9IGxhc3Q7Cgl9CgoJaWYgKHN0cmNtcChtb2RlLCAibGVhayIpID09IDApIHsKCQlsb25nIG4gPSBhcmdjID4gMiA/IGF0b2woYXJndlsyXSkgOiAxMDAwMDA7CgkJZmlsbCgxKTsKI2lmbmRlZiBMSU5VWF9SRUYKCQlzeXN0ZW1faW5mbyBiZWZvcmUsIGFmdGVyOwoJCWdldF9zeXN0ZW1faW5mbygmYmVmb3JlKTsKI2VuZGlmCgkJbG9uZyBlbWZpbGUgPSAwLCBvdGhlciA9IDA7CgkJZm9yIChsb25nIGkgPSAwOyBpIDwgbjsgaSsrKSB7CgkJCWludCBmZHNbMl07CgkJCWlmIChwaXBlKGZkcykgPT0gMCkgewoJCQkJY2xvc2UoZmRzWzBdKTsKCQkJCWNsb3NlKGZkc1sxXSk7CgkJCX0gZWxzZSBpZiAoZXJybm8gPT0gRU1GSUxFKQoJCQkJZW1maWxlKys7CgkJCWVsc2UKCQkJCW90aGVyKys7CgkJfQojaWZuZGVmIExJTlVYX1JFRgoJCWdldF9zeXN0ZW1faW5mbygmYWZ0ZXIpOwoJCXByaW50ZigiJWxkIHBpcGUoKSBjYWxsczogJWxkIEVNRklMRSwgJWxkIG90aGVyOyB1c2VkIHBhZ2VzICVsbGQgLT4gIgoJCQkiJWxsZCAoZGVsdGEgJWxsZCwgJWxsZCBieXRlcyBwZXIgY2FsbClcbiIsIG4sIGVtZmlsZSwgb3RoZXIsCgkJCShsb25nIGxvbmcpYmVmb3JlLnVzZWRfcGFnZXMsIChsb25nIGxvbmcpYWZ0ZXIudXNlZF9wYWdlcywKCQkJKGxvbmcgbG9uZykoYWZ0ZXIudXNlZF9wYWdlcyAtIGJlZm9yZS51c2VkX3BhZ2VzKSwKCQkJKGxvbmcgbG9uZykoKGFmdGVyLnVzZWRfcGFnZXMgLSBiZWZvcmUudXNlZF9wYWdlcykgKiBCX1BBR0VfU0laRQoJCQkJLyBuKSk7CiNlbHNlCgkJcHJpbnRmKCIlbGQgcGlwZSgpIGNhbGxzOiAlbGQgRU1GSUxFLCAlbGQgb3RoZXJcbiIsIG4sIGVtZmlsZSwgb3RoZXIpOwojZW5kaWYKCQlyZXR1cm4gb3RoZXIgIT0gMDsKCX0KCglmcHJpbnRmKHN0ZGVyciwgInVzYWdlOiAlcyBmdWxsfG9uZXxsZWFrIFtuXVxuIiwgYXJndlswXSk7CglyZXR1cm4gMjsKfQo=' | base64 -d > pipe918.c && sha256sum pipe918.c
+# | uname -a
+# | command -v gcc || { apt-get install -y -qq gcc > /dev/null 2>&1; }
+# | gcc -O1 -Wall -DLINUX_REF -o pipe918 pipe918.c -lpthread 2>&1 | head
+# | for m in one full; do echo "=== pipe918 $m"; ./pipe918 $m; echo "rc=$?"; done
+# | echo "=== pipe918 leak 200000"; ./pipe918 leak 200000; echo "rc=$?"
+# | curl -sSfo node.tar.xz https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz
+# | curl -sSfo SHASUMS256.txt https://nodejs.org/dist/v24.21.0/SHASUMS256.txt
+# | grep " node-v24.21.0-linux-arm64.tar.xz$" SHASUMS256.txt | sed 's/node-v24.21.0-linux-arm64.tar.xz/node.tar.xz/' | sha256sum -c - || exit 1
+# | curl -sSfo src.tar.gz https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+# | echo '622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  src.tar.gz' | sha256sum -c - || exit 1
+# | tar xJf node.tar.xz && tar xzf src.tar.gz
+# | N=/opt/lr/node-v24.21.0-linux-arm64/bin/node; $N --version
+# | cd node-v24.21.0
+# | for i in $(seq 1 10); do
+# | 	s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=$N -j 1 -t 60 -p tap parallel/test-worker-init-failure > /tmp/lwif-$i.tap 2>&1
+# | 	echo "run $i rc=$? wall=$(( $(date +%s) - s ))s $(grep -E '^(ok|not ok)' /tmp/lwif-$i.tap)"
+# | done
+# ---- raw output ----
+ssm-run: command e86cbab1-1655-45c3-90bd-a43090903494 on i-08b8575e96d1bc8bc (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-34321-fae798)
+4c7a994aebc91e95d2d105688dcb4be58dcd762d39382e8d50d0dfe7a3a50115  pipe918.c
+Linux ip-10-128-4-171 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+/tmp/run-34321-fae798.sh: line 6: gcc: command not found
+=== pipe918 one
+rc=127
+=== pipe918 full
+rc=127
+=== pipe918 leak 200000
+rc=127
+node.tar.xz: OK
+src.tar.gz: OK
+v24.21.0
+run 1 rc=0 wall=0s ok 1 parallel/test-worker-init-failure
+run 2 rc=0 wall=1s ok 1 parallel/test-worker-init-failure
+run 3 rc=0 wall=1s ok 1 parallel/test-worker-init-failure
+run 4 rc=0 wall=1s ok 1 parallel/test-worker-init-failure
+run 5 rc=0 wall=0s ok 1 parallel/test-worker-init-failure
+run 6 rc=0 wall=1s ok 1 parallel/test-worker-init-failure
+run 7 rc=0 wall=1s ok 1 parallel/test-worker-init-failure
+run 8 rc=0 wall=1s ok 1 parallel/test-worker-init-failure
+run 9 rc=0 wall=0s ok 1 parallel/test-worker-init-failure
+run 10 rc=0 wall=1s ok 1 parallel/test-worker-init-failure
+/tmp/run-34321-fae798.sh: line 7: ./pipe918: No such file or directory
+/tmp/run-34321-fae798.sh: line 7: ./pipe918: No such file or directory
+/tmp/run-34321-fae798.sh: line 8: ./pipe918: No such file or directory
+ssm-run: Success

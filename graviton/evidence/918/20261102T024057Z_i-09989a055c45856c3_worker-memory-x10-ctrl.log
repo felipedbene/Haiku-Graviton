@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: worker-memory-x10-ctrl
+# instance: i-09989a055c45856c3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T024057Z   end: 20261102T024127Z   rc: 0
+# script sha256: d5fd9e2169326212101deeb3aaf73dddfe6c4afd675bda0cee704b13b8df0847
+# ---- script ----
+# | cd /boot/home/node-src/node-v24.21.0; uname -v; sha256sum /boot/system/kernel_arm64
+# | for i in $(seq 1 10); do
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -t 120 -p tap parallel/test-worker-memory > /tmp/wm-$i.tap 2>&1
+# | 	echo "run $i: $(grep -E '^(ok|not ok)' /tmp/wm-$i.tap)"
+# | done
+# | grep -h -A3 "AssertionError\|Error" /tmp/wm-*.tap | head -20
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  /boot/system/kernel_arm64
+run 1: not ok 1 parallel/test-worker-memory
+run 2: not ok 1 parallel/test-worker-memory
+run 3: not ok 1 parallel/test-worker-memory
+run 4: not ok 1 parallel/test-worker-memory
+run 5: not ok 1 parallel/test-worker-memory
+run 6: not ok 1 parallel/test-worker-memory
+run 7: not ok 1 parallel/test-worker-memory
+run 8: not ok 1 parallel/test-worker-memory
+run 9: not ok 1 parallel/test-worker-memory
+run 10: not ok 1 parallel/test-worker-memory
+    AssertionError [ERR_ASSERTION]: Unexpected memory overhead: [
+      {
+        rss: 15118336,
+        heapTotal: 7921664,
+--
+    AssertionError [ERR_ASSERTION]: Unexpected memory overhead: [
+      {
+        rss: 15118336,
+        heapTotal: 7921664,
+--
+    AssertionError [ERR_ASSERTION]: Unexpected memory overhead: [
+      {
+        rss: 15142912,
+        heapTotal: 8183808,
+--
+    AssertionError [ERR_ASSERTION]: Unexpected memory overhead: [
+      {
+        rss: 15106048,
+        heapTotal: 7921664,
+--

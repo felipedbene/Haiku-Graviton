@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: canonical-probe
+# instance: i-09c442db960f2864f   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T014146Z   end: 20261102T014150Z   rc: 0
+# script sha256: c1daae101e8230147238c64bf669c743717b8f5e575c116d2cfe8790e8597e63
+# ---- script ----
+# | for c in curl python3 node patch tar gcc; do printf '%s: ' $c; type -p $c || echo missing; done
+# | pkgman search -i -D nodejs 2>&1 | tail -n +3; pkgman search -i -D libuv 2>&1 | tail -n +3
+# | ls /boot/system/packages | grep -iE "^haiku-r1|node|uv|python" 
+# ---- raw output ----
+curl: missing
+python3: missing
+node: missing
+patch: missing
+tar: missing
+gcc: missing
+haiku-r1~beta6_hrev59996-1-arm64.hpkg

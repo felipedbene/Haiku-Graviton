@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pkgs-ctrl
+# instance: i-09c442db960f2864f   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T014201Z   end: 20261102T014212Z   rc: 0
+# script sha256: bbe90ccd7be91f7e56d22ac954a1e2537ca61e87cf8af72d8c75746e857075d7
+# ---- script ----
+# | pkgman install -y cmd:curl cmd:python3 cmd:node cmd:patch cmd:tar cmd:gcc 2>&1 | tail -4
+# | for c in curl python3 node patch tar gcc; do printf '%s: ' $c; type -p $c || echo missing; done
+# | node --version; node -p process.versions.uv
+# | pkgman search -i -D nodejs 2>&1 | tail -n +3; pkgman search -i -D libuv 2>&1 | tail -n +3
+# ---- raw output ----
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_01:42:11"
+[system] Cleaning up ...
+[system] Done.
+curl: /boot/system/bin/curl
+python3: /boot/system/bin/python3
+node: /boot/system/bin/node
+patch: /boot/system/bin/patch
+tar: /boot/system/bin/tar
+gcc: /boot/system/bin/gcc
+v20.15.1
+1.52.1
+<system>    nodejs20  20.15.1-2  arm64
+<system>    libuv  1.52.1-4  arm64

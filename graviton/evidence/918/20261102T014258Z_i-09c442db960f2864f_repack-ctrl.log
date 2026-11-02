@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-ctrl
+# instance: i-09c442db960f2864f   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T014258Z   end: 20261102T014357Z   rc: 0
+# script sha256: ee4f3b0792503f14092956d24641165d619611ba36cb36cb3953ec3b64a1b2d2
+# ---- script ----
+# | set -e
+# | echo "repack arm: ctrl (kernel_arm64.trunk, libroot.so.trunk, bfs.trunk)"
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | curl -sSf -o kernel_arm64.trunk 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w918/out/kernel_arm64.trunk?<PRESIGNED>'
+# | echo '8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  kernel_arm64.trunk' | sha256sum -c
+# | curl -sSf -o libroot.so.trunk 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w918/out/libroot.so.trunk?<PRESIGNED>'
+# | echo '6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  libroot.so.trunk' | sha256sum -c
+# | curl -sSf -o bfs.trunk 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w918/out/bfs.trunk?<PRESIGNED>'
+# | echo 'fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  bfs.trunk' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1~beta6_*-arm64.hpkg); echo "$P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | sha256sum x/kernel_arm64; cat kernel_arm64.trunk > x/kernel_arm64
+# | sha256sum x/lib/libroot.so; cat libroot.so.trunk > x/lib/libroot.so
+# | sha256sum x/add-ons/kernel/file_systems/bfs; cat bfs.trunk > x/add-ons/kernel/file_systems/bfs
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+repack arm: ctrl (kernel_arm64.trunk, libroot.so.trunk, bfs.trunk)
+kernel_arm64.trunk: OK
+libroot.so.trunk: OK
+bfs.trunk: OK
+/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  x/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  x/lib/libroot.so
+4fde601af2da0fb6c3a198479832dbd85831eb9d0130fae2f663dd7aacabe99a  x/add-ons/kernel/file_systems/bfs
+----- Package Info ----------------
+header size:                     80
+heap size:                 20502957
+TOC size:                    324054
+package attributes size:       1100
+total size:                20503037
+-----------------------------------
+-rw-r--r-- 1 baron root 20503037 Nov  2 01:43 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20644552 Oct 19 21:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+96dd8df84579712c09cae8865e64c48e6f41590839802441668bf5972288a35c  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

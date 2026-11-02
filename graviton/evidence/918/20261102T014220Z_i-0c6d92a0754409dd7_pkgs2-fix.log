@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pkgs2-fix
+# instance: i-0c6d92a0754409dd7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T014220Z   end: 20261102T014227Z   rc: 0
+# script sha256: 5c7f2093d27ac02bdd78cbfcbe17b36f26e4713b5809ea8e3a1d540dbae5c315
+# ---- script ----
+# | pkgman uninstall -y nodejs20 2>&1 | tail -2
+# | pkgman install -y nodejs24 2>&1 | tail -3
+# | node --version; node -p process.versions.uv
+# | pkgman search -i -D nodejs 2>&1 | tail -n +3; pkgman search -i -D libuv 2>&1 | tail -n +3
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_01:42:23"
+[system] Cleaning up ...
+[system] Done.
+v24.21.0
+1.52.1
+<system>    nodejs24  24.21.0-2  arm64
+<system>    libuv  1.52.1-4  arm64

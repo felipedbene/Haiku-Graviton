@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: up
+# instance: i-04ea7472c5ed95c7c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T013059Z   end: 20261102T013104Z   rc: 0
+# script sha256: 23f8337a0d6dc089ebad2ea2a0743024b013f57db36c92278a48be81bdc6d63b
+# ---- script ----
+# | uptime; ps | grep -c node; tail -5 /var/log/syslog | cut -c1-200
+# ---- raw output ----
+bash: line 1: uptime: command not found
+7
+AUTH 'sshd-session'[3840]: Postponed publickey for baron from 10.128.7.248 port 1435 ssh2 [preauth]
+AUTH 'sshd-session'[3840]: Accepted key ED25519 SHA256:+MxTFW3bfqvHjvCQpI5rZUTnIq1uudmCtXaemkILLQg found at /boot/home/config/settings/ssh/authorized_keys:1
+AUTH 'sshd-session'[3840]: Accepted publickey for baron from 10.128.7.248 port 1435 ssh2: ED25519 SHA256:+MxTFW3bfqvHjvCQpI5rZUTnIq1uudmCtXaemkILLQg
+AUTH 'sshd-session'[3840]: User child is on pid 3842
+AUTH 'sshd-session'[3842]: Starting session: command for baron from 10.128.7.248 port 1435 id 0

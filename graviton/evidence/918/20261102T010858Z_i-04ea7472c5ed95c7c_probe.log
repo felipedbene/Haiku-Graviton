@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: probe
+# instance: i-04ea7472c5ed95c7c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T010858Z   end: 20261102T010908Z   rc: 0
+# script sha256: a3ecccf5e1d52cd737b7c914aab1d511f66e54db3e89a0d6a05dabe64f29c367
+# ---- script ----
+# | uname -a; ulimit -n; bash -c 'ulimit -n 128 && ulimit -n'
+# | which node Debugger strace listarea 2>&1; ls /boot/system/apps/Debugger 2>&1
+# | node --version; node -p process.versions.uv
+# | pkgman search -i -D libuv 2>&1 | tail -n +3
+# | ls /boot/home/node-src/node-v24.21.0 2>&1 | head -3
+# ---- raw output ----
+Haiku ip-10-128-5-27.us-west-2.comput R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+256
+128
+bash: line 2: which: command not found
+ls: cannot access '/boot/system/apps/Debugger': No such file or directory
+v24.21.0
+1.52.1
+<system>    libuv  1.52.1-4  arm64
+ls: cannot access '/boot/home/node-src/node-v24.21.0': No such file or directory
