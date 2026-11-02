@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-node-versions
+# instance: i-06e34a5a8fda48608   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T154444Z   end: 20261102T154632Z   rc: 1
+# script sha256: 9433afbb3400ef4df2a15e607664c9009f742d3ab3d9cfd46ba2771d57c5ddea
+# ---- script ----
+# | cd /opt/w954
+# | for v in v24.22.2 v24.22.0 v25.9.0 v26.13.0; do
+# | 	d=node-$v-linux-arm64
+# | 	if [ ! -x $d/bin/node ]; then
+# | 		curl -sSLf https://nodejs.org/dist/$v/SHASUMS256.txt -o SUMS-$v.txt || { echo "no sums for $v"; continue; }
+# | 		curl -sSLf https://nodejs.org/dist/$v/$d.tar.xz -o $d.tar.xz || { echo "no tarball for $v"; continue; }
+# | 		grep " $d.tar.xz\$" SUMS-$v.txt | sha256sum -c - || exit 3
+# | 		tar -xJf $d.tar.xz
+# | 	fi
+# | 	echo "=== $($d/bin/node --version)"
+# | 	$d/bin/node h2coalesce954.mjs coalesced 10 | tail -1
+# | 	$d/bin/node h2coalesce954.mjs separate 10 | tail -1
+# | done
+# ---- raw output ----
+node-v24.22.2-linux-arm64.tar.xz: OK
+=== v24.22.2
+h2coalesce954 coalesced: 0/10 rounds failed
+h2coalesce954 separate: 0/10 rounds failed
+node-v24.22.0-linux-arm64.tar.xz: OK
+=== v24.22.0
+h2coalesce954 coalesced: 0/10 rounds failed
+h2coalesce954 separate: 0/10 rounds failed
+no sums for v25.9.0
+no sums for v26.13.0

@@ -1,0 +1,86 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: setup
+# instance: i-0908c2a571dc5af5c   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T152957Z   end: 20261102T153015Z   rc: 0
+# script sha256: eb739fb79c9fa3ffda4c0ba3cc6fa481bf6f49d67928c999d160138de0931ed7
+# ---- script ----
+# | mkdir -p /boot/home/w954 && cd /boot/home/w954
+# | echo 'IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwojIGhhbmc5NTQucHkgLS0gcnVuIG9uZSBOb2RlIHRlc3QgbWFueSB0aW1lcywgQyBhdCBhIHRpbWUsIGFuZCBvbiBhIHJ1biB0aGF0CiMgb3V0bGl2ZXMgaXRzIGRlYWRsaW5lIGNhcHR1cmUgdGhlIGh1bmcgcHJvY2VzcyBiZWZvcmUga2lsbGluZyBpdDoKIyBpdHMgdGhyZWFkcyAoYnQ5MTgpLCB0aGUga2VybmVsJ3MgVENQIHRhYmxlLCBhbmQgdGhlIGxpYnV2IGhhbmRsZXMgdGhhdAojIHRoZSBwcmVsb2FkIGR1bXBzIGZyb20gaW5zaWRlIHRoZSBwcm9jZXNzLgojCiMgdXNhZ2U6IGhhbmc5NTQucHkgPHJ1bnM+IDxjb25jdXJyZW5jeT4gPGRlYWRsaW5lLXM+IDx0ZXN0LmpzPiA8b3V0ZGlyPiBbZGVidWddCgppbXBvcnQgb3MsIHN1YnByb2Nlc3MsIHN5cywgdGltZQoKcnVucywgY29uYywgZGVhZGxpbmUgPSBpbnQoc3lzLmFyZ3ZbMV0pLCBpbnQoc3lzLmFyZ3ZbMl0pLCBmbG9hdChzeXMuYXJndlszXSkKdGVzdCwgb3V0ZGlyID0gc3lzLmFyZ3ZbNF0sIHN5cy5hcmd2WzVdCmRlYnVnID0gbGVuKHN5cy5hcmd2KSA+IDYgYW5kIHN5cy5hcmd2WzZdID09ICJkZWJ1ZyIKaGVyZSA9IG9zLnBhdGguZGlybmFtZShvcy5wYXRoLmFic3BhdGgoX19maWxlX18pKQpwcmVsb2FkID0gb3MucGF0aC5qb2luKGhlcmUsICJkdW1wOTU0LmpzIikKYnQgPSBvcy5wYXRoLmpvaW4oaGVyZSwgImJ0OTE4IikKb3MubWFrZWRpcnMob3V0ZGlyLCBleGlzdF9vaz1UcnVlKQoKZW52ID0gZGljdChvcy5lbnZpcm9uKQppZiBkZWJ1ZzoKCWVudlsiTk9ERV9ERUJVRyJdID0gIm5ldCxodHRwMiIKZW52WyJEVU1QOTU0X0FUX01TIl0gPSBzdHIoaW50KGRlYWRsaW5lICogMTAwMCAqIDAuNikpCgpkZWYgc2goY21kKToKCXAgPSBzdWJwcm9jZXNzLnJ1bihjbWQsIHNoZWxsPVRydWUsIHN0ZG91dD1zdWJwcm9jZXNzLlBJUEUsCgkJc3RkZXJyPXN1YnByb2Nlc3MuU1RET1VULCB0aW1lb3V0PTEyMCkKCXJldHVybiBwLnN0ZG91dC5kZWNvZGUoZXJyb3JzPSJyZXBsYWNlIikKCmFjdGl2ZSA9IHt9CnN0YXJ0ZWQgPSBkb25lID0gaHVuZyA9IGZhaWxlZCA9IDAKZHVyYXRpb25zID0gW10KdDAgPSB0aW1lLnRpbWUoKQp3aGlsZSBkb25lIDwgcnVuczoKCXdoaWxlIHN0YXJ0ZWQgPCBydW5zIGFuZCBsZW4oYWN0aXZlKSA8IGNvbmM6CgkJbiA9IHN0YXJ0ZWQKCQlmID0gb3Blbihvcy5wYXRoLmpvaW4ob3V0ZGlyLCAicnVuJTA0ZC5sb2ciICUgbiksICJ3YiIpCgkJcCA9IHN1YnByb2Nlc3MuUG9wZW4oWyIvYm9vdC9zeXN0ZW0vYmluL25vZGUiLCAiLXIiLCBwcmVsb2FkLCB0ZXN0XSwKCQkJc3RkaW49c3VicHJvY2Vzcy5QSVBFLCBzdGRvdXQ9Ziwgc3RkZXJyPXN1YnByb2Nlc3MuU1RET1VULCBlbnY9ZW52LAoJCQljd2Q9b3MucGF0aC5kaXJuYW1lKHRlc3QpKQoJCXAuc3RkaW4uY2xvc2UoKQoJCWFjdGl2ZVtuXSA9IChwLCB0aW1lLnRpbWUoKSwgZikKCQlzdGFydGVkICs9IDEKCXRpbWUuc2xlZXAoMC4wNSkKCWZvciBuLCAocCwgcywgZikgaW4gbGlzdChhY3RpdmUuaXRlbXMoKSk6CgkJcmMgPSBwLnBvbGwoKQoJCWlmIHJjIGlzIG5vdCBOb25lOgoJCQlmLmNsb3NlKCkKCQkJZHVyYXRpb25zLmFwcGVuZCh0aW1lLnRpbWUoKSAtIHMpCgkJCWlmIHJjICE9IDA6CgkJCQlmYWlsZWQgKz0gMQoJCQkJcHJpbnQoIlJVTiAlZCByYz0lZCBhZnRlciAlLjFmcyIgJSAobiwgcmMsIHRpbWUudGltZSgpIC0gcyksCgkJCQkJZmx1c2g9VHJ1ZSkKCQkJZWxzZToKCQkJCW9zLnVubGluayhvcy5wYXRoLmpvaW4ob3V0ZGlyLCAicnVuJTA0ZC5sb2ciICUgbikpCgkJCWRlbCBhY3RpdmVbbl0KCQkJZG9uZSArPSAxCgkJZWxpZiB0aW1lLnRpbWUoKSAtIHMgPiBkZWFkbGluZToKCQkJaHVuZyArPSAxCgkJCWNhcCA9IG9zLnBhdGguam9pbihvdXRkaXIsICJoYW5nJTA0ZC50eHQiICUgbikKCQkJd2l0aCBvcGVuKGNhcCwgInciKSBhcyBjOgoJCQkJYy53cml0ZSgiPT09IEhBTkcgcnVuICVkIHBpZCAlZCBhZnRlciAlLjFmcyAoZGVhZGxpbmUgJS4wZnMpXG4iCgkJCQkJJSAobiwgcC5waWQsIHRpbWUudGltZSgpIC0gcywgZGVhZGxpbmUpKQoJCQkJYy53cml0ZSgiPT09IG5ldHN0YXQgLW5cbiIgKyBzaCgibmV0c3RhdCAtbiIpKQoJCQkJYy53cml0ZSgiPT09IHBzIC1vXG4iICsgc2goInBzIC1UICVkIDI+JjEgfHwgcHMiICUgcC5waWQpKQoJCQkJYy53cml0ZSgiPT09IGJ0OTE4ICVkXG4iICUgcC5waWQgKyBzaCgiJXMgJWQgNDAiICUgKGJ0LCBwLnBpZCkpKQoJCQkJYy53cml0ZSgiPT09IG5ldHN0YXQgLW4gKGFnYWluLCBhZnRlciBidDkxOClcbiIgKyBzaCgibmV0c3RhdCAtbiIpKQoJCQlwLmtpbGwoKQoJCQlwLndhaXQoKQoJCQlmLmNsb3NlKCkKCQkJcHJpbnQoIkhBTkcgcnVuICVkIHBpZCAlZCBjYXB0dXJlZCBpbiAlcyIgJSAobiwgcC5waWQsIGNhcCksCgkJCQlmbHVzaD1UcnVlKQoJCQlkZWwgYWN0aXZlW25dCgkJCWRvbmUgKz0gMQoKZHVyYXRpb25zLnNvcnQoKQptZWQgPSBkdXJhdGlvbnNbbGVuKGR1cmF0aW9ucykgLy8gMl0gaWYgZHVyYXRpb25zIGVsc2UgMApwcmludCgiU1VNTUFSWSBydW5zPSVkIGh1bmc9JWQgZmFpbGVkKG5vbnplcm8pPSVkIHdhbGw9JS4wZnMgbWVkaWFuPSUuMmZzICIKCSJtYXgtY29tcGxldGVkPSUuMmZzIiAlIChydW5zLCBodW5nLCBmYWlsZWQsIHRpbWUudGltZSgpIC0gdDAsIG1lZCwKCQlkdXJhdGlvbnNbLTFdIGlmIGR1cmF0aW9ucyBlbHNlIDApLCBmbHVzaD1UcnVlKQo=' | base64 -d > hang954.py
+# | echo 'J3VzZSBzdHJpY3QnOwovLyBkdW1wOTU0LmpzIC0tIHByZWxvYWQgZm9yIGhhbmc5NTQucHkuIFJlY29yZHMgdGhlIGxpZmVjeWNsZSBldmVudHMgb2YKLy8gZXZlcnkgbmV0LlNvY2tldCBpbiB0aGUgcHJvY2VzcyAoY2hlYXBseTogYW4gYXJyYXkgcHVzaCBwZXIgZXZlbnQpLCBhbmQKLy8gZnJvbSBhbiB1bnJlZidkIHRpbWVyIGR1bXBzIHRoZW0gd2l0aCBsaWJ1didzIGFjdGl2ZSBoYW5kbGVzLCBzbyBhIGh1bmcKLy8gcnVuIHNob3dzIHdoaWNoIHNvY2tldCBpcyBzdGlsbCBvcGVuIGFuZCB3aGljaCBvZiBpdHMgZXZlbnRzIG5ldmVyIGNhbWUuCmNvbnN0IG5ldCA9IHJlcXVpcmUoJ25ldCcpOwpjb25zdCB0MCA9IHByb2Nlc3MuaHJ0aW1lLmJpZ2ludCgpOwpjb25zdCBtcyA9ICgpID0+IE51bWJlcigocHJvY2Vzcy5ocnRpbWUuYmlnaW50KCkgLSB0MCkgLyAxMDAwMDAwbik7CmNvbnN0IGV2ZW50cyA9IFtdOwpsZXQgbmV4dElkID0gMTsKY29uc3Qga0lkID0gU3ltYm9sKCdpZDk1NCcpOwpjb25zdCB3YXRjaGVkID0gbmV3IFNldChbJ2Nvbm5lY3QnLCAnZW5kJywgJ2ZpbmlzaCcsICdjbG9zZScsICdlcnJvcicsCgkndGltZW91dCcsICdyZWFkeSddKTsKCmNvbnN0IGVtaXQgPSBuZXQuU29ja2V0LnByb3RvdHlwZS5lbWl0OwpuZXQuU29ja2V0LnByb3RvdHlwZS5lbWl0ID0gZnVuY3Rpb24obmFtZSwgLi4uYXJncykgewoJaWYgKHdhdGNoZWQuaGFzKG5hbWUpKSB7CgkJaWYgKHRoaXNba0lkXSA9PT0gdW5kZWZpbmVkKQoJCQl0aGlzW2tJZF0gPSBuZXh0SWQrKzsKCQlldmVudHMucHVzaChbbXMoKSwgdGhpc1trSWRdLCBuYW1lLAoJCQluYW1lID09PSAnZXJyb3InID8gU3RyaW5nKGFyZ3NbMF0gJiYgYXJnc1swXS5jb2RlKSA6ICcnXSk7Cgl9CglyZXR1cm4gZW1pdC5jYWxsKHRoaXMsIG5hbWUsIC4uLmFyZ3MpOwp9OwoKY29uc3Qgc2VydmVyRW1pdCA9IG5ldC5TZXJ2ZXIucHJvdG90eXBlLmVtaXQ7Cm5ldC5TZXJ2ZXIucHJvdG90eXBlLmVtaXQgPSBmdW5jdGlvbihuYW1lLCAuLi5hcmdzKSB7CglpZiAobmFtZSA9PT0gJ2Nvbm5lY3Rpb24nKSB7CgkJY29uc3QgcyA9IGFyZ3NbMF07CgkJaWYgKHNba0lkXSA9PT0gdW5kZWZpbmVkKQoJCQlzW2tJZF0gPSBuZXh0SWQrKzsKCQlldmVudHMucHVzaChbbXMoKSwgc1trSWRdLCAnYWNjZXB0ZWQnLCAnJ10pOwoJfSBlbHNlIGlmIChuYW1lID09PSAnY2xvc2UnIHx8IG5hbWUgPT09ICdsaXN0ZW5pbmcnKSB7CgkJZXZlbnRzLnB1c2goW21zKCksIDAsICdzZXJ2ZXItJyArIG5hbWUsICcnXSk7Cgl9CglyZXR1cm4gc2VydmVyRW1pdC5jYWxsKHRoaXMsIG5hbWUsIC4uLmFyZ3MpOwp9OwoKZnVuY3Rpb24gZGVzY3JpYmUoaCkgewoJY29uc3QgbyA9IHsgdHlwZTogaC5jb25zdHJ1Y3RvciAmJiBoLmNvbnN0cnVjdG9yLm5hbWUgfTsKCWlmIChoIGluc3RhbmNlb2YgbmV0LlNvY2tldCkgewoJCW8uaWQgPSBoW2tJZF07CgkJby5sb2NhbCA9IGgubG9jYWxBZGRyZXNzICsgJzonICsgaC5sb2NhbFBvcnQ7CgkJby5yZW1vdGUgPSBoLnJlbW90ZUFkZHJlc3MgKyAnOicgKyBoLnJlbW90ZVBvcnQ7CgkJby5kZXN0cm95ZWQgPSBoLmRlc3Ryb3llZDsKCQlvLmNvbm5lY3RpbmcgPSBoLmNvbm5lY3Rpbmc7CgkJby5yZWFkeVN0YXRlID0gaC5yZWFkeVN0YXRlOwoJCW8ucmVhZGFibGUgPSBoLnJlYWRhYmxlOwoJCW8ud3JpdGFibGUgPSBoLndyaXRhYmxlOwoJCW8ucmVhZGFibGVFbmRlZCA9IGgucmVhZGFibGVFbmRlZDsKCQlvLndyaXRhYmxlRW5kZWQgPSBoLndyaXRhYmxlRW5kZWQ7CgkJby53cml0YWJsZUZpbmlzaGVkID0gaC53cml0YWJsZUZpbmlzaGVkOwoJCW8ud3JpdGFibGVMZW5ndGggPSBoLndyaXRhYmxlTGVuZ3RoOwoJCW8uYnl0ZXNSZWFkID0gaC5ieXRlc1JlYWQ7CgkJby5ieXRlc1dyaXR0ZW4gPSBoLmJ5dGVzV3JpdHRlbjsKCQlvLmFsbG93SGFsZk9wZW4gPSBoLmFsbG93SGFsZk9wZW47CgkJby5yZWFkaW5nID0gaC5faGFuZGxlID8gaC5faGFuZGxlLnJlYWRpbmcgOiB1bmRlZmluZWQ7CgkJby5oYXNIYW5kbGUgPSAhIWguX2hhbmRsZTsKCX0gZWxzZSBpZiAoaCBpbnN0YW5jZW9mIG5ldC5TZXJ2ZXIpIHsKCQl0cnkgeyBvLmFkZHJlc3MgPSBoLmFkZHJlc3MoKTsgfSBjYXRjaCAoZSkgeyBvLmFkZHJlc3MgPSBTdHJpbmcoZSk7IH0KCQlvLmxpc3RlbmluZyA9IGgubGlzdGVuaW5nOwoJCW8uY29ubmVjdGlvbnMgPSBoLl9jb25uZWN0aW9uczsKCX0KCXJldHVybiBvOwp9Cgpjb25zdCBhdCA9IE51bWJlcihwcm9jZXNzLmVudi5EVU1QOTU0X0FUX01TIHx8IDEyMDAwKTsKY29uc3QgdGltZXIgPSBzZXRUaW1lb3V0KCgpID0+IHsKCWNvbnN0IG91dCA9IFtdOwoJb3V0LnB1c2goJ0RVTVA5NTQgYXQgJyArIG1zKCkgKyAnbXMgcGlkICcgKyBwcm9jZXNzLnBpZCk7CglvdXQucHVzaCgnRFVNUDk1NCByZXNvdXJjZXMgJyArCgkJSlNPTi5zdHJpbmdpZnkocHJvY2Vzcy5nZXRBY3RpdmVSZXNvdXJjZXNJbmZvKCkpKTsKCWZvciAoY29uc3QgaCBvZiBwcm9jZXNzLl9nZXRBY3RpdmVIYW5kbGVzKCkpCgkJb3V0LnB1c2goJ0RVTVA5NTQgaGFuZGxlICcgKyBKU09OLnN0cmluZ2lmeShkZXNjcmliZShoKSkpOwoJZm9yIChjb25zdCBlIG9mIGV2ZW50cykKCQlvdXQucHVzaCgnRFVNUDk1NCBldmVudCAnICsgSlNPTi5zdHJpbmdpZnkoZSkpOwoJcHJvY2Vzcy5fcmF3RGVidWcob3V0LmpvaW4oJ1xuJykpOwp9LCBhdCk7CnRpbWVyLnVucmVmKCk7Cg==' | base64 -d > dump954.js
+# | cp /boot/home/w947/bt918 /boot/home/w947/bt918.c .
+# | sha256sum hang954.py dump954.js bt918.c bt918
+# | uname -a; node --version
+# | sha256sum /boot/system/kernel_arm64
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | sort | xargs sha256sum
+# | listimage 1 2>/dev/null | grep -E 'add-ons/kernel/network/(stack|protocols)' | awk '{print $NF}' | sort -u
+# | sysinfo | grep -E 'CPU #|cpu' | head -3; sysinfo -cpu 2>/dev/null | head -2
+# | T=/boot/home/w947/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+# | sha256sum $T
+# | cat $T
+# | echo "--- one plain run"
+# | s=$(date +%s%N 2>/dev/null || date +%s); : | node $T; echo "rc=$?"
+# | echo "--- netstat sample"; netstat -n | head -5
+# ---- raw output ----
+270a8877076fececf55cd58936611af64d47d249de404366f91d8a0394981db5  hang954.py
+6de6a4f05dc246a9bca0b99e7fb4c085ecedf864939bc236da260a298cce7ca7  dump954.js
+cf80c75d9e777156a7f7f317fd203a4b5809fcb22842c116c402b0b3004bcd8e  bt918.c
+ce8f158b5b9f9177eda89c074adae0aa77db7ee2ce8fbbae4f65adfc6fdc27c7  bt918
+Haiku ip-10-128-4-45.us-west-2.comput R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+v24.21.0
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+16 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+
+f066bc8385d74d06429025cd686494ab42fd01a21c04adda4e6696de12ce3a46  /boot/home/w947/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+'use strict';
+
+const common = require('../common');
+if (!common.hasCrypto)
+  common.skip('missing crypto');
+const http2 = require('http2');
+
+{
+  const server = http2.createServer((req, res) => {
+    req.pipe(res);
+  });
+
+  server.listen(0, common.mustCall(() => {
+    const url = `http://localhost:${server.address().port}`;
+    const client = http2.connect(url);
+    const req = client.request({ ':method': 'POST' });
+
+    for (let i = 0; i < 4000; i++) {
+      req.write(Buffer.alloc(6));
+    }
+
+    req.on('close', common.mustCall(() => {
+      console.log('(req onclose)');
+      server.close();
+      client.close();
+    }));
+
+    req.once('data', common.mustCall(() => req.destroy()));
+  }));
+}
+--- one plain run
+(req onclose)
+rc=0
+--- netstat sample
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       59/remote_broker
+ip          0      0 -                     -                                  59/remote_broker
+ip          0      0 -                     -                                  59/remote_broker
+udp         0      0 *:10902               -                                  59/remote_broker

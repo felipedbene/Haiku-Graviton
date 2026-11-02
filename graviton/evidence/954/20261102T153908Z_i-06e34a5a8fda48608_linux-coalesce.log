@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-coalesce
+# instance: i-06e34a5a8fda48608   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153908Z   end: 20261102T154024Z   rc: 0
+# script sha256: 6247e5ac14a0581771a06ba5408aab3fcf88838c0b20cdf35c63a382bffe58ef
+# ---- script ----
+# | cd /opt/w954
+# | T=/opt/w954/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+# | echo "--- A: all runs pinned to CPU 0, 8 at a time"
+# | rm -rf out-linux-cpu0
+# | NODE954=/opt/w954/node-v24.21.0-linux-arm64/bin/node taskset -c 0 python3 -I hang954.py 640 8 30 $T out-linux-cpu0
+# | echo "--- B: 64 at a time on 16 CPUs"
+# | rm -rf out-linux-c64
+# | NODE954=/opt/w954/node-v24.21.0-linux-arm64/bin/node python3 -I hang954.py 1280 64 30 $T out-linux-c64
+# | for f in out-linux-cpu0/hang*.txt out-linux-c64/hang*.txt; do [ -f "$f" ] || continue; echo "################ $f"; grep -E "HANG|5 s after|46|ESTAB|CLOSE-WAIT|FIN-WAIT" "$f" | grep -vE "LISTEN|TIME-WAIT" | head -20; n=$(basename $f .txt | sed 's/hang//'); echo "######## $(dirname $f)/run$n.log"; grep -v "^DUMP954 event" $(dirname $f)/run$n.log | head -30; done
+# ---- raw output ----
+--- A: all runs pinned to CPU 0, 8 at a time
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=59s median=0.72s max-completed=0.78s
+--- B: 64 at a time on 16 CPUs
+SUMMARY runs=1280 hung=0 failed(nonzero)=0 wall=8s median=0.37s max-completed=0.79s

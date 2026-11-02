@@ -1,0 +1,142 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-debug-pass
+# instance: i-06e34a5a8fda48608   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153556Z   end: 20261102T153607Z   rc: 0
+# script sha256: 7c1362d4b3a149562ab516f25e4e795894e191c98f755c8f679f16b103b21d03
+# ---- script ----
+# | cd /opt/w954/node-v24.21.0/test/parallel
+# | N=/opt/w954/node-v24.21.0-linux-arm64/bin/node
+# | for i in 1 2 3; do
+# | 	echo "=========== linux debug run $i"
+# | 	NODE_DEBUG=net,http2 NODE_DEBUG_NATIVE=HTTP2SESSION,HTTP2STREAM $N test-http2-many-writes-and-destroy.js > /tmp/ld$i.log 2>&1; echo "rc=$? lines=$(wc -l < /tmp/ld$i.log)"
+# | done
+# | echo "=========== run 1: JS-level lines and native lines about reading, goaway, EOF, closing"
+# | grep -nE "^(NET|HTTP2) |reading|wants read|goaway|GOAWAY|EOF|eof|closing|destroy|end|Read|stopped" /tmp/ld1.log | grep -v "receiving\|sending\|frame" | tail -120
+# ---- raw output ----
+=========== linux debug run 1
+rc=0 lines=251
+=========== linux debug run 2
+rc=0 lines=251
+=========== linux debug run 3
+rc=0 lines=251
+=========== run 1: JS-level lines and native lines about reading, goaway, EOF, closing
+11:NET 18701: connect: dns options { family: undefined, hints: 32 }
+12:NET 18701: connect: autodetecting
+13:HTTP2 18701: Http2Session client: created
+14:HTTP2 18701: Http2Session client: initiating request
+17:NET 18701: connect/multiple: only one address found, switching back to single connection
+18:NET 18701: connect: attempting to connect to 127.0.0.1:46023 (addressType: 4)
+19:NET 18701: onconnection
+20:NET 18701: _read - n 65536 isConnecting? false hasHandle? true
+21:NET 18701: Socket._handle.readStart
+22:HTTP2 18701: Http2Session server: received a connection
+23:HTTP2 18701: Http2Session server: setting up session handle
+27:HTTP2 18701: Http2Session server: submitting settings
+29:HTTP2 18701: Http2Session server: created
+30:NET 18701: afterConnect
+31:HTTP2 18701: Http2Session client: setting up session handle
+35:HTTP2 18701: Http2Session client: submitting settings
+37:NET 18701: _read - n 65536 isConnecting? false hasHandle? true
+38:NET 18701: Socket._handle.readStart
+39:HTTP2 18701: Http2Session client: connected, initializing request
+45:HttpStream 1 (21) [Http2Session client (18)] queuing 4000 buffers to send
+46:HttpStream 1 (21) [Http2Session client (18)] reading starting
+48:Http2Session server (14) nghttp2 has 9 bytes to send
+49:Http2Session server (14) wants read? 1
+51:Http2Session client (18) nghttp2 has 24 bytes to send
+52:Http2Session client (18) nghttp2 has 9 bytes to send
+53:Http2Session client (18) nghttp2 has 25 bytes to send
+54:Http2Session client (18) reading outbound data for stream 1
+55:Http2Session client (18) stream 1 has pending outbound data
+57:Http2Session client (18) nghttp2 has 16384 bytes to send directly
+58:Http2Session client (18) reading outbound data for stream 1
+59:Http2Session client (18) stream 1 has pending outbound data
+61:Http2Session client (18) nghttp2 has 7616 bytes to send directly
+62:Http2Session client (18) reading outbound data for stream 1
+64:Http2Session client (18) wants read? 1
+77:HTTP2 18701: Http2Stream 1 [Http2Session server]: headers received
+78:HttpStream 1 (25) [Http2Session server (14)] reading starting
+80:HTTP2 18701: Http2Stream 1 [Http2Session server]: initiating response
+83:HttpStream 1 (25) [Http2Session server (14)] queuing 1 buffers to send
+84:HttpStream 1 (25) [Http2Session server (14)] reading starting
+89:HttpStream 1 (25) [Http2Session server (14)] reading starting
+92:Http2Session server (14) nghttp2 has 9 bytes to send
+93:Http2Session server (14) nghttp2 has 34 bytes to send
+94:Http2Session server (14) reading outbound data for stream 1
+95:Http2Session server (14) stream 1 has pending outbound data
+97:Http2Session server (14) nghttp2 has 16384 bytes to send directly
+98:Http2Session server (14) reading outbound data for stream 1
+100:HttpStream 1 (25) [Http2Session server (14)] queuing 1 buffers to send
+101:Http2Session server (14) wants read? 1
+102:Http2Session server (14) wants read? 1
+105:Http2Session server (14) reading outbound data for stream 1
+106:Http2Session server (14) stream 1 has pending outbound data
+108:Http2Session server (14) nghttp2 has 2012 bytes to send directly
+109:Http2Session server (14) reading outbound data for stream 1
+111:Http2Session server (14) wants read? 1
+119:HTTP2 18701: Http2Session client: settings received
+127:HTTP2 18701: Http2Stream 1 [Http2Session client]: headers received
+128:HTTP2 18701: Http2Stream 1 [Http2Session client]: emitting stream 'response' event
+130:HTTP2 18701: Http2Stream 1 [Http2Session client]: destroying stream
+132:HttpStream 1 (21) [Http2Session client (18)] destroying stream
+134:NET 18701: SERVER _emitCloseIfDrained
+135:NET 18701: SERVER handle? false   connections? 1
+136:HTTP2 18701: Http2Session server: marking session closed
+137:HTTP2 18701: Http2Session server: submitting goaway
+138:Http2Session server (14) submitting goaway
+141:HTTP2 18701: Http2Session client: marking session closed
+142:HTTP2 18701: Http2Session client: submitting goaway
+143:Http2Session client (18) submitting goaway
+151:Http2Session client (18) nghttp2 has 9 bytes to send
+152:Http2Session client (18) nghttp2 has 17 bytes to send
+154:Http2Session client (18) wants read? 1
+155:Http2Session client (18) wants read? 1
+160:HttpStream 1 (25) [Http2Session server (14)] queuing 1 buffers to send
+161:HttpStream 1 (25) [Http2Session server (14)] reading starting
+167:HTTP2 18701: Http2Session server: settings received
+171:HTTP2 18701: Http2Session server: goaway 0 received [last stream id: 0]
+173:Http2Session server (14) nghttp2 has 17 bytes to send
+174:Http2Session server (14) reading outbound data for stream 1
+175:Http2Session server (14) stream 1 has pending outbound data
+177:Http2Session server (14) nghttp2 has 5604 bytes to send directly
+178:Http2Session server (14) reading outbound data for stream 1
+180:Http2Session server (14) wants read? 1
+181:Http2Session server (14) wants read? 1
+182:HttpStream 1 (21) [Http2Session client (18)] destroying stream
+186:Http2Session client (18) nghttp2 has 13 bytes to send
+188:HTTP2 18701: Http2Session client: destroying
+189:HTTP2 18701: Http2Session client: start closing/destroying null
+190:Http2Session client (18) destroying session
+191:Http2Session client (18) closing session
+194:Http2Session client (18) nghttp2 has 17 bytes to send
+197:HTTP2 18701: Http2Session client: finishSessionClose
+198:NET 18701: _final: not ended, call shutdown()
+200:NET 18701: afterShutdown destroyed=false
+201:HTTP2 18701: Http2Session client: finishSessionClose socket end null null
+209:HTTP2 18701: Http2Stream 1 [Http2Session server]: closed with code 0, closed false, readable true
+210:HTTP2 18701: Http2Stream 1 [Http2Session server]: shutting down writable on _final
+212:HTTP2 18701: Http2Stream 1 [Http2Session server]: destroying stream
+213:HttpStream 1 (25) [Http2Session server (14)] destroying stream
+216:HTTP2 18701: Http2Session server: goaway 0 received [last stream id: 0]
+218:Http2Session server (14) wants read? 0
+219:HttpStream 1 (25) [Http2Session server (14)] destroying stream
+222:HTTP2 18701: Http2Session server: destroying
+223:HTTP2 18701: Http2Session server: start closing/destroying undefined
+224:Http2Session server (14) destroying session
+225:Http2Session server (14) closing session
+228:Http2Session server (14) nghttp2 has 17 bytes to send
+231:HTTP2 18701: Http2Session server: finishSessionClose
+232:NET 18701: _final: not ended, call shutdown()
+233:NET 18701: afterShutdown destroyed=false
+234:HTTP2 18701: Http2Session server: finishSessionClose socket end null undefined
+238:NET 18701: destroy
+239:NET 18701: close
+240:NET 18701: close handle
+241:NET 18701: has server
+242:NET 18701: SERVER _emitCloseIfDrained
+243:NET 18701: SERVER: emit close
+244:NET 18701: emit close
+246:NET 18701: destroy
+247:NET 18701: close
+248:NET 18701: close handle
+249:NET 18701: emit close

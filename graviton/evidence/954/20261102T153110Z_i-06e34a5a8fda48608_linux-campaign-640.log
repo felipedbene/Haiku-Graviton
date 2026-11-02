@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-campaign-640
+# instance: i-06e34a5a8fda48608   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153110Z   end: 20261102T153127Z   rc: 0
+# script sha256: e9be6e776a7ee43a18777c96b3b91f1898b1c3f547ff596ae2a90b5614d96620
+# ---- script ----
+# | cd /opt/w954
+# | T=/opt/w954/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+# | rm -rf out-linux
+# | NODE954=/opt/w954/node-v24.21.0-linux-arm64/bin/node python3 -I hang954.py 640 8 30 $T out-linux
+# | for f in out-linux/hang*.txt; do [ -f "$f" ] || continue; echo "################ $f"; cat "$f"; done
+# | ls out-linux | head
+# ---- raw output ----
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=8s median=0.10s max-completed=0.15s
