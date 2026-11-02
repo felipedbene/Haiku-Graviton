@@ -1788,8 +1788,11 @@ ssize_t
 udp_process_ancillary_data_no_container(net_protocol *protocol,
 	net_buffer* buffer, void *data, size_t dataSize)
 {
+	// The receive options (IP_RECVDSTADDR, IPV6_RECVPKTINFO, ...) were set
+	// on the network protocol below, through udp_setsockopt(), and that is
+	// the object its module reads them from -- not this endpoint.
 	return protocol->next->module->process_ancillary_data_no_container(
-		protocol, buffer, data, dataSize);
+		protocol->next, buffer, data, dataSize);
 }
 
 
