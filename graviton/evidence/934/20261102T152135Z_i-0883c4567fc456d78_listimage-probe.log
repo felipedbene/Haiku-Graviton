@@ -1,0 +1,26 @@
+# evidence: listimage-probe
+# instance: i-0883c4567fc456d78   region: us-west-2
+# ssm command: 5c36b369-f44f-43e7-a23b-7ede3a5b6622 (agent status: Success)
+# start: 20261102T152135Z   end: 20261102T152139Z   rc: 0   log bytes: 920
+# script sha256: 7291884ef4eb38f2558fbeff6fe68bdf322f893702c14438e274afca23798535
+# ---- script ----
+# | listimage 1 | head -5; echo ...; listimage 1 | grep -iE "ntfs|fat|bfs|file_sys"; df /ntfs | head -3; mount 2>&1 | head
+# ---- raw output ----
+
+KERNEL TEAM:
+   ID               Text               Data  Seq#      Init# Name
+--------------------------------------------------------------------------------
+    1 0xffff000000000000 0xffff0000001dc000     0          0 kernel_arm64
+...
+    7 0xffff000002435000 0xffff000002484000     0          0 ntfs
+   10 0xffff0000023fe000 0xffff000002423000     0          0 fat
+   47 0xffff00000215d000 0xffff000002190000     0          0 bfs
+ 1612 0xffff00000232c000 0xffff000002358000     0          0 /boot/system/add-ons/kernel/file_systems/ramfs
+   Device No.: 8
+   Mounted at: /ntfs
+  Volume Name: "NTFS933"
+usage: mount [-ro] [-t fstype] [-p parameter] [device] directory
+	-ro	mounts the volume read-only
+	-t	specifies the file system to use (defaults to automatic recognition)
+	-p	specifies parameters to pass to the file system (-o also accepted)
+	if device is not specified, NULL is passed (for in-memory filesystems)

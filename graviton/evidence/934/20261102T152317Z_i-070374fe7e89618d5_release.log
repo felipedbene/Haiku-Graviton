@@ -1,0 +1,10 @@
+# evidence: release
+# instance: i-070374fe7e89618d5   region: us-west-2
+# ssm command: c8608c81-b4c2-4643-a045-b0ec4807d1de (agent status: Success)
+# start: 20261102T152317Z   end: 20261102T152320Z   rc: 0   log bytes: 16
+# script sha256: 991a86dbbf24a26d6bb5458f5803dd0261f59068c2001374bd6ce0380daf1052
+# ---- script ----
+# | # Release the NTFS/FAT test volumes on the Ubuntu host (none are mounted; sync).
+# | mount | grep -E "/mnt/(n|f)" || echo "nothing mounted"; sync
+# ---- raw output ----
+nothing mounted

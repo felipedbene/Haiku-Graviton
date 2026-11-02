@@ -1,0 +1,64 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-trunk
+# instance: i-070374fe7e89618d5   region: us-west-2
+# ssm command: 6219c9c9-06ad-4802-a708-fa387b38f480 (agent status: Success)
+# start: 20261102T151149Z   end: 20261102T151217Z   rc: 0   log bytes: 1893
+# script sha256: 1304354bd22de1f4402dcb48614cc572a5ba7c8f4007846e62260d20044c14bc
+# ---- script ----
+# | # Build trunk's ntfs and fat kernel add-ons (the "before" arm of 933/934) and
+# | # stage them in S3. Clean add-on object dirs so nothing stale is reused.
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/tdeflib/out933
+# | cd /opt/t && rm -rf out933 && mkdir -p out933
+# | cd hg/generated
+# | git -C .. fetch -q origin && git -C .. checkout -q -f origin/graviton && git -C .. log -1 --format='trunk %H %s'
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | rm -rf $A/ntfs $A/fat
+# | s=$(date +%s)
+# | jam -q -j$(nproc) ntfs fat > ../../out933/jam-trunk.log 2>&1; rc=$?
+# | echo "JAM trunk rc=$rc wall=$(( $(date +%s) - s ))s"; grep -E "warning:.*kernel_interface" ../../out933/jam-trunk.log; [ $rc = 0 ] || { tail -40 ../../out933/jam-trunk.log; exit 1; }
+# | cp $A/ntfs/ntfs ../../out933/ntfs.trunk && cp $A/fat/fat ../../out933/fat.trunk || exit 1
+# | file ../../out933/ntfs.trunk ../../out933/fat.trunk
+# | cd ../../out933 && sha256sum ntfs.* fat.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive . $OUT/ && aws s3 ls $OUT/
+# ---- raw output ----
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/out933
++ cd /opt/t
++ rm -rf out933
++ mkdir -p out933
++ cd hg/generated
++ git -C .. fetch -q origin
++ git -C .. checkout -q -f origin/graviton
++ git -C .. log -1 '--format=trunk %H %s'
+trunk 4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs objects/haiku/arm64/release/add-ons/kernel/file_systems/fat
+++ date +%s
++ s=1793632311
+++ nproc
++ jam -q -j16 ntfs fat
++ rc=0
+++ date +%s
++ echo 'JAM trunk rc=0 wall=18s'
+JAM trunk rc=0 wall=18s
++ grep -E 'warning:.*kernel_interface' ../../out933/jam-trunk.log
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs ../../out933/ntfs.trunk
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat ../../out933/fat.trunk
++ file ../../out933/ntfs.trunk ../../out933/fat.trunk
+../../out933/ntfs.trunk: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, not stripped
+../../out933/fat.trunk:  ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, not stripped
++ cd ../../out933
++ sha256sum ntfs.trunk fat.trunk
++ tee SHA256SUMS
+2dc15f09aed3104b6010e5bd875f0e8d13a3dea01d5bf9c4bb701fb6b281f99c  ntfs.trunk
+4d79f1cc98b758828971160b5fdd17a4a266044e38f8b44f45b6f7418bcc9b76  fat.trunk
++ aws s3 cp --quiet --recursive . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/out933/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/out933/
+2026-11-02 15:12:10        153 SHA256SUMS
+2026-11-02 15:12:10     181835 fat.trunk
+2026-11-02 15:12:10     147475 jam-trunk.log
+2026-11-02 15:12:10     371795 ntfs.trunk
