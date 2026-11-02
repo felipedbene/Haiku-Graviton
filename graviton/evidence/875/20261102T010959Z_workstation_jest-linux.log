@@ -1,0 +1,32 @@
+# host: workstation finch container Debian GNU/Linux 12 (bookworm) aarch64; utc 2026-11-02T01:10:00Z
+debconf: delaying package configuration, since apt-utils is not installed
+$ npm ci
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+$ npx jest
+  ✓ 849: an empty claim succeeds without launching, and never reaps (166 ms)
+  ✓ 849: the driver drops planned ports that are no longer queued (23 ms)
+  ✓ 849: a port the driver cannot read is kept, not silently dropped (57 ms)
+  ✓ 849: the live-state read is chunked to DynamoDB's 100-key BatchGetItem cap (40 ms)
+  ✓ 849: a building row whose lease EXPIRED is kept -- claim.py would claim it (19 ms)
+  ✓ 849: the live-state read is consistent and de-duplicated (19 ms)
+  ✓ 849: UnprocessedKeys is retried, but boundedly (60 ms)
+  ✓ 849: the driver tells a no-op chain from one that built (20 ms)
+  ✓ 845: poll_ssm classifies the refusal as stale-driver, not build-error (32 ms)
+  ✓ 845: a stale-driver outcome re-queues the port without counting an attempt (39 ms)
+  ✓ 845: the not-the-port branch stayed narrow -- unknown classes still count (90 ms)
+  ✓ 845: the pre-flight reads the deployment and reports agreement (21 ms)
+  ✓ 845: the pre-flight reports the real wd-10191705 mismatch (19 ms)
+  ✓ 845: an unmarked published driver is a mismatch, not a pass (19 ms)
+  ✓ 845: the pre-flight finds the build task through the graph, not by name (19 ms)
+  ✓ 845: a deployment with no expected version is UNVERIFIED, not a mismatch (23 ms)
+  ✓ 845: the pre-flight is best-effort on the read -- a denial does not block a wave (62 ms)
+  ✓ 845: the operator role can run the pre-flight, and still cannot invoke (185 ms)
+  ✓ 845: an ABSENT published driver is a mismatch, not an unreadable deployment (19 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       131 passed, 131 total
+Snapshots:   0 total
+Time:        18.999 s
+Ran all test suites.

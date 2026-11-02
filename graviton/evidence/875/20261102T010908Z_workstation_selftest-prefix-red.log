@@ -1,0 +1,53 @@
+# host: workstation macOS 26.7.2; utc 20261102T010908Z
+# the PRE-FIX publishers from origin/graviton fe7fef0b47, same selftest: must go red
+$ git show origin/graviton:graviton/scripts/haiku-repo-publish-ephemeral > /tmp/hrpe-prefix-875
+$ git show origin/graviton:graviton/scripts/haiku-repo-publish-native > /tmp/hrpn-prefix-875
+$ python3 graviton/scripts/haiku-repo-publish-ephemeral-selftest --script /tmp/hrpe-prefix-875 --native-script /tmp/hrpn-prefix-875
+base64 implementations found: BSD=/usr/bin/base64, GNU=/opt/homebrew/bin/gbase64
+
+  FAIL /tmp/hrpe-prefix-875 defines the b64() helper to round-trip
+== [BSD /usr/bin/base64] ephemeral publish end to end, no shim on PATH
+  FAIL publisher exits 0 (rc=64)
+       --- publisher stderr ---
+       base64: invalid argument /var/folders/dr/mlskyq0x48l379qbhy19jwfh0000gq/T/hrpe-selftest-8wjenuof/scripts/haiku-repo-add
+       Usage:	base64 [-Ddh] [-b num] [-i in_file] [-o out_file]
+         -b, --break       break encoded output up into lines of length num
+         -D, -d, --decode  decode input
+         -h, --help        display this message
+         -i, --input       input file (default: "-" for stdin)
+         -o, --output      output file (default: "-" for stdout)
+  ok   exactly one peer launched
+  ok   the launched peer is terminated on exit
+  ok   user data is one unwrapped base64 line
+  ok   user data decodes to the bootstrap script
+  FAIL the publish command reached ssm-run
+
+  FAIL /tmp/hrpe-prefix-875 defines the b64() helper to round-trip
+== [GNU /opt/homebrew/bin/gbase64] ephemeral publish end to end, no shim on PATH
+  ok   publisher exits 0 (rc=0)
+  ok   exactly one peer launched
+  ok   the launched peer is terminated on exit
+  ok   user data is one unwrapped base64 line
+  ok   user data decodes to the bootstrap script
+       sha256(shipped payloads + user data)=9b454c74c1ab62aba36771d0fbfd38c3c8dd61fbea1dc8dfce01b5d77361fda6
+  ok   haiku-repo-add decodes to the tracked file byte-for-byte (37497 bytes)
+  ok   haiku-publish-lock.sh decodes to the tracked file byte-for-byte (11982 bytes)
+  ok   haiku-repo-coherence decodes to the tracked file byte-for-byte (12460 bytes)
+  ok   hpkg_meta.py decodes to the tracked file byte-for-byte (21477 bytes)
+  ok   haiku-repo-coherence.baseline decodes to the tracked file byte-for-byte (4416 bytes)
+
+== a base64 that cannot encode stops the publish BEFORE a peer exists
+  ok   publisher exits non-zero (rc=64)
+  FAIL run-instances was never called
+  FAIL nothing needed terminating (no instance was created)
+  FAIL the incoming prefix was not touched
+
+== haiku-repo-publish-ephemeral: workstation-side base64 is the portable form
+  FAIL defines the b64() stdin helper
+  FAIL no other base64 invocation (positional file / -w0): 163: userdata=$(base64 -w0 <<-UD; 289: addb64=$(base64 -w0 "$HERE/haiku-repo-add"         2>/dev/null || base64 "$HERE/haiku-repo-add"        | tr -d '\n'); 290: lockb64=$(base64 -w0 "$HERE/haiku-publish-lock.sh" 2>/dev/null || base64 "$HERE/haiku-publish-lock.sh" | tr -d '\n'); 291: cohb64=$(base64  -w0 "$HERE/haiku-repo-coherence"  2>/dev/null || base64 "$HERE/haiku-repo-coherence" | tr -d '\n'); 292: metab64=$(base64 -w0 "$HERE/hpkg_meta.py"          2>/dev/null || base64 "$HERE/hpkg_meta.py"         | tr -d '\n'); 293: baseb64=$(base64 -w0 "$HERE/haiku-repo-coherence.baseline" 2>/dev/null || base64 "$HERE/haiku-repo-coherence.baseline" | tr -d '\n')
+== haiku-repo-publish-native: workstation-side base64 is the portable form
+  FAIL defines the b64() stdin helper
+  FAIL no other base64 invocation (positional file / -w0): 139: addb64=$(base64 -w0 "$HERE/haiku-repo-add"          2>/dev/null || base64 "$HERE/haiku-repo-add"          | tr -d '\n'); 140: awsb64=$(base64 -w0 "$HERE/haiku-aws"               2>/dev/null || base64 "$HERE/haiku-aws"               | tr -d '\n'); 141: lockb64=$(base64 -w0 "$HERE/haiku-publish-lock.sh"  2>/dev/null || base64 "$HERE/haiku-publish-lock.sh"   | tr -d '\n'); 142: cohb64=$(base64  -w0 "$HERE/haiku-repo-coherence"   2>/dev/null || base64 "$HERE/haiku-repo-coherence"     | tr -d '\n'); 143: metab64=$(base64 -w0 "$HERE/hpkg_meta.py"           2>/dev/null || base64 "$HERE/hpkg_meta.py"             | tr -d '\n'); 144: baseb64=$(base64 -w0 "$HERE/haiku-repo-coherence.baseline" 2>/dev/null || base64 "$HERE/haiku-repo-coherence.baseline" | tr -d '\n')
+
+FAILED: 11 assertion(s)
+rc=1

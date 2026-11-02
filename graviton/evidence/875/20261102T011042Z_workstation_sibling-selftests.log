@@ -1,0 +1,37 @@
+# host: workstation macOS 26.7.2; utc 20261102T011042Z
+$ python3 graviton/scripts/haiku-repo-coherence-selftest
+  ok   a failed coherence check aborts the publish (die), not just warns
+  ok   an absent coherence tool is not downgraded to a NOTE
+  ok   an absent coherence tool is fatal
+
+== the publishers that ship haiku-repo-add to a remote host carry the gate with it
+  ok   haiku-repo-publish-ephemeral ships haiku-repo-coherence to the peer
+  ok   haiku-repo-publish-ephemeral ships hpkg_meta.py to the peer
+  ok   haiku-repo-publish-ephemeral ships haiku-repo-coherence.baseline to the peer
+  ok   haiku-repo-publish-ephemeral chmod +x's the coherence tool on the peer
+  ok   haiku-repo-publish-native ships haiku-repo-coherence to the peer
+  ok   haiku-repo-publish-native ships hpkg_meta.py to the peer
+  ok   haiku-repo-publish-native ships haiku-repo-coherence.baseline to the peer
+  ok   haiku-repo-publish-native chmod +x's the coherence tool on the peer
+
+PASS
+rc=0
+$ python3 graviton/scripts/haiku-launch-selftest
+
+== haiku-launch's --reapable branch, executed
+  ok   the REAPABLE branch is still recognisable
+  ok   REAPABLE=0 yields NOSTOP_TAG=',{Key=auto-stop,Value=no}' (got ',{Key=auto-stop,Value=no}')
+  ok   REAPABLE=1 yields NOSTOP_TAG='' (got '')
+  ok   the opt-out is reachable from the command line
+
+== shell launchers still parse
+  ok   bash -n scripts/haiku-launch (clean)
+  ok   bash -n scripts/haiku-bake-builder (clean)
+  ok   bash -n scripts/haiku-perf-gate (clean)
+  ok   bash -n scripts/haiku-repo-publish-ephemeral (clean)
+  ok   py_compile pipeline/ops-lambdas/launch_builder.py (clean)
+
+PASS
+rc=0
+$ bash -n graviton/scripts/haiku-repo-publish-ephemeral && bash -n graviton/scripts/haiku-repo-publish-native
+rc=0
