@@ -1,0 +1,12 @@
+# evidence: 930-builder-find
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2
+# ssm command: ccd63ca7-f539-430d-b304-f9007fd359c3 (agent status: Success)
+# start: 20261102T152338Z   end: 20261102T152341Z   rc: 0   log bytes: 161
+# script sha256: 98df7247955119caf4288503103053fc91be1be808cfa96f72981825935bb642
+# ---- script ----
+# | HP=/boot/home/haikuports
+# | find $HP -maxdepth 3 -iname 'openssl*' | head
+# ---- raw output ----
+/boot/home/haikuports/dev-libs/openssl
+/boot/home/haikuports/dev-libs/openssl/openssl-1.1.1w.recipe
+/boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe

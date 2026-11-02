@@ -1,0 +1,16 @@
+# evidence: 930-builder-rid
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2
+# ssm command: a0929f3d-42d8-404b-a686-db4355467215 (agent status: Success)
+# start: 20261102T152635Z   end: 20261102T152638Z   rc: 0   log bytes: 562
+# script sha256: 549ae12af1a98eca8015520b652188b016e1500207ae474bc84c846ad40f9e75
+# ---- script ----
+# | ls -l /tmp/ccrun/ | tail -8; ps | grep -E "haikuporter|make|perl" | grep -v grep | head -5
+# ---- raw output ----
+-rw-r--r-- 1 baron root   71 Nov  2 15:23 cc-20261102T152338Z-860.sh
+-rw-r--r-- 1 baron root 1560 Nov  2 15:24 cc-20261102T152408Z-1738.log
+-rw-r--r-- 1 baron root 1344 Nov  2 15:24 cc-20261102T152408Z-1738.sh
+-rw-r--r-- 1 baron root   74 Nov  2 15:24 cc-20261102T152457Z-2880.log
+-rw-r--r-- 1 baron root    2 Nov  2 15:24 cc-20261102T152457Z-2880.rc
+-rw-r--r-- 1 baron root  158 Nov  2 15:24 cc-20261102T152457Z-2880.sh
+-rw-r--r-- 1 baron root    0 Nov  2 15:26 cc-20261102T152635Z-4839.log
+-rw-r--r-- 1 baron root   91 Nov  2 15:26 cc-20261102T152635Z-4839.sh

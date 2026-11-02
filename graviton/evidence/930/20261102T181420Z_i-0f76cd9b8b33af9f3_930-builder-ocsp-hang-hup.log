@@ -1,0 +1,42 @@
+# evidence: 930-builder-ocsp-hang-hup
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T181420Z   end: 20261102T181456Z   rc: 0
+# script sha256: 8e11ffcbc73d2cbf69cadec04534eeb1515ead9bf85d4f238a3f4d9df74d078c
+# ---- script ----
+# | date
+# | for p in 180280 180286; do ps | grep -w $p | grep -v grep; done
+# | echo "== kill -HUP 180286 180280"; kill -HUP 180286 180280; echo "rc=$?"; sleep 5
+# | alive=; for p in 180280 180286; do ps | grep -w "$p" | grep -v grep >/dev/null && alive="$alive $p"; done; echo "alive after HUP:${alive:- none}"
+# | if [ -n "$alive" ]; then echo "== kill -TERM$alive"; kill -TERM $alive; sleep 5; a2=; for p in $alive; do ps | grep -w "$p" | grep -v grep >/dev/null && a2="$a2 $p"; done; echo "alive after TERM:${a2:- none}"; fi
+# | sleep 10; ps | grep -E "test/recipes" | grep -v grep; tail -c 600 /boot/home/o3b.log
+# ---- raw output ----
+Mon Nov  2 18:14:28 GMT 2026
+/sources/openssl-3.5.9/test-runs/test_ocsp_cert_chain/../../app 180280        1    0    0 
+/sources/openssl-3.5.9/test-runs/test_ocsp_cert_chain/../../app 180286        1    0    0 
+== kill -HUP 180286 180280
+rc=0
+alive after HUP: 180280 180286
+== kill -TERM 180280 180286
+alive after TERM: none
+/boot/system/bin/perl -w test/recipes/90-test_sslapi.t 181860        1    0    0 
+ok 585 - iteration 3
+        ok 586 - iteration 4
+        ok 587 - iteration 5
+    ok 107 - test_npn
+        ok 588 - iteration 1
+        ok 589 - iteration 2
+        ok 590 - iteration 3
+        ok 591 - iteration 4
+    ok 108 - test_alpn
+        ok 592 - iteration 1
+        ok 593 - iteration 2
+        ok 594 - iteration 3
+        ok 595 - iteration 4
+        ok 596 - iteration 5
+        ok 597 - iteration 6
+    ok 109 - test_quic_tls
+    ok 110 - test_quic_tls_early_data
+        ok 598 - iteration 1
+        ok 599 - iteration 2
+    ok 111 - test_no_renegotiation
+        ok 600 - iteration 1

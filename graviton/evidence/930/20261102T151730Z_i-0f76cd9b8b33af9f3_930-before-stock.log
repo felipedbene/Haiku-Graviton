@@ -1,0 +1,78 @@
+# evidence: 930-before-stock
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2
+# ssm command: 61aa2f32-da4b-4469-8d6d-2d9392225421 (agent status: Success)
+# start: 20261102T151730Z   end: 20261102T151954Z   rc: 0   log bytes: 3723
+# script sha256: 506b934892a943d405ca8535828478247fa1c2947cc310cc341e01eaa0518abe
+# ---- script ----
+# | # measure: openssl identity, CPU settings and speed. OSSL=<openssl binary> (default: openssl on PATH)
+# | O=${OSSL:-openssl}
+# | uname -a
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | command -v $O; ls -l "$(command -v $O)"
+# | nproc 2>/dev/null || sysinfo -cpu | head -1
+# | echo '$ openssl version -a'; $O version -a; echo "rc=$?"
+# | echo '$ openssl info -cpusettings'; $O info -cpusettings; echo "rc=$?"
+# | echo '$ openssl speed -evp aes-256-gcm sha256 rsa2048'
+# | $O speed -evp aes-256-gcm sha256 rsa2048 2>&1; echo "speed rc=$?"
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# ---- raw output ----
+Haiku ip-10-128-15-135.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+2026-11-02T15:17:30Z
+/boot/system/bin/openssl
+-r-xr-xr-x 1 baron root 1225688 Oct 17 12:44 /boot/system/bin/openssl
+16
+$ openssl version -a
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+built on: Sat Oct 17 12:36:41 2026 UTC
+platform: haiku-x86
+options:  bn(64,32)
+compiler: cc -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wall -O2 -g -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+OPENSSLDIR: "/packages/openssl3-3.5.9-2/.self/data/ssl"
+ENGINESDIR: "/packages/openssl3-3.5.9-2/.self/lib/engines-3"
+MODULESDIR: "/packages/openssl3-3.5.9-2/.self/lib/ossl-modules"
+Seeding source: os-specific
+CPUINFO: N/A
+rc=0
+$ openssl info -cpusettings
+Undefined
+rc=0
+$ openssl speed -evp aes-256-gcm sha256 rsa2048
+Doing sha256 ops for 3s on 16 size blocks: 5192543 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 64 size blocks: 3755942 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 256 size blocks: 2041550 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 1024 size blocks: 720893 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 8192 size blocks: 102817 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 16384 size blocks: 51877 sha256 ops in 2.99s
+Doing AES-256-GCM ops for 3s on 16 size blocks: 5202694 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 64 size blocks: 2871527 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 256 size blocks: 1019935 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 1024 size blocks: 285036 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 8192 size blocks: 36945 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 16384 size blocks: 18534 AES-256-GCM ops in 2.99s
+Doing 2048 bits private rsa sign ops for 10s: 2245 2048 bits private RSA sign ops in 9.97s
+Doing 2048 bits public rsa verify ops for 10s: 91482 2048 bits public RSA verify ops in 9.97s
+Doing 2048 bits public rsa encrypt ops for 10s: 88363 2048 bits public RSA encrypt ops in 9.97s
+Doing 2048 bits private rsa decrypt ops for 10s: 2233 2048 bits private RSA decrypt ops in 9.97s
+Doing rsa2048 keygen ops for 10s: 35 rsa2048 KEM keygen ops in 10.18s
+Doing rsa2048 encaps ops for 10s: 86215 rsa2048 KEM encaps ops in 9.97s
+Doing rsa2048 decaps ops for 10s: 2245 rsa2048 KEM decaps ops in 9.97s
+Doing rsa2048 keygen ops for 10s: 33 rsa2048 signature keygen ops in 10.21s
+Doing rsa2048 signs ops for 10s: 2245 rsa2048 signature sign ops in 9.97s
+Doing rsa2048 verify ops for 10s: 91529 rsa2048 signature verify ops in 9.97s
+version: 3.5.9
+built on: Sat Oct 17 12:36:41 2026 UTC
+options: bn(64,32)
+compiler: cc -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wall -O2 -g -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+CPUINFO: N/A
+The 'numbers' are in 1000s of bytes per second processed.
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+sha256           27779.72k    80369.21k   174750.15k   246826.35k   281427.91k   284261.53k
+AES-256-GCM      27819.10k    61451.05k    87272.50k    97594.67k   101215.05k   101522.86k
+                   sign    verify    encrypt   decrypt   sign/s verify/s  encr./s  decr./s
+rsa  2048 bits 0.004440s 0.000109s 0.000113s 0.004464s    225.2   9178.9   8866.4    224.0
+                               keygen    encaps    decaps keygens/s  encaps/s  decaps/s
+                    rsa2048 0.290999s 0.000116s 0.004440s       3.4    8651.3     225.2
+                               keygen     signs    verify keygens/s    sign/s  verify/s
+                    rsa2048 0.309523s 0.004441s 0.000109s       3.2     225.2    9182.1
+speed rc=0
+2026-11-02T15:19:48Z

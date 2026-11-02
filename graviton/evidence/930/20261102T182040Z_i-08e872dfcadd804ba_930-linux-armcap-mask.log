@@ -1,0 +1,33 @@
+# evidence: 930-linux-armcap-mask
+# instance: i-08e872dfcadd804ba   region: us-west-2
+# ssm command: a28ee550-afbe-418b-8ff4-b50ab6326fbb (agent status: Success)
+# start: 20261102T182040Z   end: 20261102T182154Z   rc: 0   log bytes: 963
+# script sha256: 4b2b3d151dd057989907a05c627a576b2c34a5da3c170a0306fcb366394e1b17
+# ---- script ----
+# | export LD_LIBRARY_PATH=/opt/o930/inst/lib; O=/opt/o930/inst/bin/openssl
+# | uname -a; date -u +%Y-%m-%dT%H:%M:%SZ
+# | for m in "" 0xe7d 0x1e7d 0x3e7d; do
+# | 	echo "################ OPENSSL_armcap=${m:-<unset, detected>}"
+# | 	if [ -n "$m" ]; then export OPENSSL_armcap=$m; else unset OPENSSL_armcap; fi
+# | 	$O info -cpusettings
+# | 	$O speed -evp aes-256-gcm 2>/dev/null | grep -E "^AES-256-GCM|CPUINFO"
+# | done
+# ---- raw output ----
+Linux ip-10-128-12-157 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+2026-11-02T18:20:41Z
+################ OPENSSL_armcap=<unset, detected>
+OPENSSL_armcap=0x13ffd
+CPUINFO: OPENSSL_armcap=0x13ffd
+AES-256-GCM      66432.39k   246212.29k   774085.63k  2054003.24k  4721079.64k  5142784.68k
+################ OPENSSL_armcap=0xe7d
+OPENSSL_armcap=0xe7d env:0xe7d
+CPUINFO: OPENSSL_armcap=0xe7d env:0xe7d
+AES-256-GCM      66028.94k   242339.43k   802624.43k  1991605.93k  3549293.23k  3755272.87k
+################ OPENSSL_armcap=0x1e7d
+OPENSSL_armcap=0x1e7d env:0x1e7d
+CPUINFO: OPENSSL_armcap=0x1e7d env:0x1e7d
+AES-256-GCM      66031.62k   241927.51k   802543.79k  2045325.31k  4708513.11k  5140938.75k
+################ OPENSSL_armcap=0x3e7d
+OPENSSL_armcap=0x3e7d env:0x3e7d
+CPUINFO: OPENSSL_armcap=0x3e7d env:0x3e7d
+AES-256-GCM      66040.24k   242311.27k   802283.01k  2044013.23k  4719159.98k  5140370.77k

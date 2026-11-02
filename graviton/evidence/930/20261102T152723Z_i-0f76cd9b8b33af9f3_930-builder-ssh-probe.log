@@ -1,0 +1,9 @@
+# evidence: 930-builder-ssh-probe
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T152723Z   end: 20261102T152745Z   rc: 0
+# script sha256: a17ce24fbe63ae71d3d9b830e4e867bf1e285709df89a138150879ecc6f5009b
+# ---- script ----
+# | uname -a; ps | grep -iE "haikuporter|python3" | grep -v grep; echo probe-ok
+# ---- raw output ----
+Haiku ip-10-128-15-135.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 arm64 Haiku
+probe-ok

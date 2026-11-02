@@ -1,0 +1,11 @@
+# evidence: 930-builder-peek
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2
+# ssm command: a58f1639-6617-4da1-bc5a-ef84d1244498 (agent status: Success)
+# start: 20261102T152457Z   end: 20261102T152500Z   rc: 0   log bytes: 74
+# script sha256: 6274fe4d9015e8af35a2e04718f9a1a6e41eb260e6dd1f02abcf87ee93b4a38e
+# ---- script ----
+# | tail -c 600 /boot/home/o3.log; echo; grep -cE "^t/|\.t \.\." /boot/home/o3.log; grep -nE "Configured for|^platform|haiku-aarch64" /boot/home/o3.log | head -5
+# ---- raw output ----
+Warning: Found old repository format - repopulating the repository ...
+
+0

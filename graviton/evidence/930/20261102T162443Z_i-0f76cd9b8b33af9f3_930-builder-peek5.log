@@ -1,0 +1,41 @@
+# evidence: 930-builder-peek5
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T162443Z   end: 20261102T162504Z   rc: 0
+# script sha256: e67bedbcc0c985724596689fd0111a6a598ecafc4def72f4afa1bbf8a9e963ca
+# ---- script ----
+# | ls -l /boot/home/o3b.log; date; tail -c 1500 /boot/home/o3b.log; echo; ps | grep -E "perl|test" | grep -v grep | head
+# ---- raw output ----
+-rw-r--r-- 1 baron root 3259104 Nov  2 16:24 /boot/home/o3b.log
+Mon Nov  2 16:24:49 GMT 2026
+nce check (Message: 1 Extension: 7, 10)
+    ok 13 - Extension presence check (Message: 1 Extension: 7, 11)
+    ok 14 - Extension presence check (Message: 1 Extension: 7, 12)
+    ok 15 - Extension presence check (Message: 1 Extension: 0, 13)
+    ok 16 - Extension presence check (Message: 1 Extension: 0, 14)
+    ok 17 - Extension presence check (Message: 1 Extension: 7, 15)
+    ok 18 - Extensions count mismatch (11, 11)
+    ok 19 - Message type check. Got 2, expected 2
+    ok 20 - Extension presence check (Message: 2 Extension: 7, 34)
+    ok 21 - Extension presence check (Message: 2 Extension: 7, 35)
+    ok 22 - Extension presence check (Message: 2 Extension: 0, 36)
+    ok 23 - Extensions count mismatch (2, 2)
+    ok 24 - Message type check. Got 8, expected 8
+    ok 25 - Extension presence check (Message: 8 Extension: 0, 37)
+    ok 26 - Extension presence check (Message: 8 Extension: 0, 38)
+    ok 27 - Extension presence check (Message: 8 Extension: 1048576, 39)
+    ok 28 - Extensions count mismatch (1, 1)
+    ok 29 - Message type check. Got 11, expected 11
+    ok 30 - Extension presence check (Message: 11 Extension: 0, 41)
+    ok 31 - Extension presence check (Message: 11 Extension: 0, 42)
+    ok 32 - Extensions count mismatch (0, 0)
+    ok 33 - Message type check. Got 15, expected 15
+    ok 34 - Message type check. Got 20, expected 20
+    ok 35 - Message type check. Got 20, expected 20
+ok 17 - Acceptable but non preferred key_share70-test_tls13messages.t ................. ok
+
+/boot/system/bin/make VFP=1 test                   126925        1    0    0 
+/boot/system/bin/make _tests                       126926        1    0    0 
+/boot/system/bin/make run_tests                    126933        1    0    0 
+  PERL="perl" \
+/boot/system/bin/perl ./test/run_tests.pl          126936        1    0    0 
+/boot/system/bin/perl -w test/recipes/70-test_tls13psk.t 166482        1    0    0 

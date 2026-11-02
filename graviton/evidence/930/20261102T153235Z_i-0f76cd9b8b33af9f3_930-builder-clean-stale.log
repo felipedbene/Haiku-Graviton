@@ -1,0 +1,182 @@
+# evidence: 930-builder-clean-stale
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T153235Z   end: 20261102T153256Z   rc: 0
+# script sha256: 407f124eacb56e7fae65cce8d92f9a6b2fb4a3e575ae6823451fe1bb93e28ee4
+# ---- script ----
+# | W=/boot/home/haikuports/dev-libs/openssl/work-3.5.9
+# | for i in 1 2 3; do
+# | 	ids=$(ps | grep -E "/(make|cc|gcc|cc1|as|ld|perl|collect2)( |$)|bin/make |bin/perl |cc1 |/as " | grep -v grep | awk '{for(f=1;f<=NF;f++) if ($f ~ /^[0-9]+$/) {print $f; break}}')
+# | 	[ -n "$ids" ] || break
+# | 	echo "kill: $ids"; kill -KILL $ids 2>/dev/null; sleep 3
+# | done
+# | ps | grep -E "make|cc1|perl|haikuporter" | grep -v grep; echo "builder procs left: $(ps | grep -cE '[m]ake|[c]c1|[h]aikuporter')"
+# | df | grep -i work- ; unmount $W/boot/system && echo unmounted; df | grep -ic work- | sed 's/^/work mounts left: /'
+# | rm -rf $W && echo removed-work; ls /boot/home/haikuports/dev-libs/openssl/
+# ---- raw output ----
+builder procs left: 0
+[1m/boot/home/haikuports/dev-libs/openssl/work-3.5.9/boot/system 
+unmounted
+work mounts left: 0
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/acpi/call': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/acpi/namespace': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/bus/usb/raw': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/disk/nvme/0/0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/disk/nvme/0/1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/disk/nvme/0/raw': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/disk/virtual/ram/control': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/dprintf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/dvb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/fd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/full': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/graphics': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/input': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/misc/mem': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/misc/poke': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/net/ena/0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/null': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/ports': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/power/button/power': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/power/button/sleep': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/p9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/pa': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/pb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/pc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/pd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/pe': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/pf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/q9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/qa': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/qb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/qc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/qd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/qe': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/qf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/r9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/ra': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/rb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/rc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/rd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/re': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/rf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/s9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/sa': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/sb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/sc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/sd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/se': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/pt/sf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/ptmx': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/random': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/stderr': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/stdin': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/stdout': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/p9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/pa': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/pb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/pc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/pd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/pe': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/pf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/q9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/qa': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/qb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/qc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/qd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/qe': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/qf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/r9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/ra': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/rb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/rc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/rd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/re': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/rf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s0': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s1': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s2': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s3': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s4': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s5': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s6': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s7': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s8': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/s9': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/sa': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/sb': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/sc': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/sd': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/se': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tt/sf': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/tty': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/urandom': Read-only file system
+rm: cannot remove '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev/zero': Read-only file system
+download
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+work-1.1.1w
+work-3.5.9

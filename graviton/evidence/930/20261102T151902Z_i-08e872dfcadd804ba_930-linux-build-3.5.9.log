@@ -1,0 +1,47 @@
+# evidence: 930-linux-build-3.5.9
+# instance: i-08e872dfcadd804ba   region: us-west-2
+# ssm command: b9a86448-bae0-45e3-8101-decdef021bcd (agent status: Success)
+# start: 20261102T151902Z   end: 20261102T152011Z   rc: 0   log bytes: 1143
+# script sha256: e3bc51746db375ae751068bfc6015c9e3508be39d4979668b380e28c8718f577
+# ---- script ----
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | apt-get install -y -qq --no-install-recommends build-essential perl zlib1g-dev libzstd-dev curl ca-certificates > /dev/null; echo "apt rc=$?"
+# | mkdir -p /opt/o930 && cd /opt/o930 && rm -rf openssl-3.5.9
+# | curl -sSfLo o.tgz https://www.openssl.org/source/openssl-3.5.9.tar.gz || exit 1
+# | echo '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a  o.tgz' | sha256sum -c - || exit 1
+# | tar xzf o.tgz && cd openssl-3.5.9
+# | ./Configure linux-aarch64 --prefix=/opt/o930/inst enable-zlib enable-zstd shared -g -O2 2>&1 | tail -3
+# | make -j16 > /opt/o930/make.log 2>&1; echo "make rc=$?"; tail -3 /opt/o930/make.log
+# | make install_sw > /opt/o930/install.log 2>&1; echo "install rc=$?"
+# | LD_LIBRARY_PATH=/opt/o930/inst/lib /opt/o930/inst/bin/openssl version -a
+# ---- raw output ----
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+apt rc=0
+o.tgz: OK
+***   'Troubleshooting' section in the INSTALL.md file first)      ***
+***                                                                ***
+**********************************************************************
+make rc=0
+	apps/lib/uitest-bin-apps_ui.o test/uitest-bin-uitest.o \
+	-lssl test/libtestutil.a -lcrypto -lz -lzstd -ldl -pthread 
+make[1]: Leaving directory '/opt/o930/openssl-3.5.9'
+install rc=0
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+built on: Mon Nov  2 15:19:34 2026 UTC
+platform: linux-aarch64
+options:  bn(64,64)
+compiler: gcc -fPIC -pthread -Wa,--noexecstack -Wall -O3 -g -O2 -DOPENSSL_USE_NODELETE -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+OPENSSLDIR: "/opt/o930/inst/ssl"
+ENGINESDIR: "/opt/o930/inst/lib/engines-3"
+MODULESDIR: "/opt/o930/inst/lib/ossl-modules"
+Seeding source: os-specific
+CPUINFO: OPENSSL_armcap=0x13ffd

@@ -1,0 +1,57 @@
+# evidence: 930-builder-peek6
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T164456Z   end: 20261102T164518Z   rc: 0
+# script sha256: e67bedbcc0c985724596689fd0111a6a598ecafc4def72f4afa1bbf8a9e963ca
+# ---- script ----
+# | ls -l /boot/home/o3b.log; date; tail -c 1500 /boot/home/o3b.log; echo; ps | grep -E "perl|test" | grep -v grep | head
+# ---- raw output ----
+-rw-r--r-- 1 baron root 3282758 Nov  2 16:44 /boot/home/o3b.log
+Mon Nov  2 16:45:04 GMT 2026
+a attribute in expected sender
+    ok 12 - double attribute in expected sender
+    ok 13 - missing attribute in expected sender
+    ok 14 - bad syntax in expected sender name: leading double '/'
+    ok 15 - bad syntax in expected sender name: trailing double '/'
+    ok 16 - bad syntax in expected sender name: missing '='
+    ok 17 - expected sender empty attributes
+    ok 18 - explicit srvcert
+    ok 19 - reuse last srvcert
+    ok 20 - reuse last extracerts
+    ok 21 - output no srvcert empty extracerts
+    ok 22 - cannot reuse last srvcert
+    ok 23 - cannot reuse last extracerts
+    ok 24 - srvcert missing arg
+    ok 25 - wrong srvcert and -trusted ignored
+    ok 26 - srvcert is empty file
+    ok 27 - srvcert random content
+    ok 28 - no -trusted but srvcert
+    ok 29 - no -trusted and no -srvcert
+    ok 30 - trusted missing arg
+    ok 31 - wrong trusted cert
+    ok 32 - trusted empty file
+    ok 33 - trusted random file
+    ok 34 - trusted file does not exist
+    ok 35 - untrusted missing arg
+    ok 36 - untrusted not matching cert
+    ok 37 - untrusted empty file
+    ok 38 - untrusted random file
+    ok 39 - untrusted file does not exist
+    ok 40 - ignore key usage
+    ok 41 - ignorekeyusage with parameter
+    ok 42 - no unprotected errors - no errors
+    ok 43 - unprotected_errors with parameter
+    ok 44 - extracertsout
+    ok 45 - extracertsout no parameter
+    ok 46 - extracertsout multiple arguments
+ok 2 - CMP app CLI Mock verification
+    ok 1 - secret missing arg
+/boot/system/bin/make VFP=1 test                   126925        1    0    0 
+/boot/system/bin/make _tests                       126926        1    0    0 
+/boot/system/bin/make run_tests                    126933        1    0    0 
+  PERL="perl" \
+/boot/system/bin/perl ./test/run_tests.pl          126936        1    0    0 
+/boot/system/bin/perl -w test/recipes/80-test_cmp_http.t 167587        1    0    0 
+/boot/system/bin/perl ../../../../util/wrap.pl ../../../../apps 167589        1    0    0 
+/sources/openssl-3.5.9/test/recipes/80-test_cmp_http_data/Mock/ 167590        1    0    0 
+/boot/system/bin/perl ../../../../util/wrap.pl ../../../../apps 168886        1    0    0 
+/sources/openssl-3.5.9/test/recipes/80-test_cmp_http_data/Mock/ 168887        1    0    0 

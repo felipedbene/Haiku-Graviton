@@ -1,0 +1,141 @@
+# evidence: 930-ab-before-stock
+# instance: i-0245001cc442511c1   region: us-west-2
+# ssm command: 754b9db8-d187-4191-a6de-cb1aa2d44396 (agent status: Success)
+# start: 20261102T153559Z   end: 20261102T153823Z   rc: 0   log bytes: 5003
+# script sha256: 8b940a0cd4329d2c747b4c1c2cd47351e184204183db3b2c355736d75c52f6af
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | for p in cmd:curl cmd:node; do echo "== pkgman install $p"; feed | pkgman install $p 2>&1 | tail -2; done
+# | # measure: openssl identity, CPU settings and speed. OSSL=<openssl binary> (default: openssl on PATH)
+# | O=${OSSL:-openssl}
+# | uname -a
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | command -v $O; ls -l "$(command -v $O)"
+# | nproc 2>/dev/null || sysinfo -cpu | head -1
+# | echo '$ openssl version -a'; $O version -a; echo "rc=$?"
+# | echo '$ openssl info -cpusettings'; $O info -cpusettings; echo "rc=$?"
+# | echo '$ openssl speed -evp aes-256-gcm sha256 rsa2048'
+# | $O speed -evp aes-256-gcm sha256 rsa2048 2>&1; echo "speed rc=$?"
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | # TLS from curl, openssl s_client and Node, against public endpoints
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | pkgman list-installed 2>/dev/null | grep -E '^ *openssl3 ' ; ls /boot/system/packages | grep -E '^openssl3-|^curl-|^nodejs'
+# | echo '$ openssl version'; openssl version
+# | for h in www.amazon.com github.com; do
+# | 	echo "== curl https://$h/"
+# | 	curl -sS -o /dev/null -w 'http=%{http_code} ssl_verify=%{ssl_verify_result} tls_time=%{time_appconnect}s\n' https://$h/; echo "curl rc=$?"
+# | done
+# | echo '== curl -v handshake summary'; curl -sSv -o /dev/null https://www.amazon.com/ 2>&1 | grep -E 'SSL connection using|server certificate verification|subject:|issuer:' ; 
+# | echo '== openssl s_client'; echo | openssl s_client -connect www.amazon.com:443 -servername www.amazon.com -verify_return_error -brief 2>&1 | grep -vE '^\s*$' | head -12; echo "s_client rc=$?"
+# | echo '== node'
+# | command -v node && node -p 'process.versions.node + " openssl=" + process.versions.openssl'
+# | ldd_out=$(ls -l /boot/system/lib/libssl.so* 2>&1); echo "$ldd_out"
+# | node -e '
+# | const https=require("https");
+# | for (const h of ["www.amazon.com","github.com"]) {
+# |   const r=https.get({host:h,path:"/",headers:{"user-agent":"debeos-930"}},res=>{
+# |     const s=res.socket; console.log(h,"status",res.statusCode,"proto",s.getProtocol(),"cipher",s.getCipher().name,"authorized",s.authorized); res.resume();});
+# |   r.on("error",e=>{console.error(h,"ERROR",e.code||e.message);process.exitCode=1;});
+# | }'; echo "node rc=$?"
+# ---- raw output ----
+== pkgman install cmd:curl
+[system] Cleaning up ...
+[system] Done.
+== pkgman install cmd:node
+[system] Cleaning up ...
+[system] Done.
+Haiku ip-10-128-12-125.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+2026-11-02T15:36:02Z
+/boot/system/bin/openssl
+-r-xr-xr-x 1 baron root 1225688 Oct 17 12:44 /boot/system/bin/openssl
+16
+$ openssl version -a
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+built on: Sat Oct 17 12:36:41 2026 UTC
+platform: haiku-x86
+options:  bn(64,32)
+compiler: cc -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wall -O2 -g -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+OPENSSLDIR: "/packages/openssl3-3.5.9-2/.self/data/ssl"
+ENGINESDIR: "/packages/openssl3-3.5.9-2/.self/lib/engines-3"
+MODULESDIR: "/packages/openssl3-3.5.9-2/.self/lib/ossl-modules"
+Seeding source: os-specific
+CPUINFO: N/A
+rc=0
+$ openssl info -cpusettings
+Undefined
+rc=0
+$ openssl speed -evp aes-256-gcm sha256 rsa2048
+Doing sha256 ops for 3s on 16 size blocks: 5197852 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 64 size blocks: 3758303 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 256 size blocks: 2041893 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 1024 size blocks: 722547 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 8192 size blocks: 102793 sha256 ops in 2.99s
+Doing sha256 ops for 3s on 16384 size blocks: 51895 sha256 ops in 2.99s
+Doing AES-256-GCM ops for 3s on 16 size blocks: 5190834 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 64 size blocks: 2867850 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 256 size blocks: 1018227 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 1024 size blocks: 285186 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 8192 size blocks: 36973 AES-256-GCM ops in 2.99s
+Doing AES-256-GCM ops for 3s on 16384 size blocks: 18547 AES-256-GCM ops in 2.99s
+Doing 2048 bits private rsa sign ops for 10s: 2247 2048 bits private RSA sign ops in 9.97s
+Doing 2048 bits public rsa verify ops for 10s: 91410 2048 bits public RSA verify ops in 9.97s
+Doing 2048 bits public rsa encrypt ops for 10s: 88386 2048 bits public RSA encrypt ops in 9.96s
+Doing 2048 bits private rsa decrypt ops for 10s: 2235 2048 bits private RSA decrypt ops in 9.96s
+Doing rsa2048 keygen ops for 10s: 34 rsa2048 KEM keygen ops in 10.00s
+Doing rsa2048 encaps ops for 10s: 86700 rsa2048 KEM encaps ops in 9.96s
+Doing rsa2048 decaps ops for 10s: 2248 rsa2048 KEM decaps ops in 9.97s
+Doing rsa2048 keygen ops for 10s: 28 rsa2048 signature keygen ops in 10.14s
+Doing rsa2048 signs ops for 10s: 2246 rsa2048 signature sign ops in 9.97s
+Doing rsa2048 verify ops for 10s: 91515 rsa2048 signature verify ops in 9.97s
+version: 3.5.9
+built on: Sat Oct 17 12:36:41 2026 UTC
+options: bn(64,32)
+compiler: cc -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wall -O2 -g -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+CPUINFO: N/A
+The 'numbers' are in 1000s of bytes per second processed.
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+sha256           27818.47k    80407.31k   174781.55k   247438.67k   281546.32k   284317.27k
+AES-256-GCM      27769.63k    61313.46k    87116.89k    97637.51k   101178.91k   101550.61k
+                   sign    verify    encrypt   decrypt   sign/s verify/s  encr./s  decr./s
+rsa  2048 bits 0.004437s 0.000109s 0.000113s 0.004459s    225.4   9171.9   8869.8    224.3
+                               keygen    encaps    decaps keygens/s  encaps/s  decaps/s
+                    rsa2048 0.294198s 0.000115s 0.004433s       3.4    8700.7     225.6
+                               keygen     signs    verify keygens/s    sign/s  verify/s
+                    rsa2048 0.362026s 0.004439s 0.000109s       2.8     225.3    9183.1
+speed rc=0
+2026-11-02T15:38:19Z
+2026-11-02T15:38:19Z
+curl-8.21.0-1-arm64.hpkg
+nodejs20-20.15.1-2-arm64.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+$ openssl version
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+== curl https://www.amazon.com/
+http=200 ssl_verify=0 tls_time=0.023284s
+curl rc=0
+== curl https://github.com/
+http=200 ssl_verify=0 tls_time=0.028554s
+curl rc=0
+== curl -v handshake summary
+* SSL connection using TLSv1.3 / TLS_AES_128_GCM_SHA256 / X25519MLKEM768 / RSASSA-PSS
+*   subject: CN=www.amazon.com
+*   issuer: C=US; O=Amazon; CN=Amazon RSA 2048 M04
+== openssl s_client
+Connecting to 3.169.163.30
+CONNECTION ESTABLISHED
+Protocol version: TLSv1.3
+Ciphersuite: TLS_AES_128_GCM_SHA256
+Peer certificate: CN=www.amazon.com
+Hash used: SHA256
+Signature type: rsa_pss_rsae_sha256
+Verification: OK
+Negotiated TLS1.3 group: X25519MLKEM768
+DONE
+s_client rc=0
+== node
+/boot/system/bin/node
+20.15.1 openssl=3.5.7
+-r-xr-xr-x 1 baron root 1164752 Oct 17 12:44 /boot/system/lib/libssl.so.3
+github.com status 200 proto TLSv1.3 cipher TLS_AES_128_GCM_SHA256 authorized true
+www.amazon.com status 200 proto TLSv1.3 cipher TLS_AES_128_GCM_SHA256 authorized true
+node rc=0

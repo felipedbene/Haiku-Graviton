@@ -1,0 +1,66 @@
+# evidence: 930-linux-distro
+# instance: i-08e872dfcadd804ba   region: us-west-2
+# ssm command: 5323f1f4-4df6-4f26-b574-ff06e7067050 (agent status: Success)
+# start: 20261102T151730Z   end: 20261102T151830Z   rc: 0   log bytes: 3403
+# script sha256: 506b934892a943d405ca8535828478247fa1c2947cc310cc341e01eaa0518abe
+# ---- script ----
+# | # measure: openssl identity, CPU settings and speed. OSSL=<openssl binary> (default: openssl on PATH)
+# | O=${OSSL:-openssl}
+# | uname -a
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | command -v $O; ls -l "$(command -v $O)"
+# | nproc 2>/dev/null || sysinfo -cpu | head -1
+# | echo '$ openssl version -a'; $O version -a; echo "rc=$?"
+# | echo '$ openssl info -cpusettings'; $O info -cpusettings; echo "rc=$?"
+# | echo '$ openssl speed -evp aes-256-gcm sha256 rsa2048'
+# | $O speed -evp aes-256-gcm sha256 rsa2048 2>&1; echo "speed rc=$?"
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# ---- raw output ----
+Linux ip-10-128-12-157 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+2026-11-02T15:17:32Z
+/usr/bin/openssl
+-rwxr-xr-x 1 root root 1017208 Sep 16 18:47 /usr/bin/openssl
+16
+$ openssl version -a
+OpenSSL 3.0.13 30 Jan 2024 (Library: OpenSSL 3.0.13 30 Jan 2024)
+built on: Wed Sep 16 18:47:02 2026 UTC
+platform: debian-arm64
+options:  bn(64,64)
+compiler: gcc -fPIC -pthread -Wa,--noexecstack -Wall -fzero-call-used-regs=used-gpr -DOPENSSL_TLS_SECURITY_LEVEL=2 -Wa,--noexecstack -g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -ffile-prefix-map=/build/openssl-OQJ4SZ/openssl-3.0.13=. -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -mbranch-protection=standard -fdebug-prefix-map=/build/openssl-OQJ4SZ/openssl-3.0.13=/usr/src/openssl-3.0.13-0ubuntu3.16 -DOPENSSL_USE_NODELETE -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DNDEBUG -Wdate-time -D_FORTIFY_SOURCE=3
+OPENSSLDIR: "/usr/lib/ssl"
+ENGINESDIR: "/usr/lib/aarch64-linux-gnu/engines-3"
+MODULESDIR: "/usr/lib/aarch64-linux-gnu/ossl-modules"
+Seeding source: os-specific
+CPUINFO: OPENSSL_armcap=0xfd
+rc=0
+$ openssl info -cpusettings
+OPENSSL_armcap=0xfd
+rc=0
+$ openssl speed -evp aes-256-gcm sha256 rsa2048
+Doing sha256 for 3s on 16 size blocks: 14703376 sha256's in 3.00s
+Doing sha256 for 3s on 64 size blocks: 12927664 sha256's in 3.00s
+Doing sha256 for 3s on 256 size blocks: 8623287 sha256's in 3.00s
+Doing sha256 for 3s on 1024 size blocks: 3695493 sha256's in 3.00s
+Doing sha256 for 3s on 8192 size blocks: 584185 sha256's in 3.00s
+Doing sha256 for 3s on 16384 size blocks: 297732 sha256's in 3.00s
+Doing AES-256-GCM for 3s on 16 size blocks: 90617990 AES-256-GCM's in 3.00s
+Doing AES-256-GCM for 3s on 64 size blocks: 69276985 AES-256-GCM's in 3.00s
+Doing AES-256-GCM for 3s on 256 size blocks: 28235832 AES-256-GCM's in 3.00s
+Doing AES-256-GCM for 3s on 1024 size blocks: 10484699 AES-256-GCM's in 3.00s
+Doing AES-256-GCM for 3s on 8192 size blocks: 1423654 AES-256-GCM's in 3.00s
+Doing AES-256-GCM for 3s on 16384 size blocks: 715418 AES-256-GCM's in 3.00s
+Doing 2048 bits private rsa's for 10s: 10341 2048 bits private RSA's in 10.00s
+Doing 2048 bits public rsa's for 10s: 417932 2048 bits public RSA's in 10.00s
+version: 3.0.13
+built on: Wed Sep 16 18:47:02 2026 UTC
+options: bn(64,64)
+compiler: gcc -fPIC -pthread -Wa,--noexecstack -Wall -fzero-call-used-regs=used-gpr -DOPENSSL_TLS_SECURITY_LEVEL=2 -Wa,--noexecstack -g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -ffile-prefix-map=/build/openssl-OQJ4SZ/openssl-3.0.13=. -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -mbranch-protection=standard -fdebug-prefix-map=/build/openssl-OQJ4SZ/openssl-3.0.13=/usr/src/openssl-3.0.13-0ubuntu3.16 -DOPENSSL_USE_NODELETE -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DNDEBUG -Wdate-time -D_FORTIFY_SOURCE=3
+CPUINFO: OPENSSL_armcap=0xfd
+The 'numbers' are in 1000s of bytes per second processed.
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+sha256           78418.01k   275790.17k   735853.82k  1261394.94k  1595214.51k  1626013.70k
+AES-256-GCM     483295.95k  1477909.01k  2409457.66k  3578777.26k  3887524.52k  3907136.17k
+                  sign    verify    sign/s verify/s
+rsa 2048 bits 0.000967s 0.000024s   1034.1  41793.2
+speed rc=0
+2026-11-02T15:18:28Z

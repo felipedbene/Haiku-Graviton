@@ -1,0 +1,116 @@
+# evidence: 930-builder-failure-details
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T181626Z   end: 20261102T181647Z   rc: 0
+# script sha256: 9d9cd60eadbfa9ad8a9c05063bd086f12eda297b8e3179c0e9295e4be24e23b4
+# ---- script ----
+# | L=/boot/home/o3b.log
+# | for t in 02-test_errstr 04-test_bio_dgram 80-test_cmp_http 82-test_ocsp_cert_chain; do
+# | 	echo "################ $t"
+# | 	n=$(grep -n "^${t}\.t \.\.\.\|${t}\.t \.\." $L | head -1 | cut -d: -f1)
+# | 	grep -nE "not ok|# +Failed test|# +at |# +got|# +expected|error|ERROR" $L | awk -F: -v n="$n" '$1<=n' | tail -25
+# | done
+# ---- raw output ----
+################ 02-test_errstr
+12153:ok 67 # SKIP negative error codes are not supported in OpenSSL
+12154:ok 68 # SKIP negative error codes are not supported in OpenSSL
+12155:ok 69 # SKIP negative error codes are not supported in OpenSSL
+12156:ok 70 # SKIP negative error codes are not supported in OpenSSL
+12157:ok 71 # SKIP negative error codes are not supported in OpenSSL
+12158:ok 72 # SKIP negative error codes are not supported in OpenSSL
+12159:ok 73 # SKIP negative error codes are not supported in OpenSSL
+12160:ok 74 # SKIP negative error codes are not supported in OpenSSL
+12161:ok 75 # SKIP negative error codes are not supported in OpenSSL
+12162:ok 76 # SKIP negative error codes are not supported in OpenSSL
+12163:ok 77 # SKIP negative error codes are not supported in OpenSSL
+12164:ok 78 # SKIP negative error codes are not supported in OpenSSL
+12165:ok 79 # SKIP negative error codes are not supported in OpenSSL
+12166:ok 80 # SKIP negative error codes are not supported in OpenSSL
+12167:ok 81 # SKIP negative error codes are not supported in OpenSSL
+12168:ok 82 # SKIP negative error codes are not supported in OpenSSL
+12169:ok 83 # SKIP negative error codes are not supported in OpenSSL
+12170:ok 84 # SKIP negative error codes are not supported in OpenSSL
+12171:ok 85 # SKIP negative error codes are not supported in OpenSSL
+12172:ok 86 # SKIP negative error codes are not supported in OpenSSL
+12173:ok 87 # SKIP negative error codes are not supported in OpenSSL
+12174:ok 88 # SKIP negative error codes are not supported in OpenSSL
+12175:ok 89 # SKIP negative error codes are not supported in OpenSSL
+12176:ok 90 # SKIP negative error codes are not supported in OpenSSL
+12177:ok 91 # SKIP negative error codes are not supported in OpenSSL
+################ 04-test_bio_dgram
+12160:ok 74 # SKIP negative error codes are not supported in OpenSSL
+12161:ok 75 # SKIP negative error codes are not supported in OpenSSL
+12162:ok 76 # SKIP negative error codes are not supported in OpenSSL
+12163:ok 77 # SKIP negative error codes are not supported in OpenSSL
+12164:ok 78 # SKIP negative error codes are not supported in OpenSSL
+12165:ok 79 # SKIP negative error codes are not supported in OpenSSL
+12166:ok 80 # SKIP negative error codes are not supported in OpenSSL
+12167:ok 81 # SKIP negative error codes are not supported in OpenSSL
+12168:ok 82 # SKIP negative error codes are not supported in OpenSSL
+12169:ok 83 # SKIP negative error codes are not supported in OpenSSL
+12170:ok 84 # SKIP negative error codes are not supported in OpenSSL
+12171:ok 85 # SKIP negative error codes are not supported in OpenSSL
+12172:ok 86 # SKIP negative error codes are not supported in OpenSSL
+12173:ok 87 # SKIP negative error codes are not supported in OpenSSL
+12174:ok 88 # SKIP negative error codes are not supported in OpenSSL
+12175:ok 89 # SKIP negative error codes are not supported in OpenSSL
+12176:ok 90 # SKIP negative error codes are not supported in OpenSSL
+12177:ok 91 # SKIP negative error codes are not supported in OpenSSL
+15536:    ok 4 - test_property_parse_error
+15647:        not ok 3 - iteration 3
+15650:        not ok 4 - iteration 4
+15653:    not ok 1 - test_bio_dgram
+15660:not ok 1 - running bio_dgram_test
+15662:#   Failed test 'running bio_dgram_test'
+15663:#   at /sources/openssl-3.5.9/util/perl/OpenSSL/Test/Simple.pm line 77.
+################ 80-test_cmp_http
+31289:# cmp_server:apps/cmp.c:3323:CMP error: expecting empty path or 'pkix/' but got 'PKIX/'
+31621:# CMP error: wrong pbm value
+31622:# CMP error: error validating protection
+31623:# CMP DEBUG: sending ERROR
+31754:# CMP error: missing protection
+31755:# CMP DEBUG: sending ERROR
+32049:# CMP error: request not accepted:wrong certificate to revoke
+32050:# CMP DEBUG: sending ERROR
+32099:# CMP error: request not accepted:wrong certificate to revoke
+32100:# CMP DEBUG: sending ERROR
+32107:# CMP error: request not accepted:wrong certificate to revoke
+32108:# CMP DEBUG: sending ERROR
+32115:# CMP error: request not accepted:wrong certificate to revoke
+32116:# CMP DEBUG: sending ERROR
+32228:# CMP error: unknown crl issuer
+32229:# CMP DEBUG: sending ERROR
+32236:# CMP error: unknown crl issuer
+32237:# CMP DEBUG: sending ERROR
+32293:# CMP error: unexpected certprofile
+32294:# CMP DEBUG: sending ERROR
+32435:# CMP error: error unexpected certconf
+32436:# CMP DEBUG: sending ERROR
+32835:# CMP error: popo raverified not accepted
+32844:# CMP error: unsupported popo method
+33046:# CMP error: popo raverified not accepted
+################ 82-test_ocsp_cert_chain
+31623:# CMP DEBUG: sending ERROR
+31754:# CMP error: missing protection
+31755:# CMP DEBUG: sending ERROR
+32049:# CMP error: request not accepted:wrong certificate to revoke
+32050:# CMP DEBUG: sending ERROR
+32099:# CMP error: request not accepted:wrong certificate to revoke
+32100:# CMP DEBUG: sending ERROR
+32107:# CMP error: request not accepted:wrong certificate to revoke
+32108:# CMP DEBUG: sending ERROR
+32115:# CMP error: request not accepted:wrong certificate to revoke
+32116:# CMP DEBUG: sending ERROR
+32228:# CMP error: unknown crl issuer
+32229:# CMP DEBUG: sending ERROR
+32236:# CMP error: unknown crl issuer
+32237:# CMP DEBUG: sending ERROR
+32293:# CMP error: unexpected certprofile
+32294:# CMP DEBUG: sending ERROR
+32435:# CMP error: error unexpected certconf
+32436:# CMP DEBUG: sending ERROR
+32835:# CMP error: popo raverified not accepted
+32844:# CMP error: unsupported popo method
+33046:# CMP error: popo raverified not accepted
+36853:not ok 3 - check s_server sent ocsp response
+36855:#   Failed test 'check s_server sent ocsp response'
+36856:#   at test/recipes/82-test_ocsp_cert_chain.t line 138.

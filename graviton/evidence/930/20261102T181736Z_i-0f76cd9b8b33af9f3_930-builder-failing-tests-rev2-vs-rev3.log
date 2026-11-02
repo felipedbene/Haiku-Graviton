@@ -1,0 +1,83 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-failing-tests-rev2-vs-rev3
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T181736Z   end: 20261102T182423Z   rc: 0
+# script sha256: 95d906d218f193379f199a18ec3d05676970db534670c07ca1272d274ea88580
+# ---- script ----
+# | set -u
+# | T=/boot/home/t930; rm -rf $T; mkdir -p $T && cd $T || exit 1
+# | /boot/system/bin/curl -sSfo ab2.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/ab2.tgz?<PRESIGNED>' || exit 1
+# | echo '742f74a92086cbac46ac8502ecdec765737c22dc49397698211923950f90906b  ab2.tgz' | sha256sum -c - || exit 1
+# | tar xzf ab2.tgz 2>/dev/null; sha256sum p2/* p3/*
+# | SRC=/boot/home/haikuports/dev-libs/openssl/download/openssl-3.5.9.tar.gz
+# | echo '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a  '$SRC | sha256sum -c - || exit 1
+# | build() {	# build <rev> <configure...>
+# | 	local r=$1; shift
+# | 	mkdir -p $T/r$r && tar xzf $SRC -C $T/r$r && cd $T/r$r/openssl-3.5.9 || return 1
+# | 	patch -s -p1 < $T/p$r/openssl3-3.5.9.patchset || { echo "patch r$r failed"; return 1; }
+# | 	"$@" --prefix=$T/inst$r --openssldir=$T/inst$r/ssl enable-zlib enable-zstd shared -g > $T/conf$r.log 2>&1 || { tail $T/conf$r.log; return 1; }
+# | 	grep -E "^Configuring OpenSSL|for target" $T/conf$r.log
+# | 	make -j8 > $T/make$r.log 2>&1; echo "r$r make rc=$?"
+# | 	LD_LIBRARY_PATH=. LIBRARY_PATH=. ./apps/openssl version -a | grep -E "platform|options"
+# | }
+# | ( build 2 ./config no-asm ) &
+# | ( build 3 ./Configure haiku-aarch64 ) &
+# | wait
+# | TESTS="test_errstr test_bio_dgram test_cmp_http test_ocsp_cert_chain"
+# | runt() {	# SIGHUP back to default: this job runs under nohup, and the test
+# | 	# harness stops its servers with kill HUP.
+# | 	cd $T/r$1/openssl-3.5.9 && s=$(date +%s)
+# | 	LIBRARY_PATH=$PWD perl -e '$SIG{HUP}="DEFAULT"; exec @ARGV' make VFP=1 test TESTS="$TESTS" > $T/test$1.log 2>&1
+# | 	echo "r$1 test rc=$? wall=$(( $(date +%s) - s ))s"
+# | }
+# | ( runt 2 ) & ( runt 3 ) & wait
+# | for r in 2 3; do echo "################ rev $r"; grep -E "^[0-9]{2}-test_[a-z_]+\.t \.+|^Files=|^Result:|Failed test:|Wstat" $T/test$r.log; grep -nE "^\s*not ok" $T/test$r.log | head -20; done
+# ---- raw output ----
+ab2.tgz: OK
+83b6579a3040dbe35a1d1ade92c9c9f6eb78b93ffa66a9ca7d92e500d2500243  p2/openssl3-3.5.9.patchset
+cbd056d16991ad97b8069786219171884eba506db652b4599340d86d37b13717  p3/openssl3-3.5.9.patchset
+/boot/home/haikuports/dev-libs/openssl/download/openssl-3.5.9.tar.gz: OK
+Configuring OpenSSL version 3.5.9 for target haiku-x86
+Configuring OpenSSL version 3.5.9 for target haiku-aarch64
+r2 make rc=0
+platform: haiku-x86
+options:  bn(64,32)
+r3 make rc=0
+platform: haiku-aarch64
+options:  bn(64,64)
+r3 test rc=2 wall=60s
+r2 test rc=2 wall=63s
+################ rev 2
+Files=1, Tests=0,  0 wallclock secs ( 0.01 usr  0.01 sys +  0.18 cusr  0.04 csys =  0.24 CPU)
+Result: NOTESTS
+02-test_errstr.t         (Wstat: 256 (exited 1) Tests: 94 Failed: 1)
+  Failed test:  56
+04-test_bio_dgram.t      (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+  Failed test:  1
+82-test_ocsp_cert_chain.t (Wstat: 256 (exited 1) Tests: 3 Failed: 1)
+  Failed test:  3
+Files=4, Tests=104, 56 wallclock secs ( 0.18 usr  0.05 sys + 19.51 cusr  8.90 csys = 28.64 CPU)
+Result: FAIL
+73:not ok 56 - match 'Unknown General Error (-2147483616)' (80000020) with one of ( 'No Error (32)', 'reason(32)' )
+121:        not ok 3 - iteration 3
+124:        not ok 4 - iteration 4
+127:    not ok 1 - test_bio_dgram
+134:not ok 1 - running bio_dgram_test
+483:not ok 3 - check s_server sent ocsp response
+################ rev 3
+Files=1, Tests=0,  0 wallclock secs ( 0.01 usr  0.01 sys +  0.18 cusr  0.04 csys =  0.24 CPU)
+Result: NOTESTS
+02-test_errstr.t         (Wstat: 256 (exited 1) Tests: 94 Failed: 1)
+  Failed test:  3
+04-test_bio_dgram.t      (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+  Failed test:  1
+82-test_ocsp_cert_chain.t (Wstat: 256 (exited 1) Tests: 3 Failed: 1)
+  Failed test:  3
+Files=4, Tests=104, 53 wallclock secs ( 0.18 usr  0.04 sys + 17.46 cusr  9.03 csys = 26.71 CPU)
+Result: FAIL
+20:not ok 3 - match 'Unknown General Error (-2147483616)' (80000020) with one of ( 'No Error (32)', 'reason(32)' )
+121:        not ok 3 - iteration 3
+124:        not ok 4 - iteration 4
+127:    not ok 1 - test_bio_dgram
+134:not ok 1 - running bio_dgram_test
+483:not ok 3 - check s_server sent ocsp response

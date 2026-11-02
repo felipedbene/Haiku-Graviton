@@ -1,0 +1,9 @@
+# evidence: 930-ab-find-node24
+# instance: i-0245001cc442511c1   region: us-west-2
+# ssm command: 5f88fb78-cb30-43b9-ae41-5749cbb5e072 (agent status: Success)
+# start: 20261102T154059Z   end: 20261102T154102Z   rc: 0   log bytes: 5
+# script sha256: 962d2bb387a9876b66765f27b120e048b6e8e655d5b39587eee3050039fc8c15
+# ---- script ----
+# | package list /boot/system/packages/nodejs24-24.21.0-2-arm64.hpkg 2>/dev/null | grep -E "bin/|node$" | head; ls /boot/system/bin | grep -i node
+# ---- raw output ----
+node

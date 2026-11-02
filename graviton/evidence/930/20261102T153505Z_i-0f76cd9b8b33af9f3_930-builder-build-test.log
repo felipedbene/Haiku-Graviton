@@ -1,0 +1,110 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-build-test
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T153505Z   end: 20261102T153700Z   rc: 1
+# script sha256: d36a6bc230a7917735851b9ee3c0b48adb182f3c6d4dd8dd0dbef74d18e6e770
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports; D=$HP/dev-libs/openssl
+# | cd /boot/home/stage && curl -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED>' || exit 1
+# | echo '29b6e5ae639bcef4eb3887b49857ca31001175288cc4979621926bc4ba027557  stage-b.tgz' | sha256sum -c - || exit 1
+# | rm -rf o && tar xzf stage-b.tgz 2>/dev/null || exit 1
+# | cp o/openssl3-3.5.9.recipe $D/ && cp o/openssl3-3.5.9.patchset $D/patches/ || exit 1
+# | grep '^REVISION' $D/openssl3-3.5.9.recipe; sha256sum $D/openssl3-3.5.9.recipe $D/patches/openssl3-3.5.9.patchset
+# | ls $D; rm -rf $HP/packages/openssl3*
+# | cd $HP && s=$(date +%s); : | haikuporter -y -j16 --test openssl3 > /boot/home/o3b.log 2>&1; rc=$?
+# | echo "haikuporter exit $rc wall=$(( $(date +%s) - s ))s"
+# | echo "== configure:"; grep -nE "Configuring OpenSSL|for OS/compiler|^Configured for|Configure haiku|./config " /boot/home/o3b.log | head
+# | echo "== asm defines on a libcrypto compile line:"; grep -m1 -oE -- "-D[A-Z0-9_]*_ASM( -D[A-Z0-9_]*(_ASM|CPUID_OBJ|BN_ASM_MONT))*" /boot/home/o3b.log
+# | echo "== warnings in armcap.c:"; grep -n "armcap" /boot/home/o3b.log | grep -iE "warn|error" | head
+# | echo "== test summary:"; grep -nE "^Files=|^Result:|Failed test|Wstat|^All tests successful|Test Summary Report|^Running test" /boot/home/o3b.log | head -80
+# | ls -l $HP/packages/ 2>&1
+# | F=$HP/packages/openssl3-3.5.9-3-arm64.hpkg
+# | [ -f $F ] || { tail -60 /boot/home/o3b.log; exit 1; }
+# | sha256sum $HP/packages/*.hpkg
+# | echo "== hpkg metadata:"; package list -i $F | grep -iE "requires|provides|haiku|lib:" | head -30
+# | curl -sSf -X PUT --upload-file $F 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/openssl3-3.5.9-3-arm64.hpkg?<PRESIGNED>' && echo upload-ok
+# | exit $rc
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100   9607 100   9607   0      0 115.4k      0                              0100   9607 100   9607   0      0 115.1k      0                              0100   9607 100   9607   0      0 114.7k      0                              0
+[srccache] MISS https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED> (9607 bytes)
+stage-b.tgz: OK
+REVISION="3"
+7a85d7bf104ae8a1d026824f0fd519050f1bd57741812424bbcf61e2cb2396a3  /boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+d249cf9531fbe38ef2c98b5bb6e183970867287b49a55f36eb65678589568ddc  /boot/home/haikuports/dev-libs/openssl/patches/openssl3-3.5.9.patchset
+download
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+work-1.1.1w
+haikuporter exit 1 wall=104s
+== configure:
+82:Configuring OpenSSL version 3.5.9 for target haiku-aarch64
+== asm defines on a libcrypto compile line:
+-DBSAES_ASM -DECP_NISTZ256_ASM -DECP_SM2P256_ASM -DKECCAK1600_ASM -DMD5_ASM -DOPENSSL_BN_ASM_MONT -DOPENSSL_CPUID_OBJ -DOPENSSL_SM3_ASM -DPOLY1305_ASM -DSHA1_ASM -DSHA256_ASM -DSHA512_ASM -DSM4_ASM -DVPAES_ASM -DVPSM4_ASM
+== warnings in armcap.c:
+== test summary:
+total 0
+/boot/system/develop/headers/posix/string.h:50: Error: unknown mnemonic `extern' -- `extern char*strpbrk(const char*string,const char*set)'
+/boot/system/develop/headers/posix/string.h:51: Error: unknown mnemonic `extern' -- `extern char*strtok(char*string,const char*set)'
+/boot/system/develop/headers/posix/string.h:52: Error: unknown mnemonic `extern' -- `extern char*strtok_r(char*string,const char*set,char**savePointer)'
+/boot/system/develop/headers/posix/string.h:53: Error: unknown mnemonic `extern' -- `extern size_t strspn(const char*string,const char*set)'
+/boot/system/develop/headers/posix/string.h:54: Error: unknown mnemonic `extern' -- `extern size_t strcspn(const char*string,const char*set)'
+/boot/system/develop/headers/posix/string.h:56: Error: unknown mnemonic `extern' -- `extern int strcoll(const char*string1,const char*string2)'
+/boot/system/develop/headers/posix/string.h:57: Error: unknown mnemonic `extern' -- `extern size_t strxfrm(char*string1,const char*string2,size_t length)'
+/boot/system/develop/headers/posix/string.h:59: Error: unknown mnemonic `extern' -- `extern char*strerror(int errorCode)'
+/boot/system/develop/headers/posix/string.h:60: Error: unknown mnemonic `extern' -- `extern int strerror_r(int errorCode,char*buffer,size_t bufferSize)'
+/boot/system/develop/headers/posix/string.h:62: Error: unknown mnemonic `extern' -- `extern char*strcasestr(const char*string,const char*searchString)'
+/boot/system/develop/headers/posix/string.h:64: Error: unknown mnemonic `extern' -- `extern char*strdup(const char*string)'
+/boot/system/develop/headers/posix/string.h:65: Error: unknown mnemonic `extern' -- `extern char*strndup(const char*string,size_t size)'
+/boot/system/develop/headers/posix/string.h:66: Error: unknown mnemonic `extern' -- `extern char*stpcpy(char*dest,const char*source)'
+/boot/system/develop/headers/posix/string.h:67: Error: unknown mnemonic `extern' -- `extern char*stpncpy(char*dest,const char*source,size_t size)'
+/boot/system/develop/headers/posix/string.h:69: Error: unknown mnemonic `extern' -- `extern size_t strlcat(char*dest,const char*source,size_t length)'
+/boot/system/develop/headers/posix/string.h:70: Error: unknown mnemonic `extern' -- `extern size_t strlcpy(char*dest,const char*source,size_t length)'
+/boot/system/develop/headers/posix/string.h:72: Error: unknown mnemonic `extern' -- `extern size_t strnlen(const char*string,size_t count)'
+/boot/system/develop/headers/posix/string.h:74: Error: unknown mnemonic `extern' -- `extern char*strlwr(char*string)'
+/boot/system/develop/headers/posix/string.h:75: Error: unknown mnemonic `extern' -- `extern char*strupr(char*string)'
+/boot/system/develop/headers/posix/string.h:77: Error: unknown mnemonic `extern' -- `extern const char*strsignal(int signum)'
+/boot/system/develop/headers/posix/string.h:80: Error: unknown mnemonic `extern' -- `extern int strcoll_l(const char*string1,const char*string2,locale_t locale)'
+/boot/system/develop/headers/posix/string.h:81: Error: unknown mnemonic `extern' -- `extern char*strerror_l(int errorCode,locale_t locale)'
+/boot/system/develop/headers/posix/string.h:82: Error: unknown mnemonic `extern' -- `extern size_t strxfrm_l(char*string1,const char*string2,size_t length,locale_t locale)'
+/boot/system/develop/headers/posix/strings.h:17: Error: unknown mnemonic `extern' -- `extern int ffs(int i)'
+/boot/system/develop/headers/posix/strings.h:18: Error: unknown mnemonic `extern' -- `extern int ffsl(long i)'
+/boot/system/develop/headers/posix/strings.h:19: Error: unknown mnemonic `extern' -- `extern int ffsll(long long i)'
+/boot/system/develop/headers/posix/strings.h:21: Error: unknown mnemonic `extern' -- `extern int strcasecmp(const char*string1,const char*string2)'
+/boot/system/develop/headers/posix/strings.h:22: Error: unknown mnemonic `extern' -- `extern int strncasecmp(const char*string1,const char*string2,'
+/boot/system/develop/headers/posix/strings.h:23: Error: unknown mnemonic `size_t' -- `size_t length)'
+/boot/system/develop/headers/posix/strings.h:25: Error: unknown mnemonic `extern' -- `extern int strcasecmp_l(const char*string1,const char*string2,locale_t locale)'
+/boot/system/develop/headers/posix/strings.h:26: Error: unknown mnemonic `extern' -- `extern int strncasecmp_l(const char*string1,const char*string2,'
+/boot/system/develop/headers/posix/strings.h:27: Error: unknown mnemonic `size_t' -- `size_t length,locale_t locale)'
+/boot/system/develop/headers/posix/strings.h:34: Error: unknown mnemonic `extern' -- `extern char*index(const char*s,int c)'
+/boot/system/develop/headers/posix/strings.h:35: Error: unknown mnemonic `extern' -- `extern char*rindex(char const*s,int c)'
+/boot/system/develop/headers/bsd/string.h:20: Error: unknown mnemonic `char' -- `char* strsep(char**string,const char*delimiters)'
+/boot/system/develop/headers/bsd/string.h:21: Error: unknown mnemonic `void' -- `void explicit_bzero(void*buf,size_t len)'
+/boot/system/develop/headers/posix/sys/select.h:22: Error: unknown mnemonic `typedef' -- `typedef __haiku_uint32 fd_mask'
+/boot/system/develop/headers/posix/sys/select.h:26: Error: unknown mnemonic `typedef' -- `typedef struct fd_set{'
+/boot/system/develop/headers/posix/sys/select.h:27: Error: unknown mnemonic `fd_mask' -- `fd_mask bits[((1024)+(((sizeof(fd_mask)*8))-1))/((sizeof(fd_mask)*8))]'
+/boot/system/develop/headers/posix/sys/select.h:28: Error: junk at end of line, first unrecognized character is `}'
+/boot/system/develop/headers/posix/sys/select.h:44: Error: unknown mnemonic `extern' -- `extern int pselect(int numBits,struct fd_set*readBits,struct fd_set*writeBits,'
+/boot/system/develop/headers/posix/sys/select.h:45: Error: unknown mnemonic `struct' -- `struct fd_set*errorBits,const struct timespec*timeout,const sigset_t*sigMask)'
+/boot/system/develop/headers/posix/sys/select.h:46: Error: unknown mnemonic `extern' -- `extern int select(int numBits,struct fd_set*readBits,struct fd_set*writeBits,'
+/boot/system/develop/headers/posix/sys/select.h:47: Error: unknown mnemonic `struct' -- `struct fd_set*errorBits,struct timeval*timeout)'
+make[1]: *** [Makefile:25144: crypto/md5/liblegacy-lib-md5-aarch64.o] Error 1
+make[1]: *** Waiting for unfinished jobs....
+make[1]: Leaving directory '/sources/openssl-3.5.9'
+make: *** [Makefile:3912: build_sw] Error 2
+Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 2.
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/dev-libs/openssl/work-3.5.9 intact for inspection
+Checking if any dependency-infos need to be updated ...
+	updating dependency infos of openssl3-3.5.9
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+dev-libs::openssl3-3.5.9
+	/boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

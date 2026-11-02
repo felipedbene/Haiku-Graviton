@@ -1,0 +1,85 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-build-test-v3c
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T154209Z   end: 20261102T181555Z   rc: 1
+# script sha256: 3c04c80cd0414d01affc0655d463063d75527866f8f1fa46f2ccffa6a3ad118f
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports; D=$HP/dev-libs/openssl
+# | cd /boot/home/stage && rm -f stage-c.tgz && /boot/system/bin/curl -sSfo stage-c.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-c.tgz?<PRESIGNED>' || exit 1
+# | echo 'e2742450e39f7331e8887423bb9eb96e076a0ce21780a791e42781d5dca7b656  stage-c.tgz' | sha256sum -c - || exit 1
+# | rm -rf o && tar xzf stage-c.tgz 2>/dev/null || exit 1
+# | cp o/openssl3-3.5.9.recipe $D/ && cp o/openssl3-3.5.9.patchset $D/patches/ || exit 1
+# | grep '^REVISION' $D/openssl3-3.5.9.recipe; sha256sum $D/openssl3-3.5.9.recipe $D/patches/openssl3-3.5.9.patchset
+# | ls $D
+# | W=$D/work-3.5.9
+# | if [ -d $W ]; then for m in $W/dev $W/boot/system; do unmount $m 2>/dev/null && echo "unmounted $m"; done; rm -rf $W || exit 1; fi
+# | rm -rf $HP/packages/openssl3*
+# | cd $HP && s=$(date +%s); : | haikuporter -y -j16 --test openssl3 > /boot/home/o3b.log 2>&1; rc=$?
+# | echo "haikuporter exit $rc wall=$(( $(date +%s) - s ))s"
+# | echo "== configure:"; grep -nE "Configuring OpenSSL|for OS/compiler|^Configured for|Configure haiku|./config " /boot/home/o3b.log | head
+# | echo "== asm defines on a libcrypto compile line:"; grep -m1 -oE -- "-D[A-Z0-9_]*_ASM( -D[A-Z0-9_]*(_ASM|CPUID_OBJ|BN_ASM_MONT))*" /boot/home/o3b.log
+# | echo "== warnings in armcap.c:"; grep -n "armcap" /boot/home/o3b.log | grep -iE "warn|error" | head
+# | echo "== test summary:"; grep -nE "^Files=|^Result:|Failed test|Wstat|^All tests successful|Test Summary Report|^Running test" /boot/home/o3b.log | head -80
+# | ls -l $HP/packages/ 2>&1
+# | F=$HP/packages/openssl3-3.5.9-3-arm64.hpkg
+# | [ -f $F ] || { tail -60 /boot/home/o3b.log; exit 1; }
+# | sha256sum $HP/packages/*.hpkg
+# | echo "== hpkg metadata:"; package list -i $F | grep -iE "requires|provides|haiku|lib:" | head -30
+# | /boot/system/bin/curl -sSf -X PUT --upload-file $F 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/openssl3-3.5.9-3-arm64.hpkg?<PRESIGNED>' && echo upload-ok
+# | exit $rc
+# ---- raw output ----
+stage-c.tgz: OK
+REVISION="3"
+7a85d7bf104ae8a1d026824f0fd519050f1bd57741812424bbcf61e2cb2396a3  /boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+cbd056d16991ad97b8069786219171884eba506db652b4599340d86d37b13717  /boot/home/haikuports/dev-libs/openssl/patches/openssl3-3.5.9.patchset
+download
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+work-1.1.1w
+work-3.5.9
+haikuporter exit 1 wall=9202s
+== configure:
+82:Configuring OpenSSL version 3.5.9 for target haiku-aarch64
+== asm defines on a libcrypto compile line:
+-DBSAES_ASM -DECP_NISTZ256_ASM -DECP_SM2P256_ASM -DKECCAK1600_ASM -DMD5_ASM -DOPENSSL_BN_ASM_MONT -DOPENSSL_CPUID_OBJ -DOPENSSL_SM3_ASM -DPOLY1305_ASM -DSHA1_ASM -DSHA256_ASM -DSHA512_ASM -DSM4_ASM -DVPAES_ASM -DVPSM4_ASM
+== warnings in armcap.c:
+== test summary:
+12026:Files=1, Tests=0,  1 wallclock secs ( 0.01 usr  0.00 sys +  0.18 cusr  0.03 csys =  0.23 CPU)
+12027:Result: NOTESTS
+15662:#   Failed test 'running bio_dgram_test'
+36855:#   Failed test 'check s_server sent ocsp response'
+42513:Test Summary Report
+42515:02-test_errstr.t                      (Wstat: 256 (exited 1) Tests: 94 Failed: 1)
+42516:  Failed test:  41
+42518:04-test_bio_dgram.t                   (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+42519:  Failed test:  1
+42521:80-test_cmp_http.t                    (Wstat: 256 (exited 1) Tests: 6 Failed: 1)
+42522:  Failed test:  1
+42524:82-test_ocsp_cert_chain.t             (Wstat: 256 (exited 1) Tests: 3 Failed: 1)
+42525:  Failed test:  3
+42527:Files=347, Tests=4475, 8695 wallclock secs ( 4.94 usr  1.38 sys + 504.80 cusr 390.36 csys = 901.48 CPU)
+42528:Result: FAIL
+total 12260
+-rw-r--r-- 1 baron root 4131668 Nov  2 15:50 openssl3-3.5.9-3-arm64.hpkg
+-rw-r--r-- 1 baron root 5708397 Nov  2 15:50 openssl3_debuginfo-3.5.9-3-arm64.hpkg
+-rw-r--r-- 1 baron root 2179840 Nov  2 15:50 openssl3_devel-3.5.9-3-arm64.hpkg
+-rw-r--r-- 1 baron root  520662 Nov  2 15:50 openssl3_man-3.5.9-3-any.hpkg
+fe75f712d3f0eabf4229fc0007ece60f5b413d8bd660a377a6bae03d6cb64d4c  /boot/home/haikuports/packages/openssl3-3.5.9-3-arm64.hpkg
+7bdb3bccdd12ec713840e727d4492913782e73a0dbfb1c24b024f0caa14a7a2f  /boot/home/haikuports/packages/openssl3_debuginfo-3.5.9-3-arm64.hpkg
+c372ca8bf2b71f1f88eb955d8f1c0a91edfe21689c156e2ba6ddcce0c755db35  /boot/home/haikuports/packages/openssl3_devel-3.5.9-3-arm64.hpkg
+79a6fbf45fce6662dc09f28a91181ecb0661315fef105ef3f27807434c1b7531  /boot/home/haikuports/packages/openssl3_man-3.5.9-3-any.hpkg
+== hpkg metadata:
+	vendor: Haiku Project
+	provides: openssl3 = 3.5.9 (compatible >= 3)
+	provides: lib:libcrypto = 3 (compatible >= 3)
+	provides: lib:libssl = 3 (compatible >= 3)
+	provides: cmd:c_rehash = 3.5.9 (compatible >= 3)
+	provides: cmd:openssl = 3.5.9 (compatible >= 3)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libz>=1.3.2
+	requires: lib:libzstd>=1.5.7
+	requires: ca_root_certificates>=2026_07_16
+upload-ok

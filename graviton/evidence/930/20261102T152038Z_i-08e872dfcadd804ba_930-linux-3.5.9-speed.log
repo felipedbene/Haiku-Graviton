@@ -1,0 +1,79 @@
+# evidence: 930-linux-3.5.9-speed
+# instance: i-08e872dfcadd804ba   region: us-west-2
+# ssm command: 6796b0df-a0e7-4187-9f3d-6a3cdc52c23c (agent status: Success)
+# start: 20261102T152038Z   end: 20261102T152300Z   rc: 0   log bytes: 3782
+# script sha256: 9b09fab4c85cd56e73988cdd7a01e6b6ee4a7bafb853bdc35021fb37366b2540
+# ---- script ----
+# | export LD_LIBRARY_PATH=/opt/o930/inst/lib OSSL=/opt/o930/inst/bin/openssl
+# | # measure: openssl identity, CPU settings and speed. OSSL=<openssl binary> (default: openssl on PATH)
+# | O=${OSSL:-openssl}
+# | uname -a
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | command -v $O; ls -l "$(command -v $O)"
+# | nproc 2>/dev/null || sysinfo -cpu | head -1
+# | echo '$ openssl version -a'; $O version -a; echo "rc=$?"
+# | echo '$ openssl info -cpusettings'; $O info -cpusettings; echo "rc=$?"
+# | echo '$ openssl speed -evp aes-256-gcm sha256 rsa2048'
+# | $O speed -evp aes-256-gcm sha256 rsa2048 2>&1; echo "speed rc=$?"
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# ---- raw output ----
+Linux ip-10-128-12-157 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+2026-11-02T15:20:40Z
+/opt/o930/inst/bin/openssl
+-rwxr-xr-x 1 root root 3084176 Nov  2 15:20 /opt/o930/inst/bin/openssl
+16
+$ openssl version -a
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+built on: Mon Nov  2 15:19:34 2026 UTC
+platform: linux-aarch64
+options:  bn(64,64)
+compiler: gcc -fPIC -pthread -Wa,--noexecstack -Wall -O3 -g -O2 -DOPENSSL_USE_NODELETE -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+OPENSSLDIR: "/opt/o930/inst/ssl"
+ENGINESDIR: "/opt/o930/inst/lib/engines-3"
+MODULESDIR: "/opt/o930/inst/lib/ossl-modules"
+Seeding source: os-specific
+CPUINFO: OPENSSL_armcap=0x13ffd
+rc=0
+$ openssl info -cpusettings
+OPENSSL_armcap=0x13ffd
+rc=0
+$ openssl speed -evp aes-256-gcm sha256 rsa2048
+Doing sha256 ops for 3s on 16 size blocks: 15765432 sha256 ops in 3.00s
+Doing sha256 ops for 3s on 64 size blocks: 13931221 sha256 ops in 3.00s
+Doing sha256 ops for 3s on 256 size blocks: 9052171 sha256 ops in 3.00s
+Doing sha256 ops for 3s on 1024 size blocks: 3776442 sha256 ops in 3.00s
+Doing sha256 ops for 3s on 8192 size blocks: 586197 sha256 ops in 3.00s
+Doing sha256 ops for 3s on 16384 size blocks: 298258 sha256 ops in 3.00s
+Doing AES-256-GCM ops for 3s on 16 size blocks: 12459247 AES-256-GCM ops in 3.00s
+Doing AES-256-GCM ops for 3s on 64 size blocks: 11528283 AES-256-GCM ops in 3.00s
+Doing AES-256-GCM ops for 3s on 256 size blocks: 9071385 AES-256-GCM ops in 3.00s
+Doing AES-256-GCM ops for 3s on 1024 size blocks: 5990689 AES-256-GCM ops in 3.00s
+Doing AES-256-GCM ops for 3s on 8192 size blocks: 1728658 AES-256-GCM ops in 3.00s
+Doing AES-256-GCM ops for 3s on 16384 size blocks: 941595 AES-256-GCM ops in 3.00s
+Doing 2048 bits private rsa sign ops for 10s: 10377 2048 bits private RSA sign ops in 10.00s
+Doing 2048 bits public rsa verify ops for 10s: 412316 2048 bits public RSA verify ops in 10.00s
+Doing 2048 bits public rsa encrypt ops for 10s: 390402 2048 bits public RSA encrypt ops in 9.86s
+Doing 2048 bits private rsa decrypt ops for 10s: 10296 2048 bits private RSA decrypt ops in 10.00s
+Doing rsa2048 keygen ops for 10s: 134 rsa2048 KEM keygen ops in 10.03s
+Doing rsa2048 encaps ops for 10s: 371878 rsa2048 KEM encaps ops in 9.89s
+Doing rsa2048 decaps ops for 10s: 10368 rsa2048 KEM decaps ops in 10.00s
+Doing rsa2048 keygen ops for 10s: 132 rsa2048 signature keygen ops in 10.02s
+Doing rsa2048 signs ops for 10s: 10372 rsa2048 signature sign ops in 10.00s
+Doing rsa2048 verify ops for 10s: 412633 rsa2048 signature verify ops in 10.00s
+version: 3.5.9
+built on: Mon Nov  2 15:19:34 2026 UTC
+options: bn(64,64)
+compiler: gcc -fPIC -pthread -Wa,--noexecstack -Wall -O3 -g -O2 -DOPENSSL_USE_NODELETE -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+CPUINFO: OPENSSL_armcap=0x13ffd
+The 'numbers' are in 1000s of bytes per second processed.
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+sha256           84082.30k   297199.38k   772451.93k  1289025.54k  1600708.61k  1628886.36k
+AES-256-GCM      66449.32k   245936.70k   774091.52k  2044821.85k  4720388.78k  5142364.16k
+                   sign    verify    encrypt   decrypt   sign/s verify/s  encr./s  decr./s
+rsa  2048 bits 0.000964s 0.000024s 0.000025s 0.000971s   1037.7  41231.6  39594.5   1029.6
+                               keygen    encaps    decaps keygens/s  encaps/s  decaps/s
+                    rsa2048 0.074851s 0.000027s 0.000965s      13.4   37601.4    1036.8
+                               keygen     signs    verify keygens/s    sign/s  verify/s
+                    rsa2048 0.075909s 0.000964s 0.000024s      13.2    1037.2   41263.3
+speed rc=0
+2026-11-02T15:22:56Z

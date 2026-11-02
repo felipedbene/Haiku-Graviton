@@ -1,0 +1,30 @@
+# evidence: 930-ab-bn-ulong-importers
+# instance: i-0245001cc442511c1   region: us-west-2
+# ssm command: fa3d84c3-666c-420a-b1ca-228d3fb7b688 (agent status: Success)
+# start: 20261102T182227Z   end: 20261102T182242Z   rc: 0   log bytes: 366
+# script sha256: a011fb59f81567e73d60c6cec4c4f2d0865de30a3e5dde789b291fc64262a496
+# ---- script ----
+# | # Which ELF objects on this image import a libcrypto function whose prototype uses BN_ULONG
+# | # (32-bit under rev 2's bn(64,32), 64-bit under rev 3's bn(64,64))?
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | command -v objdump >/dev/null || { feed | pkgman install cmd:objdump 2>&1 | tail -1; }
+# | F='BN_(set|get|add|sub|mul|div|mod|is|abs_is)_word|BN_mod_exp_mont_word|BN_GENCB|BN_bn2binpad'
+# | echo "== BN_ULONG prototypes in the rev-3 headers are those named by: $F"
+# | pkgman list-installed 2>/dev/null | wc -l
+# | for d in /boot/system/bin /boot/system/lib /boot/system/apps /boot/system/servers /boot/system/add-ons /boot/system/lib/node_modules; do
+# | 	find $d -type f 2>/dev/null
+# | done | while read -r f; do
+# | 	head -c 4 "$f" 2>/dev/null | grep -q ELF || continue
+# | 	case "$f" in */libcrypto.so*|*/libssl.so*|*/engines-3/*|*/ossl-modules/*) continue;; esac
+# | 	s=$(objdump -T "$f" 2>/dev/null | awk '$4=="*UND*"||$3=="*UND*"{print $NF}' | grep -E "^($F)$" | sort -u | tr '\n' ' ')
+# | 	[ -n "$s" ] && echo "$f: $s"
+# | done
+# | echo scan-done
+# ---- raw output ----
+[system] Done.
+== BN_ULONG prototypes in the rev-3 headers are those named by: BN_(set|get|add|sub|mul|div|mod|is|abs_is)_word|BN_mod_exp_mont_word|BN_GENCB|BN_bn2binpad
+0
+/boot/system/bin/node: BN_add_word BN_bn2binpad BN_get_word BN_set_word BN_sub_word 
+/boot/system/bin/openssl: BN_add_word BN_set_word 
+/boot/system/lib/libssh2.so.1.0.1: BN_set_word 
+scan-done
