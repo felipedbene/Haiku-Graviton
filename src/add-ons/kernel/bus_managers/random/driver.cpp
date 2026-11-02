@@ -102,6 +102,16 @@ static status_t
 random_control(void *cookie, uint32 op, void *arg, size_t length)
 {
 	TRACE("ioctl(%ld)\n", op);
+
+	switch (op) {
+		case B_SET_BLOCKING_IO:
+		case B_SET_NONBLOCKING_IO:
+			// devfs forwards every fcntl(F_SETFL) here and fails it with
+			// whatever we return. Reads never wait for entropy, so either
+			// mode is already in effect.
+			return B_OK;
+	}
+
 	return B_ERROR;
 }
 
