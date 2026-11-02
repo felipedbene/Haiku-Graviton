@@ -1,0 +1,107 @@
+# aws s3 cp s3://haiku-graviton-<ACCOUNT>-us-west-2/claude-code-port/ssm-agent-staging/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg /tmp/867-hpkg/
+# $ ls -l; shasum -a 256
+-rw-r--r--@ 1 benfelip  wheel  36856490 Nov  1 13:01 /tmp/867-hpkg/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+4f4182753b817f311dfff89b085b3796ba59d288d6d4953d38abfb54d180246c  /tmp/867-hpkg/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+# $ python3 -I hpkg_ls.py <hpkg>   (hpkg v2 TOC walker; script reproduced below)
+bin
+bin/amazon-ssm-agent
+bin/ssm-agent-worker
+bin/ssm-cli
+bin/ssm-document-worker
+bin/ssm-session-logger
+bin/ssm-session-worker
+bin/ssm-setup-cli
+bin/updater
+data
+data/amazon_ssm_agent
+data/amazon_ssm_agent/source-manifest
+data/launch
+data/launch/amazon_ssm_agent
+data/licenses
+data/licenses/Apache-2.0
+.PackageInfo
+# rc=0
+# --- hpkg_ls.py ---
+"""List the file tree of a Haiku hpkg v2 (zlib heap) without the Haiku `package` tool.
+
+Usage: python3 -I hpkg_ls.py <file.hpkg>
+Format per headers/os/package/hpkg/HPKGDefs.h and PackageFileHeapWriter.cpp.
+"""
+import struct
+import sys
+import zlib
+
+path = sys.argv[1]
+data = open(path, "rb").read()
+(magic, hsize, ver, total, minor, comp, chunk, heap_c, heap_u,
+ attr_len, attr_slen, attr_scount, _r, toc_len, toc_slen, toc_scount) = struct.unpack(
+    ">IHHQHHIQQIIIIQQQ", data[:0x50])
+assert magic == 0x68706B67, "not an hpkg"
+assert comp == 1, f"heap compression {comp} is not zlib"
+nchunks = (heap_u + chunk - 1) // chunk
+table_len = (nchunks - 1) * 2
+heap = data[hsize:hsize + heap_c]
+table = heap[heap_c - table_len:]
+sizes = [struct.unpack(">H", table[i:i + 2])[0] + 1 for i in range(0, table_len, 2)]
+sizes.append(heap_c - table_len - sum(sizes))
+out = bytearray()
+off = 0
+for i, sz in enumerate(sizes):
+    raw = heap[off:off + sz]
+    usz = min(chunk, heap_u - i * chunk)
+    out += raw if sz == usz else zlib.decompress(raw)
+    off += sz
+assert len(out) == heap_u, (len(out), heap_u)
+toc = bytes(out[heap_u - toc_len - attr_len:heap_u - attr_len])
+
+pos = 0
+def cstr():
+    global pos
+    e = toc.index(b"\0", pos)
+    s = toc[pos:e].decode()
+    pos = e + 1
+    return s
+def uleb():
+    global pos
+    v = sh = 0
+    while True:
+        b = toc[pos]; pos += 1
+        v |= (b & 0x7F) << sh; sh += 7
+        if not b & 0x80:
+            return v
+
+strings = [cstr() for _ in range(toc_scount)]
+pos = toc_slen
+
+ATTR_NAMES = {0: "dir_entry", 1: "type", 2: "perms"}
+def value(typ, enc):
+    global pos
+    if typ in (1, 2):
+        n = 1 << enc
+        v = int.from_bytes(toc[pos:pos + n], "big", signed=(typ == 1)); pos += n
+        return v
+    if typ == 3:
+        return cstr() if enc == 0 else strings[uleb()]
+    if typ == 4:
+        if enc == 1:  # B_HPKG_ATTRIBUTE_ENCODING_RAW_HEAP
+            size = uleb(); uleb(); return f"<heap {size}B>"
+        size = uleb(); pos += size; return f"<inline {size}B>"  # RAW_INLINE
+    raise ValueError(typ)
+
+def walk(depth, parent_path):
+    while True:
+        tag = uleb()
+        if tag == 0:
+            return
+        t = tag - 1
+        aid, typ, kids, enc = t & 0x7F, (t >> 7) & 7, (t >> 10) & 1, (t >> 11) & 3
+        v = value(typ, enc)
+        if aid == 0:
+            p = f"{parent_path}/{v}" if parent_path else v
+            print(p)
+            if kids:
+                walk(depth + 1, p)
+        elif kids:
+            walk(depth + 1, parent_path)
+
+walk(0, "")

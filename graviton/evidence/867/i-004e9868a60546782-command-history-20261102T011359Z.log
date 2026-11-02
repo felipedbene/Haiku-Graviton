@@ -1,0 +1,54 @@
+# aws ssm list-commands --instance-id i-004e9868a60546782 --max-results 6
+# Mine: f8fe4606 (first probe; it also ran 'amazon-ssm-agent s3 cp', which does not exit, so it was cancelled), 7becf64c (ps check for a stray agent), 16a7b081 (the agent-path inspection).
+# fa9d593d predates this task's first send and is not mine.
+16a7b081-961e-4882-9a2b-1414bc91dc46	2026-11-01T19:07:30.958000-06:00	Success
+7becf64c-1e62-4b31-a24c-1f398ac960c3	2026-11-01T19:06:49.687000-06:00	Success
+f8fe4606-87de-4704-b7c3-204545048f72	2026-11-01T19:05:42.501000-06:00	Cancelled
+fa9d593d-360f-4035-b9ae-97358ec658af	2026-11-01T19:04:06.947000-06:00	Failed
+# --- 7becf64c stdout (ps | grep ssm after the cancel) ---
+/boot/system/bin/amazon-ssm-agent                     40       13    0    0 
+amazon-ssm-agent                         40     wait   10      183      141 
+amazon-ssm-agent pthread                150     wait   10        4       55 
+amazon-ssm-agent pthread                151     wait   10        0        1 
+amazon-ssm-agent pthread                152     wait   10        4        6 
+amazon-ssm-agent pthread                153     wait   10     1487    12750 
+amazon-ssm-agent pthread                154     wait   10        1       13 
+amazon-ssm-agent pthread                155     wait   10        1        2 
+amazon-ssm-agent pthread                156     wait   10        2        8 
+amazon-ssm-agent pthread                157     wait   10        3        9 
+amazon-ssm-agent pthread                158     wait   10        0        1 
+amazon-ssm-agent pthread                172     wait   10        0        0 
+amazon-ssm-agent pthread                173     wait   10        2        7 
+amazon-ssm-agent pthread                174     wait   10        0        0 
+/boot/system/bin/ssm-agent-worker                    185       15    0    0 
+ssm-agent-worker                        185     wait   10       16      116 
+ssm-agent-worker pthread                249     wait   10        3       26 
+ssm-agent-worker pthread                250     wait   10        8       12 
+ssm-agent-worker pthread                251     wait   10        1        2 
+ssm-agent-worker pthread                252     wait   10        0        4 
+ssm-agent-worker pthread                253     wait   10       10       17 
+ssm-agent-worker pthread                254     wait   10        2        8 
+ssm-agent-worker pthread                255     wait   10       10       16 
+ssm-agent-worker pthread                256     wait   10        2        3 
+ssm-agent-worker pthread                257     wait   10        8       12 
+ssm-agent-worker pthread                258     wait   10        0        0 
+ssm-agent-worker pthread                259     wait   10        3        9 
+ssm-agent-worker pthread                260     wait   10        9       15 
+ssm-agent-worker pthread                261     wait   10        6       14 
+ssm-agent-worker pthread                323     wait   10        5       10 
+/boot/system/bin/ssm-document-worker 7becf64c-1e62-4b31-a24c-1f   452       11    0    0 
+ssm-document-worker                     452     wait   10        6        6 
+ssm-document-worker pthread             453      zzz   10        0        0 
+ssm-document-worker pthread             454     wait   10        0        1 
+ssm-document-worker pthread             455     wait   10        1        1 
+ssm-document-worker pthread             456     wait   10        1        1 
+ssm-document-worker pthread             457     wait   10        3        1 
+ssm-document-worker pthread             458     wait   10        1        2 
+ssm-document-worker pthread             459     wait   10        0        1 
+ssm-document-worker pthread             460     wait   10        0        0 
+ssm-document-worker pthread             461     wait   10        0        3 
+ssm-document-worker pthread             462     wait   10        0        0 
+/boot/system/bin/sh -c /var/lib/amazon/ssm/i-004e9868a60546782/   463        1    0    0 
+---
+/boot/system/bin/amazon-ssm-agent                     40       13    0    0 
+

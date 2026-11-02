@@ -163,8 +163,9 @@ export class OpsStack extends cdk.Stack {
 
     // ---- transient builder identity --------------------------------------
     // Role the launched Graviton Haiku builder assumes: SSM-managed + read deps
-    // and write hpkgs/logs to the pools (the on-instance debeos-ssm-agent uses
-    // this to `s3 cp`).
+    // and write hpkgs/logs to the pools (the on-instance S3 client -- debeos-aws or
+    // the interim debeos-ssm-agent, resolved on the box by run_ssm.py, issue 867 --
+    // uses this to `s3 cp`).
     const builderRole = new iam.Role(this, 'BuilderRole', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
