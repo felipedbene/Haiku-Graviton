@@ -1,0 +1,12 @@
+# $ graviton/scripts/haiku-builder-s3-client check i-0e99388a3aae66881   (after install)
+haiku-builder-s3-client: checking the S3 client on i-0e99388a3aae66881 (round trip via s3://haiku-graviton-<ACCOUNT>-us-west-2/bake-scripts/bake-staging/s3-client-check/i-0e99388a3aae66881-20261102T021332Z)
+ssm-run: command 403d3238-abf0-460c-90d4-bc59f60cd9d6 on i-0e99388a3aae66881 (s3://haiku-graviton-<ACCOUNT>-us-west-2/ssm-out/run-58055-504f9a)
+check: S3 client resolved: /boot/system/bin/debeos-aws
+upload: /tmp/s3check.u4FYuQ/up -> s3://haiku-graviton-<ACCOUNT>-us-west-2/bake-scripts/bake-staging/s3-client-check/i-0e99388a3aae66881-20261102T021332Z
+download: s3://haiku-graviton-<ACCOUNT>-us-west-2/bake-scripts/bake-staging/s3-client-check/i-0e99388a3aae66881-20261102T021332Z -> /tmp/s3check.u4FYuQ/down (70 bytes)
+check: round trip OK through /boot/system/bin/debeos-aws
+ssm-run: Success
+haiku-builder-s3-client: S3 client OK on i-0e99388a3aae66881: wrote and read back s3://haiku-graviton-<ACCOUNT>-us-west-2/bake-scripts/bake-staging/s3-client-check/i-0e99388a3aae66881-20261102T021332Z
+# exit=0
+# probe object left behind? (expect nothing)
+# ls exit=1 (1 = empty prefix)

@@ -1,0 +1,325 @@
+claim.py
+launch_builder.py
+pkgkey.py
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package python3-six.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 23282 files and directories currently installed.)
+Preparing to unpack .../00-python3-six_1.16.0-4_all.deb ...
+Unpacking python3-six (1.16.0-4) ...
+Selecting previously unselected package python3-dateutil.
+Preparing to unpack .../01-python3-dateutil_2.8.2-2_all.deb ...
+Unpacking python3-dateutil (2.8.2-2) ...
+Selecting previously unselected package python3-jmespath.
+Preparing to unpack .../02-python3-jmespath_1.0.1-1_all.deb ...
+Unpacking python3-jmespath (1.0.1-1) ...
+Selecting previously unselected package python3-urllib3.
+Preparing to unpack .../03-python3-urllib3_1.26.12-1+deb12u4_all.deb ...
+Unpacking python3-urllib3 (1.26.12-1+deb12u4) ...
+Selecting previously unselected package python3-certifi.
+Preparing to unpack .../04-python3-certifi_2022.9.24-1_all.deb ...
+Unpacking python3-certifi (2022.9.24-1) ...
+Selecting previously unselected package python3-charset-normalizer.
+Preparing to unpack .../05-python3-charset-normalizer_3.0.1-2_all.deb ...
+Unpacking python3-charset-normalizer (3.0.1-2) ...
+Selecting previously unselected package python3-idna.
+Preparing to unpack .../06-python3-idna_3.3-1+deb12u1_all.deb ...
+Unpacking python3-idna (3.3-1+deb12u1) ...
+Selecting previously unselected package python3-pkg-resources.
+Preparing to unpack .../07-python3-pkg-resources_66.1.1-1+deb12u2_all.deb ...
+Unpacking python3-pkg-resources (66.1.1-1+deb12u2) ...
+Selecting previously unselected package python3-chardet.
+Preparing to unpack .../08-python3-chardet_5.1.0+dfsg-2_all.deb ...
+Unpacking python3-chardet (5.1.0+dfsg-2) ...
+Selecting previously unselected package python3-requests.
+Preparing to unpack .../09-python3-requests_2.28.1+dfsg-1_all.deb ...
+Unpacking python3-requests (2.28.1+dfsg-1) ...
+Selecting previously unselected package python3-botocore.
+Preparing to unpack .../10-python3-botocore_1.29.27+repack-1_all.deb ...
+Unpacking python3-botocore (1.29.27+repack-1) ...
+Selecting previously unselected package python3-s3transfer.
+Preparing to unpack .../11-python3-s3transfer_0.6.0-1_all.deb ...
+Unpacking python3-s3transfer (0.6.0-1) ...
+Selecting previously unselected package python3-boto3.
+Preparing to unpack .../12-python3-boto3_1.26.27+dfsg-1_all.deb ...
+Unpacking python3-boto3 (1.26.27+dfsg-1) ...
+Setting up python3-pkg-resources (66.1.1-1+deb12u2) ...
+Setting up python3-charset-normalizer (3.0.1-2) ...
+Setting up python3-six (1.16.0-4) ...
+Setting up python3-chardet (5.1.0+dfsg-2) ...
+Setting up python3-certifi (2022.9.24-1) ...
+Setting up python3-jmespath (1.0.1-1) ...
+Setting up python3-idna (3.3-1+deb12u1) ...
+Setting up python3-urllib3 (1.26.12-1+deb12u4) ...
+Setting up python3-dateutil (2.8.2-2) ...
+Setting up python3-requests (2.28.1+dfsg-1) ...
+Setting up python3-botocore (1.29.27+repack-1) ...
+Setting up python3-s3transfer (0.6.0-1) ...
+Setting up python3-boto3 (1.26.27+dfsg-1) ...
+gzip: /tmp/nb506run-puXgf7/captured.log.gz: No such file or directory
+FAIL test/pipeline.test.ts (5.954 s)
+  ✓ 867: the default S3 clients are debeos-aws then debeos-ssm-agent -- never amazon-ssm-agent (159 ms)
+  ✓ 867: no S3 call in the generated script uses a hard-coded client path (157 ms)
+  ✓ 867: an old image (interim debeos-ssm-agent only) resolves it and builds (83 ms)
+  ✓ 867: debeos-aws is preferred when both clients are present (81 ms)
+  ✓ 867: a current image with neither client refuses loudly: NOS3CLIENT RC=4, nothing run (78 ms)
+  ✓ 867: poll_ssm classifies NOS3CLIENT as no-s3-client, not build-error (13 ms)
+  ✓ 867: a no-s3-client outcome re-queues the port without counting an attempt (15 ms)
+  ✕ 867: every s3 cp the wrapper emits is checked -- none ends in || true (13 ms)
+  ✓ 867: the healthy path still stages the overlay, builds and uploads the log (21 ms)
+  ✕ 867: a failed overlay transfer skips the build: VERDICT=TRANSFER RC=5, not FAIL (20 ms)
+  ✕ 867: a failed log upload keeps the build verdict but says LOG=UPLOAD_FAILED, loudly (20 ms)
+  ✕ 867: poll_ssm names TRANSFER and records a failed log upload as upload-failed (15 ms)
+  ✕ 867: an s3-transfer outcome re-queues the port without counting an attempt (15 ms)
+  ✓ 867: the bake client check passes a working client and leaves no probe behind (18 ms)
+  ✓ 867: the bake client check FAILS with no client, a corrupting one, or one that never reached S3 (43 ms)
+  ✓ 867: the bake client check resolves the same candidates, in the same order, as run_ssm (81 ms)
+  ✓ 867: the bake installs debeos-aws and refuses to create an image when the check fails (2 ms)
+  ✓ 867: the debeos_aws package installs the client at the path run_ssm resolves first (82 ms)
+  ○ skipped creates a six-stage pipeline with the hardware gate before approval
+  ○ skipped creates four CodeBuild projects
+  ○ skipped the perf gate may only terminate its own ephemeral instances
+  ○ skipped the perf gate may only stop and start its own ephemeral instances
+  ○ skipped no instance-lifecycle grant is left tag-unconditioned
+  ○ skipped the perf gate reads ssm-run output from the configured bucket
+  ○ skipped the perf gate may only SendCommand to its own tagged peer
+  ○ skipped every iam:PassRole is scoped to one service and one role, never *
+  ○ skipped the peer role is least-privilege: SSM + baron secret + nettput + ssm-out
+  ○ skipped register uses the configured compute type; perf-test and promote stay SMALL
+  ○ skipped the register compute type default is LARGE (issue #152)
+  ○ skipped has a retained encrypted work bucket
+  ○ skipped promote role can mutate tags but not register images
+  ○ skipped promote role owns the canonical-ami-id SSM mirror in-stack (not a hand-applied inline policy)
+  ○ skipped promote project skips the best-effort candidate prune it has no rights for
+  ○ skipped the buildtools repo default is the DeBeOS fork (issue #89)
+  ○ skipped the cross-build project receives buildtoolsRepo as BUILDTOOLS_REPO
+  ○ skipped the harvest prune batches through delete-objects instead of one CLI per object
+  ○ skipped a harvest prune failure cannot fail the publish, but is reported loudly
+  ○ skipped promote: nothing in the path deletes, beyond haiku-repo-add union mirror
+  ○ skipped promote: plan is the default mode and the buildspec lets MODE govern
+  ○ skipped promote: apply refuses without a plan id (executed, not just inspected)
+  ○ skipped promote: the banked script self-test passes
+  ○ skipped promote: both serving distributions are invalidated, resolved by alias
+  ○ skipped promote: the green prefix is writable and the blue prefix is read-only
+  ○ skipped promote: the #164 publish lock is banked beside haiku-repo-add
+  ○ skipped promote: the job is budgeted for a whole-pool index rebuild
+  ○ skipped promote: the operator role cannot start a promote build
+  ○ skipped ops: every inline buildspec stays well under CodeBuild's 25,600 ceiling (#454)
+  ○ skipped publish: haiku-repo-add is fetched from an asset and sha256-verified (#454)
+  ○ skipped publish and promote both carry the #708 coherence gate (and a python3)
+  ○ skipped repo-add reports only the packages it PUBLISHED, never a skipped one (#452)
+  ○ skipped repo-add runs the #708 coherence gate on the freshly built index, before upload
+  ○ skipped repo-add refuses to upload when the #708 gate FAILS (#708)
+  ○ skipped repo-add DIES when the #708 coherence tool was never shipped (#708)
+  ○ skipped repo-add FAILS, with an empty published set, when everything is skipped (#452/#502)
+  ○ skipped repo-add relays the packaging tool's own words when a re-stamp fails (#502)
+  ○ skipped repo-add labels a PARTIAL publish, and HG_STRICT_PARTIAL makes it fatal (#502)
+  ○ skipped repo-add refuses to start without a usable licenses directory (#502)
+  ○ skipped repo-add REFUSES to publish unlocked when the lock lib is required (#453)
+  ○ skipped repo-add still only WARNS about a missing lock lib when not required
+  ○ skipped repo-add under the #164 lock defers to a live holder (#453)
+  ○ skipped repo-add acquires and releases the #164 lock around the publish (#453)
+  ○ skipped publish: banks the lock, requires it, and prunes from the add step's report
+  ○ skipped promote role can LIST every bucket its buildspec reads
+  ○ skipped the oven pipeline ends at Test: no Approve stage and no Promote stage
+  ○ skipped the oven builds no Promote project and references no promote buildspec
+  ○ skipped no oven role can move the canonical tag
+  ○ skipped no oven role can write the canonical SSM parameter
+  ○ skipped the oven takes one execution at a time and queues rather than discarding
+  ○ skipped the perf gate never runs concurrently with itself
+  ○ skipped the oven tags its AMI as a first-class candidate, additively
+  ○ skipped no oven resource name collides with the trunk pipeline
+  ○ skipped the trunk bake pipeline still has both Approve and Promote
+  ○ skipped the trunk promote role can still move the canonical tag and its SSM mirror
+  ○ skipped the perf gate stamps a per-run id on both instances it launches
+  ○ skipped #576: no instance launcher tags a node SSMAgentAutoUpdate
+  ○ skipped the straggler sweep only sweeps this run, and sweeps nothing if it cannot tell
+  ○ skipped the register upload key carries a per-run discriminator
+  ○ skipped a passing gate stamps its measured numbers onto the AMI
+  ○ skipped a failed build is tagged fail even though the gate recorded numbers first
+  ○ skipped a succeeding build with no sidecar is tagged unknown, not pass
+  ○ skipped gate-result tagging can never fail the build
+  ○ skipped the oven keeps the hardware gate, wired to the registered AMI
+  ○ skipped prune --tag selects the named tag; the default is still candidate=true
+  ○ skipped prune refuses to select on the canonical tag, or a malformed selector
+  ○ skipped prune is still dry-run by default and still protects the canonical
+  ○ skipped #506: the build Lambda carries the tree driver's NATIVEBUILD_VERSION, so the on-builder assertion is bound to source
+  ○ skipped #506: readNativebuildVersion refuses a driver with no marker (guard cannot ship disabled)
+  ○ skipped #506: run_ssm refreshes the driver from S3 and refuses a stale copy before building
+  ○ skipped #506 mutation: a CURRENT staged driver proceeds to build (VERDICT=OK)
+  ○ skipped #506 mutation: a STALE staged driver is refused loudly (VERDICT=STALE RC=3)
+  ○ skipped 769: the wrapper classifies an out-of-disk run as CAPACITY, not FAIL, and passes rc=9
+  ○ skipped 769: a run that built a port and THEN ran out of disk is CAPACITY, not OK
+  ○ skipped 769: a stale driver is STALE/RC=3 -- the capacity arm did not shadow it
+  ○ skipped 769: poll_ssm names the capacity verdict instead of flattening it to build-error
+  ○ skipped #505: a success clears the previous failure residue
+  ○ skipped #505: a failure still records the error class it was given
+  ○ skipped 769: a capacity event re-queues the package without counting an attempt
+  ○ skipped 769: an ordinary build error is still a counted failure (the capacity branch is narrow)
+  ○ skipped #505 §C: a reported failure whose hpkg is in the harvest pool is recorded built
+  ○ skipped #505 §C: the pool is listed under the package key prefix, not scanned
+  ○ skipped #505 §C: a reported success never consults the pool
+  ○ skipped #505 §C: a class-9 empty hpkg does not promote a failure to built
+  ○ skipped #505 §C: a stale hpkg from an earlier success does not mask a real failure
+  ○ skipped #505 §C: another package's hpkg cannot confirm this one
+  ○ skipped #505 §C: with no HARVEST_S3 the failure path is exactly what it was
+  ○ skipped #505 §C: RecordFn is wired to the harvest pool and may only LIST it
+  ○ skipped builder SG: instances in it may reach each other, and only each other
+  ○ skipped #611: no endpoint without the allowlist context -- nothing internet-facing by default
+  ○ skipped #611: with an allowlist, the endpoint is an internet-facing NLB in ONE public subnet
+  ○ skipped #611: the listener is TCP passthrough on :10902 and carries NO certificate
+  ○ skipped #611: targets are INSTANCE-type with client IP preserved, and NONE are registered at deploy
+  ○ skipped #766: brokerEndpointQuic makes the endpoint TCP_UDP, UDP rules beside every TCP one
+  ○ skipped #766: without brokerEndpointQuic the endpoint stays TCP only
+  ○ skipped #611: the builder SG is widened only to the endpoint SG -- never to a CIDR
+  ○ skipped #611: "the internet" needs a second, explicit flag -- a short prefix alone is refused
+  ○ skipped #611: a malformed allowlist fails synth instead of quietly opening or closing the endpoint
+  ○ skipped 837: the overlay reaches a port whose dir hyphenates the underscored package name
+  ○ skipped 837: a hyphenated port dir with no recipe of that name yet is still found by dir name
+  ○ skipped 837: the recipe lookup pins the port name, so a prefix-sharing port is not chosen
+  ○ skipped 837: an unlocatable port says so in the build log instead of skipping silently
+  ○ skipped 838: a dry c8g spot pool walks the other AZ, then an equivalent type, still on spot
+  ○ skipped 838: with every spot pool dry and no opt-in, it never buys on-demand and raises the retryable error
+  ○ skipped 838: on-demand fallback only when explicitly enabled, primary type first, and reported
+  ○ skipped 838: a non-capacity launch error still fails at once, and a pinned type is not swapped
+  ○ skipped 838: the stack wires the spot fallback list, keeps on-demand off, and retries LaunchBuilder on capacity
+  ○ skipped 839: only this execution's still-building leases go back to queued
+  ○ skipped 839: without a lease owner the release writes nothing
+  ○ skipped 839: ClaimBatch reports the lease owner it wrote
+  ○ skipped 839: every failure path releases leases before it reaps
+  ○ skipped 849: ClaimBatch goes to a Choice, not straight to LaunchBuilder
+  ○ skipped 849: an empty claim succeeds without launching, and never reaps
+  ○ skipped 849: the driver drops planned ports that are no longer queued
+  ○ skipped 849: a port the driver cannot read is kept, not silently dropped
+  ○ skipped 849: the live-state read is chunked to DynamoDB's 100-key BatchGetItem cap
+  ○ skipped 849: a building row whose lease EXPIRED is kept -- claim.py would claim it
+  ○ skipped 849: the live-state read is consistent and de-duplicated
+  ○ skipped 849: UnprocessedKeys is retried, but boundedly
+  ○ skipped 849: the driver tells a no-op chain from one that built
+  ○ skipped 845: poll_ssm classifies the refusal as stale-driver, not build-error
+  ○ skipped 845: a stale-driver outcome re-queues the port without counting an attempt
+  ○ skipped 845: the not-the-port branch stayed narrow -- unknown classes still count
+  ○ skipped 845: the pre-flight reads the deployment and reports agreement
+  ○ skipped 845: the pre-flight reports the real wd-10191705 mismatch
+  ○ skipped 845: an unmarked published driver is a mismatch, not a pass
+  ○ skipped 845: the pre-flight finds the build task through the graph, not by name
+  ○ skipped 845: a deployment with no expected version is UNVERIFIED, not a mismatch
+  ○ skipped 845: the pre-flight is best-effort on the read -- a denial does not block a wave
+  ○ skipped 845: the operator role can run the pre-flight, and still cannot invoke
+  ○ skipped 845: an ABSENT published driver is a mismatch, not an unreadable deployment
+
+  ● 867: every s3 cp the wrapper emits is checked -- none ends in || true
+
+    expect(received).not.toMatch(expected)
+
+    Expected pattern: not /\|\|\s*true/
+    Received string:      "\"$S3C\" s3 cp \"s3://b/debeos-overlay/sdl2-1.recipe\" \"$D/\"sdl2-1.recipe || true"
+
+      3602 |   const cps = script.split('\n').filter(l => / s3 cp /.test(l));
+      3603 |   expect(cps.length).toBe(3);   // driver refresh, one overlay file, log upload
+    > 3604 |   for (const l of cps) expect(l).not.toMatch(/\|\|\s*true/);
+           |                                      ^
+      3605 | });
+      3606 |
+      3607 | test('867: the healthy path still stages the overlay, builds and uploads the log', () => {
+
+      at Object.<anonymous> (test/pipeline.test.ts:3604:38)
+
+  ● 867: a failed overlay transfer skips the build: VERDICT=TRANSFER RC=5, not FAIL
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "TRANSFER"
+    Received: "OK"
+
+      3616 | test('867: a failed overlay transfer skips the build: VERDICT=TRANSFER RC=5, not FAIL', () => {
+      3617 |   const r = runTransfer('*sdl2-2.30.0.patchset*');
+    > 3618 |   expect(r.verdict).toBe('TRANSFER');
+           |                     ^
+      3619 |   expect(r.rc).toBe(5);
+      3620 |   // The build did NOT run against the stock (or half-staged) recipe.
+      3621 |   expect(r.built).toBe(false);
+
+      at Object.<anonymous> (test/pipeline.test.ts:3618:21)
+
+  ● 867: a failed log upload keeps the build verdict but says LOG=UPLOAD_FAILED, loudly
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "UPLOAD_FAILED"
+    Received: "s3://b/logs/r/sdl2.log.gz"
+
+      3630 |   expect(r.rc).toBe(0);
+      3631 |   expect(r.built).toBe(true);
+    > 3632 |   expect(r.logRef).toBe('UPLOAD_FAILED');
+           |                    ^
+      3633 |   expect(r.err).toContain('#867 LOG UPLOAD FAILED to s3://b/logs/r/sdl2.log.gz');
+      3634 |   // The client's own error reaches stderr verbatim.
+      3635 |   expect(r.err).toContain('stub: AccessDenied');
+
+      at Object.<anonymous> (test/pipeline.test.ts:3632:20)
+
+  ● 867: poll_ssm names TRANSFER and records a failed log upload as upload-failed
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 3
+    + Received  + 3
+
+      Array [
+        Array [
+          false,
+    -     "s3-transfer",
+    +     "build-error",
+          "s3://b/k.log.gz",
+        ],
+        Array [
+          false,
+          "build-error",
+    -     "upload-failed",
+    +     "UPLOAD_FAILED",
+        ],
+        Array [
+          true,
+          null,
+    -     "upload-failed",
+    +     "UPLOAD_FAILED",
+        ],
+      ]
+
+      3659 |   ].join('\n');
+      3660 |   const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+    > 3661 |   expect(JSON.parse(out.trimEnd().split('\n').pop() as string)).toEqual([
+           |                                                                 ^
+      3662 |     [false, 's3-transfer', 's3://b/k.log.gz'],
+      3663 |     // A real build failure is still a build failure; only the log reference changes.
+      3664 |     [false, 'build-error', 'upload-failed'],
+
+      at Object.<anonymous> (test/pipeline.test.ts:3661:65)
+
+  ● 867: an s3-transfer outcome re-queues the port without counting an attempt
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "queued"
+    Received: "failed"
+
+      3669 | test('867: an s3-transfer outcome re-queues the port without counting an attempt', () => {
+      3670 |   const r = recordCapacity('s3-transfer');
+    > 3671 |   expect(r.state).toBe('queued');
+           |                   ^
+      3672 |   expect(r.exprs).toHaveLength(1);
+      3673 |   expect(r.exprs[0]).not.toContain('attempt_count');
+      3674 |   expect(r.values[0][':o']).toBe('s3-transfer-requeued');
+
+      at Object.<anonymous> (test/pipeline.test.ts:3671:19)
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 131 skipped, 13 passed, 149 total
+Snapshots:   0 total
+Time:        6.134 s
+Ran all test suites with tests matching "867".
+npm notice
+npm notice New major version of npm available! 11.19.1 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

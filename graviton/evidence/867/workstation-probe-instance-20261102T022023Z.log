@@ -1,0 +1,4 @@
+# aws ec2 describe-instances i-0e99388a3aae66881 (probe launched from canonical ami-03c3545c37f391c1f; terminated after the evidence)
+i-0e99388a3aae66881	ami-03c3545c37f391c1f	c8g.large	2026-11-02T02:03:01+00:00	shutting-down
+# aws ec2 describe-images --filters tag:canonical=true
+ami-03c3545c37f391c1f	haiku-oven-1793580871

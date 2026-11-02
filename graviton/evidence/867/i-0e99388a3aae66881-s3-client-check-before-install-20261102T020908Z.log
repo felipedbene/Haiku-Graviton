@@ -1,0 +1,10 @@
+# instance i-0e99388a3aae66881 launched from canonical ami-03c3545c37f391c1f (curl+golang installed by the probe, no S3 client)
+# $ graviton/scripts/haiku-builder-s3-client check i-0e99388a3aae66881
+haiku-builder-s3-client: checking the S3 client on i-0e99388a3aae66881 (round trip via s3://haiku-graviton-<ACCOUNT>-us-west-2/bake-scripts/bake-staging/s3-client-check/i-0e99388a3aae66881-20261102T020910Z)
+ssm-run: command e7ba2ffa-f7b0-4fc5-88b0-6cc09a97e2c0 on i-0e99388a3aae66881 (s3://haiku-graviton-<ACCOUNT>-us-west-2/ssm-out/run-54215-86c1eb)
+check: FATAL: NO S3 CLIENT: none of [/boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent] is executable.
+  A build wave on this image would refuse every port (VERDICT=NOS3CLIENT).
+failed to run commands: exit status 3
+ssm-run: Failed (exit 3)
+haiku-builder-s3-client: FAILED: the builder has no usable S3 client (remote exit 3); see above
+# exit=1

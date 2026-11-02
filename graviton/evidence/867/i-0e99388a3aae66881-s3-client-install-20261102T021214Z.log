@@ -1,0 +1,50 @@
+# $ graviton/scripts/haiku-builder-s3-client install i-0e99388a3aae66881   (branch fix/867-builder-s3-client working tree, base 909e7c6b3a)
+haiku-builder-s3-client: staged 14 debeos-aws inputs to s3://haiku-graviton-<ACCOUNT>-us-west-2/bake-scripts/bake-staging/debeos-aws-src/
+haiku-builder-s3-client: building + installing debeos_aws on i-0e99388a3aae66881 (native go build, several minutes)
+ssm-run: command b1ea8155-18b0-4ea6-aa8a-a07bede0e141 on i-0e99388a3aae66881 (s3://haiku-graviton-<ACCOUNT>-us-west-2/ssm-out/run-57333-2e5ca2)
+== building debeos-aws 0.1.0-1 from /boot/home/debeos-aws-src/graviton/go-arm64/debeos-aws with go version go1.26.1 haiku/arm64 ==
+source digest: sha256:4b61dc76c66af81a900b56c958f1d32166ec13c67771ae3a4eda0d3b43c058e9
+== package create (-z zlib) ==
+----- Package Info ----------------
+header size:                     80
+heap size:                  3537769
+TOC size:                       335
+package attributes size:        930
+total size:                 3537849
+-----------------------------------
+package-attributes:
+	name: debeos_aws
+	summary: Native AWS S3/CloudFront client for DeBeOS on Graviton
+	description: debeos-aws (graviton/go-arm64/debeos-aws): a CGO-free Go client covering the S3 (ls, cp, sync, rm) and CloudFront invalidation verbs the DeBeOS build and publish tools call, authenticating with the EC2 instance role over IMDS. Built natively on DeBeOS with the golang package from the in-tree source; aws-sdk-go-v2 is pinned by go.sum. It is the S3 client the build-wave wrapper and haiku-nativebuild resolve first at /boot/system/bin/debeos-aws, since the real amazon-ssm-agent has no s3 verbs (issue 867). DeBeOS-Source-Digest: sha256:4b61dc76c66af81a900b56c958f1d32166ec13c67771ae3a4eda0d3b43c058e9
+	vendor: DeBeOS
+	packager: DeBeOS <debeos@debene.dev>
+	architecture: arm64
+	version: 0.1.0-1
+	copyright: DeBeOS contributors
+	copyright: Amazon.com, Inc. or its affiliates (aws-sdk-go-v2)
+	license: MIT
+	license: Apache-2.0
+	URL: https://github.com/felipedbene/Haiku-Graviton
+	provides: debeos_aws = 0.1.0
+	provides: cmd:debeos_aws = 0.1.0
+	requires: haiku
+bin                                      0  2026-11-02 02:13:15  drwxr-xr-x
+  debeos-aws                       9961740  2026-11-02 02:13:15  -r-xr-xr-x
+data                                     0  2026-11-02 02:12:39  drwxr-xr-x
+  debeos_aws                             0  2026-11-02 02:13:16  drwxr-xr-x
+    source-manifest                    953  2026-11-02 02:13:16  -rw-r--r--
+    toolchain                           59  2026-11-02 02:13:16  -rw-r--r--
+  licenses                               0  2026-11-02 02:13:16  drwxr-xr-x
+    Apache-2.0                       11358  2026-11-02 02:13:16  -rw-r--r--
+.PackageInfo                          1058  2026-11-02 02:13:16  -rw-r--r--
+built: /boot/home/debeos-aws-src/debeos_aws-0.1.0-1-arm64.hpkg
+-r-xr-xr-x 1 baron root 9961740 Nov  2 02:13 /boot/system/bin/debeos-aws
+-rw-r--r-- 1 baron root 3537849 Nov  2 02:13 /boot/system/packages/debeos_aws-0.1.0-1-arm64.hpkg
+debeos-aws 0.1.0
+ssm-run: Success
+haiku-builder-s3-client: installed /boot/system/bin/debeos-aws on i-0e99388a3aae66881
+
+real	1m7.981s
+user	0m10.825s
+sys	0m6.751s
+# exit=0
