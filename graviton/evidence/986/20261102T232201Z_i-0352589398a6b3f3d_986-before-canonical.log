@@ -1,0 +1,175 @@
+# evidence: 986-before-canonical
+# instance: i-0352589398a6b3f3d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T232201Z   end: 20261102T232222Z   rc: 0
+# script sha256: af99f721c19b14e8e4e58b9ed0e2aba2c69564f97017408b315e1f5ea11d6d6a
+# ---- script ----
+# | set -u
+# | echo "== image"; uname -v; date -u
+# | echo "== openssh-ish packages in system/packages"
+# | ls -l /boot/system/packages | grep -i ssh
+# | for f in /boot/system/packages/openssh*.hpkg; do echo "-- $f"; sha256sum "$f"; package list -i "$f"; done
+# | echo "== which package /boot/system/bin/sshd comes from"; ls -l /boot/system/bin/sshd; catattr SYS:PACKAGE_FILE /boot/system/bin/sshd 2>&1; ssh -V
+# | echo "== launch job + boot script"; cat /boot/system/settings/launch/sshd | grep -v '^#'; ls -l /boot/system/bin/sshd_boot.sh
+# | echo "== repos"; pkgman list-repos
+# | echo "== green index: openssh entry, and anything requiring openssh / cmd:ssh*"
+# | mkdir -p /boot/home/o986 && cd /boot/home/o986
+# | curl -sSf -o repo https://packages.debene.dev/arm64/repo; echo "curl rc=$?"; sha256sum repo
+# | package_repo list -v repo > repo.txt; echo "package_repo rc=$?"
+# | awk '/^package-attributes:/{p=0} /^\tname: openssh$/{p=1; print "package-attributes:"} p' repo.txt
+# | echo "-- packages whose requires/conflicts/replaces name openssh*, or require cmd:ssh/sshd/scp/sftp/ssh_keygen"
+# | awk '/^package-attributes:/{n=""} /^\tname: /{n=$2} /^\tversion: /{v=$2}
+# |   /^\t(requires|conflicts|replaces|supplements): / { if ($2 ~ /^(openssh|cmd:ssh|cmd:sshd|cmd:scp|cmd:sftp|cmd:ssh_keygen)/) print n"-"v": "$0 }' repo.txt
+# | echo "== simulate green's next openssh revision: green's 10.4p1-1 repacked as 10.4p1-2, in a local repo"
+# | curl -sSf -o green-openssh-10.4p1-1-arm64.hpkg https://packages.debene.dev/arm64/packages/openssh-10.4p1-1-arm64.hpkg; echo "curl rc=$?"
+# | sha256sum green-openssh-10.4p1-1-arm64.hpkg
+# | rm -rf x && mkdir x && package extract -C x green-openssh-10.4p1-1-arm64.hpkg; echo "extract rc=$?"
+# | sed -i 's/^version\([[:space:]]*\)10.4p1-1$/version\110.4p1-2/' x/.PackageInfo
+# | grep -n '^version\|^name' x/.PackageInfo
+# | mkdir -p lrepo && rm -f lrepo/*.hpkg lrepo/repo
+# | (cd x && package create -q ../lrepo/openssh-10.4p1-2-arm64.hpkg); echo "create rc=$?"
+# | package list -i lrepo/openssh-10.4p1-2-arm64.hpkg | head -8
+# | cat > lrepo/repo.info <<'R'
+# | name o986sim
+# | vendor "DeBeOS"
+# | summary "issue 986: green's openssh at the next revision (simulation)"
+# | priority 1
+# | baseurl file:///boot/home/o986/lrepo
+# | identifier o986sim
+# | architecture arm64
+# | R
+# | (cd lrepo && package_repo create repo.info openssh-10.4p1-2-arm64.hpkg); echo "repo create rc=$?"
+# | sha256sum lrepo/repo lrepo/repo.info
+# | pkgman add-repo file:///boot/home/o986/lrepo; echo "add-repo rc=$?"
+# | pkgman list-repos
+# | echo "== pkgman update (all), answered 'no': the plan only"
+# | printf 'no\n' | pkgman update 2>&1 | grep -vE '^\*\*\* please enter'; echo "pkgman update rc=${PIPESTATUS[1]}"
+# | echo "== pkgman update openssh, answered 'no'"
+# | printf 'no\n' | pkgman update openssh 2>&1 | grep -vE '^\*\*\* please enter'; echo "pkgman update openssh rc=${PIPESTATUS[1]}"
+# | pkgman drop-repo o986sim; echo "drop-repo rc=$?"
+# | pkgman list-repos
+# ---- raw output ----
+== image
+hrev59996 Nov  2 2026 14:49:36
+Mon Nov  2 23:22:09 GMT 2026
+== openssh-ish packages in system/packages
+-rw-r--r-- 1 baron root  3466892 Nov  2 14:52 openssh-10.4p1-1-arm64.hpkg
+-- /boot/system/packages/openssh-10.4p1-1-arm64.hpkg
+659863a1d4bcfd761dfb0a900d816bf1c8835f82f1145ef54e294fc1b19b41ba  /boot/system/packages/openssh-10.4p1-1-arm64.hpkg
+package-attributes:
+	name: openssh
+	summary: Secure Shell client and server (remote login program)
+	description: OpenSSH cross-built for Haiku/arm64 for the AWS Graviton port.
+Configured --without-openssl because no OpenSSL package exists for arm64, so
+only Ed25519 keys and OpenSSH's internal ciphers are supported. Statically
+linked against zlib; the only shared library dependencies are libroot,
+libnetwork and libbsd, all part of the base haiku package.
+	vendor: DeBeOS
+	packager: haiku-graviton port <felipe@localhost>
+	architecture: arm64
+	version: 10.4p1-1
+	copyright: 2005-2025 Tatu Ylonen et al.
+	license: OpenSSH
+	URL: https://www.openssh.com/
+	provides: openssh = 10.4p1
+	provides: cmd:scp = 10.4p1
+	provides: cmd:sftp = 10.4p1
+	provides: cmd:ssh = 10.4p1
+	provides: cmd:ssh_add = 10.4p1
+	provides: cmd:ssh_agent = 10.4p1
+	provides: cmd:ssh_keygen = 10.4p1
+	provides: cmd:ssh_keyscan = 10.4p1
+	provides: cmd:sshd = 10.4p1
+	requires: haiku
+== which package /boot/system/bin/sshd comes from
+-r-xr-xr-x 1 baron root 723104 Nov  2 14:51 /boot/system/bin/sshd
+/boot/system/bin/sshd : string : openssh-10.4p1-1-arm64.hpkg
+OpenSSH_10.4p1, without OpenSSL
+== launch job + boot script
+
+service x-vnd.openssh-sshd {
+	launch /bin/sh /boot/system/bin/sshd_boot.sh
+	legacy
+}
+-r-xr-xr-x 1 baron root 4971 Nov  2 14:51 /boot/system/bin/sshd_boot.sh
+== repos
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+== green index: openssh entry, and anything requiring openssh / cmd:ssh*
+/tmp/ccrun/cc-20261102T232201Z-21418.sh: line 11: curl: command not found
+curl rc=127
+sha256sum: repo: No such file or directory
+Error: Failed to open repository file "repo": No such file or directory
+package_repo rc=1
+-- packages whose requires/conflicts/replaces name openssh*, or require cmd:ssh/sshd/scp/sftp/ssh_keygen
+== simulate green's next openssh revision: green's 10.4p1-1 repacked as 10.4p1-2, in a local repo
+/tmp/ccrun/cc-20261102T232201Z-21418.sh: line 18: curl: command not found
+curl rc=127
+sha256sum: green-openssh-10.4p1-1-arm64.hpkg: No such file or directory
+Error: Failed to open package file "green-openssh-10.4p1-1-arm64.hpkg": No such file or directory
+extract rc=1
+sed: can't read x/.PackageInfo: No such file or directory
+grep: x/.PackageInfo: No such file or directory
+Failed to read .PackageInfo: No such file or directory
+create rc=1
+Error: Failed to open package file "lrepo/openssh-10.4p1-2-arm64.hpkg": No such file or directory
+package 'openssh-10.4p1-2-arm64.hpkg' does not exist
+repo create rc=1
+sha256sum: lrepo/repo: No such file or directory
+cccfd78afb762417913e2a6594b3d80fcb3ff573a017f3c84922367d593bab62  lrepo/repo.info
+Error: Failed to open repository file "/boot/system/cache/package-repositories/o986sim": No such file or directory
+*** failed! : No such file or directory
+Fetching repository info from file:///boot/home/o986/lrepo ...
+Activating repository config from file:///boot/home/o986/lrepo ...
+Fetching repository checksum from file:///boot/home/o986/lrepo ...
+add-repo rc=5
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+        o986sim
+		base-url:  file:///boot/home/o986/lrepo
+		identifier: o986sim
+		priority:  1
+== pkgman update (all), answered 'no': the plan only
+Error: Failed to open repository file "/boot/system/cache/package-repositories/DeBeOS": No such file or directory
+À†ƒ¬( repochecksum-1 []
+Validating checksum for DeBeOS...done.
+À†ƒ¬( repocache-2 [ KiB]
+Error: Failed to open repository file "/boot/system/cache/package-repositories/o986sim": No such file or directory
+Refreshing repository "o986sim" failedError: Failed to open repository file "/boot/system/cache/package-repositories/o986sim": No such file or directory
+Failed to get cache for repository "o986sim". Skipping.Validating checksum for DeBeOS...done.
+: No such file or directory
+: No Error (1)
+The following changes will be made:
+  in system:
+    install package bzip2-1.0.8-3 from repository DeBeOS
+    upgrade package gawk-3.1.8_bootstrap-2 to 5.3.0-1 from repository DeBeOS
+    upgrade package coreutils-9.9_bootstrap-1 to 9.11-2 from repository DeBeOS
+    install package graphite2-1.3.14-4 from repository DeBeOS
+    upgrade package freetype-2.6.3_bootstrap-1 to 2.14.3-1 from repository DeBeOS
+    install package harfbuzz-14.2.0-1 from repository DeBeOS
+Continue? [yes/no] (yes) : 
+pkgman update rc=1
+== pkgman update openssh, answered 'no'
+À¦ü3? repochecksum-1 []
+Error: Failed to open repository file "/boot/system/cache/package-repositories/o986sim": No such file or directory
+Refreshing repository "o986sim" failedError: Failed to open repository file "/boot/system/cache/package-repositories/o986sim": No such file or directory
+Failed to get cache for repository "o986sim". Skipping.Nothing to do.
+Validating checksum for DeBeOS...done.
+: No such file or directory
+: No Error (1)
+pkgman update openssh rc=0
+*** aborted : Operation canceled
+Removing repository o986sim ...
+Really remove the repository 'o986sim'? [yes/no] (no) : no
+drop-repo rc=5
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+        o986sim
+		base-url:  file:///boot/home/o986/lrepo
+		identifier: o986sim
+		priority:  1
