@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-setup
+# instance: i-0ef29f46300cd419b   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T055652Z   end: 20261102T055832Z   rc: 0
+# script sha256: df78d003fb6873203d3c322897d25a1ec2fda9c0693a158d3c84e7546227c1e6
+# ---- script ----
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq
+# | apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /dev/null
+# | echo "apt rc=$?"
+# | if ! command -v aws; then
+# | 	curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
+# | 	(cd /tmp && unzip -q a.zip && ./aws/install > /dev/null)
+# | fi
+# | mkdir -p /opt/t900 && cd /opt/t900
+# | rm -rf hg buildtools
+# | git clone -q --depth 80 --no-single-branch https://github.com/felipedbene/Haiku-Graviton.git hg || exit 2
+# | git -C hg fetch -q --depth 80 origin fix/873-ipv6-dual-stack graviton || exit 2
+# | git -C hg log -1 --format='873-tip %H %s' FETCH_HEAD
+# | git -C hg rev-parse origin/fix/873-ipv6-dual-stack origin/graviton
+# | git clone -q --depth 1 https://github.com/felipedbene/buildtools.git buildtools
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /dev/null 2>&1 && ./jam0 install > /dev/null 2>&1)
+# | command -v jam || exit 3
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 4
+# | tar --zstd -xf /tmp/ct.tar.zst -C .
+# | ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix /opt/t900/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32 2>&1 | tail -1
+# | echo SETUP-DONE
+# ---- raw output ----
+apt rc=0
+873-tip eaf7d9a1bab6efb76a1caaf967683c44de767f99 evidence: issue 873 dual-stack sockets before/after on Graviton
+eaf7d9a1bab6efb76a1caaf967683c44de767f99
+909e7c6b3ae5883daa6d6249d728232199198bcc
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+SETUP-DONE
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.

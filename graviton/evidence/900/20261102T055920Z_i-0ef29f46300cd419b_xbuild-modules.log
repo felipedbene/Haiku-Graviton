@@ -1,0 +1,71 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-0ef29f46300cd419b   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T055920Z   end: 20261102T060029Z   rc: 0
+# script sha256: 1ff333c52d91359de5a153291c1c26ef5a3dd338df9ad789db07f2e2b7e78d7f
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/t900
+# | cd /opt/t900/hg/generated || exit 1
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | objdir_of() { dirname "$(path_of $1)"; }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		git -C .. apply --whitespace=nowarn "$patch" || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat
+# | 	sleep 3
+# | 	for t in "$@"; do rm -rf "$(objdir_of $t)"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/ipv6/ipv6.cpp' | head -20
+# | 	mkdir -p /opt/t900/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/t900/out/$label/$t && sha256sum /opt/t900/out/$label/$t | sed "s|/opt/t900/out/||"
+# | 	done
+# | 	return $rc
+# | }
+# | aws s3 cp --quiet $OUT/fix.patch /opt/t900/fix.patch && sha256sum /opt/t900/fix.patch
+# | M="stack ipv6 tcp udp ipv4"
+# | build trunk origin/graviton none $M
+# | build b948 origin/fix/873-ipv6-dual-stack none $M
+# | build fix origin/fix/873-ipv6-dual-stack /opt/t900/fix.patch $M
+# | for d in trunk b948 fix; do
+# | 	for f in /opt/t900/out/$d/*; do aws s3 cp --quiet "$f" "$OUT/mod/$d/$(basename $f)"; done
+# | done
+# | aws s3 ls --recursive $OUT/mod/ | wc -l
+# ---- raw output ----
+7c6310bf91c28a4ce49a0b69edaf005b8237bf80ff1deaedfcb18da2cbbb069f  /opt/t900/fix.patch
+JAM trunk ref=origin/graviton head=909e7c6b patch=none rc=0 wall=20s failed=0 warnings=122
+41d989d30a9389d1f54ea14aa7d2b860b6f63ac5bd49746e45813dd7fa68d392  trunk/stack
+cd4b81a95f6c984d1d84eed4d03fc875b040f64b0ddc37565db212fe2a84ec28  trunk/ipv6
+5d1fdabccc1ad4159f2145b0299e785bef94a22ece12687e4933b4490488d80c  trunk/tcp
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  trunk/udp
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  trunk/ipv4
+JAM b948 ref=origin/fix/873-ipv6-dual-stack head=eaf7d9a1 patch=none rc=0 wall=13s failed=0 warnings=103
+7a8e657953df1809d985fd93d0d259acf8833bfe8cf077e155ab5ec539806cce  b948/stack
+d4d8408918a23f5df380d66390920387be39925244a6d2cd87630b663f29e370  b948/ipv6
+7638a65d658f4a56e974987da15edf07480d086c39891d2d9e24486a17b3aeb1  b948/tcp
+14f077dd6dbccc2c7b02e70ab8fcea11a64ac084d1c70b35f398c51042246e9f  b948/udp
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  b948/ipv4
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+JAM fix ref=origin/fix/873-ipv6-dual-stack head=eaf7d9a1 patch=/opt/t900/fix.patch rc=0 wall=9s failed=0 warnings=2
+7a8e657953df1809d985fd93d0d259acf8833bfe8cf077e155ab5ec539806cce  fix/stack
+4add36d2d293ced62cb536251e4acb0112fa4563255e3b8bd295370238558d57  fix/ipv6
+7638a65d658f4a56e974987da15edf07480d086c39891d2d9e24486a17b3aeb1  fix/tcp
+14f077dd6dbccc2c7b02e70ab8fcea11a64ac084d1c70b35f398c51042246e9f  fix/udp
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  fix/ipv4
+15
