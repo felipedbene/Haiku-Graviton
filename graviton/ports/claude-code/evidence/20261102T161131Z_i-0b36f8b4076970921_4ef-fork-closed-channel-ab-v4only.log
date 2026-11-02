@@ -1,0 +1,32 @@
+# evidence: 4ef-fork-closed-channel-ab-v4only
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T161131Z   end: 20261102T162045Z   rc: 0
+# script sha256: de5206e620ac47d70414d3f6c980545d1f827dfc3e534d900febc2108fa9e208
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0/test/parallel || exit 1
+# | T=test-child-process-fork-closed-channel-segfault.js
+# | V=test-child-process-fork-closed-channel-segfault-v4only.js
+# | sed 's/  \.listen(0, common\.mustCall(() => {/  .listen(0, "0.0.0.0", common.mustCall(() => {/' $T > $V
+# | echo "== the only difference between the two files:"; diff $T $V
+# | run() {	# run <file>: 16 copies at once, count those still running after 45 s
+# | 	local pids="" alive=0 p
+# | 	for i in $(seq 16); do node $1 > /dev/null 2>&1 & pids="$pids $!"; done
+# | 	sleep 45
+# | 	for p in $pids; do kill -0 $p 2>/dev/null && { alive=$((alive+1)); kill $p; }; done; wait 2>/dev/null
+# | 	echo $alive
+# | }
+# | ta=0; tb=0
+# | for r in 1 2 3 4 5 6; do a=$(run $T); b=$(run $V); ta=$((ta+a)); tb=$((tb+b)); echo "round $r: dual-stack listen(0) hung $a/16, listen(0,'0.0.0.0') hung $b/16"; done
+# | echo "TOTAL: dual-stack $ta/96 hung, IPv4-only $tb/96 hung"
+# | rm -f $V
+# ---- raw output ----
+== the only difference between the two files:
+/tmp/ccrun/cc-20261102T161131Z-43942.sh: line 6: diff: command not found
+round 1: dual-stack listen(0) hung 0/16, listen(0,'0.0.0.0') hung 0/16
+round 2: dual-stack listen(0) hung 0/16, listen(0,'0.0.0.0') hung 0/16
+round 3: dual-stack listen(0) hung 1/16, listen(0,'0.0.0.0') hung 0/16
+round 4: dual-stack listen(0) hung 3/16, listen(0,'0.0.0.0') hung 0/16
+round 5: dual-stack listen(0) hung 1/16, listen(0,'0.0.0.0') hung 1/16
+round 6: dual-stack listen(0) hung 0/16, listen(0,'0.0.0.0') hung 0/16
+TOTAL: dual-stack 5/96 hung, IPv4-only 1/96 hung

@@ -1,0 +1,85 @@
+# evidence: 4ef-fork-closed-channel-hang-state
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T160742Z   end: 20261102T161057Z   rc: 0
+# script sha256: c9debecd4b60d502e770290629fe15e502af49154571dbe0bf50c03de7bab39a
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0/test/parallel || exit 1
+# | T=test-child-process-fork-closed-channel-segfault.js
+# | hung=0
+# | for round in 1 2 3 4; do
+# | 	pids=""; for i in $(seq 16); do node $T > /tmp/fsd-$round-$i.out 2>&1 & pids="$pids $!"; done
+# | 	sleep 45
+# | 	alive=""; for p in $pids; do kill -0 $p 2>/dev/null && alive="$alive $p"; done
+# | 	echo "round $round: $(echo $alive | wc -w) of 16 still running after 45 s (alone it takes ~1 s)"
+# | 	if [ -n "$alive" ] && [ $hung -eq 0 ]; then
+# | 		hung=1
+# | 		echo "--- ps (node teams)"; ps | grep -E 'bin/node|^ *node' | grep -v grep | head -20
+# | 		echo "--- netstat -n (tcp, non-listen)"; netstat -n -t 2>&1 | grep -v -E 'listen' | head -40
+# | 		echo "--- netstat -n -l"; netstat -n -t -l 2>&1 | head -40
+# | 		for p in $alive; do echo "--- output of $p so far"; done
+# | 	fi
+# | 	for p in $alive; do kill $p 2>/dev/null; done; wait 2>/dev/null
+# | 	pkill_none=1
+# | done
+# | echo "== AF of the server: what does server.address() report?"
+# | node -e 'const net=require("net");const s=net.createServer().listen(0,()=>{console.log(JSON.stringify(s.address()));const c=net.connect(s.address().port,()=>{console.log("client local",c.localAddress,c.localFamily,"remote",c.remoteAddress,c.remoteFamily);c.destroy();s.close()})})'
+# ---- raw output ----
+round 1: 2 of 16 still running after 45 s (alone it takes ~1 s)
+--- ps (node teams)
+/boot/system/bin/node test-child-process-fork-closed-channel-se 80878       11    0    0 
+/boot/system/bin/node test-child-process-fork-closed-channel-se 80881       11    0    0 
+--- netstat -n (tcp, non-listen)
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 [10.128.9.169]:40754  [44.254.14.191]:443   established  190/ssm-agent-worker
+tcp         0      0 [10.128.9.169]:22     [10.128.7.248]:24921  time-wait    100/sshd
+tcp         0      0 [10.128.9.169]:22     [10.128.7.248]:38765  time-wait    100/sshd
+tcp         0      0 [::ffff:127.0.0.1]:11627 [::ffff:127.0.0.1]:1696 time-wait    80173
+tcp         0      0 [::ffff:127.0.0.1]:11619 [::ffff:127.0.0.1]:1722 time-wait    80171
+tcp         0      0 [::ffff:127.0.0.1]:11659 [::ffff:127.0.0.1]:1739 time-wait    80174
+tcp         0      0 [::ffff:127.0.0.1]:11627 [::ffff:127.0.0.1]:1741 time-wait    80173
+tcp         0      0 [::ffff:127.0.0.1]:11656 [::ffff:127.0.0.1]:1745 time-wait    80172
+tcp         0      0 [::ffff:127.0.0.1]:11619 [::ffff:127.0.0.1]:1771 time-wait    80171
+tcp         0      0 [::ffff:127.0.0.1]:11659 [::ffff:127.0.0.1]:1772 time-wait    80174
+tcp         0      0 [::ffff:127.0.0.1]:11656 [::ffff:127.0.0.1]:1773 time-wait    80172
+tcp         0      0 [::ffff:127.0.0.1]:11677 [::ffff:127.0.0.1]:1788 time-wait    80177
+tcp         0      0 [::ffff:127.0.0.1]:11679 [::ffff:127.0.0.1]:1839 time-wait    80178
+tcp         0      0 [::ffff:127.0.0.1]:11687 [::ffff:127.0.0.1]:1813 time-wait    80181
+tcp         0      0 [::ffff:127.0.0.1]:11677 [::ffff:127.0.0.1]:1868 time-wait    80177
+tcp         0      0 [::ffff:127.0.0.1]:11687 [::ffff:127.0.0.1]:1900 time-wait    80181
+tcp         0      0 [::ffff:127.0.0.1]:11679 [::ffff:127.0.0.1]:1908 time-wait    80178
+tcp         0      0 [::ffff:127.0.0.1]:11745 [::ffff:127.0.0.1]:1945 time-wait    80212
+tcp         0      0 [::ffff:127.0.0.1]:11785 [::ffff:127.0.0.1]:1950 time-wait    80194
+tcp         0      0 [::ffff:127.0.0.1]:11831 [::ffff:127.0.0.1]:1979 time-wait    80218
+tcp         0      0 [::ffff:127.0.0.1]:11763 [::ffff:127.0.0.1]:2010 time-wait    80205
+tcp         0      0 [::ffff:127.0.0.1]:11715 [::ffff:127.0.0.1]:1940 time-wait    80207
+tcp         0      0 [::ffff:127.0.0.1]:11814 [::ffff:127.0.0.1]:2025 time-wait    80217
+tcp         0      0 [::ffff:127.0.0.1]:11861 [::ffff:127.0.0.1]:2026 time-wait    80219
+tcp         0      0 [::ffff:127.0.0.1]:11865 [::ffff:127.0.0.1]:2047 time-wait    80220
+tcp         0      0 [::ffff:127.0.0.1]:11829 [::ffff:127.0.0.1]:2052 time-wait    80208
+tcp         0      0 [::ffff:127.0.0.1]:11715 [::ffff:127.0.0.1]:2078 time-wait    80207
+tcp         0      0 [::ffff:127.0.0.1]:11745 [::ffff:127.0.0.1]:2081 time-wait    80212
+tcp         0      0 [::ffff:127.0.0.1]:11785 [::ffff:127.0.0.1]:2097 time-wait    80194
+tcp         0      0 [::ffff:127.0.0.1]:11831 [::ffff:127.0.0.1]:2100 time-wait    80218
+tcp         0      0 [::ffff:127.0.0.1]:11763 [::ffff:127.0.0.1]:2117 time-wait    80205
+tcp         0      0 [::ffff:127.0.0.1]:11814 [::ffff:127.0.0.1]:2142 time-wait    80217
+tcp         0      0 [::ffff:127.0.0.1]:11865 [::ffff:127.0.0.1]:2150 time-wait    80220
+tcp         0      0 [::ffff:127.0.0.1]:11861 [::ffff:127.0.0.1]:2179 time-wait    80219
+tcp         0      0 [::ffff:127.0.0.1]:11829 [::ffff:127.0.0.1]:2195 time-wait    80208
+tcp         0      0 [127.0.0.1]:2212      [127.0.0.1]:11896     time-wait    80519
+tcp         0      0 [::ffff:127.0.0.1]:11896 [::ffff:127.0.0.1]:2233 time-wait    80519
+tcp         0      0 [127.0.0.1]:2251      [127.0.0.1]:11920     time-wait    80521
+tcp         0      0 [::ffff:127.0.0.1]:11920 [::ffff:127.0.0.1]:2262 time-wait    80521
+--- netstat -n -l
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       63/remote_broker
+tcp         0      0 *:22                  *:0                   listen       100/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       156/app_server
+--- output of 80878 so far
+--- output of 80881 so far
+round 2: 0 of 16 still running after 45 s (alone it takes ~1 s)
+round 3: 1 of 16 still running after 45 s (alone it takes ~1 s)
+round 4: 4 of 16 still running after 45 s (alone it takes ~1 s)
+== AF of the server: what does server.address() report?
+{"address":"::","family":"IPv6","port":13042}
+client local 127.0.0.1 IPv4 remote 127.0.0.1 IPv4

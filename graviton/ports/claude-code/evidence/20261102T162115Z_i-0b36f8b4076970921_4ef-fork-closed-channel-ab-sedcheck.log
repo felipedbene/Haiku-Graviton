@@ -1,0 +1,12 @@
+# evidence: 4ef-fork-closed-channel-ab-sedcheck
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T162115Z   end: 20261102T162136Z   rc: 0
+# script sha256: 9abddf588ef4830eba3300506fdde90f242dd2f7610b2d26be077afd4989f698
+# ---- script ----
+# | cd /boot/home/node-src/node-v24.21.0/test/parallel || exit 1
+# | T=test-child-process-fork-closed-channel-segfault.js
+# | sed 's/  \.listen(0, common\.mustCall(() => {/  .listen(0, "0.0.0.0", common.mustCall(() => {/' $T | grep -n 'listen(0'
+# | grep -n 'listen(0' $T
+# ---- raw output ----
+31:  .listen(0, "0.0.0.0", common.mustCall(() => {
+31:  .listen(0, common.mustCall(() => {

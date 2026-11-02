@@ -1,0 +1,256 @@
+# evidence: 4ef-repro-udp899
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T154722Z   end: 20261102T154823Z   rc: 0
+# script sha256: d9139f207e0358fc93089667c494313330a305b26a9f2e37ed87692624fd018c
+# ---- script ----
+# | set -u
+# | # udp899.c from trunk origin/graviton 4ef344f5fa, sha256 1d6e5c7c14135a788b9d0ff9d9e26be73d003f8a5d998c8cf1c4707b963c2e0c
+# | W=/boot/home/rudp899; rm -rf $W; mkdir -p $W; cd $W || exit 2
+# | echo 'LyoKICogdWRwODk5LmMgLS0gaXNzdWUgODk5OiBhIFVEUCBzb2NrZXQgd2l0aCBhIGRhdGFncmFtIHF1ZXVlZCBpcyByZWFkYWJsZSwKICogZXZlbiB3aGVuIHRoZSBkYXRhZ3JhbSBpcyBlbXB0eSwgd2hldGhlciB0aGUgcG9sbCgpIG9yIHNlbGVjdCgpIHdhcwogKiBlbnRlcmVkIGJlZm9yZSB0aGUgZGF0YWdyYW0gYXJyaXZlZCBvciBhZnRlciBpdC4gcmVjdigpIG9mIGFuIGVtcHR5CiAqIGRhdGFncmFtIHJldHVybnMgMCwgYW5kIG9uY2UgdGhlIHF1ZXVlIGlzIGRyYWluZWQgdGhlIHNvY2tldCBpcyBub3QKICogcmVhZGFibGUgYW55IG1vcmUuIFN0cmVhbSBzb2NrZXRzIGFyZSB0aGUgY29udHJvbDogdGhlcmUgYSAwLWJ5dGUgcmVhZAogKiBtZWFucyBFT0YsIGFuZCBhbiBpZGxlIGNvbm5lY3Rpb24gaXMgbm90IHJlYWRhYmxlLgogKgogKiBDb3ZlcmVkLCBmb3IgZWFjaCBhZGRyZXNzIHNldHVwIChJUHY0LCBJUHY2LCBhbiBJUHY0IHNlbmRlciB0byBhCiAqIGR1YWwtc3RhY2sgOjogc29ja2V0LCBhbmQgYW4gSVB2NiBzZW5kZXIgdG8gOjpmZmZmOjEyNy4wLjAuMSksIGVhY2gKICogY29ubmVjdGlvbiBtb2RlIChib3RoIGVuZHMgdW5jb25uZWN0ZWQ7IGJvdGggY29ubmVjdGVkOyBvbmUgc29ja2V0CiAqIGNvbm5lY3RlZCB0byBpdHNlbGYsIGFzIE5vZGUncyBkZ3JhbSB0ZXN0cyBkbykgYW5kIGVhY2ggd2FpdCAocG9sbCgpIG9yCiAqIHNlbGVjdCgpLCBlbnRlcmVkIGJlZm9yZSBvciBhZnRlciB0aGUgZGF0YWdyYW0gYXJyaXZlcyk6CiAqICAgLSB0aGUgc2VxdWVuY2UgMCwgMywgMCBieXRlcywgZWFjaCBzZW50LCB3YWl0ZWQgZm9yIGFuZCByZWFkIGluIHR1cm4KICogICAtIGEgZnJlc2ggcG9sbCgpIG9uIHRoZSBkcmFpbmVkIHNvY2tldCByZXBvcnRzIG5vdGhpbmcKICogQW5kIG9uY2UgcGVyIGFkZHJlc3Mgc2V0dXA6CiAqICAgLSAzIGFuZCAwIGJ5dGVzIHF1ZXVlZCB0b2dldGhlciwgdGhlbiAwIGFuZCAwOiBhIGZyZXNoIHBvbGwoKSBpcwogKiAgICAgcmVhZGFibGUgYmVmb3JlIGVhY2ggcmVjdigpLCBhbmQgbm90IGFmdGVyIHRoZSBsYXN0IG9uZQogKiAgIC0gYW4gZW1wdHkgZGF0YWdyYW0gc2VudCB3aXRoIHNlbmRtc2coKSBhbmQgbXNnX2lvdmxlbiAwCiAqICAgLSBTT19SQ1ZMT1dBVCBsYXJnZXIgdGhhbiB0aGUgcXVldWVkIGRhdGFncmFtIGRvZXMgbm90IGhpZGUgaXQKICogU3RyZWFtIGNvbnRyb2w6IGFuIGlkbGUgVENQIGNvbm5lY3Rpb24sIG9uZSB3aXRoIDEgYnl0ZSBxdWV1ZWQsIGFuZCBvbmUKICogd2hvc2UgcGVlciBoYXMgc2h1dCBkb3duIHdyaXRpbmcgKHJlYWRhYmxlLCByZWN2KCkgMCkuCiAqCiAqIEV4aXQgc3RhdHVzOiB0aGUgbnVtYmVyIG9mIEZBSUxzLiBQbGFpbiBQT1NJWDogYnVpbGRzIGFuZCBydW5zIG9uIExpbnV4LAogKiB3aGljaCBpcyB0aGUgcmVmZXJlbmNlLgogKi8KCiNpbmNsdWRlIDxhcnBhL2luZXQuaD4KI2luY2x1ZGUgPGVycm5vLmg+CiNpbmNsdWRlIDxuZXRpbmV0L2luLmg+CiNpbmNsdWRlIDxwb2xsLmg+CiNpbmNsdWRlIDxwdGhyZWFkLmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RyaW5nLmg+CiNpbmNsdWRlIDxzeXMvc2VsZWN0Lmg+CiNpbmNsdWRlIDxzeXMvc29ja2V0Lmg+CiNpbmNsdWRlIDxzeXMvdGltZS5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CgoKc3RhdGljIGludCBzRmFpbGVkID0gMDsKc3RhdGljIGludCBzUGFzc2VkID0gMDsKCgpzdGF0aWMgdm9pZApyZXBvcnQoY29uc3QgY2hhciogd2hhdCwgaW50IG9rLCBjb25zdCBjaGFyKiBkZXRhaWwpCnsKCXByaW50ZigiJS01OHMgJXMgICVzXG4iLCB3aGF0LCBvayA/ICJQQVNTIiA6ICJGQUlMIiwgZGV0YWlsKTsKCWlmIChvaykKCQlzUGFzc2VkKys7CgllbHNlCgkJc0ZhaWxlZCsrOwp9CgoKc3RhdGljIHNvY2tsZW5fdAptYWtlX2FkZHJlc3MoaW50IGZhbWlseSwgY29uc3QgY2hhciogdGV4dCwgaW50IHBvcnQsCglzdHJ1Y3Qgc29ja2FkZHJfc3RvcmFnZSogYWRkcmVzcykKewoJbWVtc2V0KGFkZHJlc3MsIDAsIHNpemVvZigqYWRkcmVzcykpOwoJaWYgKGZhbWlseSA9PSBBRl9JTkVUKSB7CgkJc3RydWN0IHNvY2thZGRyX2luKiBpbiA9IChzdHJ1Y3Qgc29ja2FkZHJfaW4qKWFkZHJlc3M7CgkJaW4tPnNpbl9mYW1pbHkgPSBBRl9JTkVUOwoJCWluLT5zaW5fcG9ydCA9IGh0b25zKHBvcnQpOwoJCWluZXRfcHRvbihBRl9JTkVULCB0ZXh0LCAmaW4tPnNpbl9hZGRyKTsKCQlyZXR1cm4gc2l6ZW9mKCppbik7Cgl9CgoJc3RydWN0IHNvY2thZGRyX2luNiogaW42ID0gKHN0cnVjdCBzb2NrYWRkcl9pbjYqKWFkZHJlc3M7CglpbjYtPnNpbjZfZmFtaWx5ID0gQUZfSU5FVDY7CglpbjYtPnNpbjZfcG9ydCA9IGh0b25zKHBvcnQpOwoJaW5ldF9wdG9uKEFGX0lORVQ2LCB0ZXh0LCAmaW42LT5zaW42X2FkZHIpOwoJcmV0dXJuIHNpemVvZigqaW42KTsKfQoKCnN0YXRpYyBpbnQKcG9ydF9vZihjb25zdCBzdHJ1Y3Qgc29ja2FkZHJfc3RvcmFnZSogYWRkcmVzcykKewoJaWYgKGFkZHJlc3MtPnNzX2ZhbWlseSA9PSBBRl9JTkVUKQoJCXJldHVybiBudG9ocygoKGNvbnN0IHN0cnVjdCBzb2NrYWRkcl9pbiopYWRkcmVzcyktPnNpbl9wb3J0KTsKCXJldHVybiBudG9ocygoKGNvbnN0IHN0cnVjdCBzb2NrYWRkcl9pbjYqKWFkZHJlc3MpLT5zaW42X3BvcnQpOwp9CgoKc3RhdGljIGludApsb2NhbF9wb3J0KGludCBmZCkKewoJc3RydWN0IHNvY2thZGRyX3N0b3JhZ2UgYWRkcmVzczsKCXNvY2tsZW5fdCBsZW5ndGggPSBzaXplb2YoYWRkcmVzcyk7CglpZiAoZ2V0c29ja25hbWUoZmQsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhZGRyZXNzLCAmbGVuZ3RoKSAhPSAwKQoJCXJldHVybiAtMTsKCXJldHVybiBwb3J0X29mKCZhZGRyZXNzKTsKfQoKCi8qIQlBIFVEUCBzb2NrZXQgb2YgXGEgZmFtaWx5IGJvdW5kIHRvIFxhIGJpbmRUZXh0LCBwb3J0IDAuIEZvciBBRl9JTkVUNiwKCVxhIHY2b25seSBzZXRzIElQVjZfVjZPTkxZICgtMSBsZWF2ZXMgdGhlIGRlZmF1bHQpLgoqLwpzdGF0aWMgaW50CnVkcF9zb2NrZXQoaW50IGZhbWlseSwgY29uc3QgY2hhciogYmluZFRleHQsIGludCB2Nm9ubHkpCnsKCWludCBmZCA9IHNvY2tldChmYW1pbHksIFNPQ0tfREdSQU0sIDApOwoJaWYgKGZkIDwgMCkgewoJCXByaW50Zigic29ja2V0KCVkKTogJXNcbiIsIGZhbWlseSwgc3RyZXJyb3IoZXJybm8pKTsKCQlyZXR1cm4gLTE7Cgl9CglpZiAoZmFtaWx5ID09IEFGX0lORVQ2ICYmIHY2b25seSA+PSAwCgkJJiYgc2V0c29ja29wdChmZCwgSVBQUk9UT19JUFY2LCBJUFY2X1Y2T05MWSwgJnY2b25seSwKCQkJc2l6ZW9mKHY2b25seSkpICE9IDApIHsKCQlwcmludGYoIklQVjZfVjZPTkxZPSVkOiAlc1xuIiwgdjZvbmx5LCBzdHJlcnJvcihlcnJubykpOwoJCWNsb3NlKGZkKTsKCQlyZXR1cm4gLTE7Cgl9CgoJc3RydWN0IHNvY2thZGRyX3N0b3JhZ2UgYWRkcmVzczsKCXNvY2tsZW5fdCBsZW5ndGggPSBtYWtlX2FkZHJlc3MoZmFtaWx5LCBiaW5kVGV4dCwgMCwgJmFkZHJlc3MpOwoJaWYgKGJpbmQoZmQsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhZGRyZXNzLCBsZW5ndGgpICE9IDApIHsKCQlwcmludGYoImJpbmQoJXMpOiAlc1xuIiwgYmluZFRleHQsIHN0cmVycm9yKGVycm5vKSk7CgkJY2xvc2UoZmQpOwoJCXJldHVybiAtMTsKCX0KCXJldHVybiBmZDsKfQoKCi8vICNwcmFnbWEgbWFyayAtIHdhaXRpbmcKCgplbnVtIHdhaXRfbW9kZSB7CglQT0xMX0JFRk9SRSwKCVBPTExfQUZURVIsCglTRUxFQ1RfQkVGT1JFLAoJU0VMRUNUX0FGVEVSCn07CgpzdGF0aWMgY29uc3QgY2hhcioga1dhaXROYW1lc1tdID0gewoJInBvbGwtYmVmb3JlIiwgInBvbGwtYWZ0ZXIiLCAic2VsZWN0LWJlZm9yZSIsICJzZWxlY3QtYWZ0ZXIiCn07CgoKLyohCVdoZXRoZXIgXGEgZmQgaXMgcmVhZGFibGUsIGJ5IHBvbGwoKSBvciBzZWxlY3QoKSBwZXIgXGEgdXNlU2VsZWN0LCB3aXRoCglcYSB0aW1lb3V0TXMuIFJldHVybnMgMSByZWFkYWJsZSwgMCBub3QsIC0xIGVycm9yOyBcYSBkZXRhaWwgZ2V0cyB0aGUgcmF3CglyZXN1bHQuCiovCnN0YXRpYyBpbnQKd2FpdF9yZWFkYWJsZShpbnQgZmQsIGludCB1c2VTZWxlY3QsIGludCB0aW1lb3V0TXMsIGNoYXIqIGRldGFpbCwKCXNpemVfdCBkZXRhaWxTaXplKQp7CglpZiAoIXVzZVNlbGVjdCkgewoJCXN0cnVjdCBwb2xsZmQgcGZkID0geyBmZCwgUE9MTElOLCAwIH07CgkJaW50IHIgPSBwb2xsKCZwZmQsIDEsIHRpbWVvdXRNcyk7CgkJaWYgKHIgPCAwKSB7CgkJCXNucHJpbnRmKGRldGFpbCwgZGV0YWlsU2l6ZSwgInBvbGw6ICVzIiwgc3RyZXJyb3IoZXJybm8pKTsKCQkJcmV0dXJuIC0xOwoJCX0KCQlzbnByaW50ZihkZXRhaWwsIGRldGFpbFNpemUsICJwb2xsPSVkIHJldmVudHM9MHgleCIsIHIsCgkJCSh1bnNpZ25lZClwZmQucmV2ZW50cyk7CgkJcmV0dXJuIHIgPT0gMSAmJiAocGZkLnJldmVudHMgJiBQT0xMSU4pICE9IDA7Cgl9CgoJZmRfc2V0IHNldDsKCUZEX1pFUk8oJnNldCk7CglGRF9TRVQoZmQsICZzZXQpOwoJc3RydWN0IHRpbWV2YWwgdGltZW91dCA9IHsgdGltZW91dE1zIC8gMTAwMCwgKHRpbWVvdXRNcyAlIDEwMDApICogMTAwMCB9OwoJaW50IHIgPSBzZWxlY3QoZmQgKyAxLCAmc2V0LCBOVUxMLCBOVUxMLCAmdGltZW91dCk7CglpZiAociA8IDApIHsKCQlzbnByaW50ZihkZXRhaWwsIGRldGFpbFNpemUsICJzZWxlY3Q6ICVzIiwgc3RyZXJyb3IoZXJybm8pKTsKCQlyZXR1cm4gLTE7Cgl9CglzbnByaW50ZihkZXRhaWwsIGRldGFpbFNpemUsICJzZWxlY3Q9JWQgaXNzZXQ9JWQiLCByLAoJCUZEX0lTU0VUKGZkLCAmc2V0KSA/IDEgOiAwKTsKCXJldHVybiByID09IDEgJiYgRkRfSVNTRVQoZmQsICZzZXQpOwp9CgoKc3RydWN0IHdhaXRlciB7CglpbnQJCQlmZDsKCWludAkJCXVzZVNlbGVjdDsKCWludAkJCXJlc3VsdDsKCWNoYXIJCWRldGFpbFs2NF07Cn07CgoKc3RhdGljIHZvaWQqCndhaXRlcl90aHJlYWQodm9pZCogX3dhaXRlcikKewoJc3RydWN0IHdhaXRlciogd2FpdGVyID0gKHN0cnVjdCB3YWl0ZXIqKV93YWl0ZXI7Cgl3YWl0ZXItPnJlc3VsdCA9IHdhaXRfcmVhZGFibGUod2FpdGVyLT5mZCwgd2FpdGVyLT51c2VTZWxlY3QsIDMwMDAsCgkJd2FpdGVyLT5kZXRhaWwsIHNpemVvZih3YWl0ZXItPmRldGFpbCkpOwoJcmV0dXJuIE5VTEw7Cn0KCgovLyAjcHJhZ21hIG1hcmsgLSBVRFAKCgpzdHJ1Y3Qgc2V0dXAgewoJY29uc3QgY2hhcioJbmFtZTsKCWludAkJCXJlY2VpdmVyRmFtaWx5OwoJY29uc3QgY2hhcioJcmVjZWl2ZXJCaW5kOwoJaW50CQkJcmVjZWl2ZXJWNm9ubHk7CglpbnQJCQlzZW5kZXJGYW1pbHk7Cgljb25zdCBjaGFyKglzZW5kZXJCaW5kOwoJaW50CQkJc2VuZGVyVjZvbmx5OwoJY29uc3QgY2hhcioJZGVzdGluYXRpb247CgkJLy8gcmVjZWl2ZXIncyBhZGRyZXNzIGFzIHRoZSBzZW5kZXIgYWRkcmVzc2VzIGl0Cgljb25zdCBjaGFyKglzb3VyY2U7CgkJLy8gc2VuZGVyJ3MgYWRkcmVzcyBhcyB0aGUgcmVjZWl2ZXIgc2VlcyBpdAp9OwoKc3RhdGljIGNvbnN0IHN0cnVjdCBzZXR1cCBrU2V0dXBzW10gPSB7Cgl7ICJpcHY0IiwgQUZfSU5FVCwgIjEyNy4wLjAuMSIsIC0xLCBBRl9JTkVULCAiMTI3LjAuMC4xIiwgLTEsCgkJIjEyNy4wLjAuMSIsICIxMjcuMC4wLjEiIH0sCgl7ICJpcHY2IiwgQUZfSU5FVDYsICI6OjEiLCAxLCBBRl9JTkVUNiwgIjo6MSIsIDEsICI6OjEiLCAiOjoxIiB9LAoJeyAidjQtdG8tZHVhbCIsIEFGX0lORVQ2LCAiOjoiLCAwLCBBRl9JTkVULCAiMTI3LjAuMC4xIiwgLTEsCgkJIjEyNy4wLjAuMSIsICI6OmZmZmY6MTI3LjAuMC4xIiB9LAoJeyAibWFwcGVkLXRvLWR1YWwiLCBBRl9JTkVUNiwgIjo6IiwgMCwgQUZfSU5FVDYsICI6OiIsIDAsCgkJIjo6ZmZmZjoxMjcuMC4wLjEiLCAiOjpmZmZmOjEyNy4wLjAuMSIgfSwKfTsKCgplbnVtIGNvbm5lY3RfbW9kZSB7CglVTkNPTk5FQ1RFRCwKCUNPTk5FQ1RFRCwKCVNFTEZfQ09OTkVDVEVECn07CgpzdGF0aWMgY29uc3QgY2hhcioga0Nvbm5lY3ROYW1lc1tdID0gewoJInVuY29ubmVjdGVkIiwgImNvbm5lY3RlZCIsICJzZWxmLWNvbm5lY3RlZCIKfTsKCgpzdHJ1Y3QgcGFpciB7CglpbnQJCQlzZW5kZXI7CglpbnQJCQlyZWNlaXZlcjsKCWludAkJCWNvbm5lY3RlZDsKCXN0cnVjdCBzb2NrYWRkcl9zdG9yYWdlIGRlc3RpbmF0aW9uOwoJc29ja2xlbl90CWRlc3RpbmF0aW9uTGVuZ3RoOwp9OwoKCnN0YXRpYyB2b2lkCmNsb3NlX3BhaXIoc3RydWN0IHBhaXIqIHBhaXIpCnsKCWlmIChwYWlyLT5zZW5kZXIgPj0gMCAmJiBwYWlyLT5zZW5kZXIgIT0gcGFpci0+cmVjZWl2ZXIpCgkJY2xvc2UocGFpci0+c2VuZGVyKTsKCWlmIChwYWlyLT5yZWNlaXZlciA+PSAwKQoJCWNsb3NlKHBhaXItPnJlY2VpdmVyKTsKCXBhaXItPnNlbmRlciA9IHBhaXItPnJlY2VpdmVyID0gLTE7Cn0KCgpzdGF0aWMgaW50Cm9wZW5fcGFpcihjb25zdCBzdHJ1Y3Qgc2V0dXAqIHNldHVwLCBpbnQgbW9kZSwgc3RydWN0IHBhaXIqIHBhaXIpCnsKCXBhaXItPnNlbmRlciA9IHBhaXItPnJlY2VpdmVyID0gLTE7CglwYWlyLT5jb25uZWN0ZWQgPSBtb2RlICE9IFVOQ09OTkVDVEVEOwoKCWlmIChtb2RlID09IFNFTEZfQ09OTkVDVEVEKSB7CgkJLy8gT25lIHNvY2tldCBzZW5kcyB0byBpdHNlbGYuIEZvciB0aGUgZHVhbC1zdGFjayBzZXR1cHMgaXQgaXMgdGhlCgkJLy8gOjogc29ja2V0LCByZWFjaGluZyBpdHNlbGYgdGhyb3VnaCA6OmZmZmY6MTI3LjAuMC4xLgoJCXBhaXItPnJlY2VpdmVyID0gdWRwX3NvY2tldChzZXR1cC0+cmVjZWl2ZXJGYW1pbHksCgkJCXNldHVwLT5yZWNlaXZlckJpbmQsIHNldHVwLT5yZWNlaXZlclY2b25seSk7CgkJaWYgKHBhaXItPnJlY2VpdmVyIDwgMCkKCQkJcmV0dXJuIC0xOwoJCXBhaXItPnNlbmRlciA9IHBhaXItPnJlY2VpdmVyOwoJCWNvbnN0IGNoYXIqIHNlbGYgPSBzZXR1cC0+cmVjZWl2ZXJGYW1pbHkgPT0gQUZfSU5FVAoJCQk/ICIxMjcuMC4wLjEiIDogc2V0dXAtPnJlY2VpdmVyVjZvbmx5ID09IDAKCQkJCT8gIjo6ZmZmZjoxMjcuMC4wLjEiIDogIjo6MSI7CgkJcGFpci0+ZGVzdGluYXRpb25MZW5ndGggPSBtYWtlX2FkZHJlc3Moc2V0dXAtPnJlY2VpdmVyRmFtaWx5LCBzZWxmLAoJCQlsb2NhbF9wb3J0KHBhaXItPnJlY2VpdmVyKSwgJnBhaXItPmRlc3RpbmF0aW9uKTsKCQlpZiAoY29ubmVjdChwYWlyLT5yZWNlaXZlciwgKHN0cnVjdCBzb2NrYWRkciopJnBhaXItPmRlc3RpbmF0aW9uLAoJCQkJcGFpci0+ZGVzdGluYXRpb25MZW5ndGgpICE9IDApIHsKCQkJcHJpbnRmKCJjb25uZWN0KHNlbGYgJXMpOiAlc1xuIiwgc2VsZiwgc3RyZXJyb3IoZXJybm8pKTsKCQkJY2xvc2VfcGFpcihwYWlyKTsKCQkJcmV0dXJuIC0xOwoJCX0KCQlyZXR1cm4gMDsKCX0KCglwYWlyLT5yZWNlaXZlciA9IHVkcF9zb2NrZXQoc2V0dXAtPnJlY2VpdmVyRmFtaWx5LCBzZXR1cC0+cmVjZWl2ZXJCaW5kLAoJCXNldHVwLT5yZWNlaXZlclY2b25seSk7CglwYWlyLT5zZW5kZXIgPSB1ZHBfc29ja2V0KHNldHVwLT5zZW5kZXJGYW1pbHksIHNldHVwLT5zZW5kZXJCaW5kLAoJCXNldHVwLT5zZW5kZXJWNm9ubHkpOwoJaWYgKHBhaXItPnJlY2VpdmVyIDwgMCB8fCBwYWlyLT5zZW5kZXIgPCAwKSB7CgkJY2xvc2VfcGFpcihwYWlyKTsKCQlyZXR1cm4gLTE7Cgl9CgoJcGFpci0+ZGVzdGluYXRpb25MZW5ndGggPSBtYWtlX2FkZHJlc3Moc2V0dXAtPnNlbmRlckZhbWlseSwKCQlzZXR1cC0+ZGVzdGluYXRpb24sIGxvY2FsX3BvcnQocGFpci0+cmVjZWl2ZXIpLCAmcGFpci0+ZGVzdGluYXRpb24pOwoJaWYgKG1vZGUgPT0gQ09OTkVDVEVEKSB7CgkJc3RydWN0IHNvY2thZGRyX3N0b3JhZ2Ugc291cmNlOwoJCXNvY2tsZW5fdCBzb3VyY2VMZW5ndGggPSBtYWtlX2FkZHJlc3Moc2V0dXAtPnJlY2VpdmVyRmFtaWx5LAoJCQlzZXR1cC0+c291cmNlLCBsb2NhbF9wb3J0KHBhaXItPnNlbmRlciksICZzb3VyY2UpOwoJCWlmIChjb25uZWN0KHBhaXItPnJlY2VpdmVyLCAoc3RydWN0IHNvY2thZGRyKikmc291cmNlLCBzb3VyY2VMZW5ndGgpCgkJCQkhPSAwCgkJCXx8IGNvbm5lY3QocGFpci0+c2VuZGVyLCAoc3RydWN0IHNvY2thZGRyKikmcGFpci0+ZGVzdGluYXRpb24sCgkJCQlwYWlyLT5kZXN0aW5hdGlvbkxlbmd0aCkgIT0gMCkgewoJCQlwcmludGYoImNvbm5lY3QoKTogJXNcbiIsIHN0cmVycm9yKGVycm5vKSk7CgkJCWNsb3NlX3BhaXIocGFpcik7CgkJCXJldHVybiAtMTsKCQl9Cgl9CglyZXR1cm4gMDsKfQoKCnN0YXRpYyBzc2l6ZV90CnNlbmRfZGF0YWdyYW0oY29uc3Qgc3RydWN0IHBhaXIqIHBhaXIsIHNpemVfdCBzaXplKQp7CglzdGF0aWMgY29uc3QgY2hhciBrUGF5bG9hZFsxNl0gPSAiMDEyMzQ1Njc4OWFiY2RlIjsKCWlmIChwYWlyLT5jb25uZWN0ZWQpCgkJcmV0dXJuIHNlbmQocGFpci0+c2VuZGVyLCBrUGF5bG9hZCwgc2l6ZSwgMCk7CglyZXR1cm4gc2VuZHRvKHBhaXItPnNlbmRlciwga1BheWxvYWQsIHNpemUsIDAsCgkJKGNvbnN0IHN0cnVjdCBzb2NrYWRkciopJnBhaXItPmRlc3RpbmF0aW9uLCBwYWlyLT5kZXN0aW5hdGlvbkxlbmd0aCk7Cn0KCgpzdGF0aWMgc3NpemVfdApyZWNlaXZlX2RhdGFncmFtKGludCBmZCkKewoJY2hhciBidWZmZXJbNjRdOwoJcmV0dXJuIHJlY3YoZmQsIGJ1ZmZlciwgc2l6ZW9mKGJ1ZmZlciksIE1TR19ET05UV0FJVCk7Cn0KCgovKiEJU2VuZHMgYSBcYSBzaXplIGJ5dGUgZGF0YWdyYW0gYW5kIGNoZWNrcyB0aGUgcmVjZWl2ZXIgaXMgcmVwb3J0ZWQKCXJlYWRhYmxlIGJ5IHRoZSBcYSBtb2RlIHdhaXQsIHRoZW4gdGhhdCByZWN2KCkgcmV0dXJucyBcYSBzaXplLgoqLwpzdGF0aWMgaW50CmNoZWNrX29uZShjb25zdCBzdHJ1Y3QgcGFpciogcGFpciwgaW50IG1vZGUsIHNpemVfdCBzaXplLCBjaGFyKiBkZXRhaWwsCglzaXplX3QgZGV0YWlsU2l6ZSkKewoJaW50IHVzZVNlbGVjdCA9IG1vZGUgPT0gU0VMRUNUX0JFRk9SRSB8fCBtb2RlID09IFNFTEVDVF9BRlRFUjsKCWludCByZWFkYWJsZTsKCWNoYXIgd2FpdERldGFpbFs2NF07CgoJaWYgKG1vZGUgPT0gUE9MTF9CRUZPUkUgfHwgbW9kZSA9PSBTRUxFQ1RfQkVGT1JFKSB7CgkJc3RydWN0IHdhaXRlciB3YWl0ZXIgPSB7IHBhaXItPnJlY2VpdmVyLCB1c2VTZWxlY3QsIC0xLCAiIiB9OwoJCXB0aHJlYWRfdCB0aHJlYWQ7CgkJaWYgKHB0aHJlYWRfY3JlYXRlKCZ0aHJlYWQsIE5VTEwsIHdhaXRlcl90aHJlYWQsICZ3YWl0ZXIpICE9IDApIHsKCQkJc25wcmludGYoZGV0YWlsLCBkZXRhaWxTaXplLCAicHRocmVhZF9jcmVhdGUgZmFpbGVkIik7CgkJCXJldHVybiAwOwoJCX0KCQl1c2xlZXAoMjAwMDAwKTsKCQkJLy8gZ2l2ZSB0aGUgd2FpdGVyIHRpbWUgdG8gYmxvY2sKCQlzc2l6ZV90IHNlbnQgPSBzZW5kX2RhdGFncmFtKHBhaXIsIHNpemUpOwoJCXB0aHJlYWRfam9pbih0aHJlYWQsIE5VTEwpOwoJCWlmIChzZW50ICE9IChzc2l6ZV90KXNpemUpIHsKCQkJc25wcmludGYoZGV0YWlsLCBkZXRhaWxTaXplLCAic2VuZCglenUpPSV6ZCAlcyIsIHNpemUsIHNlbnQsCgkJCQlzdHJlcnJvcihlcnJubykpOwoJCQlyZXR1cm4gMDsKCQl9CgkJcmVhZGFibGUgPSB3YWl0ZXIucmVzdWx0OwoJCXN0cmNweSh3YWl0RGV0YWlsLCB3YWl0ZXIuZGV0YWlsKTsKCX0gZWxzZSB7CgkJc3NpemVfdCBzZW50ID0gc2VuZF9kYXRhZ3JhbShwYWlyLCBzaXplKTsKCQlpZiAoc2VudCAhPSAoc3NpemVfdClzaXplKSB7CgkJCXNucHJpbnRmKGRldGFpbCwgZGV0YWlsU2l6ZSwgInNlbmQoJXp1KT0lemQgJXMiLCBzaXplLCBzZW50LAoJCQkJc3RyZXJyb3IoZXJybm8pKTsKCQkJcmV0dXJuIDA7CgkJfQoJCXVzbGVlcCgxMDAwMDApOwoJCQkvLyBsZXQgaXQgYXJyaXZlIGJlZm9yZSB0aGUgd2FpdCBzdGFydHMKCQlyZWFkYWJsZSA9IHdhaXRfcmVhZGFibGUocGFpci0+cmVjZWl2ZXIsIHVzZVNlbGVjdCwgMCwgd2FpdERldGFpbCwKCQkJc2l6ZW9mKHdhaXREZXRhaWwpKTsKCX0KCglzc2l6ZV90IHJlY2VpdmVkID0gcmVjZWl2ZV9kYXRhZ3JhbShwYWlyLT5yZWNlaXZlcik7CglpbnQgcmVjZWl2ZUVycm5vID0gZXJybm87CglpZiAocmVjZWl2ZWQgPCAwKSB7CgkJc25wcmludGYoZGV0YWlsLCBkZXRhaWxTaXplLCAiJXMgcmVjdj0lemQgKCVzKSIsIHdhaXREZXRhaWwsCgkJCXJlY2VpdmVkLCBzdHJlcnJvcihyZWNlaXZlRXJybm8pKTsKCX0gZWxzZQoJCXNucHJpbnRmKGRldGFpbCwgZGV0YWlsU2l6ZSwgIiVzIHJlY3Y9JXpkIiwgd2FpdERldGFpbCwgcmVjZWl2ZWQpOwoJcmV0dXJuIHJlYWRhYmxlID09IDEgJiYgcmVjZWl2ZWQgPT0gKHNzaXplX3Qpc2l6ZTsKfQoKCnN0YXRpYyBpbnQKY2hlY2tfZHJhaW5lZChpbnQgZmQsIGNoYXIqIGRldGFpbCwgc2l6ZV90IGRldGFpbFNpemUpCnsKCXJldHVybiB3YWl0X3JlYWRhYmxlKGZkLCAwLCAwLCBkZXRhaWwsIGRldGFpbFNpemUpID09IDA7Cn0KCgpzdGF0aWMgdm9pZAp0ZXN0X3NlcXVlbmNlKGNvbnN0IHN0cnVjdCBzZXR1cCogc2V0dXAsIGludCBjb25uZWN0TW9kZSwgaW50IHdhaXRNb2RlKQp7CglzdGF0aWMgY29uc3Qgc2l6ZV90IGtTaXplc1tdID0geyAwLCAzLCAwIH07CgljaGFyIHdoYXRbOTZdOwoJY2hhciBkZXRhaWxbMTYwXTsKCXN0cnVjdCBwYWlyIHBhaXI7CgoJaWYgKG9wZW5fcGFpcihzZXR1cCwgY29ubmVjdE1vZGUsICZwYWlyKSAhPSAwKSB7CgkJc25wcmludGYod2hhdCwgc2l6ZW9mKHdoYXQpLCAiJXMgJXMgJXM6IHNldHVwIiwgc2V0dXAtPm5hbWUsCgkJCWtDb25uZWN0TmFtZXNbY29ubmVjdE1vZGVdLCBrV2FpdE5hbWVzW3dhaXRNb2RlXSk7CgkJcmVwb3J0KHdoYXQsIDAsICJjb3VsZCBub3Qgb3BlbiB0aGUgc29ja2V0cyIpOwoJCXJldHVybjsKCX0KCglmb3IgKHNpemVfdCBpID0gMDsgaSA8IHNpemVvZihrU2l6ZXMpIC8gc2l6ZW9mKGtTaXplc1swXSk7IGkrKykgewoJCXNucHJpbnRmKHdoYXQsIHNpemVvZih3aGF0KSwgIiVzICVzICVzOiAlenUgYnl0ZXMiLCBzZXR1cC0+bmFtZSwKCQkJa0Nvbm5lY3ROYW1lc1tjb25uZWN0TW9kZV0sIGtXYWl0TmFtZXNbd2FpdE1vZGVdLCBrU2l6ZXNbaV0pOwoJCWludCBvayA9IGNoZWNrX29uZSgmcGFpciwgd2FpdE1vZGUsIGtTaXplc1tpXSwgZGV0YWlsLAoJCQlzaXplb2YoZGV0YWlsKSk7CgkJcmVwb3J0KHdoYXQsIG9rLCBkZXRhaWwpOwoJfQoKCXNucHJpbnRmKHdoYXQsIHNpemVvZih3aGF0KSwgIiVzICVzICVzOiBkcmFpbmVkIiwgc2V0dXAtPm5hbWUsCgkJa0Nvbm5lY3ROYW1lc1tjb25uZWN0TW9kZV0sIGtXYWl0TmFtZXNbd2FpdE1vZGVdKTsKCXJlcG9ydCh3aGF0LCBjaGVja19kcmFpbmVkKHBhaXIucmVjZWl2ZXIsIGRldGFpbCwgc2l6ZW9mKGRldGFpbCkpLAoJCWRldGFpbCk7CgoJY2xvc2VfcGFpcigmcGFpcik7Cn0KCgovKiEJU2VuZHMgYWxsIG9mIFxhIHNpemVzIGJlZm9yZSBsb29raW5nLCB0aGVuIGNoZWNrcyBlYWNoIGlzIHJlcG9ydGVkIGJ5IGEKCWZyZXNoIHBvbGwoKSBhbmQgcmVhZCBpbiBvcmRlciwgYW5kIHRoYXQgbm90aGluZyBpcyBsZWZ0IGFmdGVyLgoqLwpzdGF0aWMgdm9pZAp0ZXN0X3F1ZXVlZChjb25zdCBzdHJ1Y3Qgc2V0dXAqIHNldHVwLCBjb25zdCBzaXplX3QqIHNpemVzLCBpbnQgY291bnQpCnsKCWNoYXIgd2hhdFs5Nl07CgljaGFyIGRldGFpbFsxNjBdOwoJY2hhciBsYWJlbFszMl0gPSAiIjsKCXN0cnVjdCBwYWlyIHBhaXI7CgoJZm9yIChpbnQgaSA9IDA7IGkgPCBjb3VudDsgaSsrKSB7CgkJc2l6ZV90IGxlbmd0aCA9IHN0cmxlbihsYWJlbCk7CgkJc25wcmludGYobGFiZWwgKyBsZW5ndGgsIHNpemVvZihsYWJlbCkgLSBsZW5ndGgsICIlcyV6dSIsCgkJCWkgPiAwID8gIisiIDogIiIsIHNpemVzW2ldKTsKCX0KCglpZiAob3Blbl9wYWlyKHNldHVwLCBVTkNPTk5FQ1RFRCwgJnBhaXIpICE9IDApIHsKCQlzbnByaW50Zih3aGF0LCBzaXplb2Yod2hhdCksICIlcyBxdWV1ZWQgJXM6IHNldHVwIiwgc2V0dXAtPm5hbWUsCgkJCWxhYmVsKTsKCQlyZXBvcnQod2hhdCwgMCwgImNvdWxkIG5vdCBvcGVuIHRoZSBzb2NrZXRzIik7CgkJcmV0dXJuOwoJfQoKCWZvciAoaW50IGkgPSAwOyBpIDwgY291bnQ7IGkrKykgewoJCXNzaXplX3Qgc2VudCA9IHNlbmRfZGF0YWdyYW0oJnBhaXIsIHNpemVzW2ldKTsKCQlpZiAoc2VudCAhPSAoc3NpemVfdClzaXplc1tpXSkgewoJCQlzbnByaW50Zih3aGF0LCBzaXplb2Yod2hhdCksICIlcyBxdWV1ZWQgJXM6IHNlbmQgJXp1IiwKCQkJCXNldHVwLT5uYW1lLCBsYWJlbCwgc2l6ZXNbaV0pOwoJCQlzbnByaW50ZihkZXRhaWwsIHNpemVvZihkZXRhaWwpLCAic2VuZD0lemQgJXMiLCBzZW50LAoJCQkJc3RyZXJyb3IoZXJybm8pKTsKCQkJcmVwb3J0KHdoYXQsIDAsIGRldGFpbCk7CgkJCWNsb3NlX3BhaXIoJnBhaXIpOwoJCQlyZXR1cm47CgkJfQoJfQoJdXNsZWVwKDEwMDAwMCk7CgoJZm9yIChpbnQgaSA9IDA7IGkgPCBjb3VudDsgaSsrKSB7CgkJY2hhciB3YWl0RGV0YWlsWzY0XTsKCQlpbnQgcmVhZGFibGUgPSB3YWl0X3JlYWRhYmxlKHBhaXIucmVjZWl2ZXIsIDAsIDAsIHdhaXREZXRhaWwsCgkJCXNpemVvZih3YWl0RGV0YWlsKSk7CgkJc3NpemVfdCByZWNlaXZlZCA9IHJlY2VpdmVfZGF0YWdyYW0ocGFpci5yZWNlaXZlcik7CgkJc25wcmludGYod2hhdCwgc2l6ZW9mKHdoYXQpLCAiJXMgcXVldWVkICVzOiAjJWQgKCV6dSBieXRlcykiLAoJCQlzZXR1cC0+bmFtZSwgbGFiZWwsIGkgKyAxLCBzaXplc1tpXSk7CgkJc25wcmludGYoZGV0YWlsLCBzaXplb2YoZGV0YWlsKSwgIiVzIHJlY3Y9JXpkIiwgd2FpdERldGFpbCwKCQkJcmVjZWl2ZWQpOwoJCXJlcG9ydCh3aGF0LCByZWFkYWJsZSA9PSAxICYmIHJlY2VpdmVkID09IChzc2l6ZV90KXNpemVzW2ldLAoJCQlkZXRhaWwpOwoJfQoKCXNucHJpbnRmKHdoYXQsIHNpemVvZih3aGF0KSwgIiVzIHF1ZXVlZCAlczogZHJhaW5lZCIsIHNldHVwLT5uYW1lLAoJCWxhYmVsKTsKCXJlcG9ydCh3aGF0LCBjaGVja19kcmFpbmVkKHBhaXIucmVjZWl2ZXIsIGRldGFpbCwgc2l6ZW9mKGRldGFpbCkpLAoJCWRldGFpbCk7CgljbG9zZV9wYWlyKCZwYWlyKTsKfQoKCi8qIQlOb2RlJ3MgY29ubmVjdGVkIHNlbmQgb2YgYW4gZW1wdHkgYXJyYXk6IHNlbmRtc2coKSB3aXRoIG5vIGlvdmVjcy4gKi8Kc3RhdGljIHZvaWQKdGVzdF9zZW5kbXNnX2VtcHR5KGNvbnN0IHN0cnVjdCBzZXR1cCogc2V0dXApCnsKCWNoYXIgd2hhdFs5Nl07CgljaGFyIGRldGFpbFsxNjBdOwoJY2hhciB3YWl0RGV0YWlsWzY0XTsKCXN0cnVjdCBwYWlyIHBhaXI7CgoJc25wcmludGYod2hhdCwgc2l6ZW9mKHdoYXQpLCAiJXMgc2VuZG1zZyhtc2dfaW92bGVuPTApIHRoZW4gcG9sbCIsCgkJc2V0dXAtPm5hbWUpOwoJaWYgKG9wZW5fcGFpcihzZXR1cCwgQ09OTkVDVEVELCAmcGFpcikgIT0gMCkgewoJCXJlcG9ydCh3aGF0LCAwLCAiY291bGQgbm90IG9wZW4gdGhlIHNvY2tldHMiKTsKCQlyZXR1cm47Cgl9CgoJc3RydWN0IG1zZ2hkciBtZXNzYWdlOwoJbWVtc2V0KCZtZXNzYWdlLCAwLCBzaXplb2YobWVzc2FnZSkpOwoJc3NpemVfdCBzZW50ID0gc2VuZG1zZyhwYWlyLnNlbmRlciwgJm1lc3NhZ2UsIDApOwoJaWYgKHNlbnQgIT0gMCkgewoJCXNucHJpbnRmKGRldGFpbCwgc2l6ZW9mKGRldGFpbCksICJzZW5kbXNnPSV6ZCAlcyIsIHNlbnQsCgkJCXN0cmVycm9yKGVycm5vKSk7CgkJcmVwb3J0KHdoYXQsIDAsIGRldGFpbCk7CgkJY2xvc2VfcGFpcigmcGFpcik7CgkJcmV0dXJuOwoJfQoJdXNsZWVwKDEwMDAwMCk7CglpbnQgcmVhZGFibGUgPSB3YWl0X3JlYWRhYmxlKHBhaXIucmVjZWl2ZXIsIDAsIDAsIHdhaXREZXRhaWwsCgkJc2l6ZW9mKHdhaXREZXRhaWwpKTsKCXNzaXplX3QgcmVjZWl2ZWQgPSByZWNlaXZlX2RhdGFncmFtKHBhaXIucmVjZWl2ZXIpOwoJc25wcmludGYoZGV0YWlsLCBzaXplb2YoZGV0YWlsKSwgInNlbmRtc2c9MCAlcyByZWN2PSV6ZCIsIHdhaXREZXRhaWwsCgkJcmVjZWl2ZWQpOwoJcmVwb3J0KHdoYXQsIHJlYWRhYmxlID09IDEgJiYgcmVjZWl2ZWQgPT0gMCwgZGV0YWlsKTsKCWNsb3NlX3BhaXIoJnBhaXIpOwp9CgoKLyohCVNPX1JDVkxPV0FUIGRvZXMgbm90IGFwcGx5IHRvIGRhdGFncmFtczogb25lIHNtYWxsZXIgdGhhbiBpdCBpcyBzdGlsbAoJcmVhZGFibGUgKExpbnV4IGlnbm9yZXMgdGhlIG9wdGlvbiBmb3IgVURQIHBvbGwoKSkuCiovCnN0YXRpYyB2b2lkCnRlc3RfbG93X3dhdGVyX21hcmsoY29uc3Qgc3RydWN0IHNldHVwKiBzZXR1cCkKewoJY2hhciB3aGF0Wzk2XTsKCWNoYXIgZGV0YWlsWzE2MF07CgljaGFyIHdhaXREZXRhaWxbNjRdOwoJc3RydWN0IHBhaXIgcGFpcjsKCglzbnByaW50Zih3aGF0LCBzaXplb2Yod2hhdCksICIlcyBTT19SQ1ZMT1dBVD04LCAzIGJ5dGVzIHF1ZXVlZCIsCgkJc2V0dXAtPm5hbWUpOwoJaWYgKG9wZW5fcGFpcihzZXR1cCwgVU5DT05ORUNURUQsICZwYWlyKSAhPSAwKSB7CgkJcmVwb3J0KHdoYXQsIDAsICJjb3VsZCBub3Qgb3BlbiB0aGUgc29ja2V0cyIpOwoJCXJldHVybjsKCX0KCglpbnQgbG93YXQgPSA4OwoJaWYgKHNldHNvY2tvcHQocGFpci5yZWNlaXZlciwgU09MX1NPQ0tFVCwgU09fUkNWTE9XQVQsICZsb3dhdCwKCQkJc2l6ZW9mKGxvd2F0KSkgIT0gMCkgewoJCXNucHJpbnRmKGRldGFpbCwgc2l6ZW9mKGRldGFpbCksICJTT19SQ1ZMT1dBVDogJXMiLCBzdHJlcnJvcihlcnJubykpOwoJCXJlcG9ydCh3aGF0LCAwLCBkZXRhaWwpOwoJCWNsb3NlX3BhaXIoJnBhaXIpOwoJCXJldHVybjsKCX0KCglzc2l6ZV90IHNlbnQgPSBzZW5kX2RhdGFncmFtKCZwYWlyLCAzKTsKCXVzbGVlcCgxMDAwMDApOwoJaW50IHJlYWRhYmxlID0gd2FpdF9yZWFkYWJsZShwYWlyLnJlY2VpdmVyLCAwLCAwLCB3YWl0RGV0YWlsLAoJCXNpemVvZih3YWl0RGV0YWlsKSk7Cglzc2l6ZV90IHJlY2VpdmVkID0gcmVjZWl2ZV9kYXRhZ3JhbShwYWlyLnJlY2VpdmVyKTsKCXNucHJpbnRmKGRldGFpbCwgc2l6ZW9mKGRldGFpbCksICJzZW5kPSV6ZCAlcyByZWN2PSV6ZCIsIHNlbnQsCgkJd2FpdERldGFpbCwgcmVjZWl2ZWQpOwoJcmVwb3J0KHdoYXQsIHNlbnQgPT0gMyAmJiByZWFkYWJsZSA9PSAxICYmIHJlY2VpdmVkID09IDMsIGRldGFpbCk7CgljbG9zZV9wYWlyKCZwYWlyKTsKfQoKCi8vICNwcmFnbWEgbWFyayAtIFRDUCBjb250cm9sCgoKc3RhdGljIHZvaWQKdGVzdF9zdHJlYW0odm9pZCkKewoJY2hhciBkZXRhaWxbMTYwXTsKCWNoYXIgd2FpdERldGFpbFs2NF07CgoJaW50IGxpc3RlbmVyID0gc29ja2V0KEFGX0lORVQsIFNPQ0tfU1RSRUFNLCAwKTsKCXN0cnVjdCBzb2NrYWRkcl9zdG9yYWdlIGFkZHJlc3M7Cglzb2NrbGVuX3QgbGVuZ3RoID0gbWFrZV9hZGRyZXNzKEFGX0lORVQsICIxMjcuMC4wLjEiLCAwLCAmYWRkcmVzcyk7CglpZiAobGlzdGVuZXIgPCAwIHx8IGJpbmQobGlzdGVuZXIsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhZGRyZXNzLCBsZW5ndGgpICE9IDAKCQl8fCBsaXN0ZW4obGlzdGVuZXIsIDEpICE9IDApIHsKCQlyZXBvcnQoInRjcDogc2V0dXAiLCAwLCBzdHJlcnJvcihlcnJubykpOwoJCWlmIChsaXN0ZW5lciA+PSAwKQoJCQljbG9zZShsaXN0ZW5lcik7CgkJcmV0dXJuOwoJfQoJbGVuZ3RoID0gbWFrZV9hZGRyZXNzKEFGX0lORVQsICIxMjcuMC4wLjEiLCBsb2NhbF9wb3J0KGxpc3RlbmVyKSwKCQkmYWRkcmVzcyk7CglpbnQgY2xpZW50ID0gc29ja2V0KEFGX0lORVQsIFNPQ0tfU1RSRUFNLCAwKTsKCWlmIChjbGllbnQgPCAwCgkJfHwgY29ubmVjdChjbGllbnQsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhZGRyZXNzLCBsZW5ndGgpICE9IDApIHsKCQlyZXBvcnQoInRjcDogY29ubmVjdCIsIDAsIHN0cmVycm9yKGVycm5vKSk7CgkJaWYgKGNsaWVudCA+PSAwKQoJCQljbG9zZShjbGllbnQpOwoJCWNsb3NlKGxpc3RlbmVyKTsKCQlyZXR1cm47Cgl9CglpbnQgc2VydmVyID0gYWNjZXB0KGxpc3RlbmVyLCBOVUxMLCBOVUxMKTsKCWNsb3NlKGxpc3RlbmVyKTsKCWlmIChzZXJ2ZXIgPCAwKSB7CgkJcmVwb3J0KCJ0Y3A6IGFjY2VwdCIsIDAsIHN0cmVycm9yKGVycm5vKSk7CgkJY2xvc2UoY2xpZW50KTsKCQlyZXR1cm47Cgl9CgoJaW50IHJlYWRhYmxlID0gd2FpdF9yZWFkYWJsZShzZXJ2ZXIsIDAsIDAsIHdhaXREZXRhaWwsCgkJc2l6ZW9mKHdhaXREZXRhaWwpKTsKCXJlcG9ydCgidGNwOiBpZGxlIGNvbm5lY3Rpb24gaXMgbm90IHJlYWRhYmxlIiwgcmVhZGFibGUgPT0gMCwKCQl3YWl0RGV0YWlsKTsKCglzZW5kKGNsaWVudCwgIngiLCAxLCAwKTsKCXVzbGVlcCgxMDAwMDApOwoJcmVhZGFibGUgPSB3YWl0X3JlYWRhYmxlKHNlcnZlciwgMCwgMCwgd2FpdERldGFpbCwgc2l6ZW9mKHdhaXREZXRhaWwpKTsKCXNzaXplX3QgcmVjZWl2ZWQgPSByZWNlaXZlX2RhdGFncmFtKHNlcnZlcik7CglzbnByaW50ZihkZXRhaWwsIHNpemVvZihkZXRhaWwpLCAiJXMgcmVjdj0lemQiLCB3YWl0RGV0YWlsLCByZWNlaXZlZCk7CglyZXBvcnQoInRjcDogMSBieXRlIHF1ZXVlZCBpcyByZWFkYWJsZSIsIHJlYWRhYmxlID09IDEgJiYgcmVjZWl2ZWQgPT0gMSwKCQlkZXRhaWwpOwoKCXJlYWRhYmxlID0gd2FpdF9yZWFkYWJsZShzZXJ2ZXIsIDAsIDAsIHdhaXREZXRhaWwsIHNpemVvZih3YWl0RGV0YWlsKSk7CglyZXBvcnQoInRjcDogZHJhaW5lZCBjb25uZWN0aW9uIGlzIG5vdCByZWFkYWJsZSIsIHJlYWRhYmxlID09IDAsCgkJd2FpdERldGFpbCk7CgoJc2h1dGRvd24oY2xpZW50LCBTSFVUX1dSKTsKCXVzbGVlcCgxMDAwMDApOwoJcmVhZGFibGUgPSB3YWl0X3JlYWRhYmxlKHNlcnZlciwgMCwgMCwgd2FpdERldGFpbCwgc2l6ZW9mKHdhaXREZXRhaWwpKTsKCXJlY2VpdmVkID0gcmVjZWl2ZV9kYXRhZ3JhbShzZXJ2ZXIpOwoJc25wcmludGYoZGV0YWlsLCBzaXplb2YoZGV0YWlsKSwgIiVzIHJlY3Y9JXpkIiwgd2FpdERldGFpbCwgcmVjZWl2ZWQpOwoJcmVwb3J0KCJ0Y3A6IHBlZXIgc2h1dGRvd24oU0hVVF9XUikgaXMgcmVhZGFibGUsIHJlY3YgMCAoRU9GKSIsCgkJcmVhZGFibGUgPT0gMSAmJiByZWNlaXZlZCA9PSAwLCBkZXRhaWwpOwoKCWNsb3NlKGNsaWVudCk7CgljbG9zZShzZXJ2ZXIpOwp9CgoKaW50Cm1haW4odm9pZCkKewoJc2V0dmJ1ZihzdGRvdXQsIE5VTEwsIF9JT0xCRiwgMCk7CgoJY29uc3QgaW50IHNldHVwQ291bnQgPSBzaXplb2Yoa1NldHVwcykgLyBzaXplb2Yoa1NldHVwc1swXSk7Cglmb3IgKGludCBzID0gMDsgcyA8IHNldHVwQ291bnQ7IHMrKykgewoJCWZvciAoaW50IGMgPSBVTkNPTk5FQ1RFRDsgYyA8PSBTRUxGX0NPTk5FQ1RFRDsgYysrKSB7CgkJCWZvciAoaW50IHcgPSBQT0xMX0JFRk9SRTsgdyA8PSBTRUxFQ1RfQUZURVI7IHcrKykKCQkJCXRlc3Rfc2VxdWVuY2UoJmtTZXR1cHNbc10sIGMsIHcpOwoJCX0KCgkJc3RhdGljIGNvbnN0IHNpemVfdCBrTm9uRW1wdHlGaXJzdFtdID0geyAzLCAwIH07CgkJc3RhdGljIGNvbnN0IHNpemVfdCBrRW1wdHlUd2ljZVtdID0geyAwLCAwIH07CgkJdGVzdF9xdWV1ZWQoJmtTZXR1cHNbc10sIGtOb25FbXB0eUZpcnN0LCAyKTsKCQl0ZXN0X3F1ZXVlZCgma1NldHVwc1tzXSwga0VtcHR5VHdpY2UsIDIpOwoJCXRlc3Rfc2VuZG1zZ19lbXB0eSgma1NldHVwc1tzXSk7CgkJdGVzdF9sb3dfd2F0ZXJfbWFyaygma1NldHVwc1tzXSk7Cgl9CgoJdGVzdF9zdHJlYW0oKTsKCglwcmludGYoInVkcDg5OTogJWQgcGFzc2VkLCAlZCBmYWlsZWRcbiIsIHNQYXNzZWQsIHNGYWlsZWQpOwoJcmV0dXJuIHNGYWlsZWQ7Cn0K' | base64 -d > udp899.c
+# | echo '1d6e5c7c14135a788b9d0ff9d9e26be73d003f8a5d998c8cf1c4707b963c2e0c  udp899.c' | sha256sum -c - || exit 2
+# | uname -v; sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | gcc -O2 -Wall -o udp899 udp899.c -lnetwork 2>&1; echo "compile rc=$?"
+# | for run in 1 2; do echo "=== run $run"; ./udp899 > udp899-$run.out; echo "exit=$?"; grep -E "FAIL|udp899:" udp899-$run.out; done
+# | echo "=== full output of run 1"; cat udp899-1.out
+# ---- raw output ----
+udp899.c: OK
+hrev59996 Nov  2 2026 14:49:36
+0f3be417196dc6a04e155b9656683f9971e723d7e8184aba1e4556525940810e  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+compile rc=0
+=== run 1
+exit=0
+udp899: 228 passed, 0 failed
+=== run 2
+exit=0
+udp899: 228 passed, 0 failed
+=== full output of run 1
+ipv4 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-before: 3 bytes                      PASS  poll=1 revents=0x1 recv=3
+ipv4 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-before: drained                      PASS  poll=0 revents=0x0
+ipv4 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-after: 3 bytes                       PASS  poll=1 revents=0x1 recv=3
+ipv4 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv4 unconnected poll-after: drained                       PASS  poll=0 revents=0x0
+ipv4 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-before: 3 bytes                    PASS  select=1 isset=1 recv=3
+ipv4 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-before: drained                    PASS  poll=0 revents=0x0
+ipv4 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-after: 3 bytes                     PASS  select=1 isset=1 recv=3
+ipv4 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv4 unconnected select-after: drained                     PASS  poll=0 revents=0x0
+ipv4 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-before: 3 bytes                        PASS  poll=1 revents=0x1 recv=3
+ipv4 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-before: drained                        PASS  poll=0 revents=0x0
+ipv4 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-after: 3 bytes                         PASS  poll=1 revents=0x1 recv=3
+ipv4 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv4 connected poll-after: drained                         PASS  poll=0 revents=0x0
+ipv4 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv4 connected select-before: 3 bytes                      PASS  select=1 isset=1 recv=3
+ipv4 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv4 connected select-before: drained                      PASS  poll=0 revents=0x0
+ipv4 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv4 connected select-after: 3 bytes                       PASS  select=1 isset=1 recv=3
+ipv4 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv4 connected select-after: drained                       PASS  poll=0 revents=0x0
+ipv4 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-before: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+ipv4 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-before: drained                   PASS  poll=0 revents=0x0
+ipv4 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-after: 3 bytes                    PASS  poll=1 revents=0x1 recv=3
+ipv4 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv4 self-connected poll-after: drained                    PASS  poll=0 revents=0x0
+ipv4 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-before: 3 bytes                 PASS  select=1 isset=1 recv=3
+ipv4 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-before: drained                 PASS  poll=0 revents=0x0
+ipv4 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-after: 3 bytes                  PASS  select=1 isset=1 recv=3
+ipv4 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv4 self-connected select-after: drained                  PASS  poll=0 revents=0x0
+ipv4 queued 3+0: #1 (3 bytes)                              PASS  poll=1 revents=0x1 recv=3
+ipv4 queued 3+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv4 queued 3+0: drained                                   PASS  poll=0 revents=0x0
+ipv4 queued 0+0: #1 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv4 queued 0+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv4 queued 0+0: drained                                   PASS  poll=0 revents=0x0
+ipv4 sendmsg(msg_iovlen=0) then poll                       PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+ipv4 SO_RCVLOWAT=8, 3 bytes queued                         PASS  send=3 poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-before: 3 bytes                      PASS  poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-before: 0 bytes                      PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-before: drained                      PASS  poll=0 revents=0x0
+ipv6 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-after: 3 bytes                       PASS  poll=1 revents=0x1 recv=3
+ipv6 unconnected poll-after: 0 bytes                       PASS  poll=1 revents=0x1 recv=0
+ipv6 unconnected poll-after: drained                       PASS  poll=0 revents=0x0
+ipv6 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-before: 3 bytes                    PASS  select=1 isset=1 recv=3
+ipv6 unconnected select-before: 0 bytes                    PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-before: drained                    PASS  poll=0 revents=0x0
+ipv6 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-after: 3 bytes                     PASS  select=1 isset=1 recv=3
+ipv6 unconnected select-after: 0 bytes                     PASS  select=1 isset=1 recv=0
+ipv6 unconnected select-after: drained                     PASS  poll=0 revents=0x0
+ipv6 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-before: 3 bytes                        PASS  poll=1 revents=0x1 recv=3
+ipv6 connected poll-before: 0 bytes                        PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-before: drained                        PASS  poll=0 revents=0x0
+ipv6 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-after: 3 bytes                         PASS  poll=1 revents=0x1 recv=3
+ipv6 connected poll-after: 0 bytes                         PASS  poll=1 revents=0x1 recv=0
+ipv6 connected poll-after: drained                         PASS  poll=0 revents=0x0
+ipv6 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv6 connected select-before: 3 bytes                      PASS  select=1 isset=1 recv=3
+ipv6 connected select-before: 0 bytes                      PASS  select=1 isset=1 recv=0
+ipv6 connected select-before: drained                      PASS  poll=0 revents=0x0
+ipv6 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv6 connected select-after: 3 bytes                       PASS  select=1 isset=1 recv=3
+ipv6 connected select-after: 0 bytes                       PASS  select=1 isset=1 recv=0
+ipv6 connected select-after: drained                       PASS  poll=0 revents=0x0
+ipv6 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-before: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+ipv6 self-connected poll-before: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-before: drained                   PASS  poll=0 revents=0x0
+ipv6 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-after: 3 bytes                    PASS  poll=1 revents=0x1 recv=3
+ipv6 self-connected poll-after: 0 bytes                    PASS  poll=1 revents=0x1 recv=0
+ipv6 self-connected poll-after: drained                    PASS  poll=0 revents=0x0
+ipv6 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-before: 3 bytes                 PASS  select=1 isset=1 recv=3
+ipv6 self-connected select-before: 0 bytes                 PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-before: drained                 PASS  poll=0 revents=0x0
+ipv6 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-after: 3 bytes                  PASS  select=1 isset=1 recv=3
+ipv6 self-connected select-after: 0 bytes                  PASS  select=1 isset=1 recv=0
+ipv6 self-connected select-after: drained                  PASS  poll=0 revents=0x0
+ipv6 queued 3+0: #1 (3 bytes)                              PASS  poll=1 revents=0x1 recv=3
+ipv6 queued 3+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv6 queued 3+0: drained                                   PASS  poll=0 revents=0x0
+ipv6 queued 0+0: #1 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv6 queued 0+0: #2 (0 bytes)                              PASS  poll=1 revents=0x1 recv=0
+ipv6 queued 0+0: drained                                   PASS  poll=0 revents=0x0
+ipv6 sendmsg(msg_iovlen=0) then poll                       PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+ipv6 SO_RCVLOWAT=8, 3 bytes queued                         PASS  send=3 poll=1 revents=0x1 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-before: 3 bytes                PASS  poll=1 revents=0x1 recv=3
+v4-to-dual unconnected poll-before: 0 bytes                PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-before: drained                PASS  poll=0 revents=0x0
+v4-to-dual unconnected poll-after: 0 bytes                 PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-after: 3 bytes                 PASS  poll=1 revents=0x1 recv=3
+v4-to-dual unconnected poll-after: 0 bytes                 PASS  poll=1 revents=0x1 recv=0
+v4-to-dual unconnected poll-after: drained                 PASS  poll=0 revents=0x0
+v4-to-dual unconnected select-before: 0 bytes              PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-before: 3 bytes              PASS  select=1 isset=1 recv=3
+v4-to-dual unconnected select-before: 0 bytes              PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-before: drained              PASS  poll=0 revents=0x0
+v4-to-dual unconnected select-after: 0 bytes               PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-after: 3 bytes               PASS  select=1 isset=1 recv=3
+v4-to-dual unconnected select-after: 0 bytes               PASS  select=1 isset=1 recv=0
+v4-to-dual unconnected select-after: drained               PASS  poll=0 revents=0x0
+v4-to-dual connected poll-before: 0 bytes                  PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-before: 3 bytes                  PASS  poll=1 revents=0x1 recv=3
+v4-to-dual connected poll-before: 0 bytes                  PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-before: drained                  PASS  poll=0 revents=0x0
+v4-to-dual connected poll-after: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-after: 3 bytes                   PASS  poll=1 revents=0x1 recv=3
+v4-to-dual connected poll-after: 0 bytes                   PASS  poll=1 revents=0x1 recv=0
+v4-to-dual connected poll-after: drained                   PASS  poll=0 revents=0x0
+v4-to-dual connected select-before: 0 bytes                PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-before: 3 bytes                PASS  select=1 isset=1 recv=3
+v4-to-dual connected select-before: 0 bytes                PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-before: drained                PASS  poll=0 revents=0x0
+v4-to-dual connected select-after: 0 bytes                 PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-after: 3 bytes                 PASS  select=1 isset=1 recv=3
+v4-to-dual connected select-after: 0 bytes                 PASS  select=1 isset=1 recv=0
+v4-to-dual connected select-after: drained                 PASS  poll=0 revents=0x0
+v4-to-dual self-connected poll-before: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-before: 3 bytes             PASS  poll=1 revents=0x1 recv=3
+v4-to-dual self-connected poll-before: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-before: drained             PASS  poll=0 revents=0x0
+v4-to-dual self-connected poll-after: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-after: 3 bytes              PASS  poll=1 revents=0x1 recv=3
+v4-to-dual self-connected poll-after: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+v4-to-dual self-connected poll-after: drained              PASS  poll=0 revents=0x0
+v4-to-dual self-connected select-before: 0 bytes           PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-before: 3 bytes           PASS  select=1 isset=1 recv=3
+v4-to-dual self-connected select-before: 0 bytes           PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-before: drained           PASS  poll=0 revents=0x0
+v4-to-dual self-connected select-after: 0 bytes            PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-after: 3 bytes            PASS  select=1 isset=1 recv=3
+v4-to-dual self-connected select-after: 0 bytes            PASS  select=1 isset=1 recv=0
+v4-to-dual self-connected select-after: drained            PASS  poll=0 revents=0x0
+v4-to-dual queued 3+0: #1 (3 bytes)                        PASS  poll=1 revents=0x1 recv=3
+v4-to-dual queued 3+0: #2 (0 bytes)                        PASS  poll=1 revents=0x1 recv=0
+v4-to-dual queued 3+0: drained                             PASS  poll=0 revents=0x0
+v4-to-dual queued 0+0: #1 (0 bytes)                        PASS  poll=1 revents=0x1 recv=0
+v4-to-dual queued 0+0: #2 (0 bytes)                        PASS  poll=1 revents=0x1 recv=0
+v4-to-dual queued 0+0: drained                             PASS  poll=0 revents=0x0
+v4-to-dual sendmsg(msg_iovlen=0) then poll                 PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+v4-to-dual SO_RCVLOWAT=8, 3 bytes queued                   PASS  send=3 poll=1 revents=0x1 recv=3
+mapped-to-dual unconnected poll-before: 0 bytes            PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-before: 3 bytes            PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual unconnected poll-before: 0 bytes            PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-before: drained            PASS  poll=0 revents=0x0
+mapped-to-dual unconnected poll-after: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-after: 3 bytes             PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual unconnected poll-after: 0 bytes             PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual unconnected poll-after: drained             PASS  poll=0 revents=0x0
+mapped-to-dual unconnected select-before: 0 bytes          PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-before: 3 bytes          PASS  select=1 isset=1 recv=3
+mapped-to-dual unconnected select-before: 0 bytes          PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-before: drained          PASS  poll=0 revents=0x0
+mapped-to-dual unconnected select-after: 0 bytes           PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-after: 3 bytes           PASS  select=1 isset=1 recv=3
+mapped-to-dual unconnected select-after: 0 bytes           PASS  select=1 isset=1 recv=0
+mapped-to-dual unconnected select-after: drained           PASS  poll=0 revents=0x0
+mapped-to-dual connected poll-before: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-before: 3 bytes              PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual connected poll-before: 0 bytes              PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-before: drained              PASS  poll=0 revents=0x0
+mapped-to-dual connected poll-after: 0 bytes               PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-after: 3 bytes               PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual connected poll-after: 0 bytes               PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual connected poll-after: drained               PASS  poll=0 revents=0x0
+mapped-to-dual connected select-before: 0 bytes            PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-before: 3 bytes            PASS  select=1 isset=1 recv=3
+mapped-to-dual connected select-before: 0 bytes            PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-before: drained            PASS  poll=0 revents=0x0
+mapped-to-dual connected select-after: 0 bytes             PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-after: 3 bytes             PASS  select=1 isset=1 recv=3
+mapped-to-dual connected select-after: 0 bytes             PASS  select=1 isset=1 recv=0
+mapped-to-dual connected select-after: drained             PASS  poll=0 revents=0x0
+mapped-to-dual self-connected poll-before: 0 bytes         PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-before: 3 bytes         PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual self-connected poll-before: 0 bytes         PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-before: drained         PASS  poll=0 revents=0x0
+mapped-to-dual self-connected poll-after: 0 bytes          PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-after: 3 bytes          PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual self-connected poll-after: 0 bytes          PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual self-connected poll-after: drained          PASS  poll=0 revents=0x0
+mapped-to-dual self-connected select-before: 0 bytes       PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-before: 3 bytes       PASS  select=1 isset=1 recv=3
+mapped-to-dual self-connected select-before: 0 bytes       PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-before: drained       PASS  poll=0 revents=0x0
+mapped-to-dual self-connected select-after: 0 bytes        PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-after: 3 bytes        PASS  select=1 isset=1 recv=3
+mapped-to-dual self-connected select-after: 0 bytes        PASS  select=1 isset=1 recv=0
+mapped-to-dual self-connected select-after: drained        PASS  poll=0 revents=0x0
+mapped-to-dual queued 3+0: #1 (3 bytes)                    PASS  poll=1 revents=0x1 recv=3
+mapped-to-dual queued 3+0: #2 (0 bytes)                    PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual queued 3+0: drained                         PASS  poll=0 revents=0x0
+mapped-to-dual queued 0+0: #1 (0 bytes)                    PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual queued 0+0: #2 (0 bytes)                    PASS  poll=1 revents=0x1 recv=0
+mapped-to-dual queued 0+0: drained                         PASS  poll=0 revents=0x0
+mapped-to-dual sendmsg(msg_iovlen=0) then poll             PASS  sendmsg=0 poll=1 revents=0x1 recv=0
+mapped-to-dual SO_RCVLOWAT=8, 3 bytes queued               PASS  send=3 poll=1 revents=0x1 recv=3
+tcp: idle connection is not readable                       PASS  poll=0 revents=0x0
+tcp: 1 byte queued is readable                             PASS  poll=1 revents=0x1 recv=1
+tcp: drained connection is not readable                    PASS  poll=0 revents=0x0
+tcp: peer shutdown(SHUT_WR) is readable, recv 0 (EOF)      PASS  poll=1 revents=0x81 recv=0
+udp899: 228 passed, 0 failed

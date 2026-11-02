@@ -1,0 +1,32 @@
+# evidence: 4ef-rev3-suites-vs-rev2
+# workstation 20261102T173732Z. Same image and instance (i-0b36f8b4076970921, trunk 4ef344f5fa). A = 20261102T155120Z_..._4ef-nodejs24r2-full-suites.log (nodejs24 24.21.0-2 + libuv 1.52.1-4, green), B = 20261102T172820Z_..._4ef-rev3-nodejs24-full-suites.log (nodejs24 24.21.0-3 + libuv 1.52.1-5 from agent-917-full/, SHA256SUMS verified: 20261102T172740Z_..._4ef-rev3-install.log).
+# staging listing: agent-917-full/ was empty at 15:12, 15:49, 15:55 and 16:25Z; all 6 objects carry LastModified 17:12:06Z and were seen at 17:27Z
+# ---- raw output ----
+A not ok: 23  B not ok: 22
+-- fail -> pass:
+parallel/test-child-process-fork-closed-channel-segfault
+parallel/test-os
+-- pass -> fail:
+parallel/test-child-process-spawnsync-args FAIL
+-- failing in both:
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL

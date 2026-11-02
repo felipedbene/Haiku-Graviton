@@ -175,6 +175,94 @@ Per-test diff: `20261102T080118Z_workstation_fe7-node-suites-vs-7036360701.log`.
   - `parallel/test-os` stays FAIL with a new cause. PR 925 cleared the priority assertion at `test-os.js:92`, and it now fails at `:104`, `os.cpus().length > 0`. `os.cpus()` is `[]`, but the kernel reports 16 CPUs and 16 CORE topology nodes (`075855Z…fe7-cpu-topology-probe`). The HaikuPorts patchset comments out the body of `GetCPUInfo` (`src/node_os.cc`), so this is a nodejs24 packaging defect and the image is fine. That is open **#917**; commented there.
 - **Still failing, unchanged:** 42 others. #873 ×19, class (c) ×9, #882 ×5 (incl. `fs-promises`), #899 ×2 (`dgram-connect-send-empty-*`), nghttp2 packaging ×2, and one each for #929 (`fs-stat-date`), #871 (`http-writable-true-after-close`), uid 0 (`process-euid-egid`), `setproctitle` and `worker-memory`.
 
+## 2026-11-02 — fresh trunk image 4ef344f5fa
+
+This is the same verification on one fresh launch of the trunk bake `ami-0714f26bbe99a9bfb`
+(`haiku-oven-1793631413`, `debeos-r70760-g4ef344f5fa`, haiku-oven-bake execution 8a625ec5; not
+canonical, not promoted). The baseline is canonical `ami-03c3545c37f391c1f` (fe7fef0b47, section above).
+Over that baseline the image adds PRs 937 (#898), 935 (#919), 931 (#875), 932/942 (#867), 941 (#897),
+944 (#918), 945 (#869), 948 (#873), 953 (#899) and 955 (#900).
+
+Instance `i-0b36f8b4076970921`: c8g.4xlarge, 60 GiB, `subnet-0c98257f993bfc1b2`,
+`sg-0efc97cc673949063`, key `haiku-rdclient`, `ssm-instance-profile`, tags `Project=haiku-graviton`,
+`auto-stop=no`, Name `cc-verify-trunk-4ef344f5fa`. It has been terminated
+(`20261102T162553Z_workstation_4ef-repo-origin-and-ami.log`). The packages came from green:
+claude_code 2.1.314-2, nodejs24 24.21.0-2 and libuv 1.52.1-4 (`151348Z…4ef-install`). Evidence names
+below drop the `_i-0b36f8b4076970921_` part.
+
+| Check | fe7fef0b47 | 4ef344f5fa | Evidence (`20261102T…`) |
+|---|---|---|---|
+| Node acceptance | 23/23 | 23/23 ALL PASS | `151432Z…4ef-node24-accept` |
+| node-gyp addon (`haiku_devel` + `binutils`) | 42 | `add(2,40) = 42` | `151502Z…4ef-node24-gyp-addon-cxx` |
+| `--version`, `doctor`, `cc-teaminfo`, vectors | pass | pass. `doctor` no longer prints `Cannot open directory …/ssl/certs/` (PR 945) | `151610Z…4ef-claude-accept` |
+| `claude -p` via Bedrock | `pong`, 8 s | `pong`, rc 0, 7 s | `151815Z…4ef-bedrock-headless-smoke` |
+| Headless Read/Grep/Bash | correct | `aurora-7\|src/a.js,src/deep/b.js\|Haiku` | `151847Z…4ef-bedrock-headless-tools` |
+| Grep tool vs rg | 0.392 s / 0.144 s | 0.469 s / 0.150 s, same 3 files, hooks fire | `151917Z…4ef-bedrock-grep-timing` |
+| Interactive TUI: edit, bash, resize, /compact | pass | pass: edit on disk, `bash-ok-Haiku`, both reflows, same /compact behaviour | `152007Z…4ef-bedrock-tui-session` |
+| `/compact` + recall ×5 | 5/5 | 5/5 | `152212Z…4ef-compact-haiku-x5` |
+| FileChanged through `libuv_fs_event` | fired 2× | fired 2×, `delivers` | `152506Z…4ef-enduser-fresh-install-3` |
+| Ctrl-C, `-p` with no credentials | identical | identical; the cert-dir warning is gone (0 vs 2 lines) | `152733Z…4ef-tui-ctrlc-and-headless` |
+| Worker scenarios | 13/13 | 13/13 | `152900Z…4ef-compat-scenarios-on-haiku` |
+| Bun.spawn / Bun.net vs Bun | 188/24/2/0/4; 35/6/1 | identical | `152944Z…4ef-scen-haiku-node-v2` |
+| TUI snapshots vs Linux | 60/64, 33/33 | 60/64 (same 4 keycap snapshots), 33/33. The per-scenario stderr files are now empty (cert-dir warning gone) | `153732Z…4ef-tui-capture-B-haiku`, `154334Z_workstation_4ef-tui-compare-{linuxA-haikuB,tmux37c}` |
+| 30-min working soak | 123/123, 4–8 s | 123/123, 4–6 s, one process, RSS 419 → 582 MB | `162519Z…4ef-working-soak-v3-haiku` |
+| 30-min idle soak | 324 → 184 MB | alive, 12 threads, 324 → 184 MB | `165609Z…4ef-tui-soak-30min` |
+
+**Node 24 suites, green packages** (`155120Z…4ef-nodejs24r2-full-suites`, same tree and command,
+full plans):
+
+| Suite | fe7fef0b47 | 4ef344f5fa |
+|---|---|---|
+| parallel | 4469 ok / 38 not ok (3 timeout) | **4486 ok (323 skip) / 21 not ok (1 timeout)**, 367 s |
+| sequential | 113 ok / 7 not ok (1 timeout) | **118 ok / 2 not ok**, 140 s |
+
+Per-test diff: `20261102T162553Z_workstation_4ef-node-suites-vs-fe7fef0b47.log`.
+
+- **23 went from fail to pass:**
+  - #873 ×19, by PR 948 (dual-stack IPv6): `cluster-net-listen-ipv6only-false`, `http-autoselectfamily`, `http2-connect`, `http2-ip-address-host`, `https-autoselectfamily`, `https-connect-address-family`, `net-autoselectfamily`, `net-autoselectfamily-ipv4first`, `net-boundsocket`, `net-connect-options-ipv6`, `net-dns-custom-lookup`, `net-dns-lookup-skip`, `net-pingpong`, `tcp-wrap-listen`, `tls-connect-address-family`, `seq/net-connect-local-error`, `seq/net-server-address`, `seq/net-server-listen-ipv6-link-local`, `seq/tls-psk-client`. This is exactly the list of 19 from the triage.
+  - #899 ×2, by PR 953: `dgram-connect-send-empty-{array,buffer}`.
+  - #918, by PR 944: `worker-init-failure`.
+  - `seq/net-connect-econnrefused`: back to passing. It is the load-dependent test from the fe7fef0b47 run, so it is not attributed to a fix.
+- **1 went from pass to fail: `parallel/test-child-process-fork-closed-channel-segfault`** (TIMEOUT).
+  - Alone it passes 10/10. Under 16-way load it hangs about 3% of the time (3/48 with `--repeat 16`). The hung primary never gets its worker's `close` (`160041Z…fork-closed-channel-segfault-repro`, `160742Z…fork-closed-channel-hang-state`).
+  - Same-box A/B: the test with `listen(0, "0.0.0.0")` also hangs (dual-stack 5/96, IPv4-only 1/96; `161131Z…fork-closed-channel-ab-v4only`, edit confirmed in `162115Z…ab-sedcheck`). So PR 948's dual-stack path is not the trigger.
+  - fe7fef0b47 was not tried under this load, so this does not show a regression. Cause not established. Filed as **#978**.
+- **22 still fail, unchanged:** class (c) ×9, #882 ×5, nghttp2 packaging ×2, `test-os` (#917, packaging), #929, #871 (`http-writable-true-after-close`), uid 0, `setproctitle`, `worker-memory`.
+
+**Node 24 suites, staged rev-3 packages** (`172820Z…4ef-rev3-nodejs24-full-suites`).
+- **Where the packages came from.** `agent-917-full/` was empty at 15:12, 15:49, 15:55 and 16:25Z. The six objects appeared at 17:12Z, and I found them at 17:27Z after the soaks. SHA256SUMS verified on the workstation and again on the instance.
+- **Install.** nodejs24 24.21.0-3, nodejs24_devel, libuv 1.52.1-5, libuv_devel and libuv_debuginfo, installed from the files (`172740Z…4ef-rev3-install`).
+- **`os.cpus()`.** It now returns 16 entries (`Neoverse-V2`, 2798 MHz), against `[]` with rev 2. Every `times` field is still 0 (open #939).
+
+| Suite | rev 2 (green) | rev 3 (staged) |
+|---|---|---|
+| parallel | 4486 ok / 21 not ok | **4487 ok / 20 not ok (0 timeout)**, 275 s |
+| sequential | 118 / 2 | 118 / 2 |
+
+Diff: `20261102T173732Z_workstation_4ef-rev3-suites-vs-rev2.log`.
+- **`parallel/test-os` went from fail to pass:** the patched `GetCPUInfo` in nodejs24 rev 3. This confirms #917.
+- **`fork-closed-channel-segfault` passed this time.** That fits the intermittent hang in #978.
+- **`parallel/test-child-process-spawnsync-args` failed once** with `spawnSync pwd EPIPE` (`173605Z…4ef-rev3-spawnsync-args-repro`). It then passed 10/10 alone and 32/32 under 16-way load. One failure in 43 runs is not enough to call it a defect or to attribute it, so it is not filed. Incidental observation.
+
+**Per-fix repros on the baked image**, each built from its trunk source (sha256 in the log) and run
+the way its merged evidence ran it:
+
+| Issue (PR) | Repro | Expected "after" | 4ef344f5fa | Evidence (`20261102T…`) |
+|---|---|---|---|---|
+| #898 (937) | `atime898 /boot/home/a898 /tmp/a898` | 0 failures | `cases=136 failures=0 errno-notes=10` | `154408Z…4ef-repro-atime898` |
+| #919 (935) | `exit919`, stdout a pipe and a file | 0 failed | `exit919: 0 failed` ×2 | `154437Z…4ef-repro-exit919` |
+| #897 (941) | `random897` | 0 failed | `0 failed`: F_SETFL/FIONBIO/O_NONBLOCK pass. FIONREAD and the unknown ioctl still report `General system error`, which the repro prints but doesn't count (the ENOTTY follow-up is not merged) | `154506Z…4ef-repro-random897` |
+| #918 (944) | `pipe918 one/full/full2`, `leak 200000` | EMFILE, no leak | EMFILE ×3; 200000 EMFILE, page delta 3 (0 bytes per call) | `154534Z…4ef-repro-pipe918` |
+| #873 (948) | `ipv6_873` ×3 | 0 failed | `0 failed` ×3 | `154654Z…4ef-repro-ipv6_873` |
+| #899 (953) | `udp899` ×2 | 0 failed | `228 passed, 0 failed` ×2 | `154722Z…4ef-repro-udp899` |
+| #900 (955) | `tcp900 <own IPv4>` ×3 | 0 FAIL | `0 FAIL` ×3; syslog matches are the 5 boot banners only (`154914Z…syslog-panic-lines`) | `154830Z…4ef-repro-tcp900` |
+| #869 (945) | cert dir + Node CA load | dir exists, no warning | `drwxr-xr-x` 0:0 755; Node 119 system CAs, HTTPS 200, 0 stderr bytes; `doctor` 0 warning lines; `s_client` verify 0 | `154602Z…4ef-repro-869` |
+| #875 (931) | `haiku-repo-publish-ephemeral-selftest` + siblings, workstation | PASS | PASS (BSD and GNU base64), coherence and launch selftests PASS, `bash -n` both | `155039Z_workstation_4ef-875-selftests` |
+| #867 (932/942) | pipeline jest, `node:24-bookworm` | 149/149 | **149/149**, all 18 `867:` tests pass | `155412Z_workstation_4ef-867-875-jest-full-suite` |
+
+The two jest runs before that log were set-up errors of mine, so I deleted them. Both used an archive
+missing `graviton/go-arm64/` and the repo-root `data/system/data/licenses/` that the tests read.
+
 ## Phase 1 — tool sanity on the canonical image
 
 `20261031T031440Z_i-07451948888de2466_phase1-sanity-tools.log`: git 2.54.0 (status, diff,

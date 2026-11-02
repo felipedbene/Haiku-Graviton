@@ -1,0 +1,59 @@
+# evidence: 4ef-rev3-spawnsync-args-repro
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T173605Z   end: 20261102T173626Z   rc: 0
+# script sha256: b34ee6369407b97aecebe486fc92520949b04e226e921c0405322b2868311c29
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0 || exit 1
+# | echo "$(ls /boot/system/packages | grep -E '^(nodejs24|libuv)-' | tr '\n' ' ')"
+# | t=parallel/test-child-process-spawnsync-args
+# | p=0; for i in $(seq 10); do : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap $t > /tmp/ss$i.tap 2>&1; grep -q '^ok ' /tmp/ss$i.tap && p=$((p+1)) || last=$i; done
+# | echo "== $t alone: $p/10 pass"; [ -n "${last:-}" ] && sed -n '/^not ok/,/^  \.\.\./p' /tmp/ss$last.tap | head -40
+# | echo "== under -j 16 --repeat 32"; : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 --repeat 32 -p tap $t > /tmp/ssl.tap 2>&1; echo "$(grep -c '^ok ' /tmp/ssl.tap) ok, $(grep -c '^not ok ' /tmp/ssl.tap) not ok"; grep -q '^not ok' /tmp/ssl.tap && sed -n '/^not ok/,/^  \.\.\./p' /tmp/ssl.tap | head -40
+# | echo "== the failure in the suite run"; sed -n '/^not ok .*spawnsync-args/,/^  \.\.\./p' /boot/home/node-parallel-4ef-rev3.tap | head -40
+# ---- raw output ----
+libuv-1.52.1-5-arm64.hpkg nodejs24-24.21.0-3-arm64.hpkg 
+== parallel/test-child-process-spawnsync-args alone: 10/10 pass
+== under -j 16 --repeat 32
+32 ok, 0 not ok
+== the failure in the suite run
+not ok 256 parallel/test-child-process-spawnsync-args
+  ---
+  duration_ms: 680.76600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: spawnSync pwd EPIPE
+        at /boot/home/node-src/node-v24.21.0/test/parallel/test-child-process-spawnsync-args.js:42:10
+        at Object.spawnSync (node:internal/child_process:1160:20)
+        at spawnSync (node:child_process:928:24)
+        at /boot/home/node-src/node-v24.21.0/test/parallel/test-child-process-spawnsync-args.js:36:37
+        at /boot/home/node-src/node-v24.21.0/test/common/index.js:481:15
+        at Array.map (<anonymous>)
+        at Object.<anonymous> (/boot/home/node-src/node-v24.21.0/test/parallel/test-child-process-spawnsync-args.js:35:27)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: Error: spawnSync pwd EPIPE
+          at Object.spawnSync (node:internal/child_process:1160:20)
+          at spawnSync (node:child_process:928:24)
+          at /boot/home/node-src/node-v24.21.0/test/parallel/test-child-process-spawnsync-args.js:36:37
+          at /boot/home/node-src/node-v24.21.0/test/common/index.js:481:15
+          at Array.map (<anonymous>)
+          at Object.<anonymous> (/boot/home/node-src/node-v24.21.0/test/parallel/test-child-process-spawnsync-args.js:35:27)
+          at Module._compile (node:internal/modules/cjs/loader:1929:14)
+          at Object..js (node:internal/modules/cjs/loader:2060:10)
+          at Module.load (node:internal/modules/cjs/loader:1651:32)
+          at Module._load (node:internal/modules/cjs/loader:1443:12) {
+        errno: -2147459059,
+        code: 'EPIPE',
+        syscall: 'spawnSync pwd',
+        path: 'pwd',
+        spawnargs: []

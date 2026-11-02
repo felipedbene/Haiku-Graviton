@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 4ef-repo-origin-and-ami
+# workstation 20261102T162553Z: repo origin, AMI under test, instance launch facts
+# ---- raw output ----
+EZBGMRSQZAMKW	packages.debene.dev	haiku-graviton-hpkg-<ACCOUNT_ID>.s3.us-west-2.amazonaws.com	/debeos-repo-green
+ami-0714f26bbe99a9bfb	haiku-oven-1793631413	2026-11-02T15:06:21.000Z	None	4ef344f5fa939afeae9c18310d81968b3225d094	debeos-r70760-g4ef344f5fa
+ami-03c3545c37f391c1f	haiku-oven-1793580871	2026-11-02T01:03:31.000Z	true	fe7fef0b47685471f94fce4af712632dc129f86a	debeos-r70748-gfe7fef0b47
+i-0b36f8b4076970921	c8g.4xlarge	ami-0714f26bbe99a9bfb	subnet-0c98257f993bfc1b2	sg-0efc97cc673949063	haiku-rdclient	arn:aws:iam::<ACCOUNT_ID>:instance-profile/ssm-instance-profile	2026-11-02T15:12:10+00:00	running
+Name	cc-verify-trunk-4ef344f5fa
+auto-stop	no
+ephemeral	true
+Project	haiku-graviton
+$ aws s3 ls s3://<work-bucket>/agent-917-full/ (rev-3 staging set; checked 15:12, 15:49, 15:55, 16:25Z)
+(empty listing above = nothing staged at 16:25:58Z)

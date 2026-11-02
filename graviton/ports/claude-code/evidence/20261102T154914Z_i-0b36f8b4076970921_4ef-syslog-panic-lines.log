@@ -1,0 +1,13 @@
+# evidence: 4ef-syslog-panic-lines
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T154914Z   end: 20261102T154936Z   rc: 0
+# script sha256: e7a728ecc511adbb5ade35ad14d0a325250b4ec919bdb438d9311582d1a300d3
+# ---- script ----
+# | set -u
+# | grep -n -iE "kdl|panic|vm_page_fault|kernel debugger" /var/log/syslog | cut -c1-220
+# ---- raw output ----
+191:KERN: Welcome to kernel debugger output!
+1148:KERN: kernel debugger extension "debugger/run_on_exit/v1": loaded
+1149:KERN: kernel debugger extension "debugger/usb_keyboard/v1": loaded
+1150:KERN: kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+1151:KERN: kernel debugger extension "debugger/hangman/v1": loaded

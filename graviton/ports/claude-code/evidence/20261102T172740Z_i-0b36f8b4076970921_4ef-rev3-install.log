@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 4ef-rev3-install
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T172740Z   end: 20261102T172801Z   rc: 0
+# script sha256: f79d9c91489f94f5723ce77422bf3a19ae117492b0540244b02d3bbd274fed25
+# ---- script ----
+# | set -u
+# | W=/boot/home/rev3; rm -rf $W; mkdir -p $W; cd $W || exit 2; C=/boot/system/bin/curl
+# | # rev-3 set staged by another agent at s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/agent-917-full/, checksums from its SHA256SUMS
+# | $C -sSfo libuv-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-917-full/libuv-1.52.1-5-arm64.hpkg?<PRESIGNED>' || exit 1
+# | $C -sSfo libuv_devel-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-917-full/libuv_devel-1.52.1-5-arm64.hpkg?<PRESIGNED>' || exit 1
+# | $C -sSfo libuv_debuginfo-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-917-full/libuv_debuginfo-1.52.1-5-arm64.hpkg?<PRESIGNED>' || exit 1
+# | $C -sSfo nodejs24-24.21.0-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-917-full/nodejs24-24.21.0-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | $C -sSfo nodejs24_devel-24.21.0-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-917-full/nodejs24_devel-24.21.0-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | cat > SHA256SUMS <<'SUMS'
+# | 6dedc02755b3a42c6b95c1b80699373acfbbf082c387354cf7a83f14fdad4cbe  libuv-1.52.1-5-arm64.hpkg
+# | e2e4dcb0c0a4158798bca0e0b607ce36f84b8110785a8184fc0dfeb7d712926d  libuv_devel-1.52.1-5-arm64.hpkg
+# | 16700208d554ffb83d77f2a2cdc04883dae494c3fa5a34a448f6593bd2989df0  libuv_debuginfo-1.52.1-5-arm64.hpkg
+# | cd16ddb5b9e788d3e5ca83144d1db23c79331f478a5f469853ac7bf6ab203575  nodejs24-24.21.0-3-arm64.hpkg
+# | a69f1c560f267b8d62e50422daceb34edc339029ef0555dc3d7e5af3df128048  nodejs24_devel-24.21.0-3-arm64.hpkg
+# | SUMS
+# | sha256sum -c SHA256SUMS || exit 1
+# | echo "== before: $(ls /boot/system/packages | grep -E '^(nodejs24|libuv)' | tr '\n' ' ')"
+# | { for i in $(seq 60); do echo 1; done; echo yes; } | pkgman install $W/libuv-1.52.1-5-arm64.hpkg $W/libuv_devel-1.52.1-5-arm64.hpkg $W/libuv_debuginfo-1.52.1-5-arm64.hpkg $W/nodejs24-24.21.0-3-arm64.hpkg $W/nodejs24_devel-24.21.0-3-arm64.hpkg 2>&1 | grep -E '^ +(install|upgrade) package|\[system\] Done|problem'; echo "pkgman rc=${PIPESTATUS[1]}"
+# | echo "== after: $(ls /boot/system/packages | grep -E '^(nodejs24|libuv)' | tr '\n' ' ')"
+# | node --version
+# | node -e 'const os=require("os");const c=os.cpus();console.log("os.cpus().length",c.length,"model",c[0]&&c[0].model,"speed",c[0]&&c[0].speed,"times",JSON.stringify(c[0]&&c[0].times),"availableParallelism",os.availableParallelism())'
+# | claude --version
+# ---- raw output ----
+libuv-1.52.1-5-arm64.hpkg: OK
+libuv_devel-1.52.1-5-arm64.hpkg: OK
+libuv_debuginfo-1.52.1-5-arm64.hpkg: OK
+nodejs24-24.21.0-3-arm64.hpkg: OK
+nodejs24_devel-24.21.0-3-arm64.hpkg: OK
+== before: libuv-1.52.1-4-arm64.hpkg nodejs24-24.21.0-2-arm64.hpkg nodejs24_devel-24.21.0-2-arm64.hpkg 
+    upgrade package libuv-1.52.1-4 to 1.52.1-5 from local file
+    upgrade package nodejs24-24.21.0-2 to 24.21.0-3 from local file
+    install package libuv_debuginfo-1.52.1-5 from local file
+    install package libuv_devel-1.52.1-5 from local file
+    upgrade package nodejs24_devel-24.21.0-2 to 24.21.0-3 from local file
+[system] Done.
+pkgman rc=0
+== after: libuv-1.52.1-5-arm64.hpkg libuv_debuginfo-1.52.1-5-arm64.hpkg libuv_devel-1.52.1-5-arm64.hpkg nodejs24-24.21.0-3-arm64.hpkg nodejs24_devel-24.21.0-3-arm64.hpkg 
+v24.21.0
+os.cpus().length 16 model Neoverse-V2 speed 2798 times {"user":0,"nice":0,"sys":0,"idle":0,"irq":0} availableParallelism 16
+2.1.314 (Claude Code)

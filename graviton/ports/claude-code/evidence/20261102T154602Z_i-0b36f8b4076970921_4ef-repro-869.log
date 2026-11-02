@@ -1,0 +1,37 @@
+# evidence: 4ef-repro-869
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T154602Z   end: 20261102T154624Z   rc: 0
+# script sha256: fd0123ba03a0aedc31b056c005fc959336e853164273b7bffb5bcea35602abe4
+# ---- script ----
+# | set -u
+# | D=/boot/system/non-packaged/data/ssl/certs
+# | echo "=== cert dir"; ls -ld $D; stat -c '%U %G %u:%g %a' $D
+# | echo "=== OpenSSL default cert dir"; openssl version -d; node -p 'require("crypto").constants ? "node crypto ok" : ""'
+# | echo "=== Node loads the system CA store: stderr must be empty"
+# | node -e 'const tls=require("tls"); console.log("system CAs:", tls.getCACertificates ? tls.getCACertificates("system").length : "n/a")' 2>/tmp/n869.err; echo "rc=$?"; echo "stderr bytes: $(wc -c < /tmp/n869.err)"; cat /tmp/n869.err
+# | echo "=== HTTPS fetch with the system roots, stderr must be empty"
+# | node -e 'fetch("https://example.com/").then(r=>console.log("status",r.status)).catch(e=>{console.log("ERR",e.cause&&e.cause.code||e.message);process.exit(1)})' 2>/tmp/n869b.err; echo "rc=$?"; echo "stderr bytes: $(wc -c < /tmp/n869b.err)"; cat /tmp/n869b.err
+# | echo "=== claude doctor stderr"; HOME=/tmp/doc869 timeout 120 claude doctor < /dev/null 2>/tmp/d869.err | grep -E 'Platform|issues'; echo "doctor stderr: $(grep -c 'Cannot open directory' /tmp/d869.err) 'Cannot open directory' lines"
+# | echo "=== openssl s_client, default trust"; echo | timeout 30 openssl s_client -connect example.com:443 -servername example.com 2>/dev/null | grep -E 'Verify return code'
+# ---- raw output ----
+=== cert dir
+drwxr-xr-x 1 baron root 2048 Nov  2 14:52 /boot/system/non-packaged/data/ssl/certs
+baron root 0:0 755
+=== OpenSSL default cert dir
+OPENSSLDIR: "/packages/openssl3-3.5.9-2/.self/data/ssl"
+node crypto ok
+=== Node loads the system CA store: stderr must be empty
+system CAs: 119
+rc=0
+stderr bytes: 0
+=== HTTPS fetch with the system roots, stderr must be empty
+status 200
+rc=0
+stderr bytes: 0
+=== claude doctor stderr
+Platform: haiku-arm64
+No installation issues found.
+For a full setup checkup that can also fix issues, run /doctor in a Claude Code session.
+doctor stderr: 0 'Cannot open directory' lines
+=== openssl s_client, default trust
+Verify return code: 0 (ok)

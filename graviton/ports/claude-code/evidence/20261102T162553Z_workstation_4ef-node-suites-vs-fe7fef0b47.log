@@ -1,0 +1,54 @@
+# evidence: 4ef-node-suites-vs-fe7fef0b47
+# workstation 20261102T162553Z. A = 20261102T061723Z_i-084afae11b14226f8_fe7-nodejs24r2-full-suites.log (canonical fe7fef0b47), B = 20261102T155120Z_i-0b36f8b4076970921_4ef-nodejs24r2-full-suites.log (trunk 4ef344f5fa). Lists = every FAIL/TIMEOUT line of each log.
+# ---- raw output ----
+A not ok: 45  B not ok: 23
+-- fail -> pass (23):
+parallel/test-cluster-net-listen-ipv6only-false
+parallel/test-dgram-connect-send-empty-array
+parallel/test-dgram-connect-send-empty-buffer
+parallel/test-http-autoselectfamily
+parallel/test-http2-connect
+parallel/test-http2-ip-address-host
+parallel/test-https-autoselectfamily
+parallel/test-https-connect-address-family
+parallel/test-net-autoselectfamily
+parallel/test-net-autoselectfamily-ipv4first
+parallel/test-net-boundsocket
+parallel/test-net-connect-options-ipv6
+parallel/test-net-dns-custom-lookup
+parallel/test-net-dns-lookup-skip
+parallel/test-net-pingpong
+parallel/test-tcp-wrap-listen
+parallel/test-tls-connect-address-family
+parallel/test-worker-init-failure
+sequential/test-net-connect-econnrefused
+sequential/test-net-connect-local-error
+sequential/test-net-server-address
+sequential/test-net-server-listen-ipv6-link-local
+sequential/test-tls-psk-client
+-- pass -> fail (1):
+parallel/test-child-process-fork-closed-channel-segfault TIMEOUT
+-- FAIL <-> TIMEOUT among tests failing in both:
+-- failing in both (22):
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-os FAIL FAIL
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL

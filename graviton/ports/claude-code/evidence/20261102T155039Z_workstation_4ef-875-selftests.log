@@ -1,0 +1,169 @@
+# evidence: 4ef-875-selftests
+# host: workstation macOS 26.7.2 arm64; utc 20261102T155039Z; commit-under-test: trunk origin/graviton 4ef344f5fa (git archive of graviton/scripts + graviton/pipeline)
+# ---- raw output ----
+$ python3 graviton/scripts/haiku-repo-publish-ephemeral-selftest
+base64 implementations found: BSD=/usr/bin/base64, GNU=/opt/homebrew/bin/gbase64
+
+== [BSD /usr/bin/base64] binary round trip through the publishers' b64 helper
+  ok   b64 exits 0 (rc=0 )
+  ok   encoded output is one unwrapped line (87392 bytes)
+  ok   encoded output equals canonical RFC 4648 base64
+       sha256(encoded)=f6e1d37c3dd8ccdbca70125de4685187a139e0e13626fcdd58bc3dc1da608cb9
+  ok   BSD -d restores the 65543-byte blob byte-for-byte
+== [BSD /usr/bin/base64] ephemeral publish end to end, no shim on PATH
+  ok   publisher exits 0 (rc=0)
+  ok   exactly one peer launched
+  ok   the launched peer is terminated on exit
+  ok   user data is one unwrapped base64 line
+  ok   user data decodes to the bootstrap script
+       sha256(shipped payloads + user data)=9b454c74c1ab62aba36771d0fbfd38c3c8dd61fbea1dc8dfce01b5d77361fda6
+  ok   haiku-repo-add decodes to the tracked file byte-for-byte (37497 bytes)
+  ok   haiku-publish-lock.sh decodes to the tracked file byte-for-byte (11982 bytes)
+  ok   haiku-repo-coherence decodes to the tracked file byte-for-byte (12460 bytes)
+  ok   hpkg_meta.py decodes to the tracked file byte-for-byte (21477 bytes)
+  ok   haiku-repo-coherence.baseline decodes to the tracked file byte-for-byte (4416 bytes)
+
+== [GNU /opt/homebrew/bin/gbase64] binary round trip through the publishers' b64 helper
+  ok   b64 exits 0 (rc=0 )
+  ok   encoded output is one unwrapped line (87392 bytes)
+  ok   encoded output equals canonical RFC 4648 base64
+       sha256(encoded)=f6e1d37c3dd8ccdbca70125de4685187a139e0e13626fcdd58bc3dc1da608cb9
+  ok   GNU -d restores the 65543-byte blob byte-for-byte
+== [GNU /opt/homebrew/bin/gbase64] ephemeral publish end to end, no shim on PATH
+  ok   publisher exits 0 (rc=0)
+  ok   exactly one peer launched
+  ok   the launched peer is terminated on exit
+  ok   user data is one unwrapped base64 line
+  ok   user data decodes to the bootstrap script
+       sha256(shipped payloads + user data)=9b454c74c1ab62aba36771d0fbfd38c3c8dd61fbea1dc8dfce01b5d77361fda6
+  ok   haiku-repo-add decodes to the tracked file byte-for-byte (37497 bytes)
+  ok   haiku-publish-lock.sh decodes to the tracked file byte-for-byte (11982 bytes)
+  ok   haiku-repo-coherence decodes to the tracked file byte-for-byte (12460 bytes)
+  ok   hpkg_meta.py decodes to the tracked file byte-for-byte (21477 bytes)
+  ok   haiku-repo-coherence.baseline decodes to the tracked file byte-for-byte (4416 bytes)
+
+== a base64 that cannot encode stops the publish BEFORE a peer exists
+  ok   publisher exits non-zero (rc=64)
+  ok   run-instances was never called
+  ok   nothing needed terminating (no instance was created)
+  ok   the incoming prefix was not touched
+
+== haiku-repo-publish-ephemeral: workstation-side base64 is the portable form
+  ok   defines the b64() stdin helper
+  ok   no other base64 invocation (positional file / -w0)
+== haiku-repo-publish-native: workstation-side base64 is the portable form
+  ok   defines the b64() stdin helper
+  ok   no other base64 invocation (positional file / -w0)
+
+PASS
+rc=0
+$ python3 graviton/scripts/haiku-repo-coherence-selftest
+== HPKR index parse + classify
+  ok   index round-trips all 11 fixtures (got 11)
+  ok   exactly the known-broken pins fire: expected ['orphan_music', 'revpin_devel', 'simdjson_devel'], got ['orphan_music', 'revpin_devel', 'simdjson_devel']
+  ok   coherent does not fire
+  ok   coherent_devel does not fire
+  ok   looseptr does not fire
+  ok   revless does not fire
+  ok   revless_devel does not fire
+  ok   revpin does not fire
+  ok   simdjson does not fire
+  ok   sysuser does not fire
+  ok   drift finding names the version the set DOES provide (5.0.2), which is what distinguishes it from a missing package
+  ok   missing-base finding reports no available version
+  ok   missing-base message says the provider is absent, not drifted
+== *.hpkg directory parse + classify
+  ok   directory reader sees all 11 fixtures
+  ok   directory reader and index reader agree on the findings
+== end-to-end exit codes
+  ok   a new finding exits 1
+  ok   the finding is reported
+  ok   the remedy message cites the issue
+== baseline ratchet
+  ok   a fully baselined set exits 0
+  ok   baselined findings are still REPORTED, not silenced (got 3)
+  ok   a non-baselined finding still fails with a non-empty baseline
+  ok   the two classes are reported separately
+  ok   a stale entry alone does not fail by default
+  ok   a stale entry is reported
+  ok   --strict-baseline fails on a stale entry, so the list shrinks
+  ok   a malformed baseline line is rejected, not read as a wildcard
+== shipped baseline
+  ok   shipped baseline parses (8 entries)
+  ok   every shipped baseline key has exactly 3 fields
+  ok   issue 852 instance is baselined: coreutils_debuginfo coreutils 9.11
+  ok   issue 852 instance is baselined: freetype_debuginfo freetype 2.14.3
+  ok   issue 852 instance is baselined: icu67_tools icu 67.1
+  ok   issue 852 instance is baselined: ffmpeg7_devel ffmpeg7 7.1
+  ok   issue 852 instance is baselined: icu78_devel icu78 78.3
+  ok   baseline line 30 states a reason
+  ok   baseline line 36 states a reason
+  ok   baseline line 41 states a reason
+  ok   baseline line 50 states a reason
+  ok   baseline line 51 states a reason
+  ok   baseline line 60 states a reason
+  ok   baseline line 68 states a reason
+  ok   baseline line 69 states a reason
+== wiring into haiku-repo-add
+  ok   haiku-repo-add invokes haiku-repo-coherence
+  ok   haiku-repo-add's package upload is still recognisable
+  ok   the coherence gate runs BEFORE the package upload, so an incoherent union is never published
+  ok   a failed coherence check aborts the publish (die), not just warns
+  ok   an absent coherence tool is not downgraded to a NOTE
+  ok   an absent coherence tool is fatal
+
+== the publishers that ship haiku-repo-add to a remote host carry the gate with it
+  ok   haiku-repo-publish-ephemeral ships haiku-repo-coherence to the peer
+  ok   haiku-repo-publish-ephemeral ships hpkg_meta.py to the peer
+  ok   haiku-repo-publish-ephemeral ships haiku-repo-coherence.baseline to the peer
+  ok   haiku-repo-publish-ephemeral chmod +x's the coherence tool on the peer
+  ok   haiku-repo-publish-native ships haiku-repo-coherence to the peer
+  ok   haiku-repo-publish-native ships hpkg_meta.py to the peer
+  ok   haiku-repo-publish-native ships haiku-repo-coherence.baseline to the peer
+  ok   haiku-repo-publish-native chmod +x's the coherence tool on the peer
+
+PASS
+rc=0
+$ python3 graviton/scripts/haiku-launch-selftest
+== every committed launcher is enumerated
+  ok   pipeline/ops-lambdas/launch_builder.py is a known launcher (add it to LAUNCHERS and give it auto-stop=no)
+  ok   scripts/haiku-bake-builder is a known launcher (add it to LAUNCHERS and give it auto-stop=no)
+  ok   scripts/haiku-launch is a known launcher (add it to LAUNCHERS and give it auto-stop=no)
+  ok   scripts/haiku-perf-gate is a known launcher (add it to LAUNCHERS and give it auto-stop=no)
+  ok   scripts/haiku-repo-publish-ephemeral is a known launcher (add it to LAUNCHERS and give it auto-stop=no)
+  ok   scripts/haiku-launch still exists
+  ok   scripts/haiku-bake-builder still exists
+  ok   scripts/haiku-perf-gate still exists
+  ok   scripts/haiku-repo-publish-ephemeral still exists
+  ok   pipeline/ops-lambdas/launch_builder.py still exists
+
+== each run-instances call tags the INSTANCE auto-stop=no
+  ok   scripts/haiku-launch: found an instance-creating call
+  ok   scripts/haiku-launch call 1 carries auto-stop=no
+  ok   scripts/haiku-bake-builder: found an instance-creating call
+  ok   scripts/haiku-bake-builder call 1 carries auto-stop=no
+  ok   scripts/haiku-perf-gate: found an instance-creating call
+  ok   scripts/haiku-perf-gate call 1 carries auto-stop=no
+  ok   scripts/haiku-perf-gate call 2 carries auto-stop=no
+  ok   scripts/haiku-repo-publish-ephemeral: found an instance-creating call
+  ok   scripts/haiku-repo-publish-ephemeral call 1 carries auto-stop=no
+  ok   pipeline/ops-lambdas/launch_builder.py: found an instance-creating call
+  ok   pipeline/ops-lambdas/launch_builder.py call 1 carries auto-stop=no
+
+== haiku-launch's --reapable branch, executed
+  ok   the REAPABLE branch is still recognisable
+  ok   REAPABLE=0 yields NOSTOP_TAG=',{Key=auto-stop,Value=no}' (got ',{Key=auto-stop,Value=no}')
+  ok   REAPABLE=1 yields NOSTOP_TAG='' (got '')
+  ok   the opt-out is reachable from the command line
+
+== shell launchers still parse
+  ok   bash -n scripts/haiku-launch (clean)
+  ok   bash -n scripts/haiku-bake-builder (clean)
+  ok   bash -n scripts/haiku-perf-gate (clean)
+  ok   bash -n scripts/haiku-repo-publish-ephemeral (clean)
+  ok   py_compile pipeline/ops-lambdas/launch_builder.py (clean)
+
+PASS
+rc=0
+$ bash -n graviton/scripts/haiku-repo-publish-ephemeral && bash -n graviton/scripts/haiku-repo-publish-native
+rc=0

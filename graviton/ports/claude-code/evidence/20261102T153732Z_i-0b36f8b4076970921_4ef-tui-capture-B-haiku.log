@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 4ef-tui-capture-B-haiku
+# instance: i-0b36f8b4076970921   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T153732Z   end: 20261102T154257Z   rc: 0
+# script sha256: b6bf16134afb19ea01e8768f9f57c14327d3dc19a495844c098c4a3229723936
+# ---- script ----
+# | set -u
+# | cd /boot/home/cc-accept/port || exit 1
+# | tmux -V; uname -a; ls /boot/system/packages | grep -E '^(claude_code|libuv-|nodejs24-)'
+# | TUI_ONLY=B OUT=/tmp/tui-B bash tools/tui-diff.sh /nonexistent /boot/system/bin/node /boot/system/lib/claude-code 2>&1 | tail -30
+# | ls /tmp/tui-B | wc -l
+# | for f in /tmp/tui-B/*.B.err; do [ -s "$f" ] && { echo "--- stderr $f"; head -5 "$f"; }; done
+# | tar -czf /tmp/tui-B.tgz -C /tmp tui-B && sha256sum /tmp/tui-B.tgz && /boot/system/bin/curl -sSf -X PUT --upload-file /tmp/tui-B.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/tui-B-haiku-4ef344f5fa.tgz?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+tmux 3.7c
+Haiku ip-10-128-9-169.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 14:49:36 arm64 other Haiku
+claude_code-2.1.314-2-arm64.hpkg
+libuv-1.52.1-4-arm64.hpkg
+nodejs24-24.21.0-2-arm64.hpkg
+captured theme-100x30 (1 snaps, side B)
+captured theme-80x24 (1 snaps, side B)
+captured theme-40x20 (1 snaps, side B)
+captured theme-200x50 (1 snaps, side B)
+captured theme-120x40 (1 snaps, side B)
+captured theme-60x16 (1 snaps, side B)
+captured theme-arrows (11 snaps, side B)
+captured theme-resize (5 snaps, side B)
+captured theme-arrow-resize (4 snaps, side B)
+captured login-flow (3 snaps, side B)
+captured text-100x30 (8 snaps, side B)
+captured text-40x20 (8 snaps, side B)
+captured text-resize (6 snaps, side B)
+captured text-rtl (5 snaps, side B)
+captured text-rtl-vscode (6 snaps, side B)
+captured theme-vscode (2 snaps, side B)
+tui-diff: captured side B into /tmp/tui-B
+136
+e0c077eb14c2775d026ebd581b853897ac8ac4d55602fc0203f61d9c014cbabe  /tmp/tui-B.tgz
+upload-ok
