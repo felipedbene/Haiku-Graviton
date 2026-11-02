@@ -1,0 +1,67 @@
+# evidence: before-and-experiments
+# instance: i-0420ebac5121e4b18   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T010906Z   end: 20261102T010924Z   rc: 0
+# script sha256: f49949e45db6b2975c3a70802956ba5f7a2c921f551f854988d3c2cfc77b93b4
+# ---- script ----
+# | set -u
+# | NODEP='const tls=require("tls");for(const s of ["default","bundled","system"]){console.log(s, tls.getCACertificates(s).length)}'
+# | echo "== versions"; uname -v; node --version; openssl version -d
+# | echo "== stock: node system CA probe"
+# | node -e "$NODEP"; echo "node rc=$?"
+# | echo "== stock: node TLS to example.com using system store only (--use-system-ca, no bundled)"
+# | node --use-system-ca -e 'require("https").get("https://example.com/",{ca:require("tls").getCACertificates("system")},r=>{console.log("status",r.statusCode,"authorized",r.socket.authorized);r.resume()}).on("error",e=>{console.log("ERR",e.code);process.exit(1)})'; echo "rc=$?"
+# | echo "== stock: s_client, no -CApath/-CAfile"
+# | echo | openssl s_client -connect example.com:443 -servername example.com -verify_return_error 2>&1 | grep -E 'Verification|Verify return code|verify error'
+# | echo "s_client rc=${PIPESTATUS[1]}"
+# | echo "== experiment A: SSL_CERT_DIR at the existing but EMPTY packaged dir"
+# | ls -A /boot/system/data/ssl/certs | wc -l
+# | SSL_CERT_DIR=/boot/system/data/ssl/certs node -e "$NODEP"
+# | echo "== experiment B: a hashed dir (openssl rehash) of the same bundle"
+# | D=/tmp/h869certs; rm -rf $D; mkdir -p $D
+# | awk -v d=$D '/BEGIN CERTIFICATE/{n++; f=sprintf("%s/ca-%03d.pem",d,n)} f{print > f} /END CERTIFICATE/{close(f); f=""}' /boot/system/data/ssl/CARootCertificates.pem
+# | ls $D | wc -l
+# | openssl rehash $D; echo "rehash rc=$?"
+# | ls $D | grep -c '\.[0-9]$'
+# | SSL_CERT_DIR=$D node -e "$NODEP"
+# | echo "-- s_client with ONLY that dir (-no-CAfile -CApath)"
+# | echo | openssl s_client -connect example.com:443 -servername example.com -verify_return_error -no-CAfile -CApath $D 2>&1 | grep -E 'Verification|Verify return code|verify error'
+# | echo "-- s_client with -no-CAfile and DEFAULT dir only (shows the dir carries nothing today)"
+# | echo | openssl s_client -connect example.com:443 -servername example.com -verify_return_error -no-CAfile 2>&1 | grep -E 'Verification|Verify return code|verify error'
+# ---- raw output ----
+== versions
+hrev59996 Oct 19 2026 21:09:42
+v24.21.0
+OPENSSLDIR: "/packages/openssl3-3.5.9-2/.self/data/ssl"
+== stock: node system CA probe
+default 121
+bundled 121
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+system 119
+node rc=0
+== stock: node TLS to example.com using system store only (--use-system-ca, no bundled)
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+status 200 authorized true
+rc=0
+== stock: s_client, no -CApath/-CAfile
+Verification: OK
+Verify return code: 0 (ok)
+s_client rc=0
+== experiment A: SSL_CERT_DIR at the existing but EMPTY packaged dir
+0
+default 121
+bundled 121
+system 119
+== experiment B: a hashed dir (openssl rehash) of the same bundle
+119
+rehash rc=0
+119
+default 121
+bundled 121
+system 357
+-- s_client with ONLY that dir (-no-CAfile -CApath)
+Verification: OK
+Verify return code: 0 (ok)
+-- s_client with -no-CAfile and DEFAULT dir only (shows the dir carries nothing today)
+verify error:num=20:unable to get local issuer certificate
+Verification error: unable to get local issuer certificate
+Verify return code: 20 (unable to get local issuer certificate)

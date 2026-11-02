@@ -1,0 +1,38 @@
+# evidence: install-nodejs24
+# instance: i-0420ebac5121e4b18   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T010812Z   end: 20261102T010843Z   rc: 0
+# script sha256: 3e4d9cdd934f81bef2fc12032016ce6ec18739da9b1d6187aced87556201fb53
+# ---- script ----
+# | set -u
+# | pkgman search nodejs 2>&1 | head
+# | { for i in $(seq 60); do echo 1; done; echo yes; } | pkgman install nodejs24 2>&1 | tail -15
+# | echo "pkgman rc=${PIPESTATUS[1]}"
+# | ls /boot/system/packages | grep -i node
+# ---- raw output ----
+Error: Failed to open repository file "/boot/system/cache/package-repositories/DeBeOS": No such file or directory
+Error: Failed to open repository file "/boot/system/cache/package-repositories/DeBeOS": No such file or directory
+‡Öùá% repochecksum-1 []
+Validating checksum for DeBeOS...done.
+‡Öùá% repocache-2 [ KiB]
+Validating checksum for DeBeOS...done.
+Status  Name            Description                                                         
+--------------------------------------------------------------------------------------------
+        nodejs20        A JavaScript runtime built on Chrome's V8 Engine                    
+        nodejs20_devel  A JavaScript runtime built on Chrome's V8 Engine (development files)
+Validating checksum for http://packages.debene.dev/arm64/packages/c_ares-1.34.8-1-arm64.hpkg...done.
+       icu78-78.3-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/icu78-78.3-1-arm64.hpkg...done.
+       libexecinfo-1.1-6-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libexecinfo-1.1-6-arm64.hpkg...done.
+       libuv-1.52.1-4-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libuv-1.52.1-4-arm64.hpkg...done.
+       nghttp2-1.63.0-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/nghttp2-1.63.0-1-arm64.hpkg...done.
+       nodejs24-24.21.0-2-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/nodejs24-24.21.0-2-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_01:08:34"
+[system] Cleaning up ...
+[system] Done.
+pkgman rc=0
+nodejs24-24.21.0-2-arm64.hpkg
