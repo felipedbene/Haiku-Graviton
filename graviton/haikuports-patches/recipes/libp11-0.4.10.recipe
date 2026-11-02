@@ -1,0 +1,97 @@
+SUMMARY="A PKCS#11 wrapper library"
+DESCRIPTION="libp11 is a library implementing a thin layer on top of PKCS#11 \
+API to make using PKCS#11 implementations easier."
+HOMEPAGE="https://github.com/opensc/libp11"
+COPYRIGHT="2016-2019 Michał Trojnara
+	2015-2016 Nikos Mavrogiannopoulos
+	2007-2009 Andreas Jellinghaus
+	2011 Martin Paljak"
+LICENSE="GNU LGPL v2.1"
+# 4, not 3: a rebuild against openssl3 3.5.9-3 (issue 930), same source and
+# patches as stock HaikuPorts at 1d23c3a's libp11-0.4.10-3. 3.5.9-3 configures arm64 as
+# haiku-aarch64, which widens BN_ULONG in the public headers from 32 to 64 bits
+# under the same soname (lib:libcrypto = 3). This package libp11 and engines/pkcs11.so import BN_set_word,
+# so a build against the older headers passes its BN_ULONG argument as 32-bit.
+REVISION="4"
+SOURCE_URI="$HOMEPAGE/releases/download/libp11-$portVersion/libp11-$portVersion.tar.gz"
+CHECKSUM_SHA256="639ea43c3341e267214b712e1e5e12397fd2d350899e673dd1220f3c6b8e3db4"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86_gcc2 x86"
+
+libVersion="2.5.2"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+PROVIDES="
+	libp11$secondaryArchSuffix = $portVersion
+	lib:libp11$secondaryArchSuffix = $libVersionCompat
+	lib:libpkcs11$secondaryArchSuffix
+	lib:pkcs11$secondaryArchSuffix
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libcrypto$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	libp11${secondaryArchSuffix}_devel = $portVersion
+	devel:libp11$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	haiku${secondaryArchSuffix}_devel
+	libp11$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libcrypto$secondaryArchSuffix >= 3
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:autoheader
+	cmd:automake
+	cmd:awk
+	cmd:diff
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:gcc$secondaryArchSuffix
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+TEST_REQUIRES="
+	cmd:softhsm2_util
+	"
+
+defineDebugInfoPackage libp11$secondaryArchSuffix \
+	"$libDir"/engines/pkcs11.so \
+	"$libDir"/libp11.so.$libVersion
+
+enginesDir=$libDir/engines
+
+BUILD()
+{
+	runConfigure ./configure --with-enginesdir=$enginesDir \
+		--disable-static
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	rm $libDir/libp11.la
+	rm $enginesDir/pkcs11.la
+
+	prepareInstalledDevelLib libp11
+	fixPkgconfig
+
+	packageEntries devel \
+		$developDir
+}
+
+TEST()
+{
+	LIBRARY_PATH="$sourceDir/src/.libs${LIBRARY_PATH:+:$LIBRARY_PATH}" \
+	make check
+}
