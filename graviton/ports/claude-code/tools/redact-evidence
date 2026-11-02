@@ -9,10 +9,10 @@ acct=$(aws sts get-caller-identity --query Account --output text)
 [ $# -gt 0 ] || set -- "$here"/evidence/*.log
 for f in "$@"; do
 	[ -f "$f" ] || continue
-	if LC_ALL=C grep -aqE "$acct|X-Amz-(Credential|Signature|Security-Token)=" "$f"; then
+	if LC_ALL=C grep -aqiE "$acct|x-amz-(credential|signature|security-token)=|AWSAccessKeyId=|ASIA[A-Z0-9]{16}" "$f"; then
 		# The second rule catches query parameters that appear without their "?",
 		# e.g. a shell echoing a URL it split at each "&".
-		LC_ALL=C sed -i '' -E "s/$acct/<ACCOUNT_ID>/g; s/\?([^\"' ]*&)?([Xx]-[Aa][Mm][Zz]-|AWSAccessKeyId=|Signature=)[^\"' ]*/?<PRESIGNED>/g; s/([Xx]-[Aa][Mm][Zz]-[A-Za-z-]+)=[^ :\"'&]*/\1=<PRESIGNED>/g" "$f"
+		LC_ALL=C sed -i '' -E "s/$acct/<ACCOUNT_ID>/g; s/\?([^\"' ]*&)?([Xx]-[Aa][Mm][Zz]-|AWSAccessKeyId=|Signature=)[^\"' ]*/?<PRESIGNED>/g; s/([Xx]-[Aa][Mm][Zz]-[A-Za-z-]+)=[^ :\"'&]*/\1=<PRESIGNED>/g; s/ASIA[A-Z0-9]{16}/<ACCESS_KEY_ID>/g" "$f"
 		grep -q '^# redacted: ' "$f" || { printf '# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>\n' | cat - "$f" > "$f.tmp" && mv "$f.tmp" "$f"; }
 		echo "redacted: $f"
 	fi
