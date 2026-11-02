@@ -18,12 +18,14 @@
 #include <net_protocol.h>
 #include <net_stack.h>
 #include <NetBufferUtilities.h>
+#include <NetUtilities.h>
 #include <ProtocolUtilities.h>
 
 #include <ByteOrder.h>
 #include <KernelExport.h>
 #include <StackOrHeapArray.h>
 #include <util/AutoLock.h>
+#include <util/atomic.h>
 #include <util/list.h>
 #include <util/DoublyLinkedList.h>
 #include <util/MultiHashTable.h>
@@ -201,6 +203,11 @@ struct ipv6_protocol : net_protocol {
 	uint8		receive_pktinfo;
 	uint32		multicast_interface;
 		// IPV6_MULTICAST_IF interface index, 0 for the default selection
+	bool		v6only;
+		// IPV6_V6ONLY; while it is off, the socket also carries IPv4
+	net_protocol* ipv4;
+		// the IPv4 protocol that carries this socket's IPv4 traffic, created
+		// the first time it has any (see ipv4_protocol_for())
 
 	IPv6MulticastFilter multicast_filter;
 };
@@ -208,6 +215,11 @@ struct ipv6_protocol : net_protocol {
 
 static const int kDefaultTTL = IPV6_DEFHLIM;
 static const int kDefaultMulticastTTL = 1;
+static const bool kDefaultV6Only = false;
+	// as Linux (net.ipv6.bindv6only=0): a socket bound to :: also accepts IPv4
+	// unless the application asks for IPV6_V6ONLY
+
+#define NET_IPV4_MODULE_NAME "network/protocols/ipv4/v1"
 
 // Explicit Congestion Notification codepoints (RFC 3168). In IPv6 the ECN bits
 // are the low 2 bits of the 8-bit traffic class, which occupies bits 20..27 of
@@ -966,6 +978,59 @@ set_int_option(Type &target, const void* _value, size_t length)
 }
 
 
+/*!	Returns the IPv4 protocol that carries the IPv4 traffic of this dual-stack
+	socket, creating it the first time. It is an ordinary IPv4 protocol
+	instance bound to the same net_socket, so an IPv4 datagram or segment of
+	an IPv6 socket gets the same header, fragmentation and SO_BROADCAST
+	treatment as one of an IPv4 socket, and IPPROTO_IP options set on the IPv6
+	socket apply to it (see ipv6_setsockopt()).
+	Senders of one socket can race to create it; the loser frees its copy.
+*/
+static net_protocol*
+ipv4_protocol_for(ipv6_protocol* protocol)
+{
+	net_protocol* ipv4 = atomic_pointer_get(&protocol->ipv4);
+	if (ipv4 != NULL)
+		return ipv4;
+
+	net_protocol_module_info* module;
+	if (get_module(NET_IPV4_MODULE_NAME, (module_info**)&module) != B_OK)
+		return NULL;
+
+	ipv4 = module->init_protocol(protocol->socket);
+	if (ipv4 == NULL) {
+		put_module(NET_IPV4_MODULE_NAME);
+		return NULL;
+	}
+
+	ipv4->module = module;
+	ipv4->socket = protocol->socket;
+	ipv4->next = NULL;
+
+	net_protocol* existing = atomic_pointer_test_and_set(&protocol->ipv4,
+		ipv4, (net_protocol*)NULL);
+	if (existing != NULL) {
+		module->uninit_protocol(ipv4);
+		put_module(NET_IPV4_MODULE_NAME);
+		return existing;
+	}
+
+	return ipv4;
+}
+
+
+/*!	The IPv4 options a dual-stack IPv6 socket accepts on behalf of its IPv4
+	traffic. Group membership and the multicast options stay refused: the
+	IPv4 multicast filter delivers to the protocol it is attached to, which
+	here is not part of the socket's protocol chain.
+*/
+static bool
+is_ipv4_traffic_option(int option)
+{
+	return option == IP_TOS || option == IP_TTL || option == IP_DONTFRAG;
+}
+
+
 //	#pragma mark -
 
 
@@ -983,6 +1048,8 @@ ipv6_init_protocol(net_socket* socket)
 	protocol->receive_hoplimit = 0;
 	protocol->receive_pktinfo = 0;
 	protocol->multicast_interface = 0;
+	protocol->v6only = kDefaultV6Only;
+	protocol->ipv4 = NULL;
 	return protocol;
 }
 
@@ -991,6 +1058,11 @@ status_t
 ipv6_uninit_protocol(net_protocol* _protocol)
 {
 	ipv6_protocol* protocol = (ipv6_protocol*)_protocol;
+
+	if (protocol->ipv4 != NULL) {
+		protocol->ipv4->module->uninit_protocol(protocol->ipv4);
+		put_module(NET_IPV4_MODULE_NAME);
+	}
 
 	delete protocol;
 	return B_OK;
@@ -1109,10 +1181,8 @@ ipv6_getsockopt(net_protocol* _protocol, int level, int option, void* value,
 			return EOPNOTSUPP;
 		if (option == IPV6_UNICAST_HOPS)
 			return get_int_option(value, *_length, protocol->time_to_live);
-		if (option == IPV6_V6ONLY) {
-			int v6only = 1;
-			return get_int_option(value, *_length, v6only);
-		}
+		if (option == IPV6_V6ONLY)
+			return get_int_option(value, *_length, protocol->v6only ? 1 : 0);
 		if (option == IPV6_RECVPKTINFO)
 			return get_int_option(value, *_length, protocol->receive_pktinfo);
 		if (option == IPV6_RECVHOPLIMIT)
@@ -1123,6 +1193,13 @@ ipv6_getsockopt(net_protocol* _protocol, int level, int option, void* value,
 
 		dprintf("IPv6::getsockopt(): get unknown option: %d\n", option);
 		return ENOPROTOOPT;
+	}
+
+	if (level == IPPROTO_IP && is_ipv4_traffic_option(option)) {
+		net_protocol* ipv4 = ipv4_protocol_for(protocol);
+		if (ipv4 == NULL)
+			return B_NO_MEMORY;
+		return ipv4->module->getsockopt(ipv4, level, option, value, _length);
 	}
 
 	return sSocketModule->get_option(protocol->socket, level, option, value,
@@ -1170,10 +1247,13 @@ ipv6_setsockopt(net_protocol* _protocol, int level, int option,
 		if (option == IPV6_UNICAST_HOPS)
 			return set_int_option(protocol->time_to_live, value, length);
 		if (option == IPV6_V6ONLY) {
+			// TCP and UDP refuse a change once the socket is bound, as Linux
+			// and FreeBSD do: the binding was checked against the value it
+			// had then.
 			int v6only;
 			status_t status = set_int_option(v6only, value, length);
-			if (status == B_OK && v6only == 0)
-				status = B_BAD_VALUE;
+			if (status == B_OK)
+				protocol->v6only = v6only != 0;
 			return status;
 		}
 		if (option == IPV6_RECVPKTINFO)
@@ -1195,14 +1275,32 @@ ipv6_setsockopt(net_protocol* _protocol, int level, int option,
 		return ENOPROTOOPT;
 	}
 
+	if (level == IPPROTO_IP && is_ipv4_traffic_option(option)) {
+		net_protocol* ipv4 = ipv4_protocol_for(protocol);
+		if (ipv4 == NULL)
+			return B_NO_MEMORY;
+		return ipv4->module->setsockopt(ipv4, level, option, value, length);
+	}
+
 	return sSocketModule->set_option(protocol->socket, level, option,
 		value, length);
 }
 
 
 status_t
-ipv6_bind(net_protocol* protocol, const sockaddr* _address)
+ipv6_bind(net_protocol* _protocol, const sockaddr* _address)
 {
+	ipv6_protocol* protocol = (ipv6_protocol*)_protocol;
+
+	if (_address->sa_family == AF_INET && !protocol->v6only
+		&& protocol->socket->first_protocol != protocol) {
+		// A dual-stack socket taking on IPv4 traffic: the transport above us
+		// has already turned the mapped address into the IPv4 one.
+		net_protocol* ipv4 = ipv4_protocol_for(protocol);
+		if (ipv4 == NULL)
+			return B_NO_MEMORY;
+		return ipv4->module->bind(ipv4, _address);
+	}
 	if (_address->sa_family != AF_INET6)
 		return EAFNOSUPPORT;
 
@@ -1274,6 +1372,20 @@ ipv6_send_routed_data(net_protocol* _protocol, struct net_route* route,
 		return B_BAD_VALUE;
 
 	ipv6_protocol* protocol = (ipv6_protocol*)_protocol;
+
+	if (route->interface_address->domain != sDomain) {
+		// IPv4 traffic of a dual-stack socket: the transport has routed it in
+		// the IPv4 domain, with IPv4 addresses.
+		if (protocol == NULL || protocol->v6only
+			|| route->interface_address->domain->family != AF_INET)
+			return EAFNOSUPPORT;
+
+		net_protocol* ipv4 = ipv4_protocol_for(protocol);
+		if (ipv4 == NULL)
+			return B_NO_MEMORY;
+		return ipv4->module->send_routed_data(ipv4, route, buffer);
+	}
+
 	net_interface* interface = route->interface_address->interface;
 	uint8 protocolNumber;
 	if (protocol != NULL && protocol->socket != NULL)
@@ -1457,6 +1569,14 @@ ipv6_get_domain(net_protocol* protocol)
 size_t
 ipv6_get_mtu(net_protocol* protocol, const struct sockaddr* address)
 {
+	if (address->sa_family == AF_INET) {
+		// the IPv4 path of a dual-stack socket
+		net_domain* domain = gStackModule->get_domain(AF_INET);
+		if (domain == NULL)
+			return 0;
+		return domain->module->get_mtu(NULL, address);
+	}
+
 	net_route* route = sDatalinkModule->get_route(sDomain, address);
 	if (route == NULL)
 		return 0;
@@ -1740,9 +1860,16 @@ ipv6_process_ancillary_data_no_container(net_protocol* _protocol,
 		messageHeader->cmsg_type = IPV6_PKTINFO;
 
 		struct in6_pktinfo pi;
-		memcpy(&pi.ipi6_addr,
-			&((struct sockaddr_in6*)buffer->destination)->sin6_addr,
-			sizeof(struct in6_addr));
+		if (buffer->destination->sa_family == AF_INET) {
+			// an IPv4 datagram on a dual-stack socket
+			sockaddr_in6 mapped;
+			mapped_address_from_ipv4(buffer->destination, &mapped);
+			memcpy(&pi.ipi6_addr, &mapped.sin6_addr, sizeof(struct in6_addr));
+		} else {
+			memcpy(&pi.ipi6_addr,
+				&((struct sockaddr_in6*)buffer->destination)->sin6_addr,
+				sizeof(struct in6_addr));
+		}
 		if (buffer->interface_address != NULL
 			&& buffer->interface_address->interface != NULL)
 			pi.ipi6_ifindex = buffer->interface_address->interface->index;
