@@ -1,0 +1,79 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: haiku-native-trace
+# instance: i-0908c2a571dc5af5c   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T154728Z   end: 20261102T154746Z   rc: 0
+# script sha256: fa2451bac880782de9f9089013e05035a65f717a610760b90c065296cf44230c
+# ---- script ----
+# | cd /boot/home/w954
+# | sha256sum h2coalesce954.mjs
+# | for m in coalesced separate; do
+# | 	echo "=== $m, server-side native + JS trace from the last DATA chunk on"
+# | 	NODE_DEBUG=http2 NODE_DEBUG_NATIVE=HTTP2SESSION,HTTP2STREAM /boot/system/bin/node h2coalesce954.mjs $m 1 > /tmp/n954-$m.log 2>&1; echo "exit=$?"
+# | 	grep -E "Http2Session server|\[Http2Session server|HTTP2 [0-9]+: Http2Session server|round 1|h2coalesce954" /tmp/n954-$m.log | grep -vE "handling header|header key" | sed -n '/size: 5604/,$p' | head -40
+# | done
+# ---- raw output ----
+c8828a0558d0879346e3ae478339edb2dc2fa4946a264526ea7456d4d014642f  h2coalesce954.mjs
+=== coalesced, server-side native + JS trace from the last DATA chunk on
+exit=1
+Http2Session server (10) buffering data chunk for stream 1, size: 5604, flags: 0
+HttpStream 1 (16) [Http2Session server (10)] queuing 1 buffers to send
+HttpStream 1 (16) [Http2Session server (10)] reading starting
+Http2Session server (10) sending pending data
+Http2Session server (10) complete frame received: type: 0
+Http2Session server (10) handling data frame for stream 1
+Http2Session server (10) complete frame received: type: 7
+Http2Session server (10) handling goaway frame
+HTTP2 16344: Http2Session server: goaway 0 received [last stream id: 0]
+Http2Session server (10) complete frame received: type: 3
+Http2Session server (10) stream 1 closed with code: 0
+HttpStream 1 (16) [Http2Session server (10)] closed with code 0
+HTTP2 16344: Http2Stream 1 [Http2Session server]: closed with code 0, closed false, readable true
+Http2Session server (10) complete frame received: type: 7
+Http2Session server (10) handling goaway frame
+HTTP2 16344: Http2Session server: goaway 0 received [last stream id: 0]
+Http2Session server (10) sending pending data
+Http2Session server (10) wants read? 0
+round 1 coalesced: FAIL server still open after 5002 ms
+h2coalesce954 coalesced: 1/1 rounds failed
+=== separate, server-side native + JS trace from the last DATA chunk on
+exit=0
+Http2Session server (10) buffering data chunk for stream 1, size: 5604, flags: 0
+HttpStream 1 (16) [Http2Session server (10)] queuing 1 buffers to send
+HttpStream 1 (16) [Http2Session server (10)] reading starting
+Http2Session server (10) sending pending data
+Http2Session server (10) complete frame received: type: 0
+Http2Session server (10) handling data frame for stream 1
+Http2Session server (10) sending pending data
+Http2Session server (10) reading outbound data for stream 1
+Http2Session server (10) stream 1 has pending outbound data
+Http2Session server (10) sending 5604 bytes for data frame on stream 1
+Http2Session server (10) nghttp2 has 5604 bytes to send directly
+Http2Session server (10) reading outbound data for stream 1
+Http2Session server (10) deferring stream 1
+Http2Session server (10) wants read? 1
+Http2Session server (10) wants read? 1
+Http2Session server (10) receiving 47 bytes, offset 0
+Http2Session server (10) receiving 47 bytes [wants data? 1]
+Http2Session server (10) complete frame received: type: 7
+Http2Session server (10) handling goaway frame
+HTTP2 16356: Http2Session server: goaway 0 received [last stream id: 0]
+Http2Session server (10) complete frame received: type: 3
+Http2Session server (10) stream 1 closed with code: 0
+HttpStream 1 (16) [Http2Session server (10)] closed with code 0
+HTTP2 16356: Http2Stream 1 [Http2Session server]: closed with code 0, closed false, readable true
+HTTP2 16356: Http2Stream 1 [Http2Session server]: shutting down writable on _final
+HttpStream 1 (16) [Http2Session server (10)] writable side shutdown
+HTTP2 16356: Http2Stream 1 [Http2Session server]: destroying stream
+HttpStream 1 (16) [Http2Session server (10)] destroying stream
+Http2Session server (10) complete frame received: type: 7
+Http2Session server (10) handling goaway frame
+HTTP2 16356: Http2Session server: goaway 0 received [last stream id: 0]
+Http2Session server (10) sending pending data
+Http2Session server (10) wants read? 0
+HttpStream 1 (16) [Http2Session server (10)] destroying stream
+Http2Session server (10) Removing stream: 1
+HttpStream 1 (16) [Http2Session server (10)] tearing down stream
+HTTP2 16356: Http2Session server: destroying
+HTTP2 16356: Http2Session server: start closing/destroying undefined
+Http2Session server (10) destroying session
+Http2Session server (10) closing session
