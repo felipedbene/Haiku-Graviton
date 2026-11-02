@@ -1,0 +1,77 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-0aeb58eb0ad04b558   region: us-west-2
+# ssm command: 37d7bf0f-971e-48c9-9cca-5097a85b72cc (agent status: Success)
+# start: 20261102T011332Z   end: 20261102T011345Z   rc: 0
+# script sha256: a3d077d789219276fb2273d8fc964bf95d69941640e70b795fbae81fda2ed8a6
+# ---- script ----
+# | set +e
+# | export HOME=/root
+# | uname -a; grep PRETTY /etc/os-release
+# | cd /opt/d/hg && git log -1 --format='%H %s' && sha256sum graviton/scripts/random897.c
+# | mkdir -p /tmp/r && cd /tmp/r
+# | gcc -O2 -Wall -o random897 /opt/d/hg/graviton/scripts/random897.c && ./random897; echo "rc=$?"
+# | echo "== F_SETFL on a /dev/urandom stdin (what tools/test.py does after every test)"
+# | for dev in /dev/random /dev/urandom; do
+# | python3 -I -c 'import fcntl,os,sys
+# | for fd in (0,):
+# |     try:
+# |         fcntl.fcntl(fd, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(fd, fcntl.F_GETFL)); print(sys.argv[1], "fd", fd, "F_SETFL ok", "read", len(os.read(fd, 16)))
+# |     except OSError as e:
+# |         print(sys.argv[1], "fd", fd, "F_SETFL", type(e).__name__, e)' $dev < $dev
+# | done
+# | echo "== node 24.21.0 tools/test.py with stdin /dev/urandom"
+# | cd /tmp/r
+# | curl -sSfL -o node.tar.xz https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz && tar -xJf node.tar.xz
+# | NODE=/tmp/r/node-v24.21.0-linux-arm64/bin/node; $NODE --version
+# | curl -sSfL -o src.tgz https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+# | echo "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  src.tgz" | sha256sum -c || exit 5
+# | tar -xzf src.tgz node-v24.21.0/test node-v24.21.0/tools
+# | cd node-v24.21.0
+# | T="parallel/test-fs-stat parallel/test-fs-access parallel/test-fs-exists parallel/test-stream-readable-to-web"
+# | s=$(date +%s)
+# | python3 tools/test.py --shell=$NODE -j 2 -t 120 -p tap $T < /dev/urandom > /tmp/urandom.tap 2>&1
+# | echo "urandom-stdin rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -cE "^(ok|not ok) " /tmp/urandom.tap | sed 's/^/tap result lines: /'
+# | grep -E "^(ok|not ok) |^# |Error|Traceback" /tmp/urandom.tap | head -20
+# | tail -5 /tmp/urandom.tap
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+Linux ip-10-128-7-70 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+fae3a6d4344e124305a5c9904a44ded4c0f5cdc2 tests: add random897, a C repro for F_SETFL on the random devices
+1ef0f61d62b5cf60f0af5e90530d33d74300e65cc85ada7755931fefa5c5b388  graviton/scripts/random897.c
+PASS F_SETFL /dev/random (rdonly)   getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS F_SETFL /dev/random (rdwr)     getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS FIONBIO /dev/random            on=ok nb=1 read=ok off=ok nb=0
+PASS open(O_NONBLOCK) /dev/random   nb=1 read=ok poll=1 revents=0x1 clear-NB=ok nb=0
+PASS isatty /dev/random             isatty=0 errno=22 (Invalid argument)
+PASS FIONREAD /dev/random           r=-1 errno=22 (Invalid argument)
+PASS unknown ioctl /dev/random      op=0x7e5a1897 r=-1 errno=22 (Invalid argument)
+PASS F_SETFL /dev/urandom (rdonly)  getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS F_SETFL /dev/urandom (rdwr)    getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS FIONBIO /dev/urandom           on=ok nb=1 read=ok off=ok nb=0
+PASS open(O_NONBLOCK) /dev/urandom  nb=1 read=ok poll=1 revents=0x1 clear-NB=ok nb=0
+PASS isatty /dev/urandom            isatty=0 errno=22 (Invalid argument)
+PASS FIONREAD /dev/urandom          r=-1 errno=22 (Invalid argument)
+PASS unknown ioctl /dev/urandom     op=0x7e5a1897 r=-1 errno=22 (Invalid argument)
+random897: 0 failed
+rc=0
+== F_SETFL on a /dev/urandom stdin (what tools/test.py does after every test)
+/dev/random fd 0 F_SETFL ok read 16
+/dev/urandom fd 0 F_SETFL ok read 16
+== node 24.21.0 tools/test.py with stdin /dev/urandom
+v24.21.0
+src.tgz: OK
+urandom-stdin rc=0 wall=3s
+tap result lines: 4
+ok 1 parallel/test-fs-access # skip as this test should not be run as `root`
+ok 2 parallel/test-fs-stat
+ok 3 parallel/test-fs-exists
+ok 4 parallel/test-stream-readable-to-web
+  ---
+  duration_ms: 2307.00100
+  ...
+
+All tests passed.
+# ---- raw stderr ----
+

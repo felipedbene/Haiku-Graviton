@@ -1,0 +1,9 @@
+# evidence: every instance launched for issue 897 is terminated
+# captured: 20261102T021440Z via aws ec2 describe-instances
+i-08c51cf9759456a7b	hg897-prep	ami-058776e58bd902fba	terminated
+i-0246d0aaaa24c5024	hg897-before2	ami-03c3545c37f391c1f	terminated
+i-0f5238217cfc8fa0d	hg897-before	ami-058776e58bd902fba	terminated
+i-0c2858af345b6dba3	hg897-prep2	ami-058776e58bd902fba	terminated
+i-066fe6985ceb8efdf	hg897-prep3	ami-03c3545c37f391c1f	terminated
+i-0cb8d7a495e4b733b	hg897-after	ami-0392780f6e4cafbef	terminated
+i-0aeb58eb0ad04b558	hg897-xbuild	ami-0dcf79589cb11e193	terminated

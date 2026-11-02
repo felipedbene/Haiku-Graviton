@@ -1,0 +1,155 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-0aeb58eb0ad04b558   region: us-west-2
+# ssm command: e759105b-cbf7-4226-b027-b89b2d9facc5 (agent status: Success)
+# start: 20261102T011100Z   end: 20261102T011252Z   rc: 0
+# script sha256: e16ef5a2aa716331a53dee6a94bb58f382392452786694d86ee43799b6f88f20
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root SOURCE_DATE_EPOCH=1793480000
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | mkdir -p /opt/d && cd /opt/d
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch fix/897-random-setfl https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg log -3 --format='%H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | for V in base:fe7fef0b47 fix:fae3a6d434; do
+# | 	N=${V%%:*}; C=${V#*:}
+# | 	git -C /opt/d/hg checkout -q -f $C && git -C /opt/d/hg log -1 --format="variant $N: %H %s"
+# | 	git -C /opt/d/hg diff --stat fe7fef0b47 -- src
+# | 	s=$(date +%s); jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 random > jam-$N.log 2>&1; rc=$?
+# | 	echo "JAM_RC($N)=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$N.log)"
+# | 	grep -E "error:|warning:" jam-$N.log | grep -i random | head -20
+# | 	tail -3 jam-$N.log
+# | 	F=objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
+# | 	ls -l $F && mkdir -p /opt/d/out/$N && cp $F /opt/d/out/$N/random
+# | 	cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d $F | awk '/<random_control>:/,/^$/' | head -30
+# | done
+# | cd /opt/d/out && sha256sum */random | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive /opt/d/out $B/out/ && aws s3 ls --recursive $B/out/
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+apt rc=0
+fae3a6d4344e124305a5c9904a44ded4c0f5cdc2 tests: add random897, a C repro for F_SETFL on the random devices
+9f2d362c84d91c034da1eab31c0210be0716f8ca random: accept F_SETFL on /dev/random and /dev/urandom
+fe7fef0b47685471f94fce4af712632dc129f86a libroot: keep the current time for UTIME_NOW in utimensat() (#928)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+variant base: fe7fef0b47685471f94fce4af712632dc129f86a libroot: keep the current time for UTIME_NOW in utimensat() (#928)
+JAM_RC(base)=0 wall=13s failed=0
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+...updated 862 target(s)...
+-rwxr-xr-x 1 root root 17739 Nov  2 01:12 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
+variant fix: fae3a6d4344e124305a5c9904a44ded4c0f5cdc2 tests: add random897, a C repro for F_SETFL on the random devices
+ src/add-ons/kernel/bus_managers/random/driver.cpp | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+JAM_RC(fix)=0 wall=4s failed=0
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+...updated 2 target(s)...
+-rwxr-xr-x 1 root root 17739 Nov  2 01:12 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
+bc296db6c84e7540634e2b4c5aa5e13fc6107896ae89d29980cfef3e25ed599b  base/random
+b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df  fix/random
+2026-11-02 01:12:49        155 hg897/out/SHA256SUMS
+2026-11-02 01:12:49      17739 hg897/out/base/random
+2026-11-02 01:12:49      17739 hg897/out/fix/random
+# ---- raw stderr ----
++ export DEBIAN_FRONTEND=noninteractive HOME=/root SOURCE_DATE_EPOCH=1793480000
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo apt rc=0
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ mkdir -p /opt/d
++ cd /opt/d
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch fix/897-random-setfl https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg log -3 --format=%H %s
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
++ nproc
++ ../configure --cross-tools-prefix /opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ N=base
++ C=fe7fef0b47
++ git -C /opt/d/hg checkout -q -f fe7fef0b47
++ git -C /opt/d/hg log -1 --format=variant base: %H %s
++ git -C /opt/d/hg diff --stat fe7fef0b47 -- src
++ date +%s
++ s=1793581950
++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 random
++ rc=0
++ date +%s
++ grep -cE \.\.\.failed jam-base.log
++ echo JAM_RC(base)=0 wall=13s failed=0
++ grep -E error:|warning: jam-base.log
++ grep -i random
++ head -20
++ tail -3 jam-base.log
++ F=objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ ls -l objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ mkdir -p /opt/d/out/base
++ cp objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random /opt/d/out/base/random
++ cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ awk /<random_control>:/,/^$/
++ head -30
++ N=fix
++ C=fae3a6d434
++ git -C /opt/d/hg checkout -q -f fae3a6d434
++ git -C /opt/d/hg log -1 --format=variant fix: %H %s
++ git -C /opt/d/hg diff --stat fe7fef0b47 -- src
++ date +%s
++ s=1793581963
++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 random
++ rc=0
++ date +%s
++ grep -cE \.\.\.failed jam-fix.log
++ echo JAM_RC(fix)=0 wall=4s failed=0
++ grep -E error:|warning: jam-fix.log
++ grep -i random
++ head -20
++ tail -3 jam-fix.log
++ F=objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ ls -l objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ mkdir -p /opt/d/out/fix
++ cp objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random /opt/d/out/fix/random
++ cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ awk /<random_control>:/,/^$/
++ head -30
++ cd /opt/d/out
++ + sha256sum base/randomtee fix/random
+ SHA256SUMS
++ aws s3 cp --quiet --recursive /opt/d/out s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897/out/
++ aws s3 ls --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897/out/
