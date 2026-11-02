@@ -1,0 +1,56 @@
+# evidence: linux-reference
+# instance: i-04c323bc88edf4326   region: us-west-2
+# ssm command: 512023bb-f522-478a-93d9-40abb7dbd08d (agent status: Success)
+# start: 20261102T011444Z   end: 20261102T011447Z   rc: 0   log bytes: 2262
+# script sha256: 64411f6062fca02e8ea4aa9351b72ba74ca6a7a528a8c3a6354361328070d989
+# ---- script ----
+# | # Linux (glibc) reference for exit919.c, built from the branch's source.
+# | set -x
+# | cd /opt/t && uname -a && ldd --version | head -1
+# | git -C hg show origin/fix/919-exit-no-flush:graviton/scripts/exit919.c > exit919.c && sha256sum exit919.c
+# | gcc -O1 -Wall -o exit919 exit919.c || exit 1
+# | ./exit919; echo "rc=$?"
+# | echo "== stdout a file"
+# | ./exit919 > /tmp/e919.txt; echo "rc=$?"; cat /tmp/e919.txt
+# ---- raw output ----
++ cd /opt/t
++ uname -a
+Linux ip-10-128-5-158 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
++ ldd --version
++ head -1
+ldd (Ubuntu GLIBC 2.39-0ubuntu8.9) 2.39
++ git -C hg show origin/fix/919-exit-no-flush:graviton/scripts/exit919.c
++ sha256sum exit919.c
+c34c28b5c7918fa624e09cfff55c0529b38664906f5339e1f2071fa5c5bee9d3  exit919.c
++ gcc -O1 -Wall -o exit919 exit919.c
+exit919.c: In function ‘atexit_handler’:
+exit919.c:53:9: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   53 |         write(STDOUT_FILENO, "HANDLER", 7);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++ ./exit919
+fork-_exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-_Exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+failed-exec    marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+spawn-missing  marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 0 failed
++ echo rc=0
+rc=0
++ echo '== stdout a file'
+== stdout a file
++ ./exit919
++ echo rc=0
+rc=0
++ cat /tmp/e919.txt
+fork-_exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-_Exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+failed-exec    marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+spawn-missing  marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 0 failed

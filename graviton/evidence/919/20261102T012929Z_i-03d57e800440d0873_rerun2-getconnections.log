@@ -1,0 +1,29 @@
+# evidence: rerun2-getconnections
+# instance: i-03d57e800440d0873   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T012929Z   end: 20261102T012950Z   rc: 0
+# script sha256: 220ef9df52131b9ec7214a94ab29135edbc2f3279628a5c8d6f5dd6393a1eb67
+# ---- script ----
+# | # Is the fork-getconnections failure new with trunk's libroot, or there with
+# | # canonical's too? 10 runs each (-j 4), alternating system / trunk / fix919
+# | # libroot, two rounds; then 10 serial runs (-j 1) under the system libroot.
+# | cd /boot/home/td/node-v24.21.0
+# | t=parallel/test-child-process-fork-getconnections
+# | for round in 1 2; do
+# | 	for L in system lib-trunk lib-fix919; do
+# | 		if [ $L = system ]; then unset LIBRARY_PATH; else export LIBRARY_PATH=/boot/home/td/$L; fi
+# | 		: | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap --repeat 10 $t > /tmp/rr.txt 2>&1
+# | 		echo "round $round $L -j4: ok=$(grep -acE '^ok ' /tmp/rr.txt) not_ok=$(grep -acE '^not ok ' /tmp/rr.txt)"
+# | 	done
+# | done
+# | unset LIBRARY_PATH
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -t 120 -p tap --repeat 10 $t > /tmp/rr.txt 2>&1
+# | echo "system -j1: ok=$(grep -acE '^ok ' /tmp/rr.txt) not_ok=$(grep -acE '^not ok ' /tmp/rr.txt)"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/rr.txt | head -30
+# ---- raw output ----
+round 1 system -j4: ok=7 not_ok=3
+round 1 lib-trunk -j4: ok=9 not_ok=1
+round 1 lib-fix919 -j4: ok=10 not_ok=0
+round 2 system -j4: ok=8 not_ok=2
+round 2 lib-trunk -j4: ok=10 not_ok=0
+round 2 lib-fix919 -j4: ok=10 not_ok=0
+system -j1: ok=10 not_ok=0

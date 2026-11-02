@@ -1,0 +1,440 @@
+# evidence: run-after-fixlib
+# instance: i-0557cc9b56ed61976   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T012055Z   end: 20261102T012739Z   rc: 1
+# script sha256: b19fb248b211b9bff6a167dd3325775295f732d53c6bcdeaf3ae8c613106a6f1
+# ---- script ----
+# | # hrun.sh <libdir|system>: exit919 under the system (canonical) libroot, the
+# | set -- lib-fix919
+# | # trunk build and the fix919 build; then Node 24.21.0's own runner, stdin a
+# | # pipe (#870), with LIBRARY_PATH selecting the libroot under test.
+# | LIB=$1
+# | cd /boot/home/td
+# | uname -a
+# | sha256sum /boot/system/lib/libroot.so lib-*/libroot.so exit919.c exit919
+# | for L in system lib-trunk lib-fix919; do
+# | 	if [ $L = system ]; then unset LIBRARY_PATH; else export LIBRARY_PATH=/boot/home/td/$L; fi
+# | 	echo "=== exit919, libroot: $L (LIBRARY_PATH=${LIBRARY_PATH:-<unset>})"
+# | 	sleep 3 & listimage $! | grep -E "libroot"; wait
+# | 	./exit919; echo "rc=$?"
+# | 	echo "--- stdout a file"
+# | 	./exit919 > /tmp/e919.txt; echo "rc=$?"; cat /tmp/e919.txt
+# | 	echo "--- the issue's minimal case: printf without newline, fork, child _exit(0), parent exits"
+# | 	printf '#include <stdio.h>\n#include <unistd.h>\n#include <sys/wait.h>\nint main(void){printf("hello919 ");if(fork()==0)_exit(0);wait(NULL);return 0;}\n' > mini919.c && gcc -o mini919 mini919.c
+# | 	./mini919 > /tmp/m919.txt; echo "rc=$? copies=$(grep -o hello919 /tmp/m919.txt | wc -l) raw='$(cat /tmp/m919.txt)'"
+# | done
+# | unset LIBRARY_PATH
+# | [ "$LIB" = system ] || export LIBRARY_PATH=/boot/home/td/$LIB
+# | echo "=== Node tests, LIBRARY_PATH=${LIBRARY_PATH:-<unset>}"
+# | node -e 'require("child_process").execSync("listimage " + process.pid + " | grep libroot", {stdio: "inherit"})'
+# | cd /boot/home/td/node-v24.21.0
+# | REG='parallel/test-child-process-* sequential/test-child-process-* parallel/test-process-exit* parallel/test-stdout-* parallel/test-stdio-*'
+# | echo "node $(node --version) tests: $REG"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap $REG > /boot/home/td/tap.txt 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -aE "^(ok|not ok) " /boot/home/td/tap.txt | sed -E 's/^(not ok|ok) [0-9]+ /\1 /' | sort -k2 | uniq
+# | echo "== totals"; grep -acE "^ok " /boot/home/td/tap.txt; grep -acE "^not ok " /boot/home/td/tap.txt
+# | echo "== failure details"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /boot/home/td/tap.txt | head -400
+# | grep -ciE "panic|assert" /var/log/syslog
+# ---- raw output ----
+Haiku ip-10-128-15-36.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  /boot/system/lib/libroot.so
+7ca06f219cbebb1f83b71bccd20daff79eb89550355b389225b298ea9b812f1e  lib-fix919/libroot.so
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  lib-trunk/libroot.so
+c34c28b5c7918fa624e09cfff55c0529b38664906f5339e1f2071fa5c5bee9d3  exit919.c
+cfc168783721eb76bd1aca27474ddc2febf84bf15a33409180d5dc7c9fe19de1  exit919
+=== exit919, libroot: system (LIBRARY_PATH=<unset>)
+ 7152 0x000000e33b84d000 0x000000e33b96a000     0          0 /boot/system/lib/libroot.so
+fork-_exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+fork-_Exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+failed-exec    marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+spawn-missing  marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 1 (want 0) handler 0 (want 0)  FAIL   raw 'MARKCHILD'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 5 failed
+rc=5
+--- stdout a file
+rc=5
+fork-_exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+fork-_Exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+failed-exec    marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+spawn-missing  marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 1 (want 0) handler 0 (want 0)  FAIL   raw 'MARKCHILD'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 5 failed
+--- the issue's minimal case: printf without newline, fork, child _exit(0), parent exits
+rc=0 copies=2 raw='hello919 hello919 '
+=== exit919, libroot: lib-trunk (LIBRARY_PATH=/boot/home/td/lib-trunk)
+ 7476 0x000000edbc7b0000 0x000000edbc8cd000     0          0 /boot/home/td/lib-trunk/libroot.so
+fork-_exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+fork-_Exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+failed-exec    marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+spawn-missing  marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 1 (want 0) handler 0 (want 0)  FAIL   raw 'MARKCHILD'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 5 failed
+rc=5
+--- stdout a file
+rc=5
+fork-_exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+fork-_Exit     marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+failed-exec    marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+spawn-missing  marks 2 (want 1) child 0 (want 0) handler 0 (want 0)  FAIL   raw 'MARKMARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 1 (want 0) handler 0 (want 0)  FAIL   raw 'MARKCHILD'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 5 failed
+--- the issue's minimal case: printf without newline, fork, child _exit(0), parent exits
+rc=0 copies=2 raw='hello919 hello919 '
+=== exit919, libroot: lib-fix919 (LIBRARY_PATH=/boot/home/td/lib-fix919)
+ 7844 0x00000076fe1f3000 0x00000076fe310000     0          0 /boot/home/td/lib-fix919/libroot.so
+fork-_exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-_Exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+failed-exec    marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+spawn-missing  marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 0 failed
+rc=0
+--- stdout a file
+rc=0
+fork-_exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-_Exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+failed-exec    marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+spawn-missing  marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+popen-exit     marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+child-buffer   marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+atexit         marks 1 (want 1) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARK'
+fork-exit      marks 2 (want 2) child 0 (want 0) handler 0 (want 0)  PASS   raw 'MARKMARK'
+exit919: 0 failed
+--- the issue's minimal case: printf without newline, fork, child _exit(0), parent exits
+rc=0 copies=1 raw='hello919 '
+=== Node tests, LIBRARY_PATH=/boot/home/td/lib-fix919
+ 8156 0x0000017c630c7000 0x0000017c631e4000     0          0 /boot/home/td/lib-fix919/libroot.so
+node v24.21.0 tests: parallel/test-child-process-* sequential/test-child-process-* parallel/test-process-exit* parallel/test-stdout-* parallel/test-stdio-*
+test.py rc=1 wall=378s
+not ok parallel/test-child-process-default-options
+not ok parallel/test-child-process-disconnect
+not ok parallel/test-child-process-env
+not ok parallel/test-child-process-exec-env
+not ok parallel/test-child-process-fork-getconnections
+not ok parallel/test-child-process-fork-net
+not ok parallel/test-child-process-fork-net-socket
+not ok parallel/test-child-process-send-keep-open
+not ok sequential/test-child-process-emfile
+ok parallel/test-child-process-advanced-serialization
+ok parallel/test-child-process-advanced-serialization-host-objects
+ok parallel/test-child-process-advanced-serialization-largebuffer
+ok parallel/test-child-process-advanced-serialization-splitted-length-field
+ok parallel/test-child-process-bad-stdio
+ok parallel/test-child-process-can-write-to-stdout
+ok parallel/test-child-process-constructor
+ok parallel/test-child-process-cwd
+ok parallel/test-child-process-destroy
+ok parallel/test-child-process-detached
+ok parallel/test-child-process-dgram-reuseport # skip The `reusePort` is not supported
+ok parallel/test-child-process-double-pipe
+ok parallel/test-child-process-exec-abortcontroller-promisified
+ok parallel/test-child-process-exec-any-shells-windows # skip Windows specific test.
+ok parallel/test-child-process-exec-cwd
+ok parallel/test-child-process-exec-encoding
+ok parallel/test-child-process-exec-error
+ok parallel/test-child-process-exec-kill-throws
+ok parallel/test-child-process-exec-maxbuf
+ok parallel/test-child-process-exec-std-encoding
+ok parallel/test-child-process-exec-stdout-stderr-data-string
+ok parallel/test-child-process-exec-timeout-expire
+ok parallel/test-child-process-exec-timeout-kill
+ok parallel/test-child-process-exec-timeout-not-expired
+ok parallel/test-child-process-execFile-promisified-abortController
+ok parallel/test-child-process-execfile
+ok parallel/test-child-process-execfile-maxbuf
+ok parallel/test-child-process-execfilesync-maxbuf
+ok parallel/test-child-process-execsync-maxbuf
+ok parallel/test-child-process-exit-code
+ok parallel/test-child-process-flush-stdio
+ok parallel/test-child-process-fork
+ok parallel/test-child-process-fork-abort-signal
+ok parallel/test-child-process-fork-advanced-header-serialization
+ok parallel/test-child-process-fork-and-spawn
+ok parallel/test-child-process-fork-args
+ok parallel/test-child-process-fork-close
+ok parallel/test-child-process-fork-closed-channel-segfault
+ok parallel/test-child-process-fork-detached
+ok parallel/test-child-process-fork-dgram
+ok parallel/test-child-process-fork-exec-argv
+ok parallel/test-child-process-fork-exec-path
+ok parallel/test-child-process-fork-net-server
+ok parallel/test-child-process-fork-no-shell
+ok parallel/test-child-process-fork-ref
+ok parallel/test-child-process-fork-ref2
+ok parallel/test-child-process-fork-stdio
+ok parallel/test-child-process-fork-stdio-string-variant
+ok parallel/test-child-process-fork-timeout-kill-signal
+ok parallel/test-child-process-fork-url
+ok parallel/test-child-process-fork3
+ok parallel/test-child-process-http-socket-leak
+ok parallel/test-child-process-internal
+ok parallel/test-child-process-ipc
+ok parallel/test-child-process-ipc-next-tick
+ok parallel/test-child-process-kill
+ok parallel/test-child-process-kill-sigwinch
+ok parallel/test-child-process-net-reuseport # skip The `reusePort` option is not supported
+ok parallel/test-child-process-no-deprecation
+ok parallel/test-child-process-pipe-dataflow
+ok parallel/test-child-process-promisified
+ok parallel/test-child-process-prototype-tampering # skip undefined
+ok parallel/test-child-process-recv-handle
+ok parallel/test-child-process-reject-null-bytes
+ok parallel/test-child-process-send-after-close
+ok parallel/test-child-process-send-cb
+ok parallel/test-child-process-send-returns-boolean
+ok parallel/test-child-process-send-type-error
+ok parallel/test-child-process-send-utf8
+ok parallel/test-child-process-server-close
+ok parallel/test-child-process-set-blocking
+ok parallel/test-child-process-silent
+ok parallel/test-child-process-spawn-args
+ok parallel/test-child-process-spawn-argv0
+ok parallel/test-child-process-spawn-controller
+ok parallel/test-child-process-spawn-error
+ok parallel/test-child-process-spawn-event
+ok parallel/test-child-process-spawn-shell
+ok parallel/test-child-process-spawn-timeout-kill-signal
+ok parallel/test-child-process-spawn-typeerror
+ok parallel/test-child-process-spawn-windows-batch-file
+ok parallel/test-child-process-spawnsync
+ok parallel/test-child-process-spawnsync-args
+ok parallel/test-child-process-spawnsync-env
+ok parallel/test-child-process-spawnsync-input
+ok parallel/test-child-process-spawnsync-kill-signal
+ok parallel/test-child-process-spawnsync-maxbuf
+ok parallel/test-child-process-spawnsync-non-string-args
+ok parallel/test-child-process-spawnsync-shell
+ok parallel/test-child-process-spawnsync-timeout
+ok parallel/test-child-process-spawnsync-validation-errors
+ok parallel/test-child-process-stdin
+ok parallel/test-child-process-stdin-ipc
+ok parallel/test-child-process-stdio
+ok parallel/test-child-process-stdio-big-write-end
+ok parallel/test-child-process-stdio-inherit
+ok parallel/test-child-process-stdio-merge-stdouts-into-cat
+ok parallel/test-child-process-stdio-overlapped # skip overlapped-checker binary is not available
+ok parallel/test-child-process-stdio-reuse-readable-stdio
+ok parallel/test-child-process-stdout-flush
+ok parallel/test-child-process-stdout-flush-exit
+ok parallel/test-child-process-stdout-ipc
+ok parallel/test-child-process-uid-gid
+ok parallel/test-child-process-validate-stdio
+ok parallel/test-child-process-windows-hide
+ok parallel/test-process-exit
+ok parallel/test-process-exit-after-fetch-throw
+ok parallel/test-process-exit-code
+ok parallel/test-process-exit-code-validation
+ok parallel/test-process-exit-from-before-exit
+ok parallel/test-process-exit-handler
+ok parallel/test-process-exit-recursive
+ok parallel/test-stdio-closed
+ok parallel/test-stdio-pipe-access
+ok parallel/test-stdio-pipe-redirect
+ok parallel/test-stdio-pipe-stderr
+ok parallel/test-stdio-undestroy
+ok parallel/test-stdout-cannot-be-closed-child-process-pipe
+ok parallel/test-stdout-close-catch
+ok parallel/test-stdout-close-unref
+ok parallel/test-stdout-pipeline-destroy
+ok parallel/test-stdout-stderr-reading
+ok parallel/test-stdout-stderr-write
+ok parallel/test-stdout-to-file
+ok sequential/test-child-process-execsync
+ok sequential/test-child-process-exit
+ok sequential/test-child-process-pass-fd
+== totals
+127
+9
+== failure details
+not ok 7 parallel/test-child-process-default-options
+  ---
+  duration_ms: 139.22600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: spawn /usr/bin/env ENOENT
+        at ChildProcess._handle.onexit (node:internal/child_process:287:19)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on ChildProcess instance at:
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      errno: -2147459069,
+      code: 'ENOENT',
+      syscall: 'spawn /usr/bin/env',
+      path: '/usr/bin/env',
+      spawnargs: []
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 13 parallel/test-child-process-env
+  ---
+  duration_ms: 116.87300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: spawn /usr/bin/env ENOENT
+        at ChildProcess._handle.onexit (node:internal/child_process:287:19)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on ChildProcess instance at:
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      errno: -2147459069,
+      code: 'ENOENT',
+      syscall: 'spawn /usr/bin/env',
+      path: '/usr/bin/env',
+      spawnargs: []
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 17 parallel/test-child-process-exec-env
+  ---
+  duration_ms: 217.66300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    0 !== 1
+    
+        at process.<anonymous> (/boot/home/td/node-v24.21.0/test/parallel/test-child-process-exec-env.js:61:10)
+        at process.emit (node:events:526:24) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 0,
+      expected: 1,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 44 parallel/test-child-process-fork-getconnections
+  ---
+  duration_ms: 213.53500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched noop function calls. Expected exactly 1, actual 0.
+        at Proxy.mustCall (/boot/home/td/node-v24.21.0/test/common/index.js:439:10)
+        at Object.<anonymous> (/boot/home/td/node-v24.21.0/test/parallel/test-child-process-fork-getconnections.js:108:29)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47
+  ...
+not ok 71 parallel/test-child-process-disconnect
+  ---
+  duration_ms: 360082.22400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 86 parallel/test-child-process-fork-net
+  ---
+  duration_ms: 360065.60500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 89 parallel/test-child-process-fork-net-socket
+  ---
+  duration_ms: 360071.51800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 131 sequential/test-child-process-emfile
+  ---
+  duration_ms: 135.54200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + '/bin/sh: line 1: ulimit: open files: cannot modify limit: Operation not allowed\n'
+    - ''
+    
+        at Object.<anonymous> (/boot/home/td/node-v24.21.0/test/sequential/test-child-process-emfile.js:43:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '/bin/sh: line 1: ulimit: open files: cannot modify limit: Operation not allowed\n',
+      expected: '',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 136 parallel/test-child-process-send-keep-open
+  ---
+  duration_ms: 360021.31000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-default-options.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-env.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-exec-env.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-fork-getconnections.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-disconnect.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-fork-net.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-fork-net-socket.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/sequential/test-child-process-emfile.js
+/boot/system/bin/node /boot/home/td/node-v24.21.0/test/parallel/test-child-process-send-keep-open.js
+0
