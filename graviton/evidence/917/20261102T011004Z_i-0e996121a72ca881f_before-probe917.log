@@ -1,0 +1,53 @@
+# evidence: before-probe917
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: ea836e5e-02ab-4cce-81b2-e76fa1ec3890 (agent status: Success)
+# start: 20261102T011004Z   end: 20261102T011113Z   rc: 0
+# ---- script ----
+# | mkdir -p /tmp/p917 && cd /tmp/p917
+# | echo 'LyogcHJvYmU5MTc6IHdoYXQgZWFjaCBsYXllciB1bmRlciBvcy5jcHVzKCkgcmV0dXJucyBvbiB0aGlzIG1hY2hpbmUuICovCiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8T1MuaD4KI2luY2x1ZGUgPHV2Lmg+CgppbnQKbWFpbih2b2lkKQp7Cgl1aW50MzIgY291bnQgPSAwOwoJc3RhdHVzX3Qgc3QgPSBnZXRfY3B1X3RvcG9sb2d5X2luZm8oTlVMTCwgJmNvdW50KTsKCXByaW50ZigiZ2V0X2NwdV90b3BvbG9neV9pbmZvKE5VTEwpOiBzdGF0dXMgJWQgKCVzKSBjb3VudCAldVxuIiwgKGludClzdCwKCQlzdHJlcnJvcihzdCksIGNvdW50KTsKCWNwdV90b3BvbG9neV9ub2RlX2luZm8gbm9kZXNbMjU2XTsKCXVpbnQzMiBuID0gY291bnQ7CglzdCA9IGdldF9jcHVfdG9wb2xvZ3lfaW5mbyhub2RlcywgJm4pOwoJcHJpbnRmKCJnZXRfY3B1X3RvcG9sb2d5X2luZm8oYnVmKTogc3RhdHVzICVkIGNvdW50ICV1XG4iLCAoaW50KXN0LCBuKTsKCWZvciAodWludDMyIGkgPSAwOyBpIDwgbiAmJiBpIDwgMjU2OyBpKyspIHsKCQlwcmludGYoIiAgbm9kZSAldSB0eXBlICVkIGxldmVsICV1IGlkICV1IiwgaSwgbm9kZXNbaV0udHlwZSwKCQkJbm9kZXNbaV0ubGV2ZWwsIG5vZGVzW2ldLmlkKTsKCQlpZiAobm9kZXNbaV0udHlwZSA9PSBCX1RPUE9MT0dZX0NPUkUpCgkJCXByaW50ZigiIG1vZGVsICUjeCBmcmVxICVsbHUiLCBub2Rlc1tpXS5kYXRhLmNvcmUubW9kZWwsCgkJCQkodW5zaWduZWQgbG9uZyBsb25nKW5vZGVzW2ldLmRhdGEuY29yZS5kZWZhdWx0X2ZyZXF1ZW5jeSk7CgkJcHJpbnRmKCJcbiIpOwoJfQoJc3lzdGVtX2luZm8gc2k7CglzdCA9IGdldF9zeXN0ZW1faW5mbygmc2kpOwoJcHJpbnRmKCJnZXRfc3lzdGVtX2luZm86IHN0YXR1cyAlZCBjcHVfY291bnQgJXVcbiIsIChpbnQpc3QsIHNpLmNwdV9jb3VudCk7CgljcHVfaW5mbyBjaVs2NF07CglzdCA9IGdldF9jcHVfaW5mbygwLCBzaS5jcHVfY291bnQsIGNpKTsKCXByaW50ZigiZ2V0X2NwdV9pbmZvOiBzdGF0dXMgJWRcbiIsIChpbnQpc3QpOwoJZm9yICh1aW50MzIgaSA9IDA7IHN0ID09IEJfT0sgJiYgaSA8IHNpLmNwdV9jb3VudDsgaSsrKQoJCXByaW50ZigiICBjcHUgJXUgYWN0aXZlICVsbGQgZW5hYmxlZCAlZCBjdXJfZnJlcSAlbGx1XG4iLCBpLAoJCQkobG9uZyBsb25nKWNpW2ldLmFjdGl2ZV90aW1lLCBjaVtpXS5lbmFibGVkLAoJCQkodW5zaWduZWQgbG9uZyBsb25nKWNpW2ldLmN1cnJlbnRfZnJlcXVlbmN5KTsKCgl1dl9jcHVfaW5mb190KiBpbmZvcyA9IE5VTEw7CglpbnQgYyA9IC0xOwoJaW50IHIgPSB1dl9jcHVfaW5mbygmaW5mb3MsICZjKTsKCXByaW50ZigidXZfY3B1X2luZm86IHIgJWQgKCVzKSBjb3VudCAlZFxuIiwgciwgciA/IHV2X3N0cmVycm9yKHIpIDogIm9rIiwgYyk7Cglmb3IgKGludCBpID0gMDsgciA9PSAwICYmIGkgPCBjOyBpKyspCgkJcHJpbnRmKCIgIFslZF0gbW9kZWwgXCIlc1wiIHNwZWVkICVkIHVzZXIgJWxsdSBzeXMgJWxsdSBpZGxlICVsbHVcbiIsCgkJCWksIGluZm9zW2ldLm1vZGVsLCBpbmZvc1tpXS5zcGVlZCwKCQkJKHVuc2lnbmVkIGxvbmcgbG9uZylpbmZvc1tpXS5jcHVfdGltZXMudXNlciwKCQkJKHVuc2lnbmVkIGxvbmcgbG9uZylpbmZvc1tpXS5jcHVfdGltZXMuc3lzLAoJCQkodW5zaWduZWQgbG9uZyBsb25nKWluZm9zW2ldLmNwdV90aW1lcy5pZGxlKTsKCWlmIChyID09IDApCgkJdXZfZnJlZV9jcHVfaW5mbyhpbmZvcywgYyk7CglyZXR1cm4gMDsKfQo=' | base64 -d > probe917.c
+# | sha256sum probe917.c
+# | gcc -Wall -o probe917 probe917.c -luv 2>&1
+# | ./probe917
+# ---- raw output ----
+2b35ea47e94abdbb086430bd4a0d283ca197b69cd0fb4b241bf324f384995aea  probe917.c
+get_cpu_topology_info(NULL): status 0 (No error) count 18
+get_cpu_topology_info(buf): status 0 count 18
+  node 0 type 1 level 3 id 0
+  node 1 type 4 level 2 id 0
+  node 2 type 3 level 1 id 0 model 0x411fd401 freq 2598014577
+  node 3 type 2 level 0 id 0
+  node 4 type 3 level 1 id 1 model 0x411fd401 freq 2598014577
+  node 5 type 2 level 0 id 1
+  node 6 type 3 level 1 id 2 model 0x411fd401 freq 2598014577
+  node 7 type 2 level 0 id 2
+  node 8 type 3 level 1 id 3 model 0x411fd401 freq 2598014577
+  node 9 type 2 level 0 id 3
+  node 10 type 3 level 1 id 4 model 0x411fd401 freq 2598014577
+  node 11 type 2 level 0 id 4
+  node 12 type 3 level 1 id 5 model 0x411fd401 freq 2598014577
+  node 13 type 2 level 0 id 5
+  node 14 type 3 level 1 id 6 model 0x411fd401 freq 2598014577
+  node 15 type 2 level 0 id 6
+  node 16 type 3 level 1 id 7 model 0x411fd401 freq 2598014577
+  node 17 type 2 level 0 id 7
+get_system_info: status 0 cpu_count 8
+get_cpu_info: status 0
+  cpu 0 active 1752216 enabled 1 cur_freq 2598014577
+  cpu 1 active 1178657 enabled 1 cur_freq 2598014577
+  cpu 2 active 1070464 enabled 1 cur_freq 2598014577
+  cpu 3 active 489187 enabled 1 cur_freq 2598014577
+  cpu 4 active 770178 enabled 1 cur_freq 2598014577
+  cpu 5 active 637738 enabled 1 cur_freq 2598014577
+  cpu 6 active 892048 enabled 1 cur_freq 2598014577
+  cpu 7 active 799932 enabled 1 cur_freq 2598014577
+uv_cpu_info: r 0 (ok) count 8
+  [0] model "unknown" speed 2598 user 0 sys 0 idle 0
+  [1] model "unknown" speed 2598 user 0 sys 0 idle 0
+  [2] model "unknown" speed 2598 user 0 sys 0 idle 0
+  [3] model "unknown" speed 2598 user 0 sys 0 idle 0
+  [4] model "unknown" speed 2598 user 0 sys 0 idle 0
+  [5] model "unknown" speed 2598 user 0 sys 0 idle 0
+  [6] model "unknown" speed 2598 user 0 sys 0 idle 0
+  [7] model "unknown" speed 2598 user 0 sys 0 idle 0
+
+

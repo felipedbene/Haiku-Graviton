@@ -1,0 +1,15 @@
+# evidence: builder-upload
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: 28c134bd-5e84-47ef-909a-5f9f8a4331c0 (agent status: Success)
+# start: 20261102T033956Z   end: 20261102T033958Z   rc: 0
+# ---- script ----
+# | cd /boot/home/haikuports/packages || exit 1
+# | curl -sSf -T nodejs24-24.21.0-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/nodejs24-24.21.0-3-arm64.hpkg?<PRESIGNED>' && echo up0
+# | curl -sSf -T libuv-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/libuv-1.52.1-5-arm64.hpkg?<PRESIGNED>' && echo up1
+# | curl -sSf -T libuv_devel-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/libuv_devel-1.52.1-5-arm64.hpkg?<PRESIGNED>' && echo up2
+# ---- raw output ----
+up0
+up1
+up2
+
+
