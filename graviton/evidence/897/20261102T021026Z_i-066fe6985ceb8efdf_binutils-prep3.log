@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: binutils-prep3
+# instance: i-066fe6985ceb8efdf   region: us-west-2   transport: SSM (script started detached with nohup, output file polled)
+# start: 20261102T021026Z   end: 20261102T021102Z
+# script sha256: de9e0a6ba56fd73f85cb5cf1182a0306178be2450f43f1da183d8f44e35ec0c6
+# ---- script ----
+# | pkgman install -y binutils 2>&1 | tail -2
+# | command -v as ld
+# | ps | grep "sleep 999999" | grep -v grep
+# | listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | sync; sleep 5; sync
+# | echo BINUTILS_DONE
+# ---- raw output ----
+JOB_RC=0
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/as
+/boot/system/bin/ld
+/boot/system/bin/sleep 999999                        441        1    0    0 
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+BINUTILS_DONE

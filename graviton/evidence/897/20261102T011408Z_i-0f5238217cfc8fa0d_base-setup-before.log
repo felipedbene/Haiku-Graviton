@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: base-setup-before
+# instance: i-0f5238217cfc8fa0d   region: us-west-2
+# ssm command: 7d40a613-b423-4f9b-8bf8-169978337c46 (agent status: Failed)
+# start: 20261102T011408Z   end: 20261102T021420Z   rc: -1
+# script sha256: ae5d2122754e6e4ddefedd6384f5d1d67fd73f4ced769d45801470239d1ffd73
+# ---- script ----
+# | set -x
+# | pkgman install -y nodejs24 python3.14 gcc haiku_devel 2>&1 | tail -4
+# | node --version; python3 --version; gcc --version | head -1
+# | mkdir -p /boot/home/t && cd /boot/home/t
+# | python3 -I - <<'PY'
+# | import hashlib, tarfile, urllib.request
+# | u = "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
+# | urllib.request.urlretrieve(u, "node-v24.21.0.tar.gz")
+# | h = hashlib.sha256(open("node-v24.21.0.tar.gz", "rb").read()).hexdigest()
+# | assert h == "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777", h
+# | with tarfile.open("node-v24.21.0.tar.gz") as t:
+# |     m = [x for x in t.getmembers() if x.name.split("/")[1:2] in (["test"], ["tools"])]
+# |     t.extractall(".", members=m, filter="data")
+# | print("node tarball sha256 OK, extracted", len(m))
+# | PY
+# | rm -f node-v24.21.0.tar.gz
+# | ls /boot/home/t/node-v24.21.0
+# | sync
+# | echo SETUP_DONE
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+
+# ---- raw stderr ----
+

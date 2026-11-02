@@ -1,0 +1,126 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: setup-install-prep3
+# instance: i-066fe6985ceb8efdf   region: us-west-2   transport: SSM (script started detached with nohup, output file polled)
+# start: 20261102T020834Z   end: 20261102T020946Z
+# script sha256: e3c1dd84deff12262b161ab2e2720b5a3a60e28b74cbb16a133b6443c84efcd0
+# ---- script ----
+# | set -x
+# | pkgman install -y nodejs24 python3.14 gcc haiku_devel 2>&1 | tail -4
+# | node --version; python3 --version; gcc --version | head -1
+# | mkdir -p /boot/home/t && cd /boot/home/t
+# | python3 -I - <<'PY'
+# | import hashlib, tarfile, urllib.request
+# | u = "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
+# | urllib.request.urlretrieve(u, "node-v24.21.0.tar.gz")
+# | h = hashlib.sha256(open("node-v24.21.0.tar.gz", "rb").read()).hexdigest()
+# | assert h == "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777", h
+# | with tarfile.open("node-v24.21.0.tar.gz") as t:
+# |     m = [x for x in t.getmembers() if x.name.split("/")[1:2] in (["test"], ["tools"])]
+# |     t.extractall(".", members=m, filter="data")
+# | print("node tarball sha256 OK, extracted", len(m))
+# | PY
+# | rm -f node-v24.21.0.tar.gz
+# | ls /boot/home/t/node-v24.21.0
+# | sync
+# | URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/hg897/out/fix/random?<PRESIGNED>
+# | SHA=b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df
+# | # Keep bus_managers/random/device_v1 referenced while the new file lands, so
+# | # the running kernel never binds it to a second image (issue 940).
+# | nohup sh -c 'exec 9</dev/urandom; exec sleep 999999' > /dev/null 2>&1 &
+# | sleep 2
+# | ps | grep "sleep 999999" | grep -v grep
+# | echo "before install:"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | D=/boot/home/config/non-packaged/add-ons/kernel/bus_managers
+# | mkdir -p $D && cd /boot/home && python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "random.fix")' "$URL"
+# | echo "$SHA  random.fix" | sha256sum -c || exit 5
+# | cp random.fix $D/random.new && chmod 755 $D/random.new && mv $D/random.new $D/random
+# | ls -la $D; sha256sum $D/random
+# | sync; sleep 5; sync
+# | for k in 1 2 3; do head -c 16 /dev/urandom | od -An -tx1; sleep 5; done
+# | echo "after install (running kernel must still use the packaged image only):"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | sync; sleep 10; sync
+# | echo SETUP_DONE
+# ---- raw output ----
+JOB_RC=0
++ pkgman install -y nodejs24 python3.14 gcc haiku_devel
++ tail -4
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_02:08:41"
+[system] Cleaning up ...
+[system] Done.
++ node --version
+v24.21.0
++ python3 --version
+Python 3.14.7
++ gcc --version
++ head -1
+gcc (2026_03_29) 13.3.0
++ mkdir -p /boot/home/t
++ cd /boot/home/t
++ python3 -I -
+node tarball sha256 OK, extracted 12111
++ rm -f node-v24.21.0.tar.gz
++ ls /boot/home/t/node-v24.21.0
+test
+tools
++ sync
++ URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/hg897/out/fix/random?<PRESIGNED>
++ SHA=b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df
++ sleep 2
++ nohup sh -c 'exec 9</dev/urandom; exec sleep 999999'
++ ps
++ grep 'sleep 999999'
++ grep -v grep
+/boot/system/bin/sleep 999999                        441        1    0    0 
++ echo 'before install:'
+before install:
++ listimage 1
++ grep -E random
++ sed 's/  */ /g'
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
++ D=/boot/home/config/non-packaged/add-ons/kernel/bus_managers
++ mkdir -p /boot/home/config/non-packaged/add-ons/kernel/bus_managers
++ cd /boot/home
++ python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "random.fix")' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/hg897/out/fix/random?<PRESIGNED>
++ echo 'b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df  random.fix'
++ sha256sum -c
+random.fix: OK
++ cp random.fix /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random.new
++ chmod 755 /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random.new
++ mv /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random.new /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
++ ls -la /boot/home/config/non-packaged/add-ons/kernel/bus_managers
+total 30
+drwxr-xr-x 1 baron root  2048 Nov  2 02:09 .
+drwxr-xr-x 1 baron root  2048 Nov  2 02:09 ..
+-rwxr-xr-x 1 baron root 17739 Nov  2 02:09 random
++ sha256sum /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df  /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
++ sync
++ sleep 5
++ sync
++ for k in 1 2 3
++ head -c 16 /dev/urandom
++ od -An -tx1
+ f6 d5 3f 22 33 71 99 20 0d e7 ad 77 e0 0a dc eb
++ sleep 5
++ for k in 1 2 3
++ head -c 16 /dev/urandom
++ od -An -tx1
+ 24 b3 53 90 a1 67 7f 20 66 48 b5 8f 8a 93 70 bd
++ sleep 5
++ for k in 1 2 3
++ head -c 16 /dev/urandom
++ od -An -tx1
+ 99 70 a6 3a a3 57 e1 ff 01 42 2f 45 b8 39 a1 70
++ sleep 5
++ echo 'after install (running kernel must still use the packaged image only):'
+after install (running kernel must still use the packaged image only):
++ listimage 1
++ grep -E random
++ sed 's/  */ /g'
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
++ sync
++ sleep 10
++ sync
++ echo SETUP_DONE
+SETUP_DONE
