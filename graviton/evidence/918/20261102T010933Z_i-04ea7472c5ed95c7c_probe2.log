@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: probe2
+# instance: i-04ea7472c5ed95c7c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T010933Z   end: 20261102T010938Z   rc: 0
+# script sha256: f5a710efc3a17dcbe54eef762ea3ee8242087359d14836662bdbd3106f710e2e
+# ---- script ----
+# | for c in strace listarea listsem listport ps Debugger gdb lldb gcc python3 profile; do printf '%s: ' $c; type -p $c || echo missing; done
+# | ls /boot/system/apps | head -50
+# | pkgman search gdb 2>&1 | tail -5
+# | pkgman search -a debugger 2>&1 | tail -5
+# ---- raw output ----
+strace: /boot/system/bin/strace
+listarea: /boot/system/bin/listarea
+listsem: /boot/system/bin/listsem
+listport: /boot/system/bin/listport
+ps: /boot/system/bin/ps
+Debugger: missing
+gdb: missing
+lldb: missing
+gcc: /boot/system/bin/gcc
+python3: /boot/system/bin/python3
+profile: /boot/system/bin/profile
+AboutSystem
+CharacterMap
+DeskCalc
+Devices
+DiskProbe
+DiskUsage
+DriveSetup
+Expander
+Installer
+NetworkStatus
+ProcessController
+ShowImage
+StyledEdit
+Terminal
+TextSearch
+Workspaces
+        gdbm_tools        A set of database routines                                           
+        gef               GDB enhanced features for exploiters and reverse-engineers           
+        glib2             GLib is a cross-platform software utility library                    
+        glib2_debuginfo   GLib is a cross-platform software utility library (debug info)       
+        glib2_devel       GLib is a cross-platform software utility library (development files)
+        zydis_devel                              Disassembler Library for x86 and x86-64 (development files)                                         
+        zziplib                                  The zziplib extract data from archives in a single zip                                              
+        zziplib_devel                            The zziplib extract data from archives in a single zip (development files)                          
+        zziplib_doc                              The zziplib extract data from archives in a single zip (documentation)                              
+        zziplib_tools                            The zziplib extract data from archives in a single zip                                              

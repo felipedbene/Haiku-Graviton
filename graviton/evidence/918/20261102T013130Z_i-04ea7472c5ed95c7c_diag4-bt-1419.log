@@ -1,0 +1,2894 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: diag4-bt-1419
+# instance: i-04ea7472c5ed95c7c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T013130Z   end: 20261102T013134Z   rc: 0
+# script sha256: f515b3c804e3d69b9f870a3b19bb9ea899717bfa54a80dee7b0041714a4443f9
+# ---- script ----
+# | t=1419
+# | echo "--- listarea $t: $(listarea $t 2>&1 | wc -l) lines"
+# | /boot/home/w918/bt918 $t 30 2>&1
+# ---- raw output ----
+--- listarea 1419: 360 lines
+team 1419: 194 threads (state before attaching)
+    1419 MainThread                       waiting   sem 28193 select
+    1420 DelayedTaskSche                  waiting   sem 13621 select
+    1421 V8Worker                         waiting   sem -1 
+    1422 V8Worker                         waiting   sem -1 
+    1423 V8Worker                         waiting   sem -1 
+    1424 V8Worker                         waiting   sem -1 
+    1425 SignalInspector                  waiting   sem -1 
+    1453 WorkerThread                     waiting   sem -1 
+    1454 WorkerThread                     waiting   sem -1 
+    1455 WorkerThread                     waiting   sem -1 
+    1456 WorkerThread                     waiting   sem -1 
+    1457 WorkerThread                     waiting   sem -1 
+    1458 WorkerThread                     waiting   sem -1 
+    1459 WorkerThread                     waiting   sem -1 
+    1460 WorkerThread                     waiting   sem -1 
+    1461 WorkerThread                     waiting   sem -1 
+    1462 WorkerThread                     waiting   sem -1 
+    1463 WorkerThread                     waiting   sem -1 
+    1464 WorkerThread                     waiting   sem -1 
+    1465 WorkerThread                     waiting   sem -1 
+    1466 WorkerThread                     waiting   sem -1 
+    1467 WorkerThread                     waiting   sem -1 
+    1468 WorkerThread                     waiting   sem -1 
+    1469 WorkerThread                     waiting   sem -1 
+    1470 WorkerThread                     waiting   sem -1 
+    1471 WorkerThread                     waiting   sem -1 
+    1472 WorkerThread                     waiting   sem -1 
+    1473 WorkerThread                     waiting   sem -1 
+    1474 WorkerThread                     waiting   sem -1 
+    1475 WorkerThread                     waiting   sem -1 
+    1476 WorkerThread                     waiting   sem -1 
+    1477 WorkerThread                     waiting   sem -1 
+    1478 WorkerThread                     waiting   sem -1 
+    1479 WorkerThread                     waiting   sem -1 
+    1480 WorkerThread                     waiting   sem -1 
+    1481 WorkerThread                     waiting   sem -1 
+    1482 WorkerThread                     waiting   sem -1 
+    1483 WorkerThread                     waiting   sem -1 
+    1484 WorkerThread                     waiting   sem -1 
+    1485 WorkerThread                     waiting   sem -1 
+    1486 WorkerThread                     waiting   sem -1 
+    1487 WorkerThread                     waiting   sem -1 
+    1488 WorkerThread                     waiting   sem -1 
+    1489 WorkerThread                     waiting   sem -1 
+    1490 WorkerThread                     waiting   sem -1 
+    1491 WorkerThread                     waiting   sem -1 
+    1492 WorkerThread                     waiting   sem -1 
+    1493 WorkerThread                     waiting   sem -1 
+    1494 WorkerThread                     waiting   sem -1 
+    1495 WorkerThread                     waiting   sem -1 
+    1496 WorkerThread                     waiting   sem -1 
+    1497 WorkerThread                     waiting   sem -1 
+    1498 WorkerThread                     waiting   sem -1 
+    1499 WorkerThread                     waiting   sem -1 
+    1500 WorkerThread                     waiting   sem -1 
+    1501 WorkerThread                     waiting   sem -1 
+    1502 WorkerThread                     waiting   sem -1 
+    1503 WorkerThread                     waiting   sem -1 
+    1504 WorkerThread                     waiting   sem -1 
+    1505 WorkerThread                     waiting   sem -1 
+    1506 WorkerThread                     waiting   sem -1 
+    1507 WorkerThread                     waiting   sem -1 
+    1508 WorkerThread                     waiting   sem -1 
+    1509 WorkerThread                     waiting   sem -1 
+    1510 WorkerThread                     waiting   sem -1 
+    1511 WorkerThread                     waiting   sem -1 
+    1512 WorkerThread                     waiting   sem -1 
+    1513 WorkerThread                     waiting   sem -1 
+    1514 WorkerThread                     waiting   sem -1 
+    1515 WorkerThread                     waiting   sem -1 
+    1516 WorkerThread                     waiting   sem -1 
+    1517 WorkerThread                     waiting   sem -1 
+    1518 WorkerThread                     waiting   sem -1 
+    1519 WorkerThread                     waiting   sem -1 
+    1520 WorkerThread                     waiting   sem -1 
+    1521 WorkerThread                     waiting   sem -1 
+    1522 WorkerThread                     waiting   sem -1 
+    1523 WorkerThread                     waiting   sem -1 
+    1524 WorkerThread                     waiting   sem -1 
+    1525 WorkerThread                     waiting   sem -1 
+    1526 WorkerThread                     waiting   sem -1 
+    1527 WorkerThread                     waiting   sem -1 
+    1529 WorkerThread                     waiting   sem -1 
+    1543 WorkerThread                     waiting   sem -1 
+    1546 WorkerThread                     waiting   sem -1 
+    1547 WorkerThread                     waiting   sem -1 
+    1548 WorkerThread                     waiting   sem -1 
+    1549 WorkerThread                     waiting   sem -1 
+    1550 WorkerThread                     waiting   sem -1 
+    1551 WorkerThread                     waiting   sem -1 
+    1553 WorkerThread                     waiting   sem -1 
+    1555 WorkerThread                     waiting   sem -1 
+    1556 WorkerThread                     waiting   sem -1 
+    1557 WorkerThread                     waiting   sem -1 
+    1558 WorkerThread                     waiting   sem -1 
+    1561 WorkerThread                     waiting   sem -1 
+    1562 WorkerThread                     waiting   sem -1 
+    1564 WorkerThread                     waiting   sem -1 
+    1565 WorkerThread                     waiting   sem -1 
+    1566 WorkerThread                     waiting   sem -1 
+    1567 WorkerThread                     waiting   sem -1 
+    1568 WorkerThread                     waiting   sem -1 
+    1569 WorkerThread                     waiting   sem -1 
+    1570 WorkerThread                     waiting   sem -1 
+    1571 WorkerThread                     waiting   sem -1 
+    1572 WorkerThread                     waiting   sem -1 
+    1573 WorkerThread                     waiting   sem -1 
+    1574 WorkerThread                     waiting   sem -1 
+    1575 WorkerThread                     waiting   sem -1 
+    1576 WorkerThread                     waiting   sem -1 
+    1577 WorkerThread                     waiting   sem -1 
+    1578 WorkerThread                     waiting   sem -1 
+    1579 WorkerThread                     waiting   sem -1 
+    1582 WorkerThread                     waiting   sem -1 
+    1583 WorkerThread                     waiting   sem -1 
+    1585 WorkerThread                     waiting   sem -1 
+    1586 WorkerThread                     waiting   sem -1 
+    1587 WorkerThread                     waiting   sem -1 
+    1588 WorkerThread                     waiting   sem -1 
+    1589 WorkerThread                     waiting   sem -1 
+    1590 WorkerThread                     waiting   sem -1 
+    1592 WorkerThread                     waiting   sem -1 
+    1593 WorkerThread                     waiting   sem -1 
+    1595 WorkerThread                     waiting   sem -1 
+    1596 WorkerThread                     waiting   sem -1 
+    1597 WorkerThread                     waiting   sem -1 
+    1598 WorkerThread                     waiting   sem -1 
+    1599 WorkerThread                     waiting   sem -1 
+    1600 WorkerThread                     waiting   sem -1 
+    1601 WorkerThread                     waiting   sem -1 
+    1602 WorkerThread                     waiting   sem -1 
+    1603 WorkerThread                     waiting   sem -1 
+    1604 WorkerThread                     waiting   sem -1 
+    1605 WorkerThread                     waiting   sem -1 
+    1606 WorkerThread                     waiting   sem -1 
+    1607 WorkerThread                     waiting   sem -1 
+    1608 WorkerThread                     waiting   sem -1 
+    1609 WorkerThread                     waiting   sem -1 
+    1610 WorkerThread                     waiting   sem -1 
+    1611 WorkerThread                     waiting   sem -1 
+    1612 WorkerThread                     waiting   sem -1 
+    1613 WorkerThread                     waiting   sem -1 
+    1614 WorkerThread                     waiting   sem -1 
+    1615 WorkerThread                     waiting   sem -1 
+    1616 WorkerThread                     waiting   sem -1 
+    1617 WorkerThread                     waiting   sem -1 
+    1618 WorkerThread                     waiting   sem -1 
+    1620 WorkerThread                     waiting   sem -1 
+    1621 WorkerThread                     waiting   sem -1 
+    1622 WorkerThread                     waiting   sem -1 
+    1623 WorkerThread                     waiting   sem -1 
+    1624 WorkerThread                     waiting   sem -1 
+    1625 WorkerThread                     waiting   sem -1 
+    1627 WorkerThread                     waiting   sem -1 
+    1628 WorkerThread                     waiting   sem -1 
+    1629 WorkerThread                     waiting   sem -1 
+    1630 WorkerThread                     waiting   sem -1 
+    1631 WorkerThread                     waiting   sem -1 
+    1632 WorkerThread                     waiting   sem -1 
+    1633 WorkerThread                     waiting   sem -1 
+    1634 WorkerThread                     waiting   sem -1 
+    1635 WorkerThread                     waiting   sem -1 
+    1636 WorkerThread                     waiting   sem -1 
+    1637 WorkerThread                     waiting   sem -1 
+    1639 WorkerThread                     waiting   sem -1 
+    1640 WorkerThread                     waiting   sem -1 
+    1641 WorkerThread                     waiting   sem -1 
+    1642 WorkerThread                     waiting   sem -1 
+    1643 WorkerThread                     waiting   sem -1 
+    1644 WorkerThread                     waiting   sem -1 
+    1645 WorkerThread                     waiting   sem -1 
+    1646 WorkerThread                     waiting   sem -1 
+    1649 WorkerThread                     waiting   sem -1 
+    1651 WorkerThread                     waiting   sem -1 
+    1652 WorkerThread                     waiting   sem -1 
+    1653 WorkerThread                     waiting   sem -1 
+    1654 WorkerThread                     waiting   sem -1 
+    1655 WorkerThread                     waiting   sem -1 
+    1656 WorkerThread                     waiting   sem -1 
+    1657 WorkerThread                     waiting   sem -1 
+    1658 WorkerThread                     waiting   sem -1 
+    1659 WorkerThread                     waiting   sem -1 
+    1660 WorkerThread                     waiting   sem -1 
+    1661 WorkerThread                     waiting   sem -1 
+    1662 WorkerThread                     waiting   sem -1 
+    1663 WorkerThread                     waiting   sem -1 
+    1664 WorkerThread                     waiting   sem -1 
+    1665 WorkerThread                     waiting   sem -1 
+    1668 WorkerThread                     waiting   sem -1 
+    1669 WorkerThread                     waiting   sem -1 
+    1671 WorkerThread                     waiting   sem -1 
+    1675 WorkerThread                     waiting   sem -1 
+    1676 WorkerThread                     waiting   sem -1 
+    1681 WorkerThread                     waiting   sem -1 
+
+thread 1419 "MainThread" (was waiting)
+    pc 0x18d06024590  _kern_poll + 0x4  (libroot.so)
+    lr 0x18d0602d89c  poll + 0x1c  (libroot.so)
+       0xf84544226c  uv__io_poll + 0x14c  (libuv.so.1.0.0)
+       0xf845431268  uv_run + 0xc8  (libuv.so.1.0.0)
+       0xd310b09780  _ZN4node21SpinEventLoopInternalEPNS_11EnvironmentE + 0x14c  (node)
+       0xd310c6bb10  _ZN4node16NodeMainInstance3RunEPNS_8ExitCodeEPNS_11EnvironmentE + 0x3c  (node)
+       0xd310c6be98  _ZN4node16NodeMainInstance3RunEv + 0x88  (node)
+       0xd310bbb964  _ZN4node5StartEiPPc + 0x294  (node)
+       0xd310ae2a10  _start + 0x50  (node)
+       0x9de5cc3348  runtime_loader + 0x128  (runtime_loader)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000000a x1 0x2 x2 0x7b94b8
+
+thread 1420 "DelayedTaskSche" (was waiting)
+    pc 0x18d06024590  _kern_poll + 0x4  (libroot.so)
+    lr 0x18d0602d89c  poll + 0x1c  (libroot.so)
+       0xf84544226c  uv__io_poll + 0x14c  (libuv.so.1.0.0)
+       0xf845431268  uv_run + 0xc8  (libuv.so.1.0.0)
+       0xd310cb0b60  _ZZN4node23WorkerThreadsTaskRunner20DelayedTaskScheduler5StartEvENUlPvE_4_FUNES2_ + 0x90  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000000a x1 0x2 x2 0xfffffffffffffc18
+
+thread 1421 "V8Worker" (was waiting)
+    pc 0x18d060241c0  _kern_mutex_switch_lock + 0x4  (libroot.so)
+    lr 0x18d06033dfc  _ZL9cond_waitP13_pthread_condP14_pthread_mutexjl + 0x9c  (libroot.so)
+       0x18d06033ec0  pthread_cond_wait + 0x18  (libroot.so)
+       0xf84543d71c  uv_cond_wait + 0xc  (libuv.so.1.0.0)
+       0xd310cab8e4  _ZThn8_N4node22PerIsolatePlatformData30PostNonNestableDelayedTaskImplESt10unique_ptrIN2v84TaskESt14default_deleteIS3_EEdRKNS2_14SourceLocationE + 0x134  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000000a x1 0 x2 0x9b5cd6acfc
+
+thread 1422 "V8Worker" (was waiting)
+    pc 0x18d060241c0  _kern_mutex_switch_lock + 0x4  (libroot.so)
+    lr 0x18d06033dfc  _ZL9cond_waitP13_pthread_condP14_pthread_mutexjl + 0x9c  (libroot.so)
+       0x18d06033ec0  pthread_cond_wait + 0x18  (libroot.so)
+       0xf84543d71c  uv_cond_wait + 0xc  (libuv.so.1.0.0)
+       0xd310cab8e4  _ZThn8_N4node22PerIsolatePlatformData30PostNonNestableDelayedTaskImplESt10unique_ptrIN2v84TaskESt14default_deleteIS3_EEdRKNS2_14SourceLocationE + 0x134  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000000a x1 0 x2 0x9b5cd6acfc
+
+thread 1423 "V8Worker" (was waiting)
+    pc 0x18d060241c0  _kern_mutex_switch_lock + 0x4  (libroot.so)
+    lr 0x18d06033dfc  _ZL9cond_waitP13_pthread_condP14_pthread_mutexjl + 0x9c  (libroot.so)
+       0x18d06033ec0  pthread_cond_wait + 0x18  (libroot.so)
+       0xf84543d71c  uv_cond_wait + 0xc  (libuv.so.1.0.0)
+       0xd310cab8e4  _ZThn8_N4node22PerIsolatePlatformData30PostNonNestableDelayedTaskImplESt10unique_ptrIN2v84TaskESt14default_deleteIS3_EEdRKNS2_14SourceLocationE + 0x134  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000000a x1 0 x2 0x9b5cd6acfc
+
+thread 1424 "V8Worker" (was waiting)
+    pc 0x18d060241c0  _kern_mutex_switch_lock + 0x4  (libroot.so)
+    lr 0x18d06033dfc  _ZL9cond_waitP13_pthread_condP14_pthread_mutexjl + 0x9c  (libroot.so)
+       0x18d06033ec0  pthread_cond_wait + 0x18  (libroot.so)
+       0xf84543d71c  uv_cond_wait + 0xc  (libuv.so.1.0.0)
+       0xd310cab8e4  _ZThn8_N4node22PerIsolatePlatformData30PostNonNestableDelayedTaskImplESt10unique_ptrIN2v84TaskESt14default_deleteIS3_EEdRKNS2_14SourceLocationE + 0x134  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000000a x1 0 x2 0x9b5cd6acfc
+
+thread 1425 "SignalInspector" (was waiting)
+    pc 0x18d060241c8  _kern_mutex_sem_acquire + 0x4  (libroot.so)
+    lr 0x18d06030e4c  sem_wait + 0x24  (libroot.so)
+       0xf84543d584  uv_sem_wait + 0x34  (libuv.so.1.0.0)
+       0xd310de30f0  _ZN4node9inspector5Agent20RequestIoThreadStartEv + 0x1a0  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000000a x1 0 x2 0
+
+thread 1453 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84542fb0c  uv_async_init + 0xcc  (libuv.so.1.0.0)
+       0xf8454373c4  uv_loop_init + 0x204  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1454 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1455 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1456 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1457 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1458 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1459 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1460 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1461 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1462 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1463 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1464 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1465 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1466 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1467 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1468 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1469 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1470 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1471 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1472 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1473 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1474 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1475 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1476 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1477 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1478 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1479 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1480 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1481 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1482 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1483 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1484 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1485 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1486 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1487 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1488 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1489 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1490 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1491 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1492 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1493 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1494 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1495 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1496 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1497 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1498 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1499 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1500 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1501 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1502 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1503 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1504 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1505 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1506 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1507 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1508 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1509 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1510 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1511 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1512 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1513 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1514 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1515 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1516 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1517 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1518 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1519 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1520 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1521 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1522 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1523 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1524 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1525 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1526 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1527 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1529 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1543 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1546 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1547 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1548 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1549 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1550 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1551 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1553 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1555 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1556 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1557 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1558 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1561 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1562 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1564 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1565 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1566 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1567 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1568 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1569 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1570 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1571 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1572 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1573 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1574 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1575 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1576 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1577 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1578 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1579 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1582 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1583 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1585 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1586 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1587 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1588 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1589 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1590 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1592 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1593 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1595 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1596 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1597 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1598 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1599 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1600 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1601 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1602 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1603 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1604 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1605 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1606 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1607 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1608 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1609 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1610 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1611 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1612 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1613 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1614 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1615 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1616 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1617 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1618 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1620 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1621 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1622 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1623 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1624 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1625 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1627 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1628 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1629 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1630 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1631 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1632 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1633 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1634 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1635 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1636 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1637 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1639 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1640 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1641 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1642 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1643 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1644 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1645 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1646 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1649 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1651 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1652 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1653 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1654 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1655 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1656 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1657 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1658 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1659 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1660 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1661 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84542fb0c  uv_async_init + 0xcc  (libuv.so.1.0.0)
+       0xf8454373c4  uv_loop_init + 0x204  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1662 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84542fb0c  uv_async_init + 0xcc  (libuv.so.1.0.0)
+       0xf8454373c4  uv_loop_init + 0x204  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1663 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1664 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1665 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1668 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1669 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1671 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1675 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1676 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40
+
+thread 1681 "WorkerThread" (was waiting)
+    pc 0x18d06024578  _kern_create_pipe + 0x4  (libroot.so)
+    lr 0x18d060a48d4  pipe + 0x14  (libroot.so)
+       0xf845437fd8  uv_pipe + 0x24  (libuv.so.1.0.0)
+       0xf84543a534  uv_signal_init + 0x84  (libuv.so.1.0.0)
+       0xf84543851c  uv__process_init + 0x18  (libuv.so.1.0.0)
+       0xf84543731c  uv_loop_init + 0x15c  (libuv.so.1.0.0)
+       0xd310d6bbf8  _ZN4node6worker16WorkerThreadDataC1EPNS0_6WorkerE + 0x38  (node)
+       0xd310d6aab8  _ZN4node6worker6Worker3RunEv + 0x138  (node)
+       0xd310d6b2a8  _ZN4node6worker6Worker3RunEv + 0x928  (node)
+       0x18d0603312c  _ZL20pthread_thread_entryPvS_ + 0x1c  (libroot.so)
+       0x8e530a93208  commpage_thread_exit + 0x0  (commpage)
+    x0 0xffffffff8000600a x1 0 x2 0x40

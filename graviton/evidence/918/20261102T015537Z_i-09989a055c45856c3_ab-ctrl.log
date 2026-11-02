@@ -1,0 +1,255 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: ab-ctrl
+# instance: i-09989a055c45856c3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T015537Z   end: 20261102T023313Z   rc: 0
+# script sha256: 663b13799e417d974f216cabe1a5464ff87600cc8663bd95a2fc545f43147741
+# ---- script ----
+# | set -u
+# | mkdir -p /boot/home/w918 && cd /boot/home/w918
+# | echo 'LyoKICogcGlwZTkxOCAtLSB3aGF0IHBpcGUoKSBkb2VzIHdoZW4gdGhlIGZkIHRhYmxlIGlzIChuZWFybHkpIGZ1bGwgKGlzc3VlIDkxOCkuCiAqCiAqICAgcGlwZTkxOCBmdWxsICAgICAgbm8gZnJlZSBmZDogcGlwZSgpIG11c3QgZmFpbCB3aXRoIEVNRklMRS4gQmVmb3JlIHRoZSBmaXgKICogICAgICAgICAgICAgICAgICAgICBIYWlrdSBibG9ja2VkIGZvcmV2ZXIgb3BlbmluZyB0aGUgd3JpdGUgZW5kIG9mIGEgRklGTwogKiAgICAgICAgICAgICAgICAgICAgIHdob3NlIHJlYWQgZW5kIGhhZCBhbHJlYWR5IGZhaWxlZC4KICogICBwaXBlOTE4IGZ1bGwyICAgICB0aGUgc2FtZSB3aXRoIHBpcGUyKE9fTk9OQkxPQ0spLiBJdHMgd3JpdGUgZW5kIG5ldmVyCiAqICAgICAgICAgICAgICAgICAgICAgYmxvY2tlZCwgc28gaXQgYWxyZWFkeSBmYWlsZWQgd2l0aCBFTUZJTEU7IGl0IHN0YXlzIGFzCiAqICAgICAgICAgICAgICAgICAgICAgYSBjaGVjayB0aGF0IGl0IHN0aWxsIGRvZXMuCiAqICAgcGlwZTkxOCBvbmUgICAgICAgb25lIGZyZWUgZmQ6IHRoZSByZWFkIGVuZCBmaXRzLCB0aGUgd3JpdGUgZW5kIGRvZXMgbm90OwogKiAgICAgICAgICAgICAgICAgICAgIHBpcGUoKSBtdXN0IGZhaWwgd2l0aCBFTUZJTEUgYW5kIGxlYXZlIHRoZSB0YWJsZSBhcyBpdAogKiAgICAgICAgICAgICAgICAgICAgIHdhcy4KICogICBwaXBlOTE4IGxlYWsgPG4+ICBuIHBpcGUoKSBjYWxscyBpbiB0aGUgIm9uZSIgc3RhdGUsIHRoZW4gdGhlIGNoYW5nZSBpbgogKiAgICAgICAgICAgICAgICAgICAgIHVzZWQgbWVtb3J5IHBhZ2VzOyBhIHZub2RlIHJlZmVyZW5jZSBsZWFrZWQgcGVyIGZhaWxlZAogKiAgICAgICAgICAgICAgICAgICAgIGNhbGwgc2hvd3MgdXAgYXMgZ3Jvd3RoIHByb3BvcnRpb25hbCB0byBuLgogKgogKiBwaXBlKCkgcnVucyBvbiBhIHNlY29uZCB0aHJlYWQgYW5kIGlzIGdpdmVuIDUgcywgc28gYSBoYW5nIGlzIHJlcG9ydGVkCiAqIHJhdGhlciB0aGFuIGluaGVyaXRlZC4gTGludXggcmVmZXJlbmNlOiBzYW1lIHNvdXJjZSwgLURMSU5VWF9SRUYuCiAqLwoKI2lmZGVmIExJTlVYX1JFRgojCWRlZmluZSBfR05VX1NPVVJDRQoJCS8qIHBpcGUyKCkgKi8KI2VuZGlmCgojaW5jbHVkZSA8ZXJybm8uaD4KI2luY2x1ZGUgPGZjbnRsLmg+CiNpbmNsdWRlIDxwdGhyZWFkLmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RkbGliLmg+CiNpbmNsdWRlIDxzdHJpbmcuaD4KI2luY2x1ZGUgPHN5cy9yZXNvdXJjZS5oPgojaW5jbHVkZSA8dGltZS5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CiNpZm5kZWYgTElOVVhfUkVGCiMJaW5jbHVkZSA8T1MuaD4KI2VuZGlmCgpzdGF0aWMgaW50IHNSZXN1bHQgPSAtMjsKc3RhdGljIGludCBzRmxhZ3MgPSAwOwpzdGF0aWMgaW50IHNFcnJubyA9IDA7CnN0YXRpYyBpbnQgc0Zkc1syXSA9IHsgLTEsIC0xIH07CgoKc3RhdGljIHZvaWQqCmRvX3BpcGUodm9pZCogdW51c2VkKQp7CglpbnQgciA9IHNGbGFncyAhPSAwID8gcGlwZTIoc0Zkcywgc0ZsYWdzKSA6IHBpcGUoc0Zkcyk7CglzRXJybm8gPSBlcnJubzsKCV9fYXRvbWljX3N0b3JlX24oJnNSZXN1bHQsIHIsIF9fQVRPTUlDX1NFUV9DU1QpOwoJcmV0dXJuIE5VTEw7Cn0KCgovKiBmaWxsIHRoZSB0YWJsZSwgbGVhdmluZyBgZnJlZWAgZGVzY3JpcHRvcnMgdW51c2VkOyByZXR1cm5zIHRoZSBmaXJzdCBmZAogKiB0aGF0IHdhcyBvcGVuZWQsIHNvIHRoZSBjYWxsZXIgY2FuIHRlbGwgd2hpY2ggc2xvdHMgYXJlIGZyZWUgKi8Kc3RhdGljIGludApmaWxsKGludCBmcmVlKQp7CglpbnQgbGFzdCA9IC0xOwoJZm9yICg7OykgewoJCWludCBmZCA9IGR1cCgwKTsKCQlpZiAoZmQgPCAwKQoJCQlicmVhazsKCQlsYXN0ID0gZmQ7Cgl9Cglmb3IgKGludCBpID0gMDsgaSA8IGZyZWU7IGkrKykKCQljbG9zZShsYXN0IC0gaSk7CglyZXR1cm4gbGFzdDsKfQoKCnN0YXRpYyBpbnQKdGltZWRfcGlwZShjb25zdCBjaGFyKiBsYWJlbCkKewoJcHRocmVhZF90IHRocmVhZDsKCXNSZXN1bHQgPSAtMjsKCXB0aHJlYWRfY3JlYXRlKCZ0aHJlYWQsIE5VTEwsIGRvX3BpcGUsIE5VTEwpOwoJZm9yIChpbnQgaSA9IDA7IGkgPCA1MDA7IGkrKykgewoJCWlmIChfX2F0b21pY19sb2FkX24oJnNSZXN1bHQsIF9fQVRPTUlDX1NFUV9DU1QpICE9IC0yKQoJCQlicmVhazsKCQl1c2xlZXAoMTAwMDApOwoJfQoJaW50IHIgPSBfX2F0b21pY19sb2FkX24oJnNSZXN1bHQsIF9fQVRPTUlDX1NFUV9DU1QpOwoJaWYgKHIgPT0gLTIpIHsKCQlwcmludGYoIiVzOiBwaXBlKCkgc3RpbGwgYmxvY2tlZCBhZnRlciA1IHMgIC0+IEhBTkdcbiIsIGxhYmVsKTsKCQlyZXR1cm4gMjsKCX0KCXB0aHJlYWRfam9pbih0aHJlYWQsIE5VTEwpOwoJaWYgKHIgPT0gMCkgewoJCXByaW50ZigiJXM6IHBpcGUoKSBzdWNjZWVkZWQgZmRzICVkICVkXG4iLCBsYWJlbCwgc0Zkc1swXSwgc0Zkc1sxXSk7CgkJcmV0dXJuIDE7Cgl9CglwcmludGYoIiVzOiBwaXBlKCkgPSAtMSBlcnJubyAlZCAoJXMpJXNcbiIsIGxhYmVsLCBzRXJybm8sIHN0cmVycm9yKHNFcnJubyksCgkJc0Vycm5vID09IEVNRklMRSA/ICIgIC0+IG9rIiA6ICIgIC0+IFdST05HIEVSUk5PIik7CglyZXR1cm4gc0Vycm5vID09IEVNRklMRSA/IDAgOiAxOwp9CgoKaW50Cm1haW4oaW50IGFyZ2MsIGNoYXIqKiBhcmd2KQp7Cgljb25zdCBjaGFyKiBtb2RlID0gYXJnYyA+IDEgPyBhcmd2WzFdIDogImZ1bGwiOwoJc3RydWN0IHJsaW1pdCBybCA9IHsgNjQsIDY0IH07CglpZiAoc2V0cmxpbWl0KFJMSU1JVF9OT0ZJTEUsICZybCkgIT0gMCkgewoJCXBlcnJvcigic2V0cmxpbWl0Iik7CgkJcmV0dXJuIDE7Cgl9CgoJaWYgKHN0cmNtcChtb2RlLCAiZnVsbCIpID09IDApIHsKCQkvKiB0aGUgaGVscGVyIHRocmVhZCBpdHNlbGYgbmVlZHMgbm8gZmQ7IGZpbGwgY29tcGxldGVseSAqLwoJCWZpbGwoMCk7CgkJcmV0dXJuIHRpbWVkX3BpcGUoImZ1bGwgdGFibGUiKTsKCX0KCglpZiAoc3RyY21wKG1vZGUsICJmdWxsMiIpID09IDApIHsKCQlzRmxhZ3MgPSBPX05PTkJMT0NLOwoJCWZpbGwoMCk7CgkJcmV0dXJuIHRpbWVkX3BpcGUoImZ1bGwgdGFibGUsIHBpcGUyKE9fTk9OQkxPQ0spIik7Cgl9CgoJaWYgKHN0cmNtcChtb2RlLCAib25lIikgPT0gMCkgewoJCWludCBsYXN0ID0gZmlsbCgxKTsKCQlpbnQgciA9IHRpbWVkX3BpcGUoIm9uZSBmcmVlIGZkIik7CgkJLyogdGhlIGZyZWUgc2xvdCBtdXN0IHN0aWxsIGJlIGZyZWU6IGR1cCgpIG11c3QgbGFuZCBvbiBpdCAqLwoJCWludCBmZCA9IGR1cCgwKTsKCQlwcmludGYoImFmdGVyOiBkdXAoKSA9ICVkIChleHBlY3RlZCAlZCwgdGhlIHNsb3QgcGlwZSgpIG11c3Qgbm90ICIKCQkJImtlZXApXG4iLCBmZCwgbGFzdCk7CgkJcmV0dXJuIHIgIT0gMCB8fCBmZCAhPSBsYXN0OwoJfQoKCWlmIChzdHJjbXAobW9kZSwgImxlYWsiKSA9PSAwKSB7CgkJbG9uZyBuID0gYXJnYyA+IDIgPyBhdG9sKGFyZ3ZbMl0pIDogMTAwMDAwOwoJCWZpbGwoMSk7CiNpZm5kZWYgTElOVVhfUkVGCgkJc3lzdGVtX2luZm8gYmVmb3JlLCBhZnRlcjsKCQlnZXRfc3lzdGVtX2luZm8oJmJlZm9yZSk7CiNlbmRpZgoJCWxvbmcgZW1maWxlID0gMCwgb3RoZXIgPSAwOwoJCWZvciAobG9uZyBpID0gMDsgaSA8IG47IGkrKykgewoJCQlpbnQgZmRzWzJdOwoJCQlpZiAocGlwZShmZHMpID09IDApIHsKCQkJCWNsb3NlKGZkc1swXSk7CgkJCQljbG9zZShmZHNbMV0pOwoJCQl9IGVsc2UgaWYgKGVycm5vID09IEVNRklMRSkKCQkJCWVtZmlsZSsrOwoJCQllbHNlCgkJCQlvdGhlcisrOwoJCX0KI2lmbmRlZiBMSU5VWF9SRUYKCQlnZXRfc3lzdGVtX2luZm8oJmFmdGVyKTsKCQlwcmludGYoIiVsZCBwaXBlKCkgY2FsbHM6ICVsZCBFTUZJTEUsICVsZCBvdGhlcjsgdXNlZCBwYWdlcyAlbGxkIC0+ICIKCQkJIiVsbGQgKGRlbHRhICVsbGQsICVsbGQgYnl0ZXMgcGVyIGNhbGwpXG4iLCBuLCBlbWZpbGUsIG90aGVyLAoJCQkobG9uZyBsb25nKWJlZm9yZS51c2VkX3BhZ2VzLCAobG9uZyBsb25nKWFmdGVyLnVzZWRfcGFnZXMsCgkJCShsb25nIGxvbmcpKGFmdGVyLnVzZWRfcGFnZXMgLSBiZWZvcmUudXNlZF9wYWdlcyksCgkJCShsb25nIGxvbmcpKChhZnRlci51c2VkX3BhZ2VzIC0gYmVmb3JlLnVzZWRfcGFnZXMpICogQl9QQUdFX1NJWkUKCQkJCS8gbikpOwojZWxzZQoJCXByaW50ZigiJWxkIHBpcGUoKSBjYWxsczogJWxkIEVNRklMRSwgJWxkIG90aGVyXG4iLCBuLCBlbWZpbGUsIG90aGVyKTsKI2VuZGlmCgkJcmV0dXJuIG90aGVyICE9IDA7Cgl9CgoJZnByaW50ZihzdGRlcnIsICJ1c2FnZTogJXMgZnVsbHxmdWxsMnxvbmV8bGVhayBbbl1cbiIsIGFyZ3ZbMF0pOwoJcmV0dXJuIDI7Cn0K' | base64 -d > pipe918.c; echo 'LyoKICogYnQ5MTggLS0gcHJpbnQgZXZlcnkgdGhyZWFkIG9mIGEgcnVubmluZyB0ZWFtIHdpdGggaXRzIHN0YXRlIGFuZCBhCiAqIGZyYW1lLXBvaW50ZXIgYmFja3RyYWNlLCBmb3IgZGlhZ25vc2luZyBhIGh1bmcgcHJvY2VzcyBvbiBhbiBpbWFnZSB0aGF0CiAqIHNoaXBzIG5vIERlYnVnZ2VyIG9yIGdkYiAoaXNzdWUgOTE4KS4KICoKICogVGhlIHRocmVhZCBsaXN0IChzdGF0ZSwgdGhlIHNlbWFwaG9yZSBpdCB3YWl0cyBvbikgaXMgdGFrZW4gYmVmb3JlCiAqIGF0dGFjaGluZywgc28gaXQgc2hvd3Mgd2hhdCB0aGUgdGVhbSB3YXMgZG9pbmcgdW5kaXN0dXJiZWQuIEVhY2ggdGhyZWFkIGlzCiAqIHRoZW4gc3RvcHBlZCB3aXRoIGRlYnVnX3RocmVhZCgpOyBhIHRocmVhZCB0aGF0IGRvZXMgbm90IHN0b3Agd2l0aGluIHRoZQogKiB0aW1lb3V0IGlzIGluIGFuIHVuaW50ZXJydXB0aWJsZSBrZXJuZWwgd2FpdCwgd2hpY2ggaXMgaXRzZWxmIHJlcG9ydGVkLgogKiBUaGUgc3RvcHBlZCB0aHJlYWRzIGFyZSBjb250aW51ZWQgYW5kIHRoZSBkZWJ1Z2dlciBkZXRhY2hlZCBhZnRlcndhcmRzLgogKgogKiBCdWlsZCBvbiBIYWlrdTogZ2NjIC1PMSAtbyBidDkxOCBidDkxOC5jIC1sZGVidWcKICogVXNhZ2U6IGJ0OTE4IDx0ZWFtLWlkPiBbbWF4LWZyYW1lc10KICovCgojaW5jbHVkZSA8T1MuaD4KI2luY2x1ZGUgPGRlYnVnZ2VyLmg+CiNpbmNsdWRlIDxpbWFnZS5oPgoKI2luY2x1ZGUgPHN0ZGlvLmg+CiNpbmNsdWRlIDxzdGRsaWIuaD4KI2luY2x1ZGUgPHN0cmluZy5oPgoKLyogbGliZGVidWcncyBkZWJ1Z19zdXBwb3J0IEFQSSAoaGVhZGVycy9wcml2YXRlL2RlYnVnL2RlYnVnX3N1cHBvcnQuaCkuIFRoZQogKiBwcml2YXRlIGhlYWRlciBpcyBub3QgaW5zdGFsbGVkIHdpdGggaGFpa3VfZGV2ZWwsIHNvIGRlY2xhcmUgd2hhdCBpcyB1c2VkLiAqLwp0eXBlZGVmIHN0cnVjdCBkZWJ1Z19jb250ZXh0IHsKCXRlYW1faWQJdGVhbTsKCXBvcnRfaWQJbnViX3BvcnQ7Cglwb3J0X2lkCXJlcGx5X3BvcnQ7Cn0gZGVidWdfY29udGV4dDsKdHlwZWRlZiBzdHJ1Y3QgZGVidWdfc3ltYm9sX2xvb2t1cF9jb250ZXh0IGRlYnVnX3N5bWJvbF9sb29rdXBfY29udGV4dDsKCnN0YXR1c190IGluaXRfZGVidWdfY29udGV4dChkZWJ1Z19jb250ZXh0KiwgdGVhbV9pZCwgcG9ydF9pZCk7CnZvaWQgZGVzdHJveV9kZWJ1Z19jb250ZXh0KGRlYnVnX2NvbnRleHQqKTsKc3NpemVfdCBkZWJ1Z19yZWFkX21lbW9yeShkZWJ1Z19jb250ZXh0KiwgY29uc3Qgdm9pZCosIHZvaWQqLCBzaXplX3QpOwpzdGF0dXNfdCBkZWJ1Z19nZXRfY3B1X3N0YXRlKGRlYnVnX2NvbnRleHQqLCB0aHJlYWRfaWQsCglkZWJ1Z19kZWJ1Z2dlcl9tZXNzYWdlKiwgZGVidWdfY3B1X3N0YXRlKik7CnN0YXR1c190IGRlYnVnX2NyZWF0ZV9zeW1ib2xfbG9va3VwX2NvbnRleHQoZGVidWdfY29udGV4dCosIGltYWdlX2lkLAoJZGVidWdfc3ltYm9sX2xvb2t1cF9jb250ZXh0KiopOwp2b2lkIGRlYnVnX2RlbGV0ZV9zeW1ib2xfbG9va3VwX2NvbnRleHQoZGVidWdfc3ltYm9sX2xvb2t1cF9jb250ZXh0Kik7CnN0YXR1c190IGRlYnVnX2xvb2t1cF9zeW1ib2xfYWRkcmVzcyhkZWJ1Z19zeW1ib2xfbG9va3VwX2NvbnRleHQqLAoJY29uc3Qgdm9pZCosIHZvaWQqKiwgY2hhciosIGludDMyLCBjaGFyKiwgaW50MzIsIGJvb2wqKTsKCiNkZWZpbmUgTUFYX1RIUkVBRFMgMTAyNAoKc3RhdGljIGNvbnN0IGNoYXIqCnN0YXRlX25hbWUodGhyZWFkX3N0YXRlIHN0YXRlKQp7Cglzd2l0Y2ggKHN0YXRlKSB7CgkJY2FzZSBCX1RIUkVBRF9SVU5OSU5HOgkJcmV0dXJuICJydW5uaW5nIjsKCQljYXNlIEJfVEhSRUFEX1JFQURZOgkJcmV0dXJuICJyZWFkeSI7CgkJY2FzZSBCX1RIUkVBRF9SRUNFSVZJTkc6CXJldHVybiAicmVjZWl2aW5nIjsKCQljYXNlIEJfVEhSRUFEX0FTTEVFUDoJCXJldHVybiAiYXNsZWVwIjsKCQljYXNlIEJfVEhSRUFEX1NVU1BFTkRFRDoJcmV0dXJuICJzdXNwZW5kZWQiOwoJCWNhc2UgQl9USFJFQURfV0FJVElORzoJCXJldHVybiAid2FpdGluZyI7CgkJZGVmYXVsdDoJCQkJCXJldHVybiAiPyI7Cgl9Cn0KCgpzdGF0aWMgdm9pZApwcmludF9hZGRyZXNzKGRlYnVnX3N5bWJvbF9sb29rdXBfY29udGV4dCogbG9va3VwLCBjb25zdCBjaGFyKiB0YWcsCgl2b2lkKiBhZGRyZXNzKQp7CgljaGFyIHN5bWJvbFsyNTZdID0gIiI7CgljaGFyIGltYWdlW0JfUEFUSF9OQU1FX0xFTkdUSF0gPSAiIjsKCXZvaWQqIGJhc2UgPSBOVUxMOwoJYm9vbCBleGFjdCA9IGZhbHNlOwoJaWYgKGxvb2t1cCAhPSBOVUxMICYmIGRlYnVnX2xvb2t1cF9zeW1ib2xfYWRkcmVzcyhsb29rdXAsIGFkZHJlc3MsICZiYXNlLAoJCQlzeW1ib2wsIHNpemVvZihzeW1ib2wpLCBpbWFnZSwgc2l6ZW9mKGltYWdlKSwgJmV4YWN0KSA9PSBCX09LKSB7CgkJY29uc3QgY2hhciogaW1hZ2VCYXNlID0gc3RycmNocihpbWFnZSwgJy8nKTsKCQlwcmludGYoIiAgICAlcyAlcCAgJXMgKyAweCVseCAgKCVzKVxuIiwgdGFnLCBhZGRyZXNzLAoJCQlzeW1ib2xbMF0gIT0gJ1wwJyA/IHN5bWJvbCA6ICI/IiwKCQkJKHVuc2lnbmVkIGxvbmcpKChjaGFyKilhZGRyZXNzIC0gKGNoYXIqKWJhc2UpLAoJCQlpbWFnZUJhc2UgIT0gTlVMTCA/IGltYWdlQmFzZSArIDEgOiBpbWFnZSk7Cgl9IGVsc2UKCQlwcmludGYoIiAgICAlcyAlcCAgP1xuIiwgdGFnLCBhZGRyZXNzKTsKfQoKCmludAptYWluKGludCBhcmdjLCBjaGFyKiogYXJndikKewoJaWYgKGFyZ2MgPCAyKSB7CgkJZnByaW50ZihzdGRlcnIsICJ1c2FnZTogJXMgPHRlYW0taWQ+IFttYXgtZnJhbWVzXVxuIiwgYXJndlswXSk7CgkJcmV0dXJuIDI7Cgl9Cgl0ZWFtX2lkIHRlYW0gPSBhdG9pKGFyZ3ZbMV0pOwoJaW50IG1heEZyYW1lcyA9IGFyZ2MgPiAyID8gYXRvaShhcmd2WzJdKSA6IDQwOwoKCXN0YXRpYyB0aHJlYWRfaW5mbyB0aHJlYWRzW01BWF9USFJFQURTXTsKCWludCBjb3VudCA9IDA7CglpbnQzMiBjb29raWUgPSAwOwoJd2hpbGUgKGNvdW50IDwgTUFYX1RIUkVBRFMKCQkmJiBnZXRfbmV4dF90aHJlYWRfaW5mbyh0ZWFtLCAmY29va2llLCAmdGhyZWFkc1tjb3VudF0pID09IEJfT0spCgkJY291bnQrKzsKCglwcmludGYoInRlYW0gJWQ6ICVkIHRocmVhZHMgKHN0YXRlIGJlZm9yZSBhdHRhY2hpbmcpXG4iLCAoaW50KXRlYW0sIGNvdW50KTsKCWZvciAoaW50IGkgPSAwOyBpIDwgY291bnQ7IGkrKykgewoJCWNoYXIgc2VtTmFtZVtCX09TX05BTUVfTEVOR1RIXSA9ICIiOwoJCXNlbV9pbmZvIHNlbUluZm87CgkJaWYgKHRocmVhZHNbaV0uc2VtID49IDAgJiYgZ2V0X3NlbV9pbmZvKHRocmVhZHNbaV0uc2VtLCAmc2VtSW5mbykgPT0gQl9PSykKCQkJc3RybGNweShzZW1OYW1lLCBzZW1JbmZvLm5hbWUsIHNpemVvZihzZW1OYW1lKSk7CgkJcHJpbnRmKCIgICU2ZCAlLTMycyAlLTlzIHNlbSAlZCAlc1xuIiwgKGludCl0aHJlYWRzW2ldLnRocmVhZCwKCQkJdGhyZWFkc1tpXS5uYW1lLCBzdGF0ZV9uYW1lKHRocmVhZHNbaV0uc3RhdGUpLAoJCQkoaW50KXRocmVhZHNbaV0uc2VtLCBzZW1OYW1lKTsKCX0KCglwb3J0X2lkIGRlYnVnZ2VyUG9ydCA9IGNyZWF0ZV9wb3J0KDY0LCAiYnQ5MTggZGVidWdnZXIiKTsKCXBvcnRfaWQgbnViUG9ydCA9IGluc3RhbGxfdGVhbV9kZWJ1Z2dlcih0ZWFtLCBkZWJ1Z2dlclBvcnQpOwoJaWYgKG51YlBvcnQgPCAwKSB7CgkJZnByaW50ZihzdGRlcnIsICJpbnN0YWxsX3RlYW1fZGVidWdnZXI6ICVzXG4iLCBzdHJlcnJvcihudWJQb3J0KSk7CgkJcmV0dXJuIDE7Cgl9CglkZWJ1Z19jb250ZXh0IGNvbnRleHQ7CglzdGF0dXNfdCBlcnJvciA9IGluaXRfZGVidWdfY29udGV4dCgmY29udGV4dCwgdGVhbSwgbnViUG9ydCk7CglpZiAoZXJyb3IgIT0gQl9PSykgewoJCWZwcmludGYoc3RkZXJyLCAiaW5pdF9kZWJ1Z19jb250ZXh0OiAlc1xuIiwgc3RyZXJyb3IoZXJyb3IpKTsKCQlyZXR1cm4gMTsKCX0KCglzdGF0aWMgYm9vbCBzdG9wcGVkW01BWF9USFJFQURTXTsKCWZvciAoaW50IGkgPSAwOyBpIDwgY291bnQ7IGkrKykKCQlkZWJ1Z190aHJlYWQodGhyZWFkc1tpXS50aHJlYWQpOwoKCS8qIENvbGxlY3QgdGhlIHN0b3Agbm90aWZpY2F0aW9ucy4gRXZlcnkgZGVidWdnZXIgbWVzc2FnZSBzdGFydHMgd2l0aCBhCgkgKiBkZWJ1Z19vcmlnaW4sIGFuZCBldmVyeSBzeW5jaHJvbm91cyBvbmUgbWVhbnMgaXRzIHRocmVhZCBpcyBzdG9wcGVkLiAqLwoJaW50IHN0b3BwZWRDb3VudCA9IDA7Cgl3aGlsZSAoc3RvcHBlZENvdW50IDwgY291bnQpIHsKCQlpbnQzMiBjb2RlOwoJCWRlYnVnX2RlYnVnZ2VyX21lc3NhZ2VfZGF0YSBtZXNzYWdlOwoJCXNzaXplX3Qgc2l6ZSA9IHJlYWRfcG9ydF9ldGMoZGVidWdnZXJQb3J0LCAmY29kZSwgJm1lc3NhZ2UsCgkJCXNpemVvZihtZXNzYWdlKSwgQl9SRUxBVElWRV9USU1FT1VULCAzMDAwMDAwKTsKCQlpZiAoc2l6ZSA8IDApCgkJCWJyZWFrOwoJCWZvciAoaW50IGkgPSAwOyBpIDwgY291bnQ7IGkrKykgewoJCQlpZiAodGhyZWFkc1tpXS50aHJlYWQgPT0gbWVzc2FnZS5vcmlnaW4udGhyZWFkICYmICFzdG9wcGVkW2ldKSB7CgkJCQlzdG9wcGVkW2ldID0gdHJ1ZTsKCQkJCXN0b3BwZWRDb3VudCsrOwoJCQl9CgkJfQoJfQoKCWRlYnVnX3N5bWJvbF9sb29rdXBfY29udGV4dCogbG9va3VwID0gTlVMTDsKCWVycm9yID0gZGVidWdfY3JlYXRlX3N5bWJvbF9sb29rdXBfY29udGV4dCgmY29udGV4dCwgLTEsICZsb29rdXApOwoJaWYgKGVycm9yICE9IEJfT0spIHsKCQlmcHJpbnRmKHN0ZGVyciwgInN5bWJvbCBsb29rdXA6ICVzXG4iLCBzdHJlcnJvcihlcnJvcikpOwoJCWxvb2t1cCA9IE5VTEw7Cgl9CgoJZm9yIChpbnQgaSA9IDA7IGkgPCBjb3VudDsgaSsrKSB7CgkJcHJpbnRmKCJcbnRocmVhZCAlZCBcIiVzXCIgKHdhcyAlcylcbiIsIChpbnQpdGhyZWFkc1tpXS50aHJlYWQsCgkJCXRocmVhZHNbaV0ubmFtZSwgc3RhdGVfbmFtZSh0aHJlYWRzW2ldLnN0YXRlKSk7CgkJaWYgKCFzdG9wcGVkW2ldKSB7CgkJCXByaW50ZigiICAgIGRpZCBub3Qgc3RvcCB3aXRoaW4gMyBzICh1bmludGVycnVwdGlibGUgd2FpdClcbiIpOwoJCQljb250aW51ZTsKCQl9CgkJZGVidWdfY3B1X3N0YXRlIGNwdTsKCQllcnJvciA9IGRlYnVnX2dldF9jcHVfc3RhdGUoJmNvbnRleHQsIHRocmVhZHNbaV0udGhyZWFkLCBOVUxMLCAmY3B1KTsKCQlpZiAoZXJyb3IgIT0gQl9PSykgewoJCQlwcmludGYoIiAgICBnZXRfY3B1X3N0YXRlOiAlc1xuIiwgc3RyZXJyb3IoZXJyb3IpKTsKCQkJY29udGludWU7CgkJfQoJCXByaW50X2FkZHJlc3MobG9va3VwLCAicGMiLCAodm9pZCopY3B1LmVscik7CgkJcHJpbnRfYWRkcmVzcyhsb29rdXAsICJsciIsICh2b2lkKiljcHUubHIpOwoJCXZvaWQqIGZyYW1lID0gKHZvaWQqKWNwdS54WzI5XTsKCQlmb3IgKGludCBmID0gMDsgZiA8IG1heEZyYW1lcyAmJiBmcmFtZSAhPSBOVUxMOyBmKyspIHsKCQkJdm9pZCogcGFpclsyXTsKCQkJaWYgKGRlYnVnX3JlYWRfbWVtb3J5KCZjb250ZXh0LCBmcmFtZSwgcGFpciwgc2l6ZW9mKHBhaXIpKQoJCQkJCSE9IHNpemVvZihwYWlyKSkKCQkJCWJyZWFrOwoJCQlpZiAocGFpclsxXSA9PSBOVUxMKQoJCQkJYnJlYWs7CgkJCXByaW50X2FkZHJlc3MobG9va3VwLCAiICAiLCBwYWlyWzFdKTsKCQkJaWYgKChjaGFyKilwYWlyWzBdIDw9IChjaGFyKilmcmFtZSkKCQkJCWJyZWFrOwoJCQlmcmFtZSA9IHBhaXJbMF07CgkJfQoJCXByaW50ZigiICAgIHgwICUjbHggeDEgJSNseCB4MiAlI2x4XG4iLCBjcHUueFswXSwgY3B1LnhbMV0sIGNwdS54WzJdKTsKCX0KCglmb3IgKGludCBpID0gMDsgaSA8IGNvdW50OyBpKyspIHsKCQlpZiAoIXN0b3BwZWRbaV0pCgkJCWNvbnRpbnVlOwoJCWRlYnVnX251Yl9jb250aW51ZV90aHJlYWQgbWVzc2FnZTsKCQltZXNzYWdlLnRocmVhZCA9IHRocmVhZHNbaV0udGhyZWFkOwoJCW1lc3NhZ2UuaGFuZGxlX2V2ZW50ID0gQl9USFJFQURfREVCVUdfSEFORExFX0VWRU5UOwoJCW1lc3NhZ2Uuc2luZ2xlX3N0ZXAgPSBmYWxzZTsKCQl3cml0ZV9wb3J0KG51YlBvcnQsIEJfREVCVUdfTUVTU0FHRV9DT05USU5VRV9USFJFQUQsICZtZXNzYWdlLAoJCQlzaXplb2YobWVzc2FnZSkpOwoJfQoJaWYgKGxvb2t1cCAhPSBOVUxMKQoJCWRlYnVnX2RlbGV0ZV9zeW1ib2xfbG9va3VwX2NvbnRleHQobG9va3VwKTsKCWRlc3Ryb3lfZGVidWdfY29udGV4dCgmY29udGV4dCk7CglyZW1vdmVfdGVhbV9kZWJ1Z2dlcih0ZWFtKTsKCXJldHVybiAwOwp9Cg==' | base64 -d > bt918.c
+# | echo "== identity"; uname -v; sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so pipe918.c bt918.c
+# | pkgman search -i -D nodejs24 2>&1 | tail -1; pkgman search -i -D libuv 2>&1 | tail -1
+# | bash -c 'ulimit -n 128 && echo "ulimit -n 128 ok: $(ulimit -n)"'
+# | gcc -O1 -Wall -o pipe918 pipe918.c 2>&1 | head; gcc -O1 -Wall -o bt918 bt918.c -ldebug 2>&1 | head
+# | echo "== pipe918"
+# | for m in one full full2; do echo "=== pipe918 $m"; ./pipe918 $m; echo "rc=$?"; done
+# | for i in 1 2; do echo "=== pipe918 leak 200000 ($i)"; ./pipe918 leak 200000; echo "rc=$?"; done
+# | echo "== named FIFO still blocks a lone writer and is released by a reader"
+# | rm -f /tmp/f918; mkfifo /tmp/f918
+# | ( echo hello > /tmp/f918; echo "writer done" ) & w=$!
+# | sleep 2; kill -0 $w 2>/dev/null && echo "writer blocked while no reader: yes"
+# | cat /tmp/f918; wait $w; rm -f /tmp/f918
+# | echo "== node tree"
+# | S=/boot/home/node-src; rm -rf $S; mkdir -p $S; cd $S || exit 1
+# | curl -sSfo node-v24.21.0.tar.gz https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz || exit 1
+# | echo '622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  node-v24.21.0.tar.gz' | sha256sum -c - || exit 1
+# | curl -sSfo nodejs-24.21.0.patchset https://raw.githubusercontent.com/haikuports/haikuports/master/net-libs/nodejs/patches/nodejs-24.21.0.patchset || exit 1
+# | echo '4960b7bed0db2e6f68ebf5b490b08fcecd6e86a21d45e8af73793856f5f8cefd  nodejs-24.21.0.patchset' | sha256sum -c - || exit 1
+# | echo 'RnJvbTogRGVCZU9TIDxkZWJlb3NAbG9jYWxob3N0PgpTdWJqZWN0OiB2ODogbGlic2FtcGxlcjogZmlsbCB0aGUgcmVnaXN0ZXIgc3RhdGUgb24gSGFpa3UgYXJtNjQKClNpZ25hbEhhbmRsZXI6OkZpbGxSZWdpc3RlclN0YXRlKCkgaGFzIEhhaWt1IGJyYW5jaGVzIGZvciBpYTMyIGFuZCB4NjQKb25seSwgc28gb24gYXJtNjQgZXZlcnkgU0lHUFJPRiBzYW1wbGUgY2FycmllcyBwYyA9IHNwID0gZnAgPSBudWxscHRyLgpUaGUgc3RhY2sgd2FsayB0aGVuIGRlcmVmZXJlbmNlcyBmcCAtIDE2ICgweGZmZmZmZmZmZmZmZmZmZjApIGluc2lkZSB0aGUKc2lnbmFsIGhhbmRsZXIgYW5kIHRoZSBwcm9jZXNzIGNyYXNoZXMgdGhlIGZpcnN0IHRpbWUgdGhlIENQVSBwcm9maWxlciwKLS1jcHUtcHJvZiBvciAtLXByb2YgdGFrZXMgYSBzYW1wbGUuCgpIYWlrdSdzIGFybTY0IG1jb250ZXh0X3QgaXMgc3RydWN0IHZyZWdzIChoZWFkZXJzL3Bvc2l4L2FyY2gvYXJtNjQvCnNpZ25hbC5oKTogeFszMF0gKHgyOSA9IGZwKSwgbHIsIHNwLCBlbHIgKHRoZSBpbnRlcnJ1cHRlZCBwYyksIGZpbGxlZCBieQphcmNoX3NldHVwX3NpZ25hbF9mcmFtZSgpIGluIHRoZSBrZXJuZWwuCgpkaWZmIC0tZ2l0IGEvZGVwcy92OC9zcmMvbGlic2FtcGxlci9zYW1wbGVyLmNjIGIvZGVwcy92OC9zcmMvbGlic2FtcGxlci9zYW1wbGVyLmNjCi0tLSBhL2RlcHMvdjgvc3JjL2xpYnNhbXBsZXIvc2FtcGxlci5jYworKysgYi9kZXBzL3Y4L3NyYy9saWJzYW1wbGVyL3NhbXBsZXIuY2MKQEAgLTUzMCw2ICs1MzAsMTMgQEAgdm9pZCBTaWduYWxIYW5kbGVyOjpGaWxsUmVnaXN0ZXJTdGF0ZSh2b2lkKiBjb250ZXh0LCBSZWdpc3RlclN0YXRlKiBzdGF0ZSkgewogICBzdGF0ZS0+cGMgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5yaXApOwogICBzdGF0ZS0+c3AgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5yc3ApOwogICBzdGF0ZS0+ZnAgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5yYnApOworI2VsaWYgVjhfSE9TVF9BUkNIX0FSTTY0CisgIHN0YXRlLT5wYyA9IHJlaW50ZXJwcmV0X2Nhc3Q8dm9pZCo+KG1jb250ZXh0LmVscik7CisgIHN0YXRlLT5zcCA9IHJlaW50ZXJwcmV0X2Nhc3Q8dm9pZCo+KG1jb250ZXh0LnNwKTsKKyAgLy8gRlAgaXMgYW4gYWxpYXMgZm9yIHgyOS4KKyAgc3RhdGUtPmZwID0gcmVpbnRlcnByZXRfY2FzdDx2b2lkKj4obWNvbnRleHQueFsyOV0pOworICAvLyBMUiBpcyBhbiBhbGlhcyBmb3IgeDMwLgorICBzdGF0ZS0+bHIgPSByZWludGVycHJldF9jYXN0PHZvaWQqPihtY29udGV4dC5scik7CiAjZW5kaWYgIC8vIFY4X0hPU1RfQVJDSF8qCiAjZWxpZiBWOF9PU19ORVRCU0QKICNpZiBWOF9IT1NUX0FSQ0hfSUEzMgpGcm9tOiBEZUJlT1MgPG5vcmVwbHlAZGViZW9zPgpTdWJqZWN0OiBbUEFUQ0hdIGhhaWt1OiByZXN0b3JlIFJlc2V0U2lnbmFsSGFuZGxlcnMsIHNraXBwaW5nIFNJR0tJTExUSFIKClRoZSBIYWlrdVBvcnRzIHBhdGNoc2V0IGNvbW1lbnRlZCBvdXQgYm90aCBzaWdhY3Rpb24oKSBjYWxscyBpbgpSZXNldFNpZ25hbEhhbmRsZXJzKCkgYmVjYXVzZSBzaWdhY3Rpb24oU0lHS0lMTFRIUikgZmFpbHMgd2l0aCBFSU5WQUwgb24gSGFpa3UKYW5kIHRyaXBwZWQgdGhlIENIRUNLLiBUaGF0IGRpc2FibGVkIHRoZSBsb29wIGFsdG9nZXRoZXI6IG5vZGUgbmV2ZXIgc2V0cwpTSUdQSVBFIChhbmQgU0lHWEZTWikgdG8gU0lHX0lHTiwgc28gYSB3cml0ZSB0byBhIGNsb3NlZCBwaXBlIG9yIHNvY2tldCBraWxscwp0aGUgcHJvY2VzcyB3aXRoIFNJR1BJUEUgaW5zdGVhZCBvZiBmYWlsaW5nIHdpdGggRVBJUEUuIFNraXAgU0lHS0lMTFRIUiB0aGUgd2F5CmxpYnV2J3MgdXZfX3Byb2Nlc3NfY2hpbGRfaW5pdCBkb2VzLCBhbmQga2VlcCB0aGUgY2hlY2tzLgoKQXBwbGllcyBvbiB0b3Agb2Ygbm9kZWpzLTI0LjIxLjAucGF0Y2hzZXQuCgpkaWZmIC0tZ2l0IGEvc3JjL25vZGUuY2MgYi9zcmMvbm9kZS5jYwotLS0gYS9zcmMvbm9kZS5jYworKysgYi9zcmMvbm9kZS5jYwpAQCAtNTAzLDYgKzUwMywxMCBAQAogICBmb3IgKHVuc2lnbmVkIG5yID0gMTsgbnIgPCBrTWF4U2lnbmFsOyBuciArPSAxKSB7CiAgICAgaWYgKG5yID09IFNJR0tJTEwgfHwgbnIgPT0gU0lHU1RPUCkKICAgICAgIGNvbnRpbnVlOworI2lmZGVmIFNJR0tJTExUSFIKKyAgICBpZiAobnIgPT0gU0lHS0lMTFRIUikKKyAgICAgIGNvbnRpbnVlOyAgLy8gSGFpa3U6IGNhbm5vdCBiZSBjYXVnaHQgb3IgaWdub3JlZDsgc2lnYWN0aW9uKCkgcmVqZWN0cyBpdC4KKyNlbmRpZgogICAgIGFjdC5zYV9oYW5kbGVyID0gKG5yID09IFNJR1BJUEUgfHwgbnIgPT0gU0lHWEZTWikgPyBTSUdfSUdOIDogU0lHX0RGTDsKICAgICBpZiAoYWN0LnNhX2hhbmRsZXIgPT0gU0lHX0RGTCkgewogICAgICAgLy8gVGhlIG9ubHkgYmFkIGhhbmRsZXIgdmFsdWUgd2UgY2FuIGluaGVyaXQgZnJvbSBiZWZvcmUgZXhlYyBpcyBTSUdfSUdOCkBAIC01MTIsMTAgKzUxNiwxMCBAQAogICAgICAgLy8gbGlicmFyeSkgaGFzIHNldCB1cCBvd24gc2lnbmFsIGhhbmRsZXIgZm9yIG93biBwdXJwb3NlcwogICAgICAgLy8gKGUuZy4gcHJvZmlsaW5nKS4gSWYgdGhhdCdzIHRoZSBjYXNlLCB3ZSB3YW50IHRvIGtlZXAgaXQgaW50YWN0LgogICAgICAgc3RydWN0IHNpZ2FjdGlvbiBvbGQ7Ci0gICAgICAvLyBDSEVDS19FUSgwLCBzaWdhY3Rpb24obnIsIG51bGxwdHIsICZvbGQpKTsKKyAgICAgIENIRUNLX0VRKDAsIHNpZ2FjdGlvbihuciwgbnVsbHB0ciwgJm9sZCkpOwogICAgICAgaWYgKChvbGQuc2FfZmxhZ3MgJiBTQV9TSUdJTkZPKSB8fCBvbGQuc2FfaGFuZGxlciAhPSBTSUdfSUdOKSBjb250aW51ZTsKICAgICB9Ci0gICAgLy8gQ0hFQ0tfRVEoMCwgc2lnYWN0aW9uKG5yLCAmYWN0LCBudWxscHRyKSk7CisgICAgQ0hFQ0tfRVEoMCwgc2lnYWN0aW9uKG5yLCAmYWN0LCBudWxscHRyKSk7CiAgIH0KICNlbmRpZiAgLy8gX19QT1NJWF9fCiB9CkZyb206IERlQmVPUyA8bm9yZXBseUBkZWJlb3M+ClN1YmplY3Q6IFtQQVRDSF0gaGFpa3U6IG5hbWUgU0lHS0lMTFRIUiBzbyBhIGNoaWxkIGtpbGxlZCBieSBpdCBpcyBub3QgcmVwb3J0ZWQgYXMgZXhpdCAwCgpIYWlrdSByZXBvcnRzIGNyYXNoZWQgYW5kIGFib3J0ZWQgdGVhbXMgYXMga2lsbGVkIGJ5IFNJR0tJTExUSFIgKDIxKSAoRGVCZU9TCmlzc3VlIDg3NikuIHNpZ25vX3N0cmluZygpIGhhZCBubyBjYXNlIGZvciBpdCBhbmQgcmV0dXJuZWQgIiIsIGFuZCBDaGlsZFByb2Nlc3MKb25leGl0IG9ubHkgcmVjb3JkcyBhIHRydXRoeSBzaWduYWxDb2RlIChsaWIvaW50ZXJuYWwvY2hpbGRfcHJvY2Vzcy5qczoyNzIpLCBzbwpzdWNoIGEgY2hpbGQgZW1pdHRlZCBleGl0KDAsIG51bGwpIC0tIGEgY3Jhc2ggbG9va2VkIGxpa2Ugc3VjY2Vzcy4gV2l0aCB0aGlzLAp0aGUgZXhpdCBldmVudCByZXBvcnRzIChudWxsLCAnU0lHS0lMTFRIUicpLgoKQXBwbGllcyBvbiB0b3Agb2Ygbm9kZWpzLTI0LjIxLjAucGF0Y2hzZXQuCgpkaWZmIC0tZ2l0IGEvc3JjL2FwaS91dGlscy5jYyBiL3NyYy9hcGkvdXRpbHMuY2MKLS0tIGEvc3JjL2FwaS91dGlscy5jYworKysgYi9zcmMvYXBpL3V0aWxzLmNjCkBAIC0xNTcsNiArMTU3LDEwIEBACiAjZW5kaWYKICNlbmRpZgogCisjaWZkZWYgU0lHS0lMTFRIUgorICAgIFNJR05PX0NBU0UoU0lHS0lMTFRIUik7CisjZW5kaWYKKwogI2lmZGVmIFNJR1NZUwogICAgIFNJR05PX0NBU0UoU0lHU1lTKTsKICNlbmRpZgo=' | base64 -d > nodejs-24.21.0-debeos.patchset
+# | echo '0c4e24ef25cef7599617960292245a5b1447aef1a7272b966656deb50026de1d  nodejs-24.21.0-debeos.patchset' | sha256sum -c - || exit 1
+# | python3 -I -c "import tarfile,sys; tarfile.open(sys.argv[1]).extractall(filter=\"tar\")" node-v24.21.0.tar.gz || exit 1
+# | cd node-v24.21.0 || exit 1
+# | for p in nodejs-24.21.0.patchset nodejs-24.21.0-debeos.patchset; do echo "== applying $p"; patch -p1 --batch --forward < ../$p > ../$p.out 2>&1; rc=$?; grep -E -c '^patching file' ../$p.out; grep -E -i 'fail|reject|hunk.*(offset|fuzz)' ../$p.out; echo "patch rc=$rc"; [ $rc -eq 0 ] || exit 1; done
+# | ls -d test/parallel test/sequential; ls test/parallel | grep -c '^test-'; ls test/sequential | grep -c '^test-'
+# | grep -n -i haiku tools/utils.py | head -5
+# | echo "== test-worker-init-failure x10"
+# | for i in $(seq 1 10); do
+# | 	s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -t 60 -p tap parallel/test-worker-init-failure > /tmp/wif-$i.tap 2>&1
+# | 	echo "run $i rc=$? wall=$(( $(date +%s) - s ))s $(grep -E '^(ok|not ok)' /tmp/wif-$i.tap)"
+# | 	if grep -q "^not ok" /tmp/wif-$i.tap; then
+# | 		# the timed-out test leaves its ulimit'ed child behind; show where its threads are
+# | 		c=$(ps | awk '/test-worker-init-failure.js child/ && !/awk/ {print $(NF-3)}' | head -1)
+# | 		if [ -n "$c" ]; then
+# | 			echo "  leftover child team $c:"
+# | 			./bt918 $c 12 > /tmp/bt-$i.txt 2>&1
+# | 			echo "    WorkerThreads by pc: $(grep -A1 '"WorkerThread"' /tmp/bt-$i.txt | awk '$1=="pc"{print $3}' | sort | uniq -c | tr -s ' ' | tr '\n' ';')"
+# | 			grep -m1 -A13 '"WorkerThread"' /tmp/bt-$i.txt | sed 's/^/    /'
+# | 			kill -9 $c
+# | 		fi
+# | 	fi
+# | done
+# | echo "== regression: parallel/test-worker* and sequential/test-child-process-emfile"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 8 -t 120 -p tap $(cd test && ls parallel/test-worker*.js parallel/test-worker*.mjs 2>/dev/null | sed 's/\.m\?js$//') sequential/test-child-process-emfile > /tmp/reg.tap 2>&1
+# | echo "regression rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -E "^1\.\." /tmp/reg.tap
+# | echo "ok: $(grep -cE '^ok ' /tmp/reg.tap)  not ok: $(grep -cE '^not ok ' /tmp/reg.tap)  skip: $(grep -cE '^ok .*# skip' /tmp/reg.tap)"
+# | grep -E "^not ok " /tmp/reg.tap
+# | grep -E "^ok .*child-process-emfile|^not ok .*child-process-emfile" /tmp/reg.tap
+# | echo "--- failure details"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/reg.tap | grep -vE "^\s*$" | head -120
+# | cp /tmp/reg.tap /boot/home/w918/reg.tap
+# ---- raw output ----
+== identity
+hrev59996 Oct 19 2026 21:09:42
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+cd061d78a0cd3535c1f8f84bfcd21b8575a9aa975bc7ed960137a488aabdc4f1  pipe918.c
+cf80c75d9e777156a7f7f317fd203a4b5809fcb22842c116c402b0b3004bcd8e  bt918.c
+<system>    nodejs24  24.21.0-2  arm64
+<system>    libuv  1.52.1-4  arm64
+ulimit -n 128 ok: 128
+pipe918.c:26:10: fatal error: errno.h: No such file or directory
+   26 | #include <errno.h>
+      |          ^~~~~~~~~
+compilation terminated.
+bt918.c:16:10: fatal error: OS.h: No such file or directory
+   16 | #include <OS.h>
+      |          ^~~~~~
+compilation terminated.
+== pipe918
+=== pipe918 one
+rc=127
+=== pipe918 full
+rc=127
+=== pipe918 full2
+rc=127
+=== pipe918 leak 200000 (1)
+rc=127
+=== pipe918 leak 200000 (2)
+rc=127
+== named FIFO still blocks a lone writer and is released by a reader
+bash: line 9: ./pipe918: No such file or directory
+bash: line 9: ./pipe918: No such file or directory
+bash: line 9: ./pipe918: No such file or directory
+bash: line 10: ./pipe918: No such file or directory
+bash: line 10: ./pipe918: No such file or directory
+writer blocked while no reader: yes
+hello
+writer done
+== node tree
+node-v24.21.0.tar.gz: OK
+nodejs-24.21.0.patchset: OK
+nodejs-24.21.0-debeos.patchset: OK
+== applying nodejs-24.21.0.patchset
+30
+patch rc=0
+== applying nodejs-24.21.0-debeos.patchset
+3
+patch rc=0
+test/parallel
+test/sequential
+4513
+120
+62:  elif id == 'Haiku':
+63:    return 'haiku'
+== test-worker-init-failure x10
+run 1 rc=1 wall=185s not ok 1 parallel/test-worker-init-failure
+run 2 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+run 3 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+run 4 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+run 5 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+run 6 rc=1 wall=180s not ok 1 parallel/test-worker-init-failure
+run 7 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+run 8 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+run 9 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+run 10 rc=1 wall=181s not ok 1 parallel/test-worker-init-failure
+== regression: parallel/test-worker* and sequential/test-child-process-emfile
+regression rc=1 wall=368s
+1..147
+ok: 145  not ok: 2  skip: 0
+not ok 118 parallel/test-worker-memory
+not ok 147 parallel/test-worker-init-failure
+ok 146 sequential/test-child-process-emfile
+--- failure details
+not ok 118 parallel/test-worker-memory
+  ---
+  duration_ms: 5901.18100
+  severity: fail
+  exitcode: 1
+  stack: |-
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=7.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=6.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=5.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=4.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=3.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=2.5 (numWorkers=8)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=1.5 (numWorkers=8)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=0)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=1)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=2)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=3)
+    run() called with n=0.5 (numWorkers=8)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=4)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=5)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=6)
+    run() called with n=-0.5 (numWorkers=8)
+    done() called (finished=7)
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    AssertionError [ERR_ASSERTION]: Unexpected memory overhead: [
+      {
+        rss: 15101952,
+        heapTotal: 7921664,
+        heapUsed: 5484200,
+        external: 2599131,
+        arrayBuffers: 143651
+      },
+      {
+        rss: 82096128,
+        heapTotal: 8445952,
+        heapUsed: 6819168,
+        external: 2599171,
+        arrayBuffers: 143651
+      }
+    ]
+        at /boot/home/node-src/node-v24.21.0/test/parallel/test-worker-memory.js:46:14
+        at /boot/home/node-src/node-v24.21.0/test/common/index.js:481:15
+        at run (/boot/home/node-src/node-v24.21.0/test/parallel/test-worker-memory.js:23:12)
+        at Worker.<anonymous> (/boot/home/node-src/node-v24.21.0/test/parallel/test-worker-memory.js:31:5)
+        at Worker.<anonymous> (/boot/home/node-src/node-v24.21.0/test/common/index.js:481:15)
+        at Worker.emit (node:events:514:28)
+        at [kOnExit] (node:internal/worker:400:10)
+        at Worker.<computed>.onexit (node:internal/worker:295:20) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }

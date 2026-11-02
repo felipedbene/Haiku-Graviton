@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: install-patch
+# instance: i-04ea7472c5ed95c7c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T011453Z   end: 20261102T011459Z   rc: 0
+# script sha256: 3f5226ec0df408182d3f6c32631e934c790dd8f453657f8931ef28cc0bb1bb18
+# ---- script ----
+# | cat /boot/home/node-src/nodejs-24.21.0.patchset.out | head; pkgman install -y cmd:patch cmd:tar 2>&1 | tail -3; type -p patch tar
+# ---- raw output ----
+bash: line 13: patch: command not found
+[system] Changes applied. Old activation state backed up in "state_2026-11-01_19:05:08-1"
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/patch
+/boot/system/bin/tar

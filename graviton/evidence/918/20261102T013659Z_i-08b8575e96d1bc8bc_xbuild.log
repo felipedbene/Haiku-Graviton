@@ -1,0 +1,192 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-08b8575e96d1bc8bc   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T013659Z   end: 20261102T013906Z   rc: 0
+# script sha256: f110ef6b5ebd3cc0d3f1c1ec85f6325e967bf62a0c6ab84989b51dee48af4190
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | ACCT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo unknown)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/w918
+# | mkdir -p /opt/w && cd /opt/w && rm -rf hg buildtools out canonical && mkdir -p out canonical
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | aws s3 cp --quiet --recursive s3://haiku-graviton-$ACCT-us-west-2/tdeflib/canonical/ canonical/ && sha256sum canonical/*
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | ${X}objcopy -O binary --only-section=_haiku_revision ../../canonical/libroot.so /tmp/rev.bin && REV=$(tr -d '\0' < /tmp/rev.bin)
+# | echo "canonical revision section: '$REV'"
+# | export SOURCE_DATE_EPOCH=$(date -u -d '2026-10-19 21:09:42' +%s)
+# | R=objects/haiku/arm64/release/system
+# | build() {	# build <label> <git-ref>
+# | 	git -C .. checkout -q -f "$2" || { echo "CHECKOUT FAILED $2"; return 1; }
+# | 	git -C .. log -1 --format="$1 %H %s"
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION="$REV" "<revisioned>kernel_arm64" "<revisioned>libroot.so" bfs > ../../out/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' ../../out/jam-$1.log) warnings_vfs=$(grep -c 'vfs.cpp.*warning' ../../out/jam-$1.log)"
+# | 	[ $rc = 0 ] || { tail -30 ../../out/jam-$1.log; return 1; }
+# | 	cp $R/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.$1
+# | 	cp $R/libroot/revisioned/libroot.so ../../out/libroot.so.$1
+# | 	cp $(find objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs -name bfs -type f | head -1) ../../out/bfs.$1
+# | 	sha256sum ../../out/kernel_arm64.$1 ../../out/libroot.so.$1 ../../out/bfs.$1
+# | }
+# | git -C .. fetch -q origin fix/918-worker-init-failure-hang
+# | build trunk origin/graviton
+# | build fix918 FETCH_HEAD
+# | git -C .. diff origin/graviton FETCH_HEAD --stat
+# | cd ../../out && sha256sum kernel_arm64.* libroot.so.* bfs.* | tee SHA256SUMS
+# | cmp libroot.so.trunk libroot.so.fix918 && echo "libroot identical across arms"
+# | cmp bfs.trunk bfs.fix918 && echo "bfs identical across arms"
+# | aws s3 cp --quiet --recursive . $OUT/out/ && aws s3 ls $OUT/out/
+# ---- raw output ----
+ssm-run: command d95c3a5e-539b-41a5-b317-930276595b88 on i-08b8575e96d1bc8bc (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-34161-4fa2bb)
+apt rc=0
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  canonical/haiku.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  canonical/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  canonical/libroot.so
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  canonical/runtime_loader
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+canonical revision section: 'hrev59996'
+trunk fe7fef0b47685471f94fce4af712632dc129f86a libroot: keep the current time for UTIME_NOW in utimensat() (#928)
+JAM trunk rc=0 wall=17s failed=0 warnings_vfs=0
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  ../../out/kernel_arm64.trunk
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  ../../out/libroot.so.trunk
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  ../../out/bfs.trunk
+fix918 c2e0fe85af263e938c50ee326e234d55b08af81e kernel: fail pipe() with EMFILE instead of hanging on a full fd table
+JAM fix918 rc=0 wall=12s failed=0 warnings_vfs=0
+0955733438eaa79a06d71cbff11941d49eb43f895ce9d9c47ae5e17b2c293fbc  ../../out/kernel_arm64.fix918
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  ../../out/libroot.so.fix918
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  ../../out/bfs.fix918
+ src/system/kernel/fs/vfs.cpp | 44 +++++++++++++++++++++++++++-----------------
+ 1 file changed, 27 insertions(+), 17 deletions(-)
+0955733438eaa79a06d71cbff11941d49eb43f895ce9d9c47ae5e17b2c293fbc  kernel_arm64.fix918
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  kernel_arm64.trunk
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  libroot.so.fix918
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  libroot.so.trunk
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  bfs.fix918
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  bfs.trunk
+libroot identical across arms
+bfs identical across arms
+2026-11-02 01:39:01        491 SHA256SUMS
+2026-11-02 01:39:01     274787 bfs.fix918
+2026-11-02 01:39:01     274787 bfs.trunk
+2026-11-02 01:39:01     348845 jam-fix918.log
+2026-11-02 01:39:01     423191 jam-trunk.log
+2026-11-02 01:39:01    2551305 kernel_arm64.fix918
+2026-11-02 01:39:01    2551305 kernel_arm64.trunk
+2026-11-02 01:39:01    1366771 libroot.so.fix918
+2026-11-02 01:39:01    1366771 libroot.so.trunk
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w918
++ mkdir -p /opt/w
++ cd /opt/w
++ rm -rf hg buildtools out canonical
++ mkdir -p out canonical
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/canonical/ canonical/
++ sha256sum canonical/haiku.hpkg canonical/kernel_arm64 canonical/libroot.so canonical/runtime_loader
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ X=/opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision ../../canonical/libroot.so /tmp/rev.bin
+++ tr -d '\0'
++ REV=hrev59996
++ echo 'canonical revision section: '\''hrev59996'\'''
+++ date -u -d '2026-10-19 21:09:42' +%s
++ export SOURCE_DATE_EPOCH=1792444182
++ SOURCE_DATE_EPOCH=1792444182
++ R=objects/haiku/arm64/release/system
++ git -C .. fetch -q origin fix/918-worker-init-failure-hang
++ build trunk origin/graviton
++ git -C .. checkout -q -f origin/graviton
++ git -C .. log -1 '--format=trunk %H %s'
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793583510
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so' bfs
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out/jam-trunk.log
+++ grep -c 'vfs.cpp.*warning' ../../out/jam-trunk.log
++ echo 'JAM trunk rc=0 wall=17s failed=0 warnings_vfs=0'
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.trunk
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out/libroot.so.trunk
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs -name bfs -type f
+++ head -1
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ../../out/bfs.trunk
++ sha256sum ../../out/kernel_arm64.trunk ../../out/libroot.so.trunk ../../out/bfs.trunk
++ build fix918 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=fix918 %H %s'
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793583527
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so' bfs
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out/jam-fix918.log
+++ grep -c 'vfs.cpp.*warning' ../../out/jam-fix918.log
++ echo 'JAM fix918 rc=0 wall=12s failed=0 warnings_vfs=0'
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.fix918
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out/libroot.so.fix918
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs -name bfs -type f
+++ head -1
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ../../out/bfs.fix918
++ sha256sum ../../out/kernel_arm64.fix918 ../../out/libroot.so.fix918 ../../out/bfs.fix918
++ git -C .. diff origin/graviton FETCH_HEAD --stat
++ cd ../../out
++ sha256sum kernel_arm64.fix918 kernel_arm64.trunk libroot.so.fix918 libroot.so.trunk bfs.fix918 bfs.trunk
++ tee SHA256SUMS
++ cmp libroot.so.trunk libroot.so.fix918
++ echo 'libroot identical across arms'
++ cmp bfs.trunk bfs.fix918
++ echo 'bfs identical across arms'
++ aws s3 cp --quiet --recursive . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w918/out/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/w918/out/
+ssm-run: Success

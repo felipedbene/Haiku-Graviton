@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: diag1
+# instance: i-04ea7472c5ed95c7c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T012927Z   end: 20261102T013016Z   rc: 0
+# script sha256: c9db95eb336aad4ab75ed7da792eedb10a0662ecc2aa3ca47f36167007d5fdf9
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.21.0
+# | echo "--- tap of run 1"; sed -n 1,40p /tmp/wif-1.tap
+# | for try in 1 2 3; do
+# | 	( ulimit -n 128 && exec node test/parallel/test-worker-init-failure.js child ) > /tmp/c.out 2>&1 &
+# | 	p=$!
+# | 	sleep 15
+# | 	if kill -0 $p 2>/dev/null; then
+# | 		echo "=== try $try: team $p STILL RUNNING after 15 s"
+# | 		echo "--- child output"; head -c 3000 /tmp/c.out
+# | 		echo "--- fdinfo $p"; fdinfo $p 2>&1 | head -200
+# | 		echo "--- bt918 $p"; /boot/home/w918/bt918 $p 40 2>&1
+# | 		kill -9 $p; wait $p 2>/dev/null
+# | 		break
+# | 	else
+# | 		wait $p; echo "=== try $try: exited rc=$?"; head -c 1500 /tmp/c.out
+# | 	fi
+# | done
+# ---- raw output ----
+--- tap of run 1
+TAP version 13
+1..1
+not ok 1 parallel/test-worker-init-failure
+  ---
+  duration_ms: 180044.30100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/parallel/test-worker-init-failure.js
+=== try 1: exited rc=0
+=== try 2: exited rc=0
+=== try 3: exited rc=0

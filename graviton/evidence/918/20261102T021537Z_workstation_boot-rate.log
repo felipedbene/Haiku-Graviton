@@ -1,0 +1,35 @@
+# evidence: boot-rate -- fresh c7g.2xlarge boots of both A/B AMIs (ctrl ami-0287bd864ec85dcda, fix ami-01b13d45924f7c3a2)
+# method: /tmp bootcheck loop: ssh via EICE (uname -v; sha256sum kernel) retried every 20 s for up to 8 min, then count 'SetupEnvironment": timed out' in get-console-output --latest
+# captured end: 20261102T021537Z
+# ---- script ----
+# | #!/bin/bash
+# | # bootcheck: for each "arm id" line, wait up to 8 min for sshd via EICE; record console timeout line.
+# | while read arm id; do
+# | 	ok=no
+# | 	for t in $(seq 1 24); do
+# | 		if /tmp/w918/evrun boot-$arm $id ssh /tmp/w918/s/id.sh 40 >/dev/null 2>&1; then ok=yes; break; fi
+# | 		rm -f $(ls -t /tmp/w918/ev/*_${id}_boot-$arm.log | head -1); sleep 20
+# | 	done
+# | 	c=$(aws ec2 get-console-output --region us-west-2 --instance-id $id --latest --query Output --output text 2>/dev/null)
+# | 	echo "$arm $id ssh_reachable=$ok env_script_timeout=$(echo "$c" | grep -c 'SetupEnvironment": timed out') console_lines=$(echo "$c" | wc -l)"
+# | done
+# ---- results ----
+# earlier boots: ab-ctrl i-09989a055c45856c3 reachable, no timeout; fix boot 1 i-0e23d61d0c4616c5b STALLED (see *_fix-boot1-console.log); fix boot 2 i-0084668eabb8a09fc reachable (ab-fix)
+ctrl i-08c7b63ad9310d808 ssh_reachable=yes env_script_timeout=0 console_lines=     981
+fix i-0292be2ce1fa8ec04 ssh_reachable=yes env_script_timeout=0 console_lines=     991
+ctrl i-08133108ae48e62ae ssh_reachable=yes env_script_timeout=0 console_lines=     982
+fix i-09aade1b279feaf36 ssh_reachable=yes env_script_timeout=0 console_lines=     992
+ctrl i-0fa626296643b4558 ssh_reachable=yes env_script_timeout=0 console_lines=     979
+fix i-0922cb9f35bfc68f1 ssh_reachable=yes env_script_timeout=0 console_lines=     969
+ctrl i-09959e54e964ca88b ssh_reachable=yes env_script_timeout=0 console_lines=     981
+fix i-0339caaa6486c52f0 ssh_reachable=yes env_script_timeout=0 console_lines=     981
+ctrl i-0ebf8426c97b1c20f ssh_reachable=yes env_script_timeout=0 console_lines=     979
+fix i-078f31bd6b36bdf5d ssh_reachable=yes env_script_timeout=0 console_lines=     969
+ctrl i-01c2cc535b9661901 ssh_reachable=yes env_script_timeout=0 console_lines=     955
+fix i-00bd203df9955ccaa ssh_reachable=yes env_script_timeout=0 console_lines=     987
+ctrl i-06428e7647871ce83 ssh_reachable=yes env_script_timeout=0 console_lines=     981
+fix i-03e83f5632f600678 ssh_reachable=yes env_script_timeout=0 console_lines=     998
+ctrl i-004a2a03cda3e1fbb ssh_reachable=yes env_script_timeout=0 console_lines=    1004
+fix i-085b81e76aae0d4df ssh_reachable=yes env_script_timeout=0 console_lines=     981
+ctrl i-0b71c966853fc4899 ssh_reachable=yes env_script_timeout=0 console_lines=     971
+fix i-0fc7b264db9695d55 ssh_reachable=yes env_script_timeout=0 console_lines=     967

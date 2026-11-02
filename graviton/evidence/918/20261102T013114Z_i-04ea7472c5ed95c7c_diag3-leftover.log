@@ -1,0 +1,377 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: diag3-leftover
+# instance: i-04ea7472c5ed95c7c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T013114Z   end: 20261102T013119Z   rc: 0
+# script sha256: 7238a7e16d81e2589c546fb43e72ff2be68f98bcd3a8ff18cdc1e7d968b31707
+# ---- script ----
+# | ps | grep -E "node|sh" | grep -v grep
+# | for t in $(ps | awk '/node/ && !/awk/ {print $2}'); do
+# | 	echo "################ team $t"
+# | 	ps -a 2>/dev/null | awk -v t=$t 'BEGIN{p=0} /^\/|^[a-z]/{p=0} {if($2==t)p=1} p' | head -3
+# | 	echo "--- fdinfo $t"; fdinfo $t 2>&1 | head -60
+# | done
+# ---- raw output ----
+/boot/system/bin/sshd -D                              64        1    0    0 
+/boot/system/bin/sh /boot/system/non-packaged/bin/remote-deskto    66        1    0    0 
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  1419      194    0    0 
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  1763      174    0    0 
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  2107      191    0    0 
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  2451      186    0    0 
+/boot/system/bin/node test/parallel/test-worker-init-failure.js  3565        7    0    0 
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  3573      184    0    0 
+/boot/system/lib/openssh/sshd-session -D -R         3854        1    0    0 
+/boot/system/lib/openssh/sshd-session -D -R         3856        1    0    0 
+/boot/system/bin/bash -s                            3857        1    0    0 
+################ team /boot/home/node-src/node-v24.21.0/test/pa
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  1419      194    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+--- fdinfo /boot/home/node-src/node-v24.21.0/test/pa
+Team: (1419) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 848856452:-281474127853968
+    1  R/W 848856452:-281474127853968
+    2  R/W 848856452:-281474127853968
+    3  R   1:1824
+    4    W 1:1824
+    5  R   1:1825
+    6    W 1:1825
+    7  R   1:1826
+    8    W 1:1826
+    9  R   1:1827
+   10    W 1:1827
+   11  R   1:1828
+   12    W 1:1828
+   13  R   1:1829
+   14    W 1:1829
+   15  R   1:1830
+   16    W 1:1830
+   17  R   2:154
+   38  R   1:2126
+   39    W 1:2126
+   40  R   1:2127
+   41    W 1:2127
+  126  R   1:1885
+  127    W 1:1885
+Team: (1763) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 848856452:-281474127853968
+    1  R/W 848856452:-281474127853968
+    2  R/W 848856452:-281474127853968
+    3  R   1:2239
+    4    W 1:2239
+    5  R   1:2240
+    6    W 1:2240
+    7  R   1:2241
+    8    W 1:2241
+    9  R   1:2242
+   10    W 1:2242
+   11  R   1:2243
+   12    W 1:2243
+   13  R   1:2244
+   14    W 1:2244
+   15  R   1:2245
+   16    W 1:2245
+   17  R   2:154
+   70  R   1:2583
+   71    W 1:2583
+   72  R   1:2584
+   73    W 1:2584
+  106  R   1:2457
+  107  R   1:2458
+  108    W 1:2457
+  109    W 1:2458
+  126  R   1:2300
+  127    W 1:2300
+Team: (2107) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 848856452:-281474127853968
+    1  R/W 848856452:-281474127853968
+################ team /boot/home/node-src/node-v24.21.0/test/pa
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  1419      194    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+--- fdinfo /boot/home/node-src/node-v24.21.0/test/pa
+Team: (1419) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 854539268:-281474122171152
+    1  R/W 854539268:-281474122171152
+    2  R/W 854539268:-281474122171152
+    3  R   1:1824
+    4    W 1:1824
+    5  R   1:1825
+    6    W 1:1825
+    7  R   1:1826
+    8    W 1:1826
+    9  R   1:1827
+   10    W 1:1827
+   11  R   1:1828
+   12    W 1:1828
+   13  R   1:1829
+   14    W 1:1829
+   15  R   1:1830
+   16    W 1:1830
+   17  R   2:154
+   38  R   1:2126
+   39    W 1:2126
+   40  R   1:2127
+   41    W 1:2127
+  126  R   1:1885
+  127    W 1:1885
+Team: (1763) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 854539268:-281474122171152
+    1  R/W 854539268:-281474122171152
+    2  R/W 854539268:-281474122171152
+    3  R   1:2239
+    4    W 1:2239
+    5  R   1:2240
+    6    W 1:2240
+    7  R   1:2241
+    8    W 1:2241
+    9  R   1:2242
+   10    W 1:2242
+   11  R   1:2243
+   12    W 1:2243
+   13  R   1:2244
+   14    W 1:2244
+   15  R   1:2245
+   16    W 1:2245
+   17  R   2:154
+   70  R   1:2583
+   71    W 1:2583
+   72  R   1:2584
+   73    W 1:2584
+  106  R   1:2457
+  107  R   1:2458
+  108    W 1:2457
+  109    W 1:2458
+  126  R   1:2300
+  127    W 1:2300
+Team: (2107) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 854539268:-281474122171152
+    1  R/W 854539268:-281474122171152
+################ team /boot/home/node-src/node-v24.21.0/test/pa
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  1419      194    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+--- fdinfo /boot/home/node-src/node-v24.21.0/test/pa
+Team: (1419) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 818494084:-281474158216336
+    1  R/W 818494084:-281474158216336
+    2  R/W 818494084:-281474158216336
+    3  R   1:1824
+    4    W 1:1824
+    5  R   1:1825
+    6    W 1:1825
+    7  R   1:1826
+    8    W 1:1826
+    9  R   1:1827
+   10    W 1:1827
+   11  R   1:1828
+   12    W 1:1828
+   13  R   1:1829
+   14    W 1:1829
+   15  R   1:1830
+   16    W 1:1830
+   17  R   2:154
+   38  R   1:2126
+   39    W 1:2126
+   40  R   1:2127
+   41    W 1:2127
+  126  R   1:1885
+  127    W 1:1885
+Team: (1763) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 818494084:-281474158216336
+    1  R/W 818494084:-281474158216336
+    2  R/W 818494084:-281474158216336
+    3  R   1:2239
+    4    W 1:2239
+    5  R   1:2240
+    6    W 1:2240
+    7  R   1:2241
+    8    W 1:2241
+    9  R   1:2242
+   10    W 1:2242
+   11  R   1:2243
+   12    W 1:2243
+   13  R   1:2244
+   14    W 1:2244
+   15  R   1:2245
+   16    W 1:2245
+   17  R   2:154
+   70  R   1:2583
+   71    W 1:2583
+   72  R   1:2584
+   73    W 1:2584
+  106  R   1:2457
+  107  R   1:2458
+  108    W 1:2457
+  109    W 1:2458
+  126  R   1:2300
+  127    W 1:2300
+Team: (2107) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 818494084:-281474158216336
+    1  R/W 818494084:-281474158216336
+################ team /boot/home/node-src/node-v24.21.0/test/pa
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  1419      194    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+--- fdinfo /boot/home/node-src/node-v24.21.0/test/pa
+Team: (1419) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 851960388:-281474124750032
+    1  R/W 851960388:-281474124750032
+    2  R/W 851960388:-281474124750032
+    3  R   1:1824
+    4    W 1:1824
+    5  R   1:1825
+    6    W 1:1825
+    7  R   1:1826
+    8    W 1:1826
+    9  R   1:1827
+   10    W 1:1827
+   11  R   1:1828
+   12    W 1:1828
+   13  R   1:1829
+   14    W 1:1829
+   15  R   1:1830
+   16    W 1:1830
+   17  R   2:154
+   38  R   1:2126
+   39    W 1:2126
+   40  R   1:2127
+   41    W 1:2127
+  126  R   1:1885
+  127    W 1:1885
+Team: (1763) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 851960388:-281474124750032
+    1  R/W 851960388:-281474124750032
+    2  R/W 851960388:-281474124750032
+    3  R   1:2239
+    4    W 1:2239
+    5  R   1:2240
+    6    W 1:2240
+    7  R   1:2241
+    8    W 1:2241
+    9  R   1:2242
+   10    W 1:2242
+   11  R   1:2243
+   12    W 1:2243
+   13  R   1:2244
+   14    W 1:2244
+   15  R   1:2245
+   16    W 1:2245
+   17  R   2:154
+   70  R   1:2583
+   71    W 1:2583
+   72  R   1:2584
+   73    W 1:2584
+  106  R   1:2457
+  107  R   1:2458
+  108    W 1:2457
+  109    W 1:2458
+  126  R   1:2300
+  127    W 1:2300
+Team: (2107) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 851960388:-281474124750032
+    1  R/W 851960388:-281474124750032
+################ team test/parallel/test-worker-init-failure.js
+/boot/system/bin/node test/parallel/test-worker-init-failure.js  3565        7    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+--- fdinfo test/parallel/test-worker-init-failure.js
+Team: (3565) /boot/system/bin/node test/parallel/test-worker-init-failure.js
+ -100  R   3:2097209
+    0  R   1:5030
+    1    W 3:2138017
+    2    W 3:2138017
+    3  R   1:5031
+    4    W 1:5031
+    5  R   1:5032
+    6    W 1:5032
+    7  R   1:5033
+    8    W 1:5033
+    9  R   1:5034
+   10    W 1:5034
+   11  R   1:5035
+   12    W 1:5035
+   13  R   1:5036
+   14    W 1:5036
+   15  R   1:5037
+   16    W 1:5037
+   17  R   2:154
+   18  R/W 855137220:-281474121573200
+   20  R/W 855137220:-281474121573200
+   22  R/W 855137220:-281474121573200
+################ team /boot/home/node-src/node-v24.21.0/test/pa
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa  1419      194    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+--- fdinfo /boot/home/node-src/node-v24.21.0/test/pa
+Team: (1419) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 854533892:-281474122176528
+    1  R/W 854533892:-281474122176528
+    2  R/W 854533892:-281474122176528
+    3  R   1:1824
+    4    W 1:1824
+    5  R   1:1825
+    6    W 1:1825
+    7  R   1:1826
+    8    W 1:1826
+    9  R   1:1827
+   10    W 1:1827
+   11  R   1:1828
+   12    W 1:1828
+   13  R   1:1829
+   14    W 1:1829
+   15  R   1:1830
+   16    W 1:1830
+   17  R   2:154
+   38  R   1:2126
+   39    W 1:2126
+   40  R   1:2127
+   41    W 1:2127
+  126  R   1:1885
+  127    W 1:1885
+Team: (1763) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 854533892:-281474122176528
+    1  R/W 854533892:-281474122176528
+    2  R/W 854533892:-281474122176528
+    3  R   1:2239
+    4    W 1:2239
+    5  R   1:2240
+    6    W 1:2240
+    7  R   1:2241
+    8    W 1:2241
+    9  R   1:2242
+   10    W 1:2242
+   11  R   1:2243
+   12    W 1:2243
+   13  R   1:2244
+   14    W 1:2244
+   15  R   1:2245
+   16    W 1:2245
+   17  R   2:154
+   70  R   1:2583
+   71    W 1:2583
+   72  R   1:2584
+   73    W 1:2584
+  106  R   1:2457
+  107  R   1:2458
+  108    W 1:2457
+  109    W 1:2458
+  126  R   1:2300
+  127    W 1:2300
+Team: (2107) /boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/pa
+ -100  R   3:2097209
+    0  R/W 854533892:-281474122176528
+    1  R/W 854533892:-281474122176528

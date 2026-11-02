@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: reg-ctrl-clean
+# instance: i-09989a055c45856c3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T023431Z   end: 20261102T024043Z   rc: 0
+# script sha256: 6550c2e7e0bf5493224430dbbb0d68d4660f4edb169f1c3df90b2d1f10cffddd
+# ---- script ----
+# | cd /boot/home/node-src/node-v24.21.0; uname -v; sha256sum /boot/system/kernel_arm64; echo "node test teams before: $(ps | grep -c "node-v24.21.0/test/pa" | tr -d " ") (includes the grep)"
+# | echo "== regression: parallel/test-worker* and sequential/test-child-process-emfile"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 8 -t 120 -p tap $(cd test && ls parallel/test-worker*.js parallel/test-worker*.mjs 2>/dev/null | sed 's/\.m\?js$//') sequential/test-child-process-emfile > /tmp/reg.tap 2>&1
+# | echo "regression rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -E "^1\.\." /tmp/reg.tap
+# | echo "ok: $(grep -cE '^ok ' /tmp/reg.tap)  not ok: $(grep -cE '^not ok ' /tmp/reg.tap)  skip: $(grep -cE '^ok .*# skip' /tmp/reg.tap)"
+# | grep -E "^not ok " /tmp/reg.tap
+# | grep -E "^ok .*child-process-emfile|^not ok .*child-process-emfile" /tmp/reg.tap
+# | echo "--- failure details"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/reg.tap | grep -vE "^\s*$" | head -120
+# | cp /tmp/reg.tap /boot/home/w918/reg.tap
+# | echo "node test teams left after: $(ps | grep -c 'node-v24.21.0/test/pa' | tr -d ' ') (includes the grep)"
+# | for t in $(ps | awk '/node-v24.21.0\/test\/pa/ && !/awk/ {print $(NF-3)}'); do kill -9 $t; done
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  /boot/system/kernel_arm64
+node test teams before: 1 (includes the grep)
+== regression: parallel/test-worker* and sequential/test-child-process-emfile
+regression rc=1 wall=366s
+1..147
+ok: 146  not ok: 1  skip: 0
+not ok 147 parallel/test-worker-init-failure
+ok 146 sequential/test-child-process-emfile
+--- failure details
+not ok 147 parallel/test-worker-init-failure
+  ---
+  duration_ms: 360108.90300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+Failed tests:
+/boot/system/bin/node /boot/home/node-src/node-v24.21.0/test/parallel/test-worker-init-failure.js
+node test teams left after: 2 (includes the grep)

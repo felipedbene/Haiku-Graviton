@@ -1,0 +1,10 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: boot-fix
+# instance: i-00bd203df9955ccaa   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T021444Z   end: 20261102T021448Z   rc: 0
+# script sha256: 39874a2c1a3d37295eb84bcdd12beb8870641061b8d49fcad29cbc4055edbd42
+# ---- script ----
+# | uname -v; sha256sum /boot/system/kernel_arm64
+# ---- raw output ----
+hrev59996 Oct 19 2026 21:09:42
+0955733438eaa79a06d71cbff11941d49eb43f895ce9d9c47ae5e17b2c293fbc  /boot/system/kernel_arm64
