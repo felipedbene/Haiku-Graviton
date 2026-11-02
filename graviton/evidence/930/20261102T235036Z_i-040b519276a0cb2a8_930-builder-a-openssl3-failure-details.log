@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-openssl3-failure-details
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T235036Z   end: 20261102T235040Z   rc: 0
+# script sha256: dc1db1ad614119e4f1130e28263ddab2ab1c1d1c9d16c362c2f0e8375ac4ddf4
+# ---- script ----
+# | L=/boot/home/o3.log
+# | s=$(grep -n "80-test_cmp_http" $L | head -1 | cut -d: -f1); e=$(grep -n "^80-test_cmp_http.t \.\.\.\|80-test_cmp_http.t \.\.\.\." $L | tail -1 | cut -d: -f1)
+# | echo "cmp_http section lines $s..$e"
+# | sed -n "${s},${e}p" $L | grep -nE "not ok|Failed test|# +(got|expected)|^# [A-Za-z]" | head -40
+# | echo "== context of each inner 'not ok' in cmp_http:"
+# | sed -n "${s},${e}p" $L | grep -n "not ok" | head -10 | while IFS=: read ln rest; do echo "--- at +$ln"; sed -n "$((s+ln-25)),$((s+ln+3))p" $L; done
+# | echo "== errstr not ok:"
+# | s2=$(grep -n "02-test_errstr" $L | head -1 | cut -d: -f1); sed -n "$s2,$((s2+400))p" $L | grep -n -B3 -A6 "not ok" | head -30
+# ---- raw output ----
+cmp_http section lines 33084..33084
+1:# Looks like you failed 1 test of 6.80-test_cmp_http.t ...................... 
+== context of each inner 'not ok' in cmp_http:
+== errstr not ok:

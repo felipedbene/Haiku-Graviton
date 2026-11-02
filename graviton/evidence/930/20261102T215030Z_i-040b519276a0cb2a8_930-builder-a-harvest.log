@@ -1,0 +1,89 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-harvest
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T215030Z   end: 20261102T215040Z   rc: 0
+# script sha256: 858cb8eca1f845d30eef25c5c8d10834df2523975d5962267622cf97e4af2a7f
+# ---- script ----
+# | P=/boot/home/haikuports/packages; L=/boot/home/o3.log
+# | echo "== haikuporter package lines:"; grep -nE "grabbing|Grabbing|^\s*(creating|Creating) package|packages for |package .*\.hpkg" $L | head -30
+# | echo "== configure:"; grep -nE "Configuring OpenSSL|for target" $L | head -3
+# | echo "== asm defines:"; grep -m1 -oE -- "-D[A-Z0-9_]*_ASM( -D[A-Z0-9_]*(_ASM|CPUID_OBJ|BN_ASM_MONT))*" $L
+# | echo "== secondary arch configured:"; grep -iE "SECONDARY_TARGET_ARCHITECTURES|TARGET_ARCHITECTURE" /boot/home/haikuports.conf /boot/home/config/settings/haikuports.conf 2>/dev/null
+# | ls -l $P; sha256sum $P/*.hpkg
+# | for f in $P/*.hpkg; do echo "== $(basename $f)"; package list -i $f | grep -E "^\s*(name|version|architecture|provides|requires|supplements|conflicts):"; done
+# | echo "== bn_ops in the devel headers:"
+# | mkdir -p /tmp/dv && rm -rf /tmp/dv/* && package extract -C /tmp/dv $P/openssl3_devel-3.5.9-3-arm64.hpkg && grep -rnE "define (SIXTY_FOUR_BIT_LONG|SIXTY_FOUR_BIT|THIRTY_TWO_BIT|BN_LLONG)|undef (SIXTY_FOUR_BIT_LONG|THIRTY_TWO_BIT)" /tmp/dv/develop/headers/openssl/configuration.h
+# ---- raw output ----
+== haikuporter package lines:
+11781:mimesetting files for package openssl3-3.5.9-3-arm64.hpkg ...
+11783:creating package openssl3-3.5.9-3-arm64.hpkg ...
+11825:mimesetting files for package openssl3_debuginfo-3.5.9-3-arm64.hpkg ...
+11827:creating package openssl3_debuginfo-3.5.9-3-arm64.hpkg ...
+11868:mimesetting files for package openssl3_devel-3.5.9-3-arm64.hpkg ...
+11870:creating package openssl3_devel-3.5.9-3-arm64.hpkg ...
+11914:mimesetting files for package openssl3_man-3.5.9-3-any.hpkg ...
+11916:creating package openssl3_man-3.5.9-3-any.hpkg ...
+11929:grabbing openssl3-3.5.9-3-arm64.hpkg and moving it to /boot/home/haikuports/packages/openssl3-3.5.9-3-arm64.hpkg
+11930:grabbing openssl3_debuginfo-3.5.9-3-arm64.hpkg and moving it to /boot/home/haikuports/packages/openssl3_debuginfo-3.5.9-3-arm64.hpkg
+11931:grabbing openssl3_devel-3.5.9-3-arm64.hpkg and moving it to /boot/home/haikuports/packages/openssl3_devel-3.5.9-3-arm64.hpkg
+11932:grabbing openssl3_man-3.5.9-3-any.hpkg and moving it to /boot/home/haikuports/packages/openssl3_man-3.5.9-3-any.hpkg
+== configure:
+70:Configuring OpenSSL version 3.5.9 for target haiku-aarch64
+== asm defines:
+-DBSAES_ASM -DECP_NISTZ256_ASM -DECP_SM2P256_ASM -DKECCAK1600_ASM -DMD5_ASM -DOPENSSL_BN_ASM_MONT -DOPENSSL_CPUID_OBJ -DOPENSSL_SM3_ASM -DPOLY1305_ASM -DSHA1_ASM -DSHA256_ASM -DSHA512_ASM -DSM4_ASM -DVPAES_ASM -DVPSM4_ASM
+== secondary arch configured:
+/boot/home/haikuports.conf:TARGET_ARCHITECTURE="arm64"
+total 12260
+-rw-r--r-- 1 baron root 4131650 Nov  2 21:49 openssl3-3.5.9-3-arm64.hpkg
+-rw-r--r-- 1 baron root 5708372 Nov  2 21:49 openssl3_debuginfo-3.5.9-3-arm64.hpkg
+-rw-r--r-- 1 baron root 2179850 Nov  2 21:49 openssl3_devel-3.5.9-3-arm64.hpkg
+-rw-r--r-- 1 baron root  520681 Nov  2 21:49 openssl3_man-3.5.9-3-any.hpkg
+31505ec5b93ab676c5ab38f6308523df88b6afa790f35d2c8b813fb1433922ee  /boot/home/haikuports/packages/openssl3-3.5.9-3-arm64.hpkg
+6c538278b272414cf4beb416c534d99d99fce1bdaad85ed33d17031c4faa4355  /boot/home/haikuports/packages/openssl3_debuginfo-3.5.9-3-arm64.hpkg
+8b601a809c4857580305f4bbc8d4b7fa3c73e02a6c35694ef5834dfc07859d3d  /boot/home/haikuports/packages/openssl3_devel-3.5.9-3-arm64.hpkg
+f55a2618dc47187c3e16a32277956b52385136e38d89c8e4d8c7d4c0cb91b932  /boot/home/haikuports/packages/openssl3_man-3.5.9-3-any.hpkg
+== openssl3-3.5.9-3-arm64.hpkg
+	name: openssl3
+	architecture: arm64
+	version: 3.5.9-3
+	provides: openssl3 = 3.5.9 (compatible >= 3)
+	provides: lib:libcrypto = 3 (compatible >= 3)
+	provides: lib:libssl = 3 (compatible >= 3)
+	provides: cmd:c_rehash = 3.5.9 (compatible >= 3)
+	provides: cmd:openssl = 3.5.9 (compatible >= 3)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libz>=1.3.2
+	requires: lib:libzstd>=1.5.7
+	requires: ca_root_certificates>=2026_07_16
+== openssl3_debuginfo-3.5.9-3-arm64.hpkg
+	name: openssl3_debuginfo
+	architecture: arm64
+	version: 3.5.9-3
+	provides: openssl3_debuginfo = 3.5.9
+	provides: debuginfo:capi.so(openssl3) = 3.5.9
+	provides: debuginfo:loader_attic.so(openssl3) = 3.5.9
+	provides: debuginfo:padlock.so(openssl3) = 3.5.9
+	provides: debuginfo:libcrypto.so.3(openssl3) = 3.5.9
+	provides: debuginfo:libssl.so.3(openssl3) = 3.5.9
+	provides: debuginfo:openssl(openssl3) = 3.5.9
+	requires: openssl3==3.5.9
+== openssl3_devel-3.5.9-3-arm64.hpkg
+	name: openssl3_devel
+	architecture: arm64
+	version: 3.5.9-3
+	provides: openssl3_devel = 3.5.9
+	provides: devel:libcrypto = 3 (compatible >= 3)
+	provides: devel:libssl = 3 (compatible >= 3)
+	requires: openssl3==3.5.9
+	conflicts: openssl_devel
+== openssl3_man-3.5.9-3-any.hpkg
+	name: openssl3_man
+	architecture: any
+	version: 3.5.9-3
+	provides: openssl3_man = 3.5.9
+	requires: openssl3==3.5.9
+	supplements: openssl3==3.5.9
+	conflicts: openssl_man
+== bn_ops in the devel headers:
+175:#  define SIXTY_FOUR_BIT_LONG
+181:#  undef THIRTY_TWO_BIT

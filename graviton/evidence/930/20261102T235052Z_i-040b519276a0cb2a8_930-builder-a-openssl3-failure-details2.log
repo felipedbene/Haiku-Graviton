@@ -1,0 +1,144 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-openssl3-failure-details2
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T235052Z   end: 20261102T235057Z   rc: 0
+# script sha256: 14089132017fd6c119a466ded67681ac7f3589db3818de213d990dc1b94d5fc9
+# ---- script ----
+# | L=/boot/home/o3.log
+# | e=33084
+# | p=$(awk -v e=$e 'NR<e && /\.t \.\.\.\./ {last=NR} END{print last}' $L); echo "cmp_http block: $p..$e"
+# | sed -n "${p},${e}p" $L | grep -n "not ok" | head
+# | for ln in $(sed -n "${p},${e}p" $L | grep -n "not ok" | cut -d: -f1 | head -6); do echo "--- block line $ln"; sed -n "$((p+ln-30)),$((p+ln+4))p" $L; done
+# | echo "== errstr block"
+# | e2=$(grep -n "02-test_errstr.t \.\.\." $L | head -1 | cut -d: -f1); p2=$(awk -v e=$e2 'NR<e && /\.t \.\.\.\./ {last=NR} END{print last}' $L); echo "errstr block: $p2..$e2"
+# | for ln in $(sed -n "${p2},${e2}p" $L | grep -n "not ok" | cut -d: -f1 | head -3); do sed -n "$((p2+ln-8)),$((p2+ln+6))p" $L; done
+# ---- raw output ----
+cmp_http block: 30874..33084
+20:    not ok 11 - msg_timeout 5
+32:    not ok 15 - total_timeout 10
+43:not ok 1 - CMP app CLI Mock connection
+--- block line 20
+ok 1 - running cipherbytes_test80-test_cipherbytes.t ................... ok
+
+    ok 1 - test_default_cipherlist_implicit
+    ok 2 - test_default_cipherlist_explicit
+    ok 3 - test_default_cipherlist_clear
+    ok 4 - test_set_ciphersuites_empty_elem
+    ok 5 - test_stdname_cipherlist
+ok 1 - running cipherlist_test80-test_cipherlist.t .................... ok
+
+    ok 1 - test_cipher_name
+ok 1 - running ciphername_test80-test_ciphername.t .................... ok
+
+    ok 1 - default config
+    ok 2 - wrong server
+    ok 3 - server missing argument
+    ok 4 - path missing argument
+    ok 5 - path wrong
+    ok 6 - path with additional '/'s fine according to RFC 3986
+    ok 7 - path mixed case
+    ok 8 - path upper case
+    ok 9 - msg_timeout missing argument
+    ok 10 - msg_timeout negative
+# cmp_main:apps/cmp.c:3695:CMP info: using section(s) 'Mock connection' of OpenSSL configuration file '../Mock/test.cnf'
+# opt_str:apps/cmp.c:2852:CMP warning: -proxy option argument is empty string, resetting option
+# setup_client_ctx:apps/cmp.c:2403:CMP info: will contact http://[::1]:40023/pkix/ 
+# CMP info: sending IR
+# CMP error: connect timeout
+# CMP error: transfer error:request sent: IR, expected response: IP
+../../../../util/wrap.pl ../../../../apps/openssl cmp -server '[::1]:40023' -config ../Mock/test.cnf -section 'Mock connection' -certout ../../../../test-runs/test_cmp_http/test.cert.pem -proxy '' -no_proxy '::1' -msg_timeout 5 => 1
+    not ok 11 - msg_timeout 5
+# ------------------------------------------------------------------------------
+    ok 12 - msg_timeout 0
+    ok 13 - total_timeout missing argument
+    ok 14 - total_timeout negative
+# cmp_main:apps/cmp.c:3695:CMP info: using section(s) 'Mock connection' of OpenSSL configuration file '../Mock/test.cnf'
+--- block line 32
+    ok 1 - default config
+    ok 2 - wrong server
+    ok 3 - server missing argument
+    ok 4 - path missing argument
+    ok 5 - path wrong
+    ok 6 - path with additional '/'s fine according to RFC 3986
+    ok 7 - path mixed case
+    ok 8 - path upper case
+    ok 9 - msg_timeout missing argument
+    ok 10 - msg_timeout negative
+# cmp_main:apps/cmp.c:3695:CMP info: using section(s) 'Mock connection' of OpenSSL configuration file '../Mock/test.cnf'
+# opt_str:apps/cmp.c:2852:CMP warning: -proxy option argument is empty string, resetting option
+# setup_client_ctx:apps/cmp.c:2403:CMP info: will contact http://[::1]:40023/pkix/ 
+# CMP info: sending IR
+# CMP error: connect timeout
+# CMP error: transfer error:request sent: IR, expected response: IP
+../../../../util/wrap.pl ../../../../apps/openssl cmp -server '[::1]:40023' -config ../Mock/test.cnf -section 'Mock connection' -certout ../../../../test-runs/test_cmp_http/test.cert.pem -proxy '' -no_proxy '::1' -msg_timeout 5 => 1
+    not ok 11 - msg_timeout 5
+# ------------------------------------------------------------------------------
+    ok 12 - msg_timeout 0
+    ok 13 - total_timeout missing argument
+    ok 14 - total_timeout negative
+# cmp_main:apps/cmp.c:3695:CMP info: using section(s) 'Mock connection' of OpenSSL configuration file '../Mock/test.cnf'
+# opt_str:apps/cmp.c:2852:CMP warning: -proxy option argument is empty string, resetting option
+# setup_client_ctx:apps/cmp.c:2403:CMP info: will contact http://[::1]:40023/pkix/ 
+# CMP info: sending IR
+# CMP info: received IP
+# CMP error: total timeout
+../../../../util/wrap.pl ../../../../apps/openssl cmp -server '[::1]:40023' -config ../Mock/test.cnf -section 'Mock connection' -certout ../../../../test-runs/test_cmp_http/test.cert.pem -proxy '' -no_proxy '::1' -total_timeout 10 => 1
+    not ok 15 - total_timeout 10
+# ------------------------------------------------------------------------------
+    ok 16 - total_timeout 0
+    ok 17 - keep_alive missing argument
+    ok 18 - keep_alive negative
+    ok 19 - keep_alive 0
+--- block line 43
+# opt_str:apps/cmp.c:2852:CMP warning: -proxy option argument is empty string, resetting option
+# setup_client_ctx:apps/cmp.c:2403:CMP info: will contact http://[::1]:40023/pkix/ 
+# CMP info: sending IR
+# CMP error: connect timeout
+# CMP error: transfer error:request sent: IR, expected response: IP
+../../../../util/wrap.pl ../../../../apps/openssl cmp -server '[::1]:40023' -config ../Mock/test.cnf -section 'Mock connection' -certout ../../../../test-runs/test_cmp_http/test.cert.pem -proxy '' -no_proxy '::1' -msg_timeout 5 => 1
+    not ok 11 - msg_timeout 5
+# ------------------------------------------------------------------------------
+    ok 12 - msg_timeout 0
+    ok 13 - total_timeout missing argument
+    ok 14 - total_timeout negative
+# cmp_main:apps/cmp.c:3695:CMP info: using section(s) 'Mock connection' of OpenSSL configuration file '../Mock/test.cnf'
+# opt_str:apps/cmp.c:2852:CMP warning: -proxy option argument is empty string, resetting option
+# setup_client_ctx:apps/cmp.c:2403:CMP info: will contact http://[::1]:40023/pkix/ 
+# CMP info: sending IR
+# CMP info: received IP
+# CMP error: total timeout
+../../../../util/wrap.pl ../../../../apps/openssl cmp -server '[::1]:40023' -config ../Mock/test.cnf -section 'Mock connection' -certout ../../../../test-runs/test_cmp_http/test.cert.pem -proxy '' -no_proxy '::1' -total_timeout 10 => 1
+    not ok 15 - total_timeout 10
+# ------------------------------------------------------------------------------
+    ok 16 - total_timeout 0
+    ok 17 - keep_alive missing argument
+    ok 18 - keep_alive negative
+    ok 19 - keep_alive 0
+    ok 20 - keep_alive 1
+    ok 21 - keep_alive 2
+    ok 22 - keep_alive too large
+    ok 23 - keep_alive extremely large
+    # Looks like you failed 2 tests of 23.
+not ok 1 - CMP app CLI Mock connection
+# ------------------------------------------------------------------------------
+    ok 1 - default test
+    ok 2 - recipient missing arg
+    ok 3 - unknown attribute in recipient name
+    ok 4 - wrong syntax in recipient name: trailing double '/' after value
+== errstr block
+errstr block: 12065..12163
+ok 43 # SKIP negative error codes are not supported in OpenSSL
+ok 44 # SKIP negative error codes are not supported in OpenSSL
+ok 45 # SKIP negative error codes are not supported in OpenSSL
+ok 46 # SKIP negative error codes are not supported in OpenSSL
+ok 47 # SKIP negative error codes are not supported in OpenSSL
+ok 48 # SKIP negative error codes are not supported in OpenSSL
+../../util/wrap.pl ../../apps/openssl errstr 80000020 => 0
+not ok 49 - match 'Unknown General Error (-2147483616)' (80000020) with one of ( 'No Error (32)', 'reason(32)' )
+# ------------------------------------------------------------------------------
+ok 50 # SKIP negative error codes are not supported in OpenSSL
+ok 51 # SKIP negative error codes are not supported in OpenSSL
+ok 52 # SKIP negative error codes are not supported in OpenSSL
+ok 53 # SKIP negative error codes are not supported in OpenSSL
+ok 54 # SKIP negative error codes are not supported in OpenSSL
+ok 55 # SKIP negative error codes are not supported in OpenSSL

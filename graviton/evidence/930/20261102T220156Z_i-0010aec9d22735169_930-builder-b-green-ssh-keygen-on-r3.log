@@ -1,0 +1,101 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-green-ssh-keygen-on-r3
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T220156Z   end: 20261102T220201Z   rc: 0
+# script sha256: 5c61822d4b5f65bda378db336816a1d0ccb70989e1b80f1d3f74f47b9c5c224b
+# ---- script ----
+# | cat /boot/system/boot/post-install/sshd_keymaker.sh
+# | echo "== rerun keymaker"; sh -x /boot/system/boot/post-install/sshd_keymaker.sh; echo "keymaker rc=$?"
+# | ls -l /boot/system/settings/ssh/
+# | mkdir -p /tmp/kg && rm -f /tmp/kg/*
+# | for t in "rsa -b 3072" "ecdsa -b 256" "ed25519"; do echo "== ssh-keygen -t $t"; ssh-keygen -q -N '' -t $t -f /tmp/kg/k_$(echo $t | cut -d' ' -f1); echo "rc=$?"; done
+# | ls -l /tmp/kg
+# | for k in /tmp/kg/k_*.pub; do ssh-keygen -lf $k; done
+# ---- raw output ----
+#!/bin/sh
+
+_progress () {
+	notify --type progress --group ssh-keygen \
+		--icon /system/kernel_`uname -p` \
+		--messageID $0_$$ \
+		--title "Generating ssh keys..." \
+		--progress "$1" "$2" >/dev/null
+}
+
+# generate SSH host keys
+
+SETTINGSSSHDIR=`finddir B_SYSTEM_SETTINGS_DIRECTORY`/ssh
+mkdir -p ${SETTINGSSSHDIR}
+
+hostKeyDir=${SETTINGSSSHDIR}
+
+
+if [ ! -f "$hostKeyDir/ssh_host_ecdsa_key" ] ; then
+	_progress 0.2 "ecdsa"
+	ssh-keygen -t ecdsa -f "$hostKeyDir/ssh_host_ecdsa_key" -N ""
+fi
+
+if [ ! -f "$hostKeyDir/ssh_host_rsa_key" ] ; then
+	_progress 0.4 "rsa"
+	ssh-keygen -t rsa -f "$hostKeyDir/ssh_host_rsa_key" -N ""
+fi
+
+if [ ! -f "$hostKeyDir/ssh_host_ed25519_key" ] ; then
+	_progress 0.6 "ed25519"
+	ssh-keygen -t ed25519 -f "$hostKeyDir/ssh_host_ed25519_key" -N ""
+fi
+
+if [ ! -f "$hostKeyDir/ssh_host_mldsa44-ed25519_key" ] ; then
+	_progress 0.8 "mldsa44-ed25519"
+	ssh-keygen -t mldsa44-ed25519 -f "$hostKeyDir/ssh_host_mldsa44-ed25519_key" -N ""
+fi
+
+# generate what's eventually missing
+ssh-keygen -A
+_progress 1.0 ""
+== rerun keymaker
+++ finddir B_SYSTEM_SETTINGS_DIRECTORY
++ SETTINGSSSHDIR=/boot/system/settings/ssh
++ mkdir -p /boot/system/settings/ssh
++ hostKeyDir=/boot/system/settings/ssh
++ '[' '!' -f /boot/system/settings/ssh/ssh_host_ecdsa_key ']'
++ '[' '!' -f /boot/system/settings/ssh/ssh_host_rsa_key ']'
++ '[' '!' -f /boot/system/settings/ssh/ssh_host_ed25519_key ']'
++ '[' '!' -f /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key ']'
++ ssh-keygen -A
++ _progress 1.0 ''
+++ uname -p
++ notify --type progress --group ssh-keygen --icon /system/kernel_arm64 --messageID /boot/system/boot/post-install/sshd_keymaker.sh_217316 --title 'Generating ssh keys...' --progress 1.0 ''
+BApplication: initialization failed: General system error
+keymaker rc=1
+total 722
+-rw-r--r-- 1 baron root 673940 Sep  1 17:31 moduli
+-rw-r--r-- 1 baron root   1591 Nov  2 22:00 ssh_config
+-rw-r--r-- 1 baron root   1495 Nov  2 14:52 ssh_config.bak
+-rw------- 1 baron root    557 Nov  2 22:00 ssh_host_ecdsa_key
+-rw-r--r-- 1 baron root    211 Nov  2 22:00 ssh_host_ecdsa_key.pub
+-rw------- 1 baron root    411 Nov  2 21:33 ssh_host_ed25519_key
+-rw-r--r-- 1 baron root     96 Nov  2 21:33 ssh_host_ed25519_key.pub
+-rw------- 1 baron root   4006 Nov  2 21:33 ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root   1892 Nov  2 21:33 ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root   4051 Nov  2 22:00 ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root   1927 Nov  2 22:00 ssh_host_mldsa44_ed25519_key.pub
+-rw------- 1 baron root   2643 Nov  2 22:00 ssh_host_rsa_key
+-rw-r--r-- 1 baron root    603 Nov  2 22:00 ssh_host_rsa_key.pub
+-rw-r--r-- 1 baron root   2321 Nov  2 14:52 sshd_config
+== ssh-keygen -t rsa -b 3072
+rc=0
+== ssh-keygen -t ecdsa -b 256
+rc=0
+== ssh-keygen -t ed25519
+rc=0
+total 26
+-rw------- 1 baron root  557 Nov  2 22:02 k_ecdsa
+-rw-r--r-- 1 baron root  211 Nov  2 22:02 k_ecdsa.pub
+-rw------- 1 baron root  452 Nov  2 22:02 k_ed25519
+-rw-r--r-- 1 baron root  131 Nov  2 22:02 k_ed25519.pub
+-rw------- 1 baron root 2643 Nov  2 22:02 k_rsa
+-rw-r--r-- 1 baron root  603 Nov  2 22:02 k_rsa.pub
+256 SHA256:BFSOL0HyQfDassBlBlyWY99Ce5XaVeZul1PuDrLotJ8 baron@ip-10-128-10-245.us-west-2.compute.internal (ECDSA)
+256 SHA256:SIOm1Iku5miMEae07fdHbWuIqkwcxzW8P9TIo8hWXTU baron@ip-10-128-10-245.us-west-2.compute.internal (ED25519)
+3072 SHA256:/OSSMNIOyyAO3P95qqDL81Px/8uex7XoBRFRgXWGaj8 baron@ip-10-128-10-245.us-west-2.compute.internal (RSA)

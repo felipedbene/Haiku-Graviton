@@ -1,0 +1,50 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-loopback-v4-v6-probe
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T235139Z   end: 20261102T235144Z   rc: 5
+# script sha256: ade565bb13b63b825b28f74d9539f9a505f21a243e2d7b1c8aea828490a73d6b
+# ---- script ----
+# | uname -a
+# | cat > /tmp/lp.pl <<'EOP'
+# | use strict; use warnings; use IO::Socket::IP; use Time::HiRes qw(time);
+# | for my $h ('127.0.0.1', '::1') {
+# | 	my $srv = IO::Socket::IP->new(LocalHost => $h, LocalPort => 0, Listen => 16, ReuseAddr => 1) or die "listen $h: $@";
+# | 	my $port = $srv->sockport;
+# | 	my $pid = fork();
+# | 	if (!$pid) { while (my $c = $srv->accept) { my $l = <$c>; print $c "pong\n"; close $c; } exit 0; }
+# | 	my @t;
+# | 	for (1..10) {
+# | 		my $t0 = time;
+# | 		my $c = IO::Socket::IP->new(PeerHost => $h, PeerPort => $port, Timeout => 30) or die "connect $h: $@";
+# | 		my $t1 = time; print $c "ping\n"; my $r = <$c>; my $t2 = time; close $c;
+# | 		push @t, sprintf("connect %.4fs rtt %.4fs", $t1-$t0, $t2-$t1);
+# | 	}
+# | 	kill 'TERM', $pid; waitpid $pid, 0;
+# | 	print "$h port $port:\n  ", join("\n  ", @t), "\n";
+# | }
+# | EOP
+# | perl /tmp/lp.pl
+# ---- raw output ----
+Haiku ip-10-128-15-28.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 14:49:36 arm64 arm64 Haiku
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+Use of uninitialized value $err in numeric eq (==) at /packages/perl-5.42.2-1/.self/lib/perl5/5.42.2/IO/Socket/IP.pm line 749.
+listen ::1: No address associated with hostname at /tmp/lp.pl line 3.
+127.0.0.1 port 1671:
+  connect 0.0058s rtt 0.0003s
+  connect 0.0002s rtt 0.0001s
+  connect 0.0002s rtt 0.0001s
+  connect 0.0002s rtt 0.0001s
+  connect 0.0002s rtt 0.0001s
+  connect 0.0002s rtt 0.0001s
+  connect 0.0002s rtt 0.0001s
+  connect 0.0001s rtt 0.0001s
+  connect 0.0001s rtt 0.0001s
+  connect 0.0002s rtt 0.0001s

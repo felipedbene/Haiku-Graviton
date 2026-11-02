@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-build-start2
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T214146Z   end: 20261102T214220Z   rc: 0
+# script sha256: d186c5b80b70b7dfdebab5d498add7011b70993749783f49c41396c8d03a3c00
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports; D=$HP/dev-libs/openssl
+# | ls $D; ls $HP/packages/ 2>&1 | head; mv /boot/home/o3.log /boot/home/o3-attempt1.log
+# | # No nohup: the ocsp/cmp_http tests stop their servers with kill HUP (#930).
+# | # Record the SIGHUP disposition this shell (and so haikuporter) inherits.
+# | perl -e 'print "SIGHUP disposition: ", (defined $SIG{HUP} && $SIG{HUP} ne "" ? $SIG{HUP} : "DEFAULT"), "\n"'
+# | cd $HP
+# | ( s=$(date +%s); perl -e 'print "SIGHUP disposition in build subshell: ", (defined $SIG{HUP} && $SIG{HUP} ne "" ? $SIG{HUP} : "DEFAULT"), "\n"'; haikuporter -y -j16 --test openssl3; echo "haikuporter exit $? wall=$(( $(date +%s) - s ))s" ) < /dev/null > /boot/home/o3.log 2>&1 &
+# | echo "started pid $!"
+# | sleep 30; tail -5 /boot/home/o3.log
+# ---- raw output ----
+download
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+work-1.1.1w
+work-3.5.9
+SIGHUP disposition: DEFAULT
+started pid 44911
+waiting for build package openssl3_devel-3.5.9-3 to be activated
+waiting for build package openssl3_man-3.5.9-3 to be activated
+Building ...
+Configuring OpenSSL version 3.5.9 for target haiku-aarch64
+Using os-specific seed configuration

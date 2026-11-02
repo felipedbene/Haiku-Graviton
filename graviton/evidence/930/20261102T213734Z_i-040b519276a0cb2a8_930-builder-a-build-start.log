@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-build-start
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T213734Z   end: 20261102T213810Z   rc: 0
+# script sha256: 0346235e0b97f04816c88e0fb4067e7a4a11057a5f37d6dc8cf590afe726e78f
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports; D=$HP/dev-libs/openssl
+# | ls $D; ls $HP/packages/ 2>&1 | head
+# | # No nohup: the ocsp/cmp_http tests stop their servers with kill HUP (#930).
+# | # Record the SIGHUP disposition this shell (and so haikuporter) inherits.
+# | perl -e 'print "SIGHUP disposition: ", (defined $SIG{HUP} && $SIG{HUP} ne "" ? $SIG{HUP} : "DEFAULT"), "\n"'
+# | cd $HP
+# | ( s=$(date +%s); perl -e 'print "SIGHUP disposition in build subshell: ", (defined $SIG{HUP} && $SIG{HUP} ne "" ? $SIG{HUP} : "DEFAULT"), "\n"'; haikuporter -y -j16 --test openssl3; echo "haikuporter exit $? wall=$(( $(date +%s) - s ))s" ) < /dev/null > /boot/home/o3.log 2>&1 &
+# | echo "started pid $!"
+# | sleep 30; tail -5 /boot/home/o3.log
+# ---- raw output ----
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+ls: cannot access '/boot/home/haikuports/packages/': No such file or directory
+SIGHUP disposition: DEFAULT
+started pid 2942
+SIGHUP disposition in build subshell: DEFAULT
+Warning: Found old repository format - repopulating the repository ...

@@ -1,0 +1,34 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-install-openssl3-r3
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T215219Z   end: 20261102T215225Z   rc: 0
+# script sha256: 8bc4dab9455ec7520141a7c3efb62be896ee34d9c65ba7ba9fc8e826d4fa7977
+# ---- script ----
+# | cd /boot/home/ossl3
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install /boot/home/ossl3/openssl3-3.5.9-3-arm64.hpkg /boot/home/ossl3/openssl3_devel-3.5.9-3-arm64.hpkg /boot/home/ossl3/openssl3_man-3.5.9-3-any.hpkg 2>&1 | tail -6
+# | ls /boot/system/packages | grep -i openssl
+# | openssl version -a
+# | grep -nE "define SIXTY_FOUR_BIT_LONG|undef THIRTY_TWO_BIT" /boot/system/develop/headers/openssl/configuration.h
+# ---- raw output ----
+    upgrade package openssl3_man-3.5.9-2 to 3.5.9-3 from local file
+    install package openssl3_devel-3.5.9-3 from local file
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : [system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_21:43:00"
+[system] Cleaning up ...
+[system] Done.
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_devel-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-3-any.hpkg
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+built on: Mon Nov  2 21:42:40 2026 UTC
+platform: haiku-aarch64
+options:  bn(64,64)
+compiler: cc -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wa,--noexecstack -Wall -O2 -g -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+OPENSSLDIR: "/packages/openssl3-3.5.9-3/.self/data/ssl"
+ENGINESDIR: "/packages/openssl3-3.5.9-3/.self/lib/engines-3"
+MODULESDIR: "/packages/openssl3-3.5.9-3/.self/lib/ossl-modules"
+Seeding source: os-specific
+CPUINFO: OPENSSL_armcap=0xe7d
+175:#  define SIXTY_FOUR_BIT_LONG
+181:#  undef THIRTY_TWO_BIT

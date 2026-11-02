@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-loopback-v4-v6-openssl
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T235158Z   end: 20261102T235208Z   rc: 0
+# script sha256: 29c4221dbcfac2f7315538cfbaef553b36815cab5b8ba93931b29ab7e3b1d30c
+# ---- script ----
+# | T=/boot/home/haikuports/dev-libs/openssl/work-3.5.9/sources/openssl-3.5.9
+# | openssl version
+# | ifconfig loop 2>&1 | head -8
+# | for h in 127.0.0.1 '[::1]'; do
+# | 	( openssl s_server -accept "$h:4444" -cert $T/apps/server.pem -naccept 5 -quiet < /dev/null > /tmp/ss.log 2>&1 ) &
+# | 	sp=$!; sleep 2
+# | 	for i in 1 2 3 4 5; do
+# | 		perl -MTime::HiRes=time -e '$t=time; system(@ARGV); printf "  %s s_client: rc=%d %.3fs\n", $ARGV[3], $?>>8, time-$t' openssl s_client -connect "$h:4444" -brief < /dev/null 2>/dev/null | grep s_client
+# | 	done
+# | 	kill $sp 2>/dev/null; wait $sp 2>/dev/null
+# | 	echo "server log ($h):"; head -3 /tmp/ss.log
+# | done
+# ---- raw output ----
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+loop	Hardware type: Local Loopback, Address: none
+	inet addr: 127.0.0.1, Mask: 255.0.0.0
+	inet6 addr: ::1, Prefix Length: 128
+	MTU: 65536, Metric: 0, up loopback link
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 31082 packets, 0 errors, 10160990 bytes, 0 mcasts, 0 dropped
+	Collisions: 0
+
+  127.0.0.1:4444 s_client: rc=0 0.046s
+  127.0.0.1:4444 s_client: rc=0 0.042s
+  127.0.0.1:4444 s_client: rc=0 0.042s
+  127.0.0.1:4444 s_client: rc=0 0.042s
+  127.0.0.1:4444 s_client: rc=0 0.042s
+server log (127.0.0.1):
+  [::1]:4444 s_client: rc=0 0.046s
+  [::1]:4444 s_client: rc=0 0.044s
+  [::1]:4444 s_client: rc=0 0.044s
+  [::1]:4444 s_client: rc=0 0.044s
+  [::1]:4444 s_client: rc=0 0.044s
+server log ([::1]):

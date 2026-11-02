@@ -1,0 +1,157 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-openssh-green-swap
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T220048Z   end: 20261102T220132Z   rc: 0
+# script sha256: 09ba9315cd5ccb6cb4c1db44943a2bad1a0a397a16783a2b7d8df3fe840708eb
+# ---- script ----
+# | cat > /boot/home/swap.sh <<'EOS'
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | echo "== uninstall image openssh"; feed | pkgman uninstall openssh 2>&1 | grep -vE '^Continue'; echo "uninstall rc=$?"
+# | echo "== install green openssh"; feed | pkgman install /boot/home/openssh-10.4p1-1-arm64.hpkg 2>&1 | grep -vE '^Continue'; echo "install rc=$?"
+# | sha256sum /boot/system/packages/openssh-10.4p1-1-arm64.hpkg
+# | echo SWAP-DONE
+# | EOS
+# | ( sh /boot/home/swap.sh ) < /dev/null > /boot/home/swap.log 2>&1 &
+# | sleep 40; cat /boot/home/swap.log
+# ---- raw output ----
+== uninstall image openssh
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+The following changes will be made:
+  in system:
+    uninstall package openssh-10.4p1-1
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_21:58:33"
+[system] Cleaning up ...
+[system] Done.
+uninstall rc=0
+== install green openssh
+Pƃ{" repochecksum-1 []
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+Validating checksum for DeBeOS...done.
+The following changes will be made:
+  in system:
+    install package openssh-10.4p1-1 from local file
+[system] warning: package openssh-10.4p1-1-arm64.hpkg: The post-installation script  "/boot/system/boot/post-install/sshd_keymaker.sh" failed with exit code 1.
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_22:00:52"
+[system] Cleaning up ...
+[system] Done.
+install rc=0
+b902d39bd06dd200ee28e057b6eeba4f22cac4563844de2ddaa137fc50272b40  /boot/system/packages/openssh-10.4p1-1-arm64.hpkg
+SWAP-DONE

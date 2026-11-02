@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-install-libssh2-r2
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T215829Z   end: 20261102T215833Z   rc: 0
+# script sha256: f887d43a9c62b27ca0cf46a9f75580cb9184825687bb6021ae0638ebbf27284f
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | P=/boot/home/haikuports/packages
+# | feed | pkgman install $P/libssh2-1.11.1-2-arm64.hpkg $P/libssh2_devel-1.11.1-2-arm64.hpkg 2>&1 | grep -vE '^Continue' | tail -5
+# | echo
+# | ls /boot/system/packages | grep -iE 'libssh2|openssl|curl|openssh'
+# | readelf --dyn-syms -W /boot/system/lib/libssh2.so.1.0.1 | awk '$7=="UND"{print $8}' | grep -E '^BN_' | sort | tr '\n' ' '; echo
+# ---- raw output ----
+    upgrade package libssh2-1.11.1-1 to 1.11.1-2 from local file
+    install package libssh2_devel-1.11.1-2 from local file
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_21:52:24"
+[system] Cleaning up ...
+[system] Done.
+
+curl-8.21.0-1-arm64.hpkg
+libssh2-1.11.1-2-arm64.hpkg
+libssh2_devel-1.11.1-2-arm64.hpkg
+openssh-10.4p1-1-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_devel-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-3-any.hpkg
+BN_CTX_free@OPENSSL_3.0.0 BN_CTX_new@OPENSSL_3.0.0 BN_bin2bn@OPENSSL_3.0.0 BN_bn2bin@OPENSSL_3.0.0 BN_clear_free@OPENSSL_3.0.0 BN_mod_exp@OPENSSL_3.0.0 BN_new@OPENSSL_3.0.0 BN_num_bits@OPENSSL_3.0.0 BN_rand@OPENSSL_3.0.0 BN_set_word@OPENSSL_3.0.0 

@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-install-c-pkgman-set
+# instance: i-037b8f221cc883fd5   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T220625Z   end: 20261102T220629Z   rc: 1
+# script sha256: 2772826a2906537d75933e37884709ec1d104edc4fa45751f2f23cbc465fa2b8
+# ---- script ----
+# | mkdir -p /boot/home/stg && cd /boot/home/stg || exit 1
+# | curl -sSfo SHA256SUMS 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/openssl359r3/SHA256SUMS?<PRESIGNED>' || exit 1
+# | curl -sSfo openssl3-3.5.9-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/openssl359r3/openssl3-3.5.9-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSfo openssl3_devel-3.5.9-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/openssl359r3/openssl3_devel-3.5.9-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSfo openssl3_debuginfo-3.5.9-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/openssl359r3/openssl3_debuginfo-3.5.9-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSfo openssl3_man-3.5.9-3-any.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/openssl359r3/openssl3_man-3.5.9-3-any.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSfo libssh2-1.11.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/openssl359r3/libssh2-1.11.1-2-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSfo libssh2_devel-1.11.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/openssl359r3/libssh2_devel-1.11.1-2-arm64.hpkg?<PRESIGNED>' || exit 1
+# | sha256sum -c SHA256SUMS || exit 1
+# | echo "== before"; ls /boot/system/packages | grep -E 'openssl|libssh2|nodejs|libuv|claude'
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install /boot/home/stg/openssl3-3.5.9-3-arm64.hpkg /boot/home/stg/openssl3_devel-3.5.9-3-arm64.hpkg /boot/home/stg/openssl3_debuginfo-3.5.9-3-arm64.hpkg /boot/home/stg/openssl3_man-3.5.9-3-any.hpkg /boot/home/stg/libssh2-1.11.1-2-arm64.hpkg /boot/home/stg/libssh2_devel-1.11.1-2-arm64.hpkg claude_code nodejs24 libuv > /boot/home/pk.log 2>&1
+# | echo "pkgman rc=$?"
+# | grep -vE '^Continue|please enter' /boot/home/pk.log
+# | echo "== after"; ls /boot/system/packages | grep -E 'openssl|libssh2|nodejs|libuv|claude'
+# | for f in /boot/home/stg/*.hpkg; do b=$(basename $f); cmp -s $f /boot/system/packages/$b && echo "installed byte-identical: $b" || echo "NOT IDENTICAL/ABSENT: $b"; done
+# ---- raw output ----
+/tmp/run-install-c-pkgman-set.sh: line 2: curl: command not found

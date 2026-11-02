@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-scan-start
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T213947Z   end: 20261102T214031Z   rc: 0
+# script sha256: 88638420454529af7d81448ddbd2df8d3095daa36a354c327ae8999ee28a38a2
+# ---- script ----
+# | cd /boot/home/scan
+# | cat > scan.sh <<'EOS'
+# | #!/bin/sh
+# | # For each green package that declares an openssl requirement (excluding the
+# | # openssl packages themselves), download it, extract it, and list every ELF
+# | # object that imports (UND) one of the 12 libcrypto exports whose signature
+# | # carries BN_ULONG, or that has DT_NEEDED libcrypto at all.
+# | cd /boot/home/scan
+# | SYMS='BN_(set|get|add|sub|mul|div|mod)_word|BN_(abs_)?is_word|BN_num_bits_word|BN_mod_exp_mont_word|BN_consttime_swap'
+# | : > hits.txt; : > needed.txt; : > scanlog.txt
+# | sed 's/:.*//' crypto-req.txt | grep -vE '^openssl' | while read p; do
+# | 	f=$p.hpkg
+# | 	curl -sSf -o "$f" "https://packages.debene.dev/arm64/packages/$f" || { echo "DOWNLOAD-FAIL $p" >> scanlog.txt; continue; }
+# | 	sha=$(sha256sum "$f" | cut -d' ' -f1)
+# | 	rm -rf x && mkdir x && package extract -C x "$f" > /dev/null 2>&1 || { echo "EXTRACT-FAIL $p" >> scanlog.txt; rm -f "$f"; continue; }
+# | 	n=0; e=0
+# | 	find x -type f | while read o; do
+# | 		[ "$(head -c 4 "$o" | od -An -c | tr -d ' ')" = "177ELF" ] || continue
+# | 		echo "$o" >> elfs.$$
+# | 	done
+# | 	[ -f elfs.$$ ] && e=$(wc -l < elfs.$$)
+# | 	[ -f elfs.$$ ] && while read o; do
+# | 		rel=${o#x/}
+# | 		if readelf -dW "$o" 2>/dev/null | grep -q 'NEEDED.*libcrypto'; then
+# | 			echo "$p $rel" >> needed.txt
+# | 		fi
+# | 		readelf --dyn-syms -W "$o" 2>/dev/null | awk '$7=="UND"{print $8}' | sed 's/@.*//' | grep -xE "$SYMS" | sort -u | tr '\n' ' ' > s.$$
+# | 		[ -s s.$$ ] && echo "$p $rel: $(cat s.$$)" >> hits.txt
+# | 		rm -f s.$$
+# | 	done < elfs.$$
+# | 	echo "SCANNED $p sha256=$sha elf=$e" >> scanlog.txt
+# | 	rm -f elfs.$$ "$f"; rm -rf x
+# | done
+# | echo SCAN-DONE >> scanlog.txt
+# | EOS
+# | ( sh scan.sh ) < /dev/null > scan.out 2>&1 &
+# | echo "scan pid $!"; sleep 40; tail -3 scanlog.txt; cat hits.txt
+# ---- raw output ----
+scan pid 2974
+SCANNED git_daemon-2.54.0-1-arm64 sha256=d2947c86e4298e357f3ea77154fdadd4558d6575fe2692a3f0b93037cae529b1 elf=1
+SCANNED gloox-1.0.28-4-arm64 sha256=d21c8ff97a2802cad87391e30df21e748d1dcbe31d17aac2e621cbc53a158f92 elf=1
+SCANNED gsoap-2.8.135-1-arm64 sha256=3dfbe10201a3eb85f80ff9fbbc2ce80b9e0c9fe0665f46726c03fb4c95d56407 elf=2

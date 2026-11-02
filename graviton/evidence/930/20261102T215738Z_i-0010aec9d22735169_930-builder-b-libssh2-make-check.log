@@ -1,0 +1,56 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-libssh2-make-check
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T215738Z   end: 20261102T215742Z   rc: 0
+# script sha256: c860804349796c166530ceed0ba48817bd173757ca7d59c2a6f077c13f7db99c
+# ---- script ----
+# | T=/boot/home/haikuports/net-libs/libssh2/work-1.11.1/sources/libssh2-1.11.1/tests
+# | ls -l --time-style=+%H:%M $T/test-suite.log
+# | sed -n '1,60p' $T/test-suite.log
+# | echo "== trs results:"; for f in $T/*.trs; do printf '%s ' $(basename $f .trs); grep ':test-result:' $f; done
+# | echo "== tests built:"; ls $T | grep -E '^test_' | grep -vE '\.(c|o|lo|log|trs)$' | head -50
+# ---- raw output ----
+-rw-r--r-- 1 baron root 215 21:56 /boot/home/haikuports/net-libs/libssh2/work-1.11.1/sources/libssh2-1.11.1/tests/test-suite.log
+=====================================
+   libssh2 -: tests/test-suite.log
+=====================================
+
+# TOTAL: 1
+# PASS:  1
+# SKIP:  0
+# XFAIL: 0
+# FAIL:  0
+# XPASS: 0
+# ERROR: 0
+
+.. contents:: :depth: 2
+
+== trs results:
+mansyntax.sh :test-result: PASS
+== tests built:
+test_aa_warmup
+test_agent_forward_ok
+test_auth_keyboard_fail
+test_auth_keyboard_ok
+test_auth_password_fail_password
+test_auth_password_fail_username
+test_auth_password_ok
+test_auth_pubkey_fail
+test_auth_pubkey_ok_dsa
+test_auth_pubkey_ok_ecdsa
+test_auth_pubkey_ok_ecdsa_signed
+test_auth_pubkey_ok_ed25519
+test_auth_pubkey_ok_ed25519_encrypted
+test_auth_pubkey_ok_ed25519_mem
+test_auth_pubkey_ok_rsa
+test_auth_pubkey_ok_rsa_aes256gcm
+test_auth_pubkey_ok_rsa_encrypted
+test_auth_pubkey_ok_rsa_openssh
+test_auth_pubkey_ok_rsa_sha2_256_signed
+test_auth_pubkey_ok_rsa_signed
+test_hostkey_hash
+test_read
+test_read_algos.test
+test_read_algos.txt
+test_ssh2
+test_sshd.test

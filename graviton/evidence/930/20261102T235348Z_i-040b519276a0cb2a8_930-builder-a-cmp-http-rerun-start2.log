@@ -1,0 +1,22 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-cmp-http-rerun-start2
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T235348Z   end: 20261102T235452Z   rc: 0
+# script sha256: 03907a31f2c518a44397be9ee34f0d3212ec28bfcb18272127e773390f797089
+# ---- script ----
+# | [ -e /sources ] || ln -s /boot/home/haikuports/dev-libs/openssl/work-3.5.9/sources /sources; ls -ld /sources; T=/sources/openssl-3.5.9
+# | cd $T || exit 1
+# | perl -e 'print "SIGHUP disposition: ", (defined $SIG{HUP} && $SIG{HUP} ne "" ? $SIG{HUP} : "DEFAULT"), "\n"'
+# | ls -l libcrypto.so.3 apps/openssl
+# | ( s=$(date +%s); LIBRARY_PATH=$T:$LIBRARY_PATH make test TESTS=test_cmp_http VFP=1; echo "make exit $? wall=$(( $(date +%s) - s ))s" ) < /dev/null > /boot/home/cmp-rerun.log 2>&1 &
+# | echo "started $!"; sleep 60; grep -cE "^\s+ok|not ok" /boot/home/cmp-rerun.log; tail -3 /boot/home/cmp-rerun.log
+# ---- raw output ----
+l--------- 1 baron root 57 Nov  2 23:53 /sources -> /boot/home/haikuports/dev-libs/openssl/work-3.5.9/sources
+SIGHUP disposition: DEFAULT
+-rwxr-xr-x 1 baron root  3060672 Nov  2 21:45 apps/openssl
+-rwxr-xr-x 1 baron root 19369320 Nov  2 21:44 libcrypto.so.3
+started 132105
+331
+make[2]: Leaving directory '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/sources/openssl-3.5.9'
+make[1]: Leaving directory '/boot/home/haikuports/dev-libs/openssl/work-3.5.9/sources/openssl-3.5.9'
+make exit 0 wall=53s

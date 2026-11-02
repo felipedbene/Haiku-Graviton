@@ -1,0 +1,102 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-install-c-tls-checks
+# instance: i-037b8f221cc883fd5   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T220739Z   end: 20261102T220749Z   rc: 0
+# script sha256: 39dd04f251c0f454ed55666085e3b1e10c290df970046bdd72b74015587dd5d0
+# ---- script ----
+# | fail=0; pass=0
+# | ck() { if [ "$1" -eq 0 ]; then pass=$((pass+1)); echo "RESULT PASS $2"; else fail=$((fail+1)); echo "RESULT FAIL $2 (rc=$1)"; fi; }
+# | cd /boot/system/packages && sed 's#  #  /boot/system/packages/#' /boot/home/stg/SHA256SUMS | sha256sum -c -; ck $? "installed packages byte-identical to SHA256SUMS"
+# | openssl version -a | grep -E '^(OpenSSL|platform|options)'
+# | openssl version -a | grep -q 'platform: haiku-aarch64' && openssl version -a | grep -q 'options:  bn(64,64)'; ck $? "openssl platform haiku-aarch64, bn(64,64)"
+# | echo "== curl https"
+# | for u in https://www.amazon.com/ https://github.com/; do
+# | 	out=$(/boot/system/bin/curl -sS -o /dev/null -w '%{http_code} verify=%{ssl_verify_result} %{scheme}' "$u"); r=$?
+# | 	echo "$u -> $out (rc=$r)"; [ $r -eq 0 ] && echo "$out" | grep -qE '^(200|301|302) verify=0'; ck $? "curl $u"
+# | done
+# | /boot/system/bin/curl -sSv -o /dev/null https://github.com/ 2>&1 | grep -E 'SSL connection using|subject:|issuer:|SSL certificate verify'
+# | echo "== openssl s_client"
+# | for h in www.amazon.com github.com; do
+# | 	out=$(openssl s_client -connect $h:443 -servername $h -verify_return_error -brief < /dev/null 2>&1); r=$?
+# | 	echo "$out" | grep -E 'CONNECTION ESTABLISHED|Protocol version|Ciphersuite|Negotiated TLS1.3 group|Verification|error' ; [ $r -eq 0 ] && echo "$out" | grep -q 'Verification: OK'; ck $? "s_client $h (rc=$r)"
+# | done
+# | echo "== Node TLS"
+# | node -p 'process.version + " openssl " + process.versions.openssl'
+# | readelf -dW /boot/system/bin/node | grep -E 'NEEDED.*(crypto|ssl|uv)'
+# | cat > /tmp/nt.js <<'EOJ'
+# | const https = require('https'); const crypto = require('crypto');
+# | let bad = 0;
+# | function get(u) { return new Promise((res) => {
+# | 	const r = https.get(u, (rs) => { const s = rs.socket;
+# | 		console.log(u, rs.statusCode, s.getProtocol(), 'authorized', s.authorized, s.getCipher().name);
+# | 		if (!s.authorized || ![200, 301, 302].includes(rs.statusCode)) bad++; rs.resume(); rs.on('end', res); });
+# | 	r.on('error', (e) => { console.log(u, 'ERROR', e.message); bad++; res(); }); }); }
+# | (async () => {
+# | 	await get('https://www.amazon.com/'); await get('https://github.com/');
+# | 	const k = crypto.randomBytes(32), iv = crypto.randomBytes(12);
+# | 	const c = crypto.createCipheriv('aes-256-gcm', k, iv); const ct = Buffer.concat([c.update('hello 930'), c.final()]); const tag = c.getAuthTag();
+# | 	const d = crypto.createDecipheriv('aes-256-gcm', k, iv); d.setAuthTag(tag); const pt = Buffer.concat([d.update(ct), d.final()]).toString();
+# | 	console.log('aes-256-gcm roundtrip', pt === 'hello 930'); if (pt !== 'hello 930') bad++;
+# | 	const h = crypto.createHash('sha256').update('abc').digest('hex');
+# | 	const hok = h === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'; console.log('sha256(abc) vector', hok); if (!hok) bad++;
+# | 	const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+# | 	const sig = crypto.sign('sha256', Buffer.from('930'), privateKey); const v = crypto.verify('sha256', Buffer.from('930'), publicKey, sig);
+# | 	console.log('rsa-2048 keygen/sign/verify', v); if (!v) bad++;
+# | 	const dh = crypto.getDiffieHellman('modp14'); dh.generateKeys(); const dh2 = crypto.getDiffieHellman('modp14'); dh2.generateKeys();
+# | 	const dok = dh.computeSecret(dh2.getPublicKey()).equals(dh2.computeSecret(dh.getPublicKey())); console.log('dh modp14 agree', dok); if (!dok) bad++;
+# | 	const p = crypto.generatePrimeSync(256, { bigint: true }); const pr = crypto.checkPrimeSync(p); console.log('generatePrime/checkPrime', pr); if (!pr) bad++;
+# | 	process.exit(bad);
+# | })();
+# | EOJ
+# | node /tmp/nt.js; ck $? "node https + crypto"
+# | echo "== claude_code"
+# | claude --version; ck $? "claude --version runs"
+# | echo "SUMMARY pass=$pass fail=$fail"
+# | [ $fail -eq 0 ]
+# ---- raw output ----
+/boot/system/packages/libssh2_devel-1.11.1-2-arm64.hpkg: OK
+/boot/system/packages/libssh2-1.11.1-2-arm64.hpkg: OK
+/boot/system/packages/openssl3_debuginfo-3.5.9-3-arm64.hpkg: OK
+/boot/system/packages/openssl3_devel-3.5.9-3-arm64.hpkg: OK
+/boot/system/packages/openssl3_man-3.5.9-3-any.hpkg: OK
+/boot/system/packages/openssl3-3.5.9-3-arm64.hpkg: OK
+RESULT PASS installed packages byte-identical to SHA256SUMS
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+platform: haiku-aarch64
+options:  bn(64,64)
+RESULT PASS openssl platform haiku-aarch64, bn(64,64)
+== curl https
+https://www.amazon.com/ -> 200 verify=0 https (rc=0)
+RESULT PASS curl https://www.amazon.com/
+https://github.com/ -> 200 verify=0 https (rc=0)
+RESULT PASS curl https://github.com/
+* SSL connection using TLSv1.3 / TLS_AES_128_GCM_SHA256 / x25519 / id-ecPublicKey
+*   subject: CN=github.com
+*   issuer: C=GB; O=Sectigo Limited; CN=Sectigo Public Server Authentication CA DV E36
+== openssl s_client
+CONNECTION ESTABLISHED
+Protocol version: TLSv1.3
+Ciphersuite: TLS_AES_128_GCM_SHA256
+Verification: OK
+Negotiated TLS1.3 group: X25519MLKEM768
+RESULT PASS s_client www.amazon.com (rc=0)
+CONNECTION ESTABLISHED
+Protocol version: TLSv1.3
+Ciphersuite: TLS_AES_128_GCM_SHA256
+Verification: OK
+RESULT PASS s_client github.com (rc=0)
+== Node TLS
+v24.21.0 openssl 3.5.9
+/tmp/run-install-c-tls-checks.sh: line 19: readelf: command not found
+https://www.amazon.com/ 200 TLSv1.3 authorized true TLS_AES_128_GCM_SHA256
+https://github.com/ 200 TLSv1.3 authorized true TLS_AES_128_GCM_SHA256
+aes-256-gcm roundtrip true
+sha256(abc) vector true
+rsa-2048 keygen/sign/verify true
+dh modp14 agree true
+generatePrime/checkPrime true
+RESULT PASS node https + crypto
+== claude_code
+2.1.314 (Claude Code)
+RESULT PASS claude --version runs
+SUMMARY pass=8 fail=0

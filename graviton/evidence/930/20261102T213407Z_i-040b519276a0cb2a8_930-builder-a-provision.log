@@ -1,0 +1,22 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-provision
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T213407Z   end: 20261102T213435Z   rc: 0
+# script sha256: 4ee0d9b7483da00cf4db38996d5061e5075297a2abd5b479ec49f24debbfeeed
+# ---- script ----
+# | uname -a; df -k /boot | grep -i total
+# | sha256sum /boot/home/stage/prov.sh /boot/home/stage/haiku-nativebuild
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install cmd:curl cmd:tar cmd:gzip 2>&1 | tail -1
+# | nohup sh -c 'DOWNLOAD_MIRROR=https://sources.debene.dev sh /boot/home/stage/prov.sh > /boot/home/prov.log 2>&1; echo "exit $?" >> /boot/home/prov.log' > /dev/null 2>&1 &
+# | sleep 20; tail -3 /boot/home/prov.log
+# ---- raw output ----
+Haiku ip-10-128-15-28.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 14:49:36 arm64 other Haiku
+ Total Blocks:   60.0 GiB (31438839 blocks)
+  Total Nodes: 0
+daf7d327574e48ea75ca8fe879a49e7faffcb681770255149a398b4f1c76fea9  /boot/home/stage/prov.sh
+a1ec6075d28904b496f5cbd9af0dfd44e06a092bcc48bbae029b82d2134f9236  /boot/home/stage/haiku-nativebuild
+[system] Done.
+provision: python3.14 zlib: ok
+provision: #136 Class 24: installing source-acquisition clients (tolerant): mercurial subversion breezy lha cvs
+provision: #136 Class 24: mercurial installed (or already present)

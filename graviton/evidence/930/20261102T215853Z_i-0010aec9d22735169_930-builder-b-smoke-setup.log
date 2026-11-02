@@ -1,0 +1,79 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-smoke-setup
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T215853Z   end: 20261102T215902Z   rc: 1
+# script sha256: 4e162a2f58fe3920d05e8bb3ff396677140e9bdaf71c35a4eb854fb2a52cc17d
+# ---- script ----
+# | set -e
+# | T=/boot/home/sshtest; cd $T
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | for d in lib:libedit lib:libncurses; do feed | pkgman install $d 2>&1 | tail -1; done
+# | echo "== build probe against installed libssh2_devel"
+# | gcc -Wall -Wextra -O1 -o ssh2probe ssh2probe.c -lssh2 -lnetwork
+# | readelf -dW ssh2probe | grep NEEDED
+# | echo "== keys (openssl $(openssl version | cut -d' ' -f2), platform $(openssl version -p))"
+# | rm -rf keys && mkdir keys && cd keys
+# | openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out host_rsa 2>/dev/null
+# | openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out host_ecdsa256 2>/dev/null
+# | openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -out host_ecdsa384 2>/dev/null
+# | openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out user_rsa 2>/dev/null
+# | openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out user_ecdsa 2>/dev/null
+# | ssh-keygen -q -t ed25519 -N '' -f user_ed25519
+# | chmod 600 host_* user_*
+# | for k in host_rsa:rsa host_ecdsa256:ecdsa256 host_ecdsa384:ecdsa384 user_rsa:rsa user_ecdsa:ecdsa256; do
+# | 	f=${k%%:*}; t=${k##*:}
+# | 	python3.14 -I $T/pubfp.py $t $f > $f.fp
+# | 	head -1 $f.fp > $f.pub; echo "$f $(tail -1 $f.fp)"
+# | done
+# | cat user_rsa.pub user_ecdsa.pub user_ed25519.pub > $T/authorized_keys
+# | cd $T
+# | echo "== green openssh (OpenSSL build) for the RSA/ECDSA/DH server"
+# | rm -rf gossh && mkdir gossh && package extract -C gossh /boot/home/scan/os.hpkg
+# | sha256sum /boot/home/scan/os.hpkg
+# | readelf -dW gossh/bin/sshd gossh/lib/openssh/sshd-session | grep -E 'File|NEEDED.*(crypto|ssl)'
+# | cat > sshd_test_config <<EOC
+# | Port 2299
+# | ListenAddress 127.0.0.1
+# | HostKey $T/keys/host_rsa
+# | HostKey $T/keys/host_ecdsa256
+# | HostKey $T/keys/host_ecdsa384
+# | HostKeyAlgorithms rsa-sha2-512,rsa-sha2-256,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384
+# | KexAlgorithms curve25519-sha256,ecdh-sha2-nistp256,ecdh-sha2-nistp384,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group-exchange-sha256
+# | PubkeyAuthentication yes
+# | AuthorizedKeysFile $T/authorized_keys
+# | PasswordAuthentication no
+# | KbdInteractiveAuthentication no
+# | StrictModes no
+# | UseDNS no
+# | PidFile $T/sshd_test.pid
+# | SshdSessionPath $T/gossh/lib/openssh/sshd-session
+# | SshdAuthPath $T/gossh/lib/openssh/sshd-auth
+# | Subsystem sftp /boot/system/lib/openssh/sftp-server
+# | LogLevel DEBUG1
+# | EOC
+# | $T/gossh/bin/sshd -t -f sshd_test_config && echo "sshd -t ok"
+# | ( $T/gossh/bin/sshd -D -e -f $T/sshd_test_config ) < /dev/null > $T/sshd_test.log 2>&1 &
+# | echo "test sshd pid $!" ; echo $! > $T/sshd_test.wrapper.pid
+# | sleep 3; grep -iE "host key|listening|error|fatal" $T/sshd_test.log
+# | netstat -an 2>/dev/null | grep -E '2299|:22 ' | head
+# ---- raw output ----
+Validating checksum for DeBeOS...done.
+Validating checksum for DeBeOS...done.
+== build probe against installed libssh2_devel
+ 0x0000000000000001 (NEEDED)             Shared library: [libssh2.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libnetwork.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libroot.so]
+== keys (openssl 3.5.9, platform platform: haiku-aarch64)
+host_rsa SHA256:uJRfSjc2e8NwMaXDwodfIloSS7XP77Lc9M+5/6Pxm/8
+host_ecdsa256 SHA256:oS5pMZPnJhJ5GDZJPGOmTjoZdrOcbnht4/UbXNflRA8
+host_ecdsa384 SHA256:rP64anbGH8Tc6Y2RvsEGxQRooqO4cFYNOBGDlGpe1IE
+user_rsa SHA256:CSriLD/AVBnVZZxMvafbchx5U1WCoB5bqXazacAvtAg
+user_ecdsa SHA256:RbmzSriIHFFzrCyyDU6lxR39Fd+kGgkjLGYE26mpvFs
+== green openssh (OpenSSL build) for the RSA/ECDSA/DH server
+b902d39bd06dd200ee28e057b6eeba4f22cac4563844de2ddaa137fc50272b40  /boot/home/scan/os.hpkg
+File: gossh/bin/sshd
+ 0x0000000000000001 (NEEDED)             Shared library: [libcrypto.so.3]
+File: gossh/lib/openssh/sshd-session
+ 0x0000000000000001 (NEEDED)             Shared library: [libcrypto.so.3]
+Missing privilege separation directory: /packages/openssh-10.4p1-1/.self/data/openssh/empty
+test sshd pid 217192

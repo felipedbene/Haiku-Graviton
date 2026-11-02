@@ -1,0 +1,601 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-bn-word-consumers
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T214420Z   end: 20261102T214425Z   rc: 0
+# script sha256: 6c80ba2d19948e752c054fa86a4bad293e20c4f736f8bbc7b1bfa0c2e41aa95f
+# ---- script ----
+# | cd /boot/home/scan
+# | echo "== packages considered (crypto-req.txt minus openssl*): $(grep -vcE '^openssl' crypto-req.txt)"
+# | echo "== scanlog non-SCANNED lines:"; grep -v '^SCANNED' scanlog.txt
+# | echo "== scanned: $(grep -c '^SCANNED' scanlog.txt)"
+# | echo "== scan.out:"; cat scan.out
+# | echo "== packages with zero ELF objects:"; grep 'elf=0$' scanlog.txt
+# | echo "== BN_ULONG-signature importers (UND dynsyms):"; cat hits.txt
+# | echo "== distinct packages with a hit:"; cut -d' ' -f1 hits.txt | sort -u
+# | echo "== ELF objects with DT_NEEDED libcrypto: $(wc -l < needed.txt) in $(cut -d' ' -f1 needed.txt | sort -u | wc -l) packages"
+# | echo "== packages with DT_NEEDED libcrypto but no BN_ULONG import:"; cut -d' ' -f1 needed.txt | sort -u > n.p; cut -d' ' -f1 hits.txt | sort -u > h.p; comm -23 n.p h.p | tr '\n' ' '; echo
+# | echo "== hit packages with no DT_NEEDED libcrypto (static or indirect):"; comm -13 n.p h.p
+# | echo "== full scanlog:"; cat scanlog.txt
+# ---- raw output ----
+== packages considered (crypto-req.txt minus openssl*): 105
+== scanlog non-SCANNED lines:
+DOWNLOAD-FAIL slack++-0-8-arm64
+SCAN-DONE
+== scanned: 104
+== scan.out:
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  7.28M 100  7.28M   0      0 18.90M      0                              0100  7.28M 100  7.28M   0      0 18.89M      0                              0100  7.28M 100  7.28M   0      0 18.88M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/apache-2.4.66-1-arm64.hpkg (7642779 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.57M 100  1.57M   0      0  5.75M      0                              0100  1.57M 100  1.57M   0      0  5.74M      0                              0100  1.57M 100  1.57M   0      0  5.74M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/aria2-1.36.0-2-arm64.hpkg (1653746 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  27657 100  27657   0      0 169.3k      0                              0100  27657 100  27657   0      0 168.9k      0                              0100  27657 100  27657   0      0 168.6k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/axel-2.17.11-2-arm64.hpkg (27657 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.87M 100  2.87M   0      0  9.45M      0                              0100  2.87M 100  2.87M   0      0  9.44M      0                              0100  2.87M 100  2.87M   0      0  9.43M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/bind_utils-9.16.50-3-arm64.hpkg (3012521 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.58M 100  1.58M   0      0  7.02M      0                              0100  1.58M 100  1.58M   0      0  7.01M      0                              0100  1.58M 100  1.58M   0      0  7.00M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/bitchx-1.2.1-4-arm64.hpkg (1657218 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.30M 100  1.30M   0      0  5.15M      0                              0100  1.30M 100  1.30M   0      0  5.13M      0                              0100  1.30M 100  1.30M   0      0  5.11M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/borgbackup-1.4.5-1-arm64.hpkg (1372029 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 12.38M 100 12.38M   0      0 29.40M      0                              0100 12.38M 100 12.38M   0      0 29.33M      0                              0100 12.38M 100 12.38M   0      0 29.26M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/bzflag-2.4.26-2-arm64.hpkg (12982555 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.77M 100  1.77M   0      0  5.92M      0                              0100  1.77M 100  1.77M   0      0  5.90M      0                              0100  1.77M 100  1.77M   0      0  5.88M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/capnproto-1.4.0-1-arm64.hpkg (1864858 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 129.3k 100 129.3k   0      0 886.1k      0                              0100 129.3k 100 129.3k   0      0 881.7k      0                              0100 129.3k 100 129.3k   0      0 877.5k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/cpr-1.14.2-1-arm64.hpkg (132465 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 676.3k 100 676.3k   0      0  4.48M      0                              0100 676.3k 100 676.3k   0      0  4.46M      0                              0100 676.3k 100 676.3k   0      0  4.44M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/curl-8.21.0-1-arm64.hpkg (692572 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 413.5k 100 413.5k   0      0  2.54M      0                              0100 413.5k 100 413.5k   0      0  2.53M      0                              0100 413.5k 100 413.5k   0      0  2.52M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/cyrus_sasl-2.1.28-2-arm64.hpkg (423488 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  39784 100  39784   0      0 324.4k      0                              0100  39784 100  39784   0      0 322.4k      0                              0100  39784 100  39784   0      0 320.5k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/dma-0.14~git-3-arm64.hpkg (39784 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  4.02M 100  4.02M   0      0 12.35M      0                              0100  4.02M 100  4.02M   0      0 12.33M      0                              0100  4.02M 100  4.02M   0      0 12.30M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/dovecot-2.3.21-1-arm64.hpkg (4216654 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.07M 100  1.07M   0      0  5.28M      0                              0100  1.07M 100  1.07M   0      0  5.25M      0                              0100  1.07M 100  1.07M   0      0  5.23M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/elinks-0.19.1-1-arm64.hpkg (1129433 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  4.39M 100  4.39M   0      0 15.11M      0                              0100  4.39M 100  4.39M   0      0 15.06M      0                              0100  4.39M 100  4.39M   0      0 15.02M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/fossil-2.28-1-arm64.hpkg (4606115 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 15.15M 100 15.15M   0      0 42.98M      0                              0100 15.15M 100 15.15M   0      0 42.87M      0                              0100 15.15M 100 15.15M   0      0 42.76M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/git-2.54.0-1-arm64.hpkg (15891402 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 991.0k 100 991.0k   0      0  4.70M      0                              0100 991.0k 100 991.0k   0      0  4.68M      0                              0100 991.0k 100 991.0k   0      0  4.66M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/git_daemon-2.54.0-1-arm64.hpkg (1014883 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 577.6k 100 577.6k   0      0  1.32M      0                              0100 577.6k 100 577.6k   0      0  1.31M      0                              0100 577.6k 100 577.6k   0      0  1.31M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/gloox-1.0.28-4-arm64.hpkg (591511 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.46M 100  1.46M   0      0  6.36M      0                              0100  1.46M 100  1.46M   0      0  6.33M      0                              0100  1.46M 100  1.46M   0      0  6.31M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/gsoap-2.8.135-1-arm64.hpkg (1538822 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0 75 37.57M  75 28.22M   0      0 27.00M      0   00:01   00:01         27.58M100 37.57M 100 37.57M   0      0 29.67M      0   00:01   00:01         27.58M100 37.57M 100 37.57M   0      0 29.65M      0   00:01   00:01         27.58M100 37.57M 100 37.57M   0      0 29.63M      0   00:01   00:01         27.58M
+[srccache] MISS https://packages.debene.dev/arm64/packages/haikuwebkit-1.10.0-2-arm64.hpkg (39398589 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  34821 100  34821   0      0 310.9k      0                              0100  34821 100  34821   0      0 307.9k      0                              0100  34821 100  34821   0      0 305.5k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/hiredis-1.3.0-1-arm64.hpkg (34821 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.11M 100  2.11M   0      0 10.46M      0                              0100  2.11M 100  2.11M   0      0 10.43M      0                              0100  2.11M 100  2.11M   0      0 10.40M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/httrack-3.49.2-5-arm64.hpkg (2222275 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.16M 100  1.16M   0      0  5.94M      0                              0100  1.16M 100  1.16M   0      0  5.92M      0                              0100  1.16M 100  1.16M   0      0  5.90M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/icecast-2.5.0-2-arm64.hpkg (1225850 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.52M 100  1.52M   0      0  6.03M      0                              0100  1.52M 100  1.52M   0      0  6.02M      0                              0100  1.52M 100  1.52M   0      0  6.00M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/irssi-1.4.5-5-arm64.hpkg (1603648 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 214.5k 100 214.5k   0      0  1.40M      0                              0100 214.5k 100 214.5k   0      0  1.39M      0                              0100 214.5k 100 214.5k   0      0  1.38M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/ixwebsocket-11.4.6-1-arm64.hpkg (219695 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  60773 100  60773   0      0 388.2k      0                              0100  60773 100  60773   0      0 386.4k      0                              0100  60773 100  60773   0      0 384.7k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/kc-2.5.1-3-arm64.hpkg (60773 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  4.32M 100  4.32M   0      0 18.67M      0                              0100  4.32M 100  4.32M   0      0 18.62M      0                              0100  4.32M 100  4.32M   0      0 18.55M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/krb5-1.20-3-arm64.hpkg (4530373 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0 59 46.01M  59 27.57M   0      0 26.87M      0   00:01   00:01         27.59M100 46.01M 100 46.01M   0      0 31.99M      0   00:01   00:01         27.59M100 46.01M 100 46.01M   0      0 31.97M      0   00:01   00:01         27.59M100 46.01M 100 46.01M   0      0 31.95M      0   00:01   00:01         27.59M
+[srccache] MISS https://packages.debene.dev/arm64/packages/ladybird-0~git90998c5d-3-arm64.hpkg (48253667 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  4.15M 100  4.15M   0      0 18.20M      0                              0100  4.15M 100  4.15M   0      0 18.14M      0                              0100  4.15M 100  4.15M   0      0 18.08M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/lagrange-1.17.6-1-arm64.hpkg (4359469 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 354.6k 100 354.6k   0      0  2.42M      0                              0100 354.6k 100 354.6k   0      0  2.41M      0                              0100 354.6k 100 354.6k   0      0  2.40M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libarchive-3.7.9-2-arm64.hpkg (363195 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  71178 100  71178   0      0 467.0k      0                              0100  71178 100  71178   0      0 464.6k      0                              0100  71178 100  71178   0      0 462.2k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libarchive_tools-3.7.9-2-arm64.hpkg (71178 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  31810 100  31810   0      0 179.2k      0                              0100  31810 100  31810   0      0 178.4k      0                              0100  31810 100  31810   0      0 177.6k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libasr-1.0.2-7-arm64.hpkg (31810 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.10M 100  1.10M   0      0  6.50M      0                              0100  1.10M 100  1.10M   0      0  6.47M      0                              0100  1.10M 100  1.10M   0      0  6.44M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libetpan-1.9.4-3-arm64.hpkg (1162449 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 795.6k 100 795.6k   0      0  3.95M      0                              0100 795.6k 100 795.6k   0      0  3.94M      0                              0100 795.6k 100 795.6k   0      0  3.92M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libevent-2.1.12-6-arm64.hpkg (814774 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 414.2k 100 414.2k   0      0  2.42M      0                              0100 414.2k 100 414.2k   0      0  2.41M      0                              0100 414.2k 100 414.2k   0      0  2.40M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libgit2_0.25-0.25.1-5-arm64.hpkg (424187 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 475.6k 100 475.6k   0      0  2.41M      0                              0100 475.6k 100 475.6k   0      0  2.40M      0                              0100 475.6k 100 475.6k   0      0  2.39M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libgit2_1.5-1.5.0-2-arm64.hpkg (487054 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.89M 100  1.89M   0      0  5.96M      0                              0100  1.89M 100  1.89M   0      0  5.94M      0                              0100  1.89M 100  1.89M   0      0  5.93M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libgit2_1.5_tools-1.5.0-2-arm64.hpkg (1986957 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 502.4k 100 502.4k   0      0  2.95M      0                              0100 502.4k 100 502.4k   0      0  2.93M      0                              0100 502.4k 100 502.4k   0      0  2.92M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libgit2_1.8-1.8.4-2-arm64.hpkg (514466 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.06M 100  2.06M   0      0  8.89M      0                              0100  2.06M 100  2.06M   0      0  8.87M      0                              0100  2.06M 100  2.06M   0      0  8.84M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libgit2_1.8_tools-1.8.4-2-arm64.hpkg (2168482 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 526.6k 100 526.6k   0      0  3.11M      0                              0100 526.6k 100 526.6k   0      0  3.10M      0                              0100 526.6k 100 526.6k   0      0  3.08M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libgit2_1.9-1.9.1-1-arm64.hpkg (539303 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.15M 100  2.15M   0      0  9.81M      0                              0100  2.15M 100  2.15M   0      0  9.78M      0                              0100  2.15M 100  2.15M   0      0  9.74M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libgit2_1.9_tools-1.9.1-1-arm64.hpkg (2262786 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  44116 100  44116   0      0 305.1k      0                              0100  44116 100  44116   0      0 303.4k      0                              0100  44116 100  44116   0      0 301.8k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libircclient-1.8-6-arm64.hpkg (44116 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  34664 100  34664   0      0 251.7k      0                              0100  34664 100  34664   0      0 250.2k      0                              0100  34664 100  34664   0      0 248.8k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/liblrdf-0.6.1-1-arm64.hpkg (34664 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 429.0k 100 429.0k   0      0  1.94M      0                              0100 429.0k 100 429.0k   0      0  1.94M      0                              0100 429.0k 100 429.0k   0      0  1.93M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libmicrohttpd-1.0.1-2-arm64.hpkg (439333 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  41455 100  41455   0      0 269.1k      0                              0100  41455 100  41455   0      0 267.7k      0                              0100  41455 100  41455   0      0 266.4k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/liboauth-1.0.3-3-arm64.hpkg (41455 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  67743 100  67743   0      0 513.6k      0                              0100  67743 100  67743   0      0 510.5k      0                              0100  67743 100  67743   0      0 507.5k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libp11-0.4.10-3-arm64.hpkg (67743 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  63184 100  63184   0      0 450.8k      0                              0100  63184 100  63184   0      0 448.2k      0                              0100  63184 100  63184   0      0 445.7k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libshout-2.4.5-2-arm64.hpkg (63184 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  39316 100  39316   0      0 283.9k      0                              0100  39316 100  39316   0      0 282.3k      0                              0100  39316 100  39316   0      0 280.7k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libsrtp2-2.5.0-2-arm64.hpkg (39316 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 113.9k 100 113.9k   0      0  1.07M      0                              0100 113.9k 100 113.9k   0      0  1.06M      0                              0100 113.9k 100 113.9k   0      0  1.05M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libssh2-1.11.1-1-arm64.hpkg (116732 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 358.3k 100 358.3k   0      0  2.94M      0                              0100 358.3k 100 358.3k   0      0  2.92M      0                              0100 358.3k 100 358.3k   0      0  2.90M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libtorrent-0.13.8-3-arm64.hpkg (366988 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 220.5k 100 220.5k   0      0  1.70M      0                              0100 220.5k 100 220.5k   0      0  1.69M      0                              0100 220.5k 100 220.5k   0      0  1.68M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libwebsockets-4.3.3-1-arm64.hpkg (225793 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  96994 100  96994   0      0 539.7k      0                              0100  96994 100  96994   0      0 537.3k      0                              0100  96994 100  96994   0      0 535.0k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/libzip-1.11.4-1-arm64.hpkg (96994 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  3.11M 100  3.11M   0      0 13.42M      0                              0100  3.11M 100  3.11M   0      0 13.38M      0                              0100  3.11M 100  3.11M   0      0 13.33M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/links-2.30-1-arm64.hpkg (3269425 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 469.3k 100 469.3k   0      0  2.98M      0                              0100 469.3k 100 469.3k   0      0  2.96M      0                              0100 469.3k 100 469.3k   0      0  2.95M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/lit-3.9.0-2-arm64.hpkg (480650 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 248.4k 100 248.4k   0      0  1.66M      0                              0100 248.4k 100 248.4k   0      0  1.65M      0                              0100 248.4k 100 248.4k   0      0  1.65M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/luvi-2.15.0-1-arm64.hpkg (254438 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.31M 100  1.31M   0      0  6.76M      0                              0100  1.31M 100  1.31M   0      0  6.73M      0                              0100  1.31M 100  1.31M   0      0  6.71M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/lynx-2.8.9rel.1-3-arm64.hpkg (1381271 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.45M 100  2.45M   0      0  8.76M      0                              0100  2.45M 100  2.45M   0      0  8.73M      0                              0100  2.45M 100  2.45M   0      0  8.71M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/mc-4.8.32-2-arm64.hpkg (2579925 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  55418 100  55418   0      0 377.8k      0                              0100  55418 100  55418   0      0 375.2k      0                              0100  55418 100  55418   0      0 372.7k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/minizip_ng-4.0.7-2-arm64.hpkg (55418 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 320.2k 100 320.2k   0      0  2.22M      0                              0100 320.2k 100 320.2k   0      0  2.21M      0                              0100 320.2k 100 320.2k   0      0  2.20M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/mosh-1.3.2-7-arm64.hpkg (327918 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 303.4k 100 303.4k   0      0  1.65M      0                              0100 303.4k 100 303.4k   0      0  1.64M      0                              0100 303.4k 100 303.4k   0      0  1.63M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/mosquitto-2.0.20-1-arm64.hpkg (310759 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 31.18M 100 31.18M   0      0 36.52M      0                              0100 31.18M 100 31.18M   0      0 36.48M      0                              0100 31.18M 100 31.18M   0      0 36.44M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/mupdf-1.20.3-3-arm64.hpkg (32704726 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 129.4k 100 129.4k   0      0 903.8k      0                              0100 129.4k 100 129.4k   0      0 897.5k      0                              0100 129.4k 100 129.4k   0      0 891.7k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/mupdf_tools-1.20.3-3-arm64.hpkg (132534 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  76934 100  76934   0      0 485.0k      0                              0100  76934 100  76934   0      0 482.5k      0                              0100  76934 100  76934   0      0 480.1k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/neon-0.36.0-2-arm64.hpkg (76934 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 221.8k 100 221.8k   0      0  1.55M      0                              0100 221.8k 100 221.8k   0      0  1.55M      0                              0100 221.8k 100 221.8k   0      0  1.54M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/net_ssleay-1.94-2-arm64.hpkg (227140 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  3.37M 100  3.37M   0      0 12.88M      0                              0100  3.37M 100  3.37M   0      0 12.84M      0                              0100  3.37M 100  3.37M   0      0 12.80M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/netsurf-3.11-4-arm64.hpkg (3538672 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.03M 100  2.03M   0      0  8.59M      0                              0100  2.03M 100  2.03M   0      0  8.57M      0                              0100  2.03M 100  2.03M   0      0  8.54M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/nginx-1.23.2-2-arm64.hpkg (2132746 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  7.00M 100  7.00M   0      0 24.40M      0                              0100  7.00M 100  7.00M   0      0 24.34M      0                              0100  7.00M 100  7.00M   0      0 24.27M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/nmap-7.94-1-arm64.hpkg (7343855 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 11.52M 100 11.52M   0      0 19.39M      0                              0100 11.52M 100 11.52M   0      0 19.36M      0                              0100 11.52M 100 11.52M   0      0 19.33M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/nodejs20-20.15.1-2-arm64.hpkg (12083858 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 17.45M 100 17.45M   0      0 39.22M      0                              0100 17.45M 100 17.45M   0      0 39.14M      0                              0100 17.45M 100 17.45M   0      0 39.06M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/nodejs24-24.21.0-3-arm64.hpkg (18308058 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 371.3k 100 371.3k   0      0  1.90M      0                              0100 371.3k 100 371.3k   0      0  1.89M      0                              0100 371.3k 100 371.3k   0      0  1.88M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/openldap-2.6.10-1-arm64.hpkg (380285 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 270.4k 100 270.4k   0      0  1.66M      0                              0100 270.4k 100 270.4k   0      0  1.65M      0                              0100 270.4k 100 270.4k   0      0  1.65M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/openldap2.4-2.4.48-5-arm64.hpkg (276913 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 276.5k 100 276.5k   0      0  1.96M      0                              0100 276.5k 100 276.5k   0      0  1.95M      0                              0100 276.5k 100 276.5k   0      0  1.94M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/openldap_tools-2.6.10-1-arm64.hpkg (283163 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0 44 72.89M  44 32.10M   0      0 31.39M      0   00:02   00:01   00:01 32.11M100 72.89M 100 72.89M   0      0 39.33M      0   00:01   00:01         32.11M100 72.89M 100 72.89M   0      0 39.32M      0   00:01   00:01         32.11M100 72.89M 100 72.89M   0      0 39.31M      0   00:01   00:01         32.11M
+[srccache] MISS https://packages.debene.dev/arm64/packages/openrct2-0.5.4-1-arm64.hpkg (76441406 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.80M 100  2.80M   0      0 10.29M      0                              0100  2.80M 100  2.80M   0      0 10.25M      0                              0100  2.80M 100  2.80M   0      0 10.22M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/openssh-10.4p1-1-arm64.hpkg (2943116 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  41354 100  41354   0      0 358.1k      0                              0100  41354 100  41354   0      0 354.8k      0                              0100  41354 100  41354   0      0 351.7k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/opusfile-0.12-4-arm64.hpkg (41354 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  36226 100  36226   0      0 174.2k      0                              0100  36226 100  36226   0      0 173.3k      0                              0100  36226 100  36226   0      0 172.4k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/paperkey-1.6-2-arm64.hpkg (36226 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  3.95M 100  3.95M   0      0 12.95M      0                              0100  3.95M 100  3.95M   0      0 12.91M      0                              0100  3.95M 100  3.95M   0      0 12.86M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/poco-1.12.4-3-arm64.hpkg (4142124 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.36M 100  1.36M   0      0  4.46M      0                              0100  1.36M 100  1.36M   0      0  4.45M      0                              0100  1.36M 100  1.36M   0      0  4.43M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/podofo-0.10.3-2-arm64.hpkg (1429127 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 668.0k 100 668.0k   0      0  2.70M      0                              0100 668.0k 100 668.0k   0      0  2.69M      0                              0100 668.0k 100 668.0k   0      0  2.67M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/podofo_tools-0.10.3-2-arm64.hpkg (684034 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  76908 100  76908   0      0 521.1k      0                              0100  76908 100  76908   0      0 517.2k      0                              0100  76908 100  76908   0      0 513.5k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/pycurl_python310-7.45.2-8-arm64.hpkg (76908 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 17.11M 100 17.11M   0      0 35.23M      0                              0100 17.11M 100 17.11M   0      0 35.16M      0                              0100 17.11M 100 17.11M   0      0 35.08M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/python3.10-3.10.21-1-arm64.hpkg (17946595 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 24.35M 100 24.35M   0      0 34.72M      0                              0100 24.35M 100 24.35M   0      0 34.69M      0                              0100 24.35M 100 24.35M   0      0 34.66M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/python3.11-3.11.16-1-arm64.hpkg (25533919 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 20.28M 100 20.28M   0      0 24.71M      0                              0100 20.28M 100 20.28M   0      0 24.69M      0                              0100 20.28M 100 20.28M   0      0 24.67M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/python3.12-3.12.14-1-arm64.hpkg (21265856 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 21.07M 100 21.07M   0      0 35.70M      0                              0100 21.07M 100 21.07M   0      0 35.66M      0                              0100 21.07M 100 21.07M   0      0 35.62M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/python3.14-3.14.7-1-arm64.hpkg (22100747 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.94M 100  2.94M   0      0  9.28M      0                              0100  2.94M 100  2.94M   0      0  9.26M      0                              0100  2.94M 100  2.94M   0      0  9.25M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/renga-1.28-3-arm64.hpkg (3091433 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 329.3k 100 329.3k   0      0  2.21M      0                              0100 329.3k 100 329.3k   0      0  2.20M      0                              0100 329.3k 100 329.3k   0      0  2.20M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/rsync-3.2.7-2-arm64.hpkg (337251 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  57510 100  57510   0      0 428.2k      0                              0100  57510 100  57510   0      0 426.2k      0                              0100  57510 100  57510   0      0 424.4k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/rtmpdump-2.4_20161210-8-arm64.hpkg (57510 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  56507 100  56507   0      0 408.9k      0                              0100  56507 100  56507   0      0 407.0k      0                              0100  56507 100  56507   0      0 405.3k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/rtmpdump_tools-2.4_20161210-8-arm64.hpkg (56507 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 10.27M 100 10.27M   0      0 25.93M      0                              0100 10.27M 100 10.27M   0      0 25.90M      0                              0100 10.27M 100 10.27M   0      0 25.86M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/ruby-3.2.9-1-arm64.hpkg (10772907 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0 17 175.0M  17 31.29M   0      0 30.39M      0   00:05   00:01   00:04 31.31M 59 175.0M  59 103.2M   0      0 50.88M      0   00:03   00:02   00:01 51.66M 88 175.0M  88 154.6M   0      0 50.92M      0   00:03   00:03         51.44M100 175.0M 100 175.0M   0      0 51.09M      0   00:03   00:03         51.44M100 175.0M 100 175.0M   0      0 51.08M      0   00:03   00:03         51.44M100 175.0M 100 175.0M   0      0 51.07M      0   00:03   00:03         51.44M
+[srccache] MISS https://packages.debene.dev/arm64/packages/rust_bin-1.101.0~nightly_e9bbadf68-1-arm64.hpkg (183503979 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+curl: (22) The requested URL returned error: 403
+[srccache] FAIL https://packages.debene.dev/arm64/packages/slack++-0-8-arm64.hpkg (upstream fetch failed or truncated; cached nothing)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  4.33M 100  4.33M   0      0 17.25M      0                              0100  4.33M 100  4.33M   0      0 17.21M      0                              0100  4.33M 100  4.33M   0      0 17.18M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/softhsm2-2.5.0-3-arm64.hpkg (4541858 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.25M 100  1.25M   0      0  5.89M      0                              0100  1.25M 100  1.25M   0      0  5.87M      0                              0100  1.25M 100  1.25M   0      0  5.86M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/sqlcipher-4.4.2-3-arm64.hpkg (1317286 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 21.32M 100 21.32M   0      0 41.46M      0                              0100 21.32M 100 21.32M   0      0 41.41M      0                              0100 21.32M 100 21.32M   0      0 41.37M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/tdlib-0.0.20260718-2-arm64.hpkg (22363651 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  8.51M 100  8.51M   0      0 23.88M      0                              0100  8.51M 100  8.51M   0      0 23.85M      0                              0100  8.51M 100  8.51M   0      0 23.81M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/teeworlds-0.7.5-3-arm64.hpkg (8928564 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 410.6k 100 410.6k   0      0  2.72M      0                              0100 410.6k 100 410.6k   0      0  2.71M      0                              0100 410.6k 100 410.6k   0      0  2.69M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/tinyemu-2019.12.21-4-arm64.hpkg (420472 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  4.38M 100  4.38M   0      0 17.05M      0                              0100  4.38M 100  4.38M   0      0 17.00M      0                              0100  4.38M 100  4.38M   0      0 16.95M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/tor-0.4.8.12-1-arm64.hpkg (4599921 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.04M 100  1.04M   0      0  3.34M      0                              0100  1.04M 100  1.04M   0      0  3.33M      0                              0100  1.04M 100  1.04M   0      0  3.32M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/u_boot_tools-2026.07-1-arm64.hpkg (1099565 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 459.1k 100 459.1k   0      0  2.42M      0                              0100 459.1k 100 459.1k   0      0  2.41M      0                              0100 459.1k 100 459.1k   0      0  2.40M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/ucommon-7.0.1-3-arm64.hpkg (470168 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  26249 100  26249   0      0 204.7k      0                              0100  26249 100  26249   0      0 203.3k      0                              0100  26249 100  26249   0      0 202.0k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/unshield-1.5.1-2-arm64.hpkg (26249 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 708.0k 100 708.0k   0      0  3.23M      0                              0100 708.0k 100 708.0k   0      0  3.22M      0                              0100 708.0k 100 708.0k   0      0  3.20M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/vorbis_tools-1.4.3-1-arm64.hpkg (724997 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 784.8k 100 784.8k   0      0  2.95M      0                              0100 784.8k 100 784.8k   0      0  2.94M      0                              0100 784.8k 100 784.8k   0      0  2.93M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/wget-1.24.5-2-arm64.hpkg (803696 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  68351 100  68351   0      0 436.6k      0                              0100  68351 100  68351   0      0 434.1k      0                              0100  68351 100  68351   0      0 431.8k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/xar-1.8.0.0~498-2-arm64.hpkg (68351 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  1.21M 100  1.21M   0      0  5.77M      0                              0100  1.21M 100  1.21M   0      0  5.75M      0                              0100  1.21M 100  1.21M   0      0  5.73M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/xerces_c-3.3.0-1-arm64.hpkg (1276987 bytes)
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 252.7k 100 252.7k   0      0  1.37M      0                              0100 252.7k 100 252.7k   0      0  1.36M      0                              0100 252.7k 100 252.7k   0      0  1.35M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/yara-4.4.0-2-arm64.hpkg (258774 bytes)
+== packages with zero ELF objects:
+SCANNED tdlib-0.0.20260718-2-arm64 sha256=31fdf2a72173a0190fe7586b7356610f6277c83a3efcc3f5d6aa5cd6575b8959 elf=0
+== BN_ULONG-signature importers (UND dynsyms):
+haikuwebkit-1.10.0-2-arm64 lib/libWebKitLegacy.so.1.10.0: BN_sub_word 
+libp11-0.4.10-3-arm64 lib/engines/pkcs11.so: BN_set_word 
+libp11-0.4.10-3-arm64 lib/libp11.so.2.5.2: BN_set_word 
+libssh2-1.11.1-1-arm64 lib/libssh2.so.1.0.1: BN_set_word 
+libwebsockets-4.3.3-1-arm64 lib/libwebsockets.so.19: BN_set_word 
+lit-3.9.0-2-arm64 bin/lulit: BN_set_word 
+luvi-2.15.0-1-arm64 bin/luvi: BN_set_word 
+net_ssleay-1.94-2-arm64 lib/perl5/vendor_perl/5.42/arm64-haiku-thread-multi/auto/Net/SSLeay/SSLeay.so: BN_set_word 
+nmap-7.94-1-arm64 bin/nmap: BN_div_word BN_set_word BN_sub_word 
+nodejs20-20.15.1-2-arm64 bin/node: BN_get_word BN_set_word 
+nodejs24-24.21.0-3-arm64 bin/node: BN_add_word BN_get_word BN_set_word BN_sub_word 
+openssh-10.4p1-1-arm64 bin/ssh-keygen: BN_add_word BN_mod_word BN_set_word 
+poco-1.12.4-3-arm64 lib/libPocoCrypto.so.94: BN_set_word 
+rtmpdump-2.4_20161210-8-arm64 lib/librtmp.1.so: BN_set_word BN_sub_word 
+softhsm2-2.5.0-3-arm64 bin/softhsm2-util: BN_add_word BN_mul_word BN_set_word 
+softhsm2-2.5.0-3-arm64 lib/softhsm/libsofthsm2.so: BN_add_word BN_mul_word BN_set_word 
+tor-0.4.8.12-1-arm64 bin/tor: BN_is_word BN_set_word BN_sub_word 
+tor-0.4.8.12-1-arm64 bin/tor-gencert: BN_is_word BN_set_word BN_sub_word 
+u_boot_tools-2026.07-1-arm64 bin/dumpimage: BN_get_word BN_set_word 
+u_boot_tools-2026.07-1-arm64 bin/fdt_add_pubkey: BN_get_word BN_set_word 
+u_boot_tools-2026.07-1-arm64 bin/fit_check_sign: BN_get_word BN_set_word 
+u_boot_tools-2026.07-1-arm64 bin/fit_info: BN_get_word BN_set_word 
+u_boot_tools-2026.07-1-arm64 bin/mkimage: BN_get_word BN_set_word 
+u_boot_tools-2026.07-1-arm64 bin/preload_check_sign: BN_get_word BN_set_word 
+== distinct packages with a hit:
+haikuwebkit-1.10.0-2-arm64
+libp11-0.4.10-3-arm64
+libssh2-1.11.1-1-arm64
+libwebsockets-4.3.3-1-arm64
+lit-3.9.0-2-arm64
+luvi-2.15.0-1-arm64
+net_ssleay-1.94-2-arm64
+nmap-7.94-1-arm64
+nodejs20-20.15.1-2-arm64
+nodejs24-24.21.0-3-arm64
+openssh-10.4p1-1-arm64
+poco-1.12.4-3-arm64
+rtmpdump-2.4_20161210-8-arm64
+softhsm2-2.5.0-3-arm64
+tor-0.4.8.12-1-arm64
+u_boot_tools-2026.07-1-arm64
+== ELF objects with DT_NEEDED libcrypto: 193 in 91 packages
+== packages with DT_NEEDED libcrypto but no BN_ULONG import:
+apache-2.4.66-1-arm64 aria2-1.36.0-2-arm64 axel-2.17.11-2-arm64 bind_utils-9.16.50-3-arm64 borgbackup-1.4.5-1-arm64 capnproto-1.4.0-1-arm64 cpr-1.14.2-1-arm64 curl-8.21.0-1-arm64 cyrus_sasl-2.1.28-2-arm64 dma-0.14~git-3-arm64 dovecot-2.3.21-1-arm64 elinks-0.19.1-1-arm64 fossil-2.28-1-arm64 git-2.54.0-1-arm64 gloox-1.0.28-4-arm64 hiredis-1.3.0-1-arm64 httrack-3.49.2-5-arm64 icecast-2.5.0-2-arm64 irssi-1.4.5-5-arm64 ixwebsocket-11.4.6-1-arm64 kc-2.5.1-3-arm64 krb5-1.20-3-arm64 ladybird-0~git90998c5d-3-arm64 lagrange-1.17.6-1-arm64 libarchive-3.7.9-2-arm64 libarchive_tools-3.7.9-2-arm64 libetpan-1.9.4-3-arm64 libevent-2.1.12-6-arm64 libgit2_0.25-0.25.1-5-arm64 libgit2_1.5-1.5.0-2-arm64 libgit2_1.5_tools-1.5.0-2-arm64 libgit2_1.8-1.8.4-2-arm64 libgit2_1.8_tools-1.8.4-2-arm64 libgit2_1.9-1.9.1-1-arm64 libgit2_1.9_tools-1.9.1-1-arm64 liboauth-1.0.3-3-arm64 libshout-2.4.5-2-arm64 libsrtp2-2.5.0-2-arm64 libtorrent-0.13.8-3-arm64 libzip-1.11.4-1-arm64 links-2.30-1-arm64 lynx-2.8.9rel.1-3-arm64 minizip_ng-4.0.7-2-arm64 mosh-1.3.2-7-arm64 mosquitto-2.0.20-1-arm64 mupdf-1.20.3-3-arm64 mupdf_tools-1.20.3-3-arm64 neon-0.36.0-2-arm64 netsurf-3.11-4-arm64 nginx-1.23.2-2-arm64 openldap-2.6.10-1-arm64 openldap2.4-2.4.48-5-arm64 openldap_tools-2.6.10-1-arm64 openrct2-0.5.4-1-arm64 opusfile-0.12-4-arm64 paperkey-1.6-2-arm64 podofo-0.10.3-2-arm64 podofo_tools-0.10.3-2-arm64 pycurl_python310-7.45.2-8-arm64 python3.10-3.10.21-1-arm64 python3.11-3.11.16-1-arm64 python3.12-3.12.14-1-arm64 python3.14-3.14.7-1-arm64 renga-1.28-3-arm64 rsync-3.2.7-2-arm64 rtmpdump_tools-2.4_20161210-8-arm64 ruby-3.2.9-1-arm64 rust_bin-1.101.0~nightly_e9bbadf68-1-arm64 sqlcipher-4.4.2-3-arm64 teeworlds-0.7.5-3-arm64 ucommon-7.0.1-3-arm64 unshield-1.5.1-2-arm64 wget-1.24.5-2-arm64 xar-1.8.0.0~498-2-arm64 yara-4.4.0-2-arm64 
+== hit packages with no DT_NEEDED libcrypto (static or indirect):
+== full scanlog:
+SCANNED apache-2.4.66-1-arm64 sha256=992fcf0cfb167a27996786e7f12e3dcc3cb26ab52d8f889df5dbcf2b4e461732 elf=103
+SCANNED aria2-1.36.0-2-arm64 sha256=58d12a967da5bfff3ae34baed615d9abd3560ecb13f029e4b5cc3909b5dbe0a7 elf=2
+SCANNED axel-2.17.11-2-arm64 sha256=ea413aa6d529408249a624679932bacb92fc1f46fa57e79bfb863c6a45b21eb1 elf=1
+SCANNED bind_utils-9.16.50-3-arm64 sha256=986dabbe4bccf91c66bde4c55f348633dce5053543dffd2d5449d1e263646db1 elf=3
+SCANNED bitchx-1.2.1-4-arm64 sha256=126d1c0a081e2b57716b4b29ee216b36ce1754a3b59220b26c5124c04206c035 elf=19
+SCANNED borgbackup-1.4.5-1-arm64 sha256=6d56250831609a15a6448bbcdfa2beec3ca1cc18715d7189b27df4b783415d79 elf=7
+SCANNED bzflag-2.4.26-2-arm64 sha256=e1cf80ceb32475d054f79ea0ca0e1631a4c3f63d4c2e40f7b6de3582fde65520 elf=36
+SCANNED capnproto-1.4.0-1-arm64 sha256=cca341457eeff1c344e15ebd43f6158885450b7cf3278f6d049bd392dfb6556f elf=11
+SCANNED cpr-1.14.2-1-arm64 sha256=c4dc66a81167f7f3c7044698cc90f476dff72a8a7c2a217360520da6eedcf358 elf=1
+SCANNED curl-8.21.0-1-arm64 sha256=bcbafdb981b730b4d417862a17160a9bea3e80e0554d4630c781d97f2c61e652 elf=2
+SCANNED cyrus_sasl-2.1.28-2-arm64 sha256=13f3f602f1169c820f57a5361f88509105f4ee0f734cb2938779f503c7344164 elf=10
+SCANNED dma-0.14~git-3-arm64 sha256=0a1359c2a4699ae1dda9428c7d0a02ba5729c0bf1ea96d9b5cd410ac6aba5252 elf=2
+SCANNED dovecot-2.3.21-1-arm64 sha256=6f153f400183cbf9a5d94e5e634e327918aaa4ac5e40323061f5d2b7ee4751af elf=87
+SCANNED elinks-0.19.1-1-arm64 sha256=2ea748943351075934cb8955db4a868252c01e4c94a8d852384c84cdb6e4ca97 elf=1
+SCANNED fossil-2.28-1-arm64 sha256=100029e95fba0faf4e209952ceb1f25f27fbc6175908a2b04358161be7807b59 elf=1
+SCANNED git-2.54.0-1-arm64 sha256=b57e60ca6f7be3d468e3752768d85baf5d76f912723a2a749850837794ffe003 elf=8
+SCANNED git_daemon-2.54.0-1-arm64 sha256=d2947c86e4298e357f3ea77154fdadd4558d6575fe2692a3f0b93037cae529b1 elf=1
+SCANNED gloox-1.0.28-4-arm64 sha256=d21c8ff97a2802cad87391e30df21e748d1dcbe31d17aac2e621cbc53a158f92 elf=1
+SCANNED gsoap-2.8.135-1-arm64 sha256=3dfbe10201a3eb85f80ff9fbbc2ce80b9e0c9fe0665f46726c03fb4c95d56407 elf=2
+SCANNED haikuwebkit-1.10.0-2-arm64 sha256=52a1c774cce8e099ec818b2578fc799124871d8d37a9d23ee34a3f5a1e992da6 elf=3
+SCANNED hiredis-1.3.0-1-arm64 sha256=7219437fd8edbfa91a237f14aebbfd512ad7e99670bf7f3768de0cf61945dcb4 elf=2
+SCANNED httrack-3.49.2-5-arm64 sha256=b5ad0f6f872aa3bedabb230eb600f1e2c4d8861796eb0351c5760515fbe5aab9 elf=15
+SCANNED icecast-2.5.0-2-arm64 sha256=64e348df238f1c0cd54e5805d6d7960586dbe5f8e3682d866de4ca36a04751bd elf=1
+SCANNED irssi-1.4.5-5-arm64 sha256=3e063ca66fe484dfcb5aa1e65164b5610bb750be535f3571bcc70b7dc78de8a4 elf=8
+SCANNED ixwebsocket-11.4.6-1-arm64 sha256=9bf002cfa75d094994ef3eaa8bfc5448f303d0d57a51133dd0e742522ba715fd elf=1
+SCANNED kc-2.5.1-3-arm64 sha256=38afee8a8187138b4d5c639290bb50b246169f486a2b77910a9b1dcb25273134 elf=1
+SCANNED krb5-1.20-3-arm64 sha256=76f0eea819acf4b57368294de4fc95e50080dca2f63cf44ab4195a5e9864d916 elf=40
+SCANNED ladybird-0~git90998c5d-3-arm64 sha256=6dffd16e4398896ea4912b906899cd1f34cc494c4a94d24ab4aa200aed59dbdb elf=48
+SCANNED lagrange-1.17.6-1-arm64 sha256=880b7f64cd09e7f59f18bd96d247b2ff9086d6bccd08def4e73645d9d9e18593 elf=1
+SCANNED libarchive-3.7.9-2-arm64 sha256=dfd5e3eb5e425ded083ade740d1dfa6573f02d38db9e8df5e675549ca1cfed21 elf=1
+SCANNED libarchive_tools-3.7.9-2-arm64 sha256=8b4f44a5e017e5a9262f92846ca1be0ee963e8084d901ed157218b13d2d02fed elf=4
+SCANNED libasr-1.0.2-7-arm64 sha256=383bc099bca77a488b4bf5511cab4024fc71c595a2c8856200f9ff55b8cf1b48 elf=1
+SCANNED libetpan-1.9.4-3-arm64 sha256=bc6fce3248b251e442107c7fc9ed199daef1ea783e081fe465daa1c14ad12edd elf=1
+SCANNED libevent-2.1.12-6-arm64 sha256=1e5dfa35162a6765f1d0997cccec5238db7e4caaa014a33ed8d8d30510daad72 elf=5
+SCANNED libgit2_0.25-0.25.1-5-arm64 sha256=9a8fe193888c701e17fd0b054310496ed0de7ba0cb9a083bb48f201965763432 elf=1
+SCANNED libgit2_1.5-1.5.0-2-arm64 sha256=e387086a34ffa8bc6ad8f080052cdf18e97cd23c7f5ecd18f89b680019001dac elf=1
+SCANNED libgit2_1.5_tools-1.5.0-2-arm64 sha256=679fef4bae1112d469dcc11af5e5c608c9c5ee0b1e3ec141eb1128a42a61ae55 elf=1
+SCANNED libgit2_1.8-1.8.4-2-arm64 sha256=e1a0102f910d325ec0b3d0df715f048fe7850bb80cece61908d6babad3b92730 elf=1
+SCANNED libgit2_1.8_tools-1.8.4-2-arm64 sha256=01fb2df405a0b20c01176e1e50e06bb052a8f415383faa2ea13be538a54cb2ea elf=1
+SCANNED libgit2_1.9-1.9.1-1-arm64 sha256=684ee3debc4c9afb0043a44850b8eef11d8f949e799024ebc5c8edad8c965f1c elf=1
+SCANNED libgit2_1.9_tools-1.9.1-1-arm64 sha256=435048edaf8c881eb0963f23394fcbeedfe51e014ac78d859d25f2ebc6b808ad elf=1
+SCANNED libircclient-1.8-6-arm64 sha256=dedff2726e92a6a5222bcba4e8d51881a8dfbba8841fba906f5f06a98685e911 elf=1
+SCANNED liblrdf-0.6.1-1-arm64 sha256=b30591dedb32dbc73315b66954e811ee4db897db68d19c2214e7942cbb09a99c elf=1
+SCANNED libmicrohttpd-1.0.1-2-arm64 sha256=095a99546b2ef7887c02b813d2d5720b344972fe76f45fba33f5bbafe9dc782b elf=1
+SCANNED liboauth-1.0.3-3-arm64 sha256=e81ebf420cd02d0b265387b78466f6a32558293d1b0f4b452e7d3d6be1ee7340 elf=1
+SCANNED libp11-0.4.10-3-arm64 sha256=a3a0946a2a5c08bf694bc2574e5e500da58b9b9fc728489fee212417f45f26c8 elf=2
+SCANNED libshout-2.4.5-2-arm64 sha256=903c4fba22c2d94016195337db40717f537180749122dd37d6b94190d692118e elf=2
+SCANNED libsrtp2-2.5.0-2-arm64 sha256=39d19538bc8d19cd3aeee85180826d3b7592017391988408a8ca96355617b4c7 elf=1
+SCANNED libssh2-1.11.1-1-arm64 sha256=6aa1ba5f040c599e07ebf964171c1e966e3e410d5ed6fb3b48f65777b70df370 elf=1
+SCANNED libtorrent-0.13.8-3-arm64 sha256=53434ea3c90b9860c1c6abd5315ba746dd766811d9e82e9b2eeda90daba75625 elf=1
+SCANNED libwebsockets-4.3.3-1-arm64 sha256=5a996463b7904ffc9fd9abfe8358998469794c250bf7bb38cae204279a4402d4 elf=1
+SCANNED libzip-1.11.4-1-arm64 sha256=dae8ec75c8398794ab86185218f1fe1decf64ab8a6de965f20b2534a56bcfe99 elf=4
+SCANNED links-2.30-1-arm64 sha256=930246ee0da5482dc08959723ea84d261c04bc88915f0ea717f8f5ce11af366e elf=1
+SCANNED lit-3.9.0-2-arm64 sha256=da2cb238a02c445c4f7997993fbec973b4e8fa00d0e00b5736f53fa13d2c0eec elf=1
+SCANNED luvi-2.15.0-1-arm64 sha256=9b39e28fcb00ddf58c38aae234261de2c1c979c3810e23e47378d337fd5d7977 elf=1
+SCANNED lynx-2.8.9rel.1-3-arm64 sha256=7c60cd8c6dbde57c4c086cd5fb268262f1c83004ca65a5f726b70ccdfa31cfbc elf=1
+SCANNED mc-4.8.32-2-arm64 sha256=95a9e31da2cf9f01c43d5a18db735ee63fdf01c525e7c1ad5f7f89e4c92d91bd elf=1
+SCANNED minizip_ng-4.0.7-2-arm64 sha256=42346618554b6f4b74619bb2f8e07190b5441536cef4af88a9ea1eaba129e6a0 elf=1
+SCANNED mosh-1.3.2-7-arm64 sha256=f38d3a2ff225f9c486f02c5ec1c6a6b45e770158cf9d563065381c6b9c85faeb elf=2
+SCANNED mosquitto-2.0.20-1-arm64 sha256=b160e3f0a9f048019edb6db7a325a5e69f21e37e82ee1cbc7f730bec46c9890f elf=7
+SCANNED mupdf-1.20.3-3-arm64 sha256=3214b9b4f441e5246e27644b8defc215487e039bf45635d1bc7e66d4b9b971ab elf=1
+SCANNED mupdf_tools-1.20.3-3-arm64 sha256=c4b55f8a9b885783f781e68b9217f889bf7a2f9782e30fa75bee70ba8788d23e elf=2
+SCANNED neon-0.36.0-2-arm64 sha256=876fb0ba9a8954d26060879096c0a0012840822564e4db796d413600fcf1fdc2 elf=1
+SCANNED net_ssleay-1.94-2-arm64 sha256=3d3a347a3c4b8eee2b2867dc461bd793883475407b08054e14bf887b4f82a645 elf=1
+SCANNED netsurf-3.11-4-arm64 sha256=619f24b73dd5d6771b9305015b07352147ed50f5b7d135611c7b06831dfd5905 elf=1
+SCANNED nginx-1.23.2-2-arm64 sha256=ce3af386fbb7868594606cfd4a096443dea744818254e214cd3854d84fc846d8 elf=1
+SCANNED nmap-7.94-1-arm64 sha256=81d597599a95c8c02b7b65d4d920da315a3e0445e18e806ce23fa4a743629632 elf=3
+SCANNED nodejs20-20.15.1-2-arm64 sha256=2841f087a305b871c110084e8d953e15ce58a075cfba10768bd897287d570dae elf=1
+SCANNED nodejs24-24.21.0-3-arm64 sha256=6792d5d0ffc9c3d37809a3006a28bad832979bda62be1970bcc72d2fcba64138 elf=1
+SCANNED openldap-2.6.10-1-arm64 sha256=2dec81b05b02548edd65e1413c3925bd1c9d0da0c83a4864555981c8aec3bb3a elf=2
+SCANNED openldap2.4-2.4.48-5-arm64 sha256=17ba5eacae46c70ba80c3251322abd3a0696a50335dc507e2750e9e296f1ba3a elf=3
+SCANNED openldap_tools-2.6.10-1-arm64 sha256=fb6f2d359b86c6238975f9ab2f03007ca378e82a7f9297208c19dd81b1728d99 elf=10
+SCANNED openrct2-0.5.4-1-arm64 sha256=b188da5fc6df00a8fbdb911ee9a0e5282d957990c2009c59b81088192726d85f elf=3
+SCANNED openssh-10.4p1-1-arm64 sha256=b902d39bd06dd200ee28e057b6eeba4f22cac4563844de2ddaa137fc50272b40 elf=14
+SCANNED opusfile-0.12-4-arm64 sha256=d2d96994d2adbbe4d1b423dc2ee558a5318d10776b2bff76045969a1f6e983ac elf=2
+SCANNED paperkey-1.6-2-arm64 sha256=2018805f5fdfc3a36b3d687f22aca0bd2df82cf6d23a660ecfd5f3cdc2d31cf1 elf=1
+SCANNED poco-1.12.4-3-arm64 sha256=fc2c86d43fdc535dab8cd62fb1f8d5c997f78ce68b08362b3533f39a52e77e6e elf=19
+SCANNED podofo-0.10.3-2-arm64 sha256=73ef8d8d0464998736c6acbc695bb96ab1e30587ad0613539ec0a8a3f06869e9 elf=1
+SCANNED podofo_tools-0.10.3-2-arm64 sha256=16ef491d8469cfbc34e338ad3f8b94c5269cb518224fced20fa91e550198ff87 elf=19
+SCANNED pycurl_python310-7.45.2-8-arm64 sha256=73c17d286199877fbb43a935e3633536e1960da0471b7ad443a0809023f7a4a5 elf=1
+SCANNED python3.10-3.10.21-1-arm64 sha256=3dbe943ab288fa8ed27538a84c3eb12fcbe6da399af0914ed351a7092be28119 elf=73
+SCANNED python3.11-3.11.16-1-arm64 sha256=e18af77d1194b356c145aa5158deec219ada496be47a742e4fc118665b94ea4d elf=74
+SCANNED python3.12-3.12.14-1-arm64 sha256=2e74e131cf192570154ad01f18fcee8d9c358387420debc82cc1309209125e78 elf=75
+SCANNED python3.14-3.14.7-1-arm64 sha256=78aeb3514631c96c51c1d32f7e1581c6e575a869f5649634d3d7d837beb5c466 elf=75
+SCANNED renga-1.28-3-arm64 sha256=ed89d18196d43fa65b904a66c047f2795fd415b63b66bf177ac39798358b106d elf=1
+SCANNED rsync-3.2.7-2-arm64 sha256=28caed8554a02cd110a3c4c434275cf2f3cbacf6d0b2d5e20c6cb5e94d13aba9 elf=1
+SCANNED rtmpdump-2.4_20161210-8-arm64 sha256=6fed7d9ae16538aef04ef01addb82f3faff46c0e8dfd143e126bc67877ef0330 elf=1
+SCANNED rtmpdump_tools-2.4_20161210-8-arm64 sha256=b587a4994170b0cd4be312c4650670545c9bacf986de80306dd53397f45f03d5 elf=4
+SCANNED ruby-3.2.9-1-arm64 sha256=bc95573e72284d260d94490ea8146b5e5b2ef88759af4ea487b010535c31e920 elf=112
+SCANNED rust_bin-1.101.0~nightly_e9bbadf68-1-arm64 sha256=d3a8352699eef66518ba59face75d5a455d5249c30dc91080367d5bf340b35b7 elf=23
+DOWNLOAD-FAIL slack++-0-8-arm64
+SCANNED softhsm2-2.5.0-3-arm64 sha256=82d7913498ec9ad95be1e25600a98f685d7c6cdbf390c6d378f9ec63039fdcbd elf=4
+SCANNED sqlcipher-4.4.2-3-arm64 sha256=14597796ed7442aaaabe2886ca3df8ab33cd3371035005f1a8ef90620db7e62d elf=2
+SCANNED tdlib-0.0.20260718-2-arm64 sha256=31fdf2a72173a0190fe7586b7356610f6277c83a3efcc3f5d6aa5cd6575b8959 elf=0
+SCANNED teeworlds-0.7.5-3-arm64 sha256=2e88ff4d1721150ca1631a97cfc1cb1844f6b59de3275ac26a08516b39b766d2 elf=2
+SCANNED tinyemu-2019.12.21-4-arm64 sha256=2c3a442fe2584f6d194b1034ce2ca3dbedc41f13752281ff4caf996b67d155b9 elf=1
+SCANNED tor-0.4.8.12-1-arm64 sha256=cd418c64d2a050d95519d018a18d1637b01a03e97aaedfdc52441778203a6755 elf=4
+SCANNED u_boot_tools-2026.07-1-arm64 sha256=9253146b0b0cd82fd15fdb358fb9a999e1a6a2d9098c71c4100eb4b81f61fa1d elf=13
+SCANNED ucommon-7.0.1-3-arm64 sha256=caec5971d4d94ea57a2fcaae083f52b0e289b83527a5dd2bb9131a69e1c300dd elf=12
+SCANNED unshield-1.5.1-2-arm64 sha256=96f53f2f350ab9cb2861b465d72c2367b3cd1b04adec0528df900fc322723157 elf=2
+SCANNED vorbis_tools-1.4.3-1-arm64 sha256=83ca4eb9cfe3bef3174ceb1edc03a699f6922565a9199fb23e05e4bf6345ea78 elf=6
+SCANNED wget-1.24.5-2-arm64 sha256=45069687a54903ab52fd64c3813dc1c6a43d48dac2168d652ecfc5d367663f53 elf=1
+SCANNED xar-1.8.0.0~498-2-arm64 sha256=6ccae6be1e5934a2820cd6bd1c6c4427c3c33f7a4cc08018e75fc9c9db6b9e8c elf=2
+SCANNED xerces_c-3.3.0-1-arm64 sha256=fed6cc94a408ecdae70c292a01e3d291b5fbedca978e9ae28a153e98e32d8ce5 elf=17
+SCANNED yara-4.4.0-2-arm64 sha256=1cba4147b930c6da020f91cfc04b3e95a8c099daf7b2f9bc0d0325e48b2aab61 elf=3
+SCAN-DONE
