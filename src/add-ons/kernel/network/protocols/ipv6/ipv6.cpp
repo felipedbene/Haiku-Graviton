@@ -2012,7 +2012,7 @@ net_protocol_module_info gIPv6Module = {
 		0,
 		ipv6_std_ops
 	},
-	NET_PROTOCOL_ATOMIC_MESSAGES,
+	NET_PROTOCOL_ATOMIC_MESSAGES | NET_PROTOCOL_HAS_MESSAGE_QUEUED,
 
 	ipv6_init_protocol,
 	ipv6_uninit_protocol,

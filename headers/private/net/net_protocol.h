@@ -63,6 +63,10 @@ typedef struct net_protocol {
 
 // net_protocol_module_info::flags field
 #define NET_PROTOCOL_ATOMIC_MESSAGES 0x01
+// The module provides message_queued(). A module built before that member
+// existed has a shorter structure and never sets this bit, so the stack must
+// not look at the member without it.
+#define NET_PROTOCOL_HAS_MESSAGE_QUEUED 0x02
 
 
 struct net_protocol_module_info {
@@ -127,8 +131,9 @@ struct net_protocol_module_info {
 					struct sockaddr* _address, socklen_t* _addressLength,
 					int flags);
 
-	// Optional, for NET_PROTOCOL_ATOMIC_MESSAGES protocols: whether a message
-	// is queued for reading. read_avail() counts bytes, so it cannot tell an
+	// Optional, for NET_PROTOCOL_ATOMIC_MESSAGES protocols, and only valid
+	// when NET_PROTOCOL_HAS_MESSAGE_QUEUED is set: whether a message is
+	// queued for reading. read_avail() counts bytes, so it cannot tell an
 	// empty datagram from an empty queue.
 	bool		(*message_queued)(net_protocol* self);
 };

@@ -691,7 +691,7 @@ net_protocol_module_info gLinkModule = {
 		0,
 		link_std_ops
 	},
-	NET_PROTOCOL_ATOMIC_MESSAGES,
+	NET_PROTOCOL_ATOMIC_MESSAGES | NET_PROTOCOL_HAS_MESSAGE_QUEUED,
 
 	link_init_protocol,
 	link_uninit_protocol,
