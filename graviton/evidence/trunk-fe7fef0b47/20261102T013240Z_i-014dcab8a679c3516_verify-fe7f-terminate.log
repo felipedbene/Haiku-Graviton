@@ -1,0 +1,8 @@
+# evidence: verify-fe7f-terminate (workstation)
+$ aws ec2 terminate-instances --instance-ids i-014dcab8a679c3516
+i-014dcab8a679c3516	running	shutting-down
+$ aws ec2 wait instance-terminated --instance-ids i-014dcab8a679c3516
+wait rc=0
+i-014dcab8a679c3516	terminated	User initiated (2026-11-02 01:32:42 GMT)
+$ canonical AMI after the run
+ami-058776e58bd902fba	haiku-graviton-1792444749

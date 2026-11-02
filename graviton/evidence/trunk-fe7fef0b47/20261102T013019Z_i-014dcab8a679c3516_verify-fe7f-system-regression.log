@@ -1,0 +1,65 @@
+# evidence: verify-fe7f-system-regression
+# instance: i-014dcab8a679c3516   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T013019Z   end: 20261102T013202Z   rc: 0
+# script sha256: 53ed24620e41553d01831a43bc211f7bc44db6bd95d29c37bef84e6d20a8ab94
+# ---- script ----
+# | set -u
+# | cd /boot/home/td || exit 1
+# | echo "--- process creation: 300 fork+exec of /bin/true from bash"
+# | time bash -c 'for i in $(seq 300); do /bin/true; done'
+# | echo "--- 100 subprocess.run (posix_spawn/fork+exec) from python"
+# | time python3 -I -c 'import subprocess; [subprocess.run(["/bin/true"]) for _ in range(100)]'
+# | echo "--- signals to children"
+# | for s in TERM INT HUP USR1 QUIT KILL; do sleep 30 & p=$!; kill -$s $p; wait $p; echo "SIG$s -> wait status $?"; done
+# | echo "--- limits"; bash -c 'ulimit -a'
+# | echo "--- write path without a limit: 1 GiB with dd, twice"
+# | for i in 1 2; do dd if=/dev/zero of=big.dat bs=1M count=1024 2>&1 | tail -1; rm -f big.dat; done
+# | echo "--- tools"; pkgman search nodejs24 2>&1 | tail -1; python3 -c 'print("python ok")'
+# | node -e 'const fs=require("fs"); fs.writeFileSync("/tmp/n.txt","x".repeat(1<<20)); console.log("node ok", fs.statSync("/tmp/n.txt").size)'
+# | echo "--- daemons"; ps | grep -E "sshd|ssm|debug_server|package_daemon|registrar" | grep -v grep | awk '{print $1}' | sort | uniq -c
+# | echo "--- kernel log: panic/assert lines: $(grep -aciE 'panic|assert' /var/log/syslog)"; grep -aiE 'panic|assert' /var/log/syslog | tail -3
+# ---- raw output ----
+--- process creation: 300 fork+exec of /bin/true from bash
+
+real	0m0.389s
+user	0m0.141s
+sys	0m0.209s
+--- 100 subprocess.run (posix_spawn/fork+exec) from python
+
+real	0m0.286s
+user	0m0.090s
+sys	0m0.197s
+--- signals to children
+SIGTERM -> wait status 143
+SIGINT -> wait status 0
+SIGHUP -> wait status 0
+/tmp/ccrun/cc-20261102T013019Z-28697.sh: line 8:  6612 User defined signal 1      sleep 30
+SIGUSR1 -> wait status 146
+SIGQUIT -> wait status 0
+/tmp/ccrun/cc-20261102T013019Z-28697.sh: line 8:  6633 Killed (by death)          sleep 30
+SIGKILL -> wait status 137
+--- limits
+core file size              (blocks, -c) 0
+data seg size               (kbytes, -d) unlimited
+file size                   (blocks, -f) unlimited
+open files                          (-n) 256
+pipe size                (512 bytes, -p) 8
+stack size                  (kbytes, -s) 65536
+max user processes                  (-u) 1024
+virtual memory              (kbytes, -v) 18014398509481983
+--- write path without a limit: 1 GiB with dd, twice
+1073741824 bytes (1.1 GB, 1.0 GiB) copied, 0.154047 s, 7.0 GB/s
+1073741824 bytes (1.1 GB, 1.0 GiB) copied, 0.147884 s, 7.3 GB/s
+--- tools
+        nodejs24_devel  A JavaScript runtime built on Chrome's V8 Engine (development files)
+python ok
+node ok 1048576
+--- daemons
+      1 /boot/system/bin/amazon-ssm-agent
+      1 /boot/system/bin/sshd
+      1 /boot/system/bin/ssm-agent-worker
+      1 /boot/system/servers/debug_server
+      1 /boot/system/servers/package_daemon
+      1 /boot/system/servers/registrar
+--- kernel log: panic/assert lines: 1
+KERN:   (0x2243254bd70)  0x1edc2454b9c  </boot/system/bin/node> _ZN4node6AssertERKNS_13AssertionInfoE + 0x78

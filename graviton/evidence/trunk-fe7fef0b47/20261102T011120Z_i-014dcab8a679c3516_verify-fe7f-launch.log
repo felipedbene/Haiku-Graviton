@@ -1,0 +1,98 @@
+# evidence: verify-fe7f-launch (workstation)
+# instance launched at 2026-11-02T01:11:20Z from the trunk bake; never rebooted, never promoted
+$ aws ec2 run-instances --region us-west-2 --image-id ami-03c3545c37f391c1f --instance-type c8g.4xlarge --subnet-id subnet-0d4f6b196024e9b92 --security-group-ids sg-0efc97cc673949063 --key-name haiku-rdclient --iam-instance-profile Name=ssm-instance-profile --block-device-mappings DeviceName=/dev/xvda,Ebs={VolumeSize=60,VolumeType=gp3,DeleteOnTermination=true} --tag-specifications ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=auto-stop,Value=no},{Key=Name,Value=verify-trunk-fe7fef0b47}]
+{
+    "id": "i-014dcab8a679c3516",
+    "launch": "2026-11-02T01:11:20+00:00",
+    "state": "pending"
+}
+$ aws ec2 describe-images --image-ids ami-03c3545c37f391c1f (name, tags)
+{
+    "Name": "haiku-oven-1793580871",
+    "Tags": [
+        {
+            "Key": "perf-rx-mbps",
+            "Value": "7662.0"
+        },
+        {
+            "Key": "source-branch",
+            "Value": "unknown"
+        },
+        {
+            "Key": "baked-by",
+            "Value": "cdk-pipeline"
+        },
+        {
+            "Key": "perf-mtu",
+            "Value": "9001"
+        },
+        {
+            "Key": "perf-tx-mbps",
+            "Value": "5869.5"
+        },
+        {
+            "Key": "candidate",
+            "Value": "true"
+        },
+        {
+            "Key": "project",
+            "Value": "haiku-graviton"
+        },
+        {
+            "Key": "source-commit",
+            "Value": "fe7fef0b47685471f94fce4af712632dc129f86a"
+        },
+        {
+            "Key": "perf-gate-at",
+            "Value": "2026-11-02T01:07:52Z"
+        },
+        {
+            "Key": "Name",
+            "Value": "haiku-oven-1793580871"
+        },
+        {
+            "Key": "perf-gate",
+            "Value": "pass"
+        },
+        {
+            "Key": "debeos-revision",
+            "Value": "debeos-r70748-gfe7fef0b47"
+        },
+        {
+            "Key": "haiku-revision",
+            "Value": "hrev59996"
+        },
+        {
+            "Key": "oven",
+            "Value": "true"
+        }
+    ]
+}
+$ aws ec2 describe-instances --instance-ids i-014dcab8a679c3516
+{
+    "Id": "i-014dcab8a679c3516",
+    "Image": "ami-03c3545c37f391c1f",
+    "Type": "c8g.4xlarge",
+    "State": "running",
+    "Launch": "2026-11-02T01:11:20+00:00",
+    "Subnet": "subnet-0d4f6b196024e9b92",
+    "SG": "sg-0efc97cc673949063",
+    "Key": "haiku-rdclient",
+    "Profile": "arn:aws:iam::<ACCOUNT_ID>:instance-profile/ssm-instance-profile",
+    "Tags": [
+        {
+            "Key": "Name",
+            "Value": "verify-trunk-fe7fef0b47"
+        },
+        {
+            "Key": "auto-stop",
+            "Value": "no"
+        },
+        {
+            "Key": "Project",
+            "Value": "haiku-graviton"
+        }
+    ]
+}
+$ aws ec2 describe-images --filters Name=tag:canonical,Values=true (canonical is untouched)
+ami-058776e58bd902fba	haiku-graviton-1792444749

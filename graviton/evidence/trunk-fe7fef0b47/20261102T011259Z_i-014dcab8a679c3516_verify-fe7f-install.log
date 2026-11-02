@@ -1,0 +1,79 @@
+# evidence: verify-fe7f-install
+# instance: i-014dcab8a679c3516   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T011259Z   end: 20261102T011321Z   rc: 0
+# script sha256: 8ec612f05cc6963fc12728f40e54b527c82d12cfb94759e00fbc4d773776ed80
+# ---- script ----
+# | set -u
+# | echo "== image: $(uname -a)"
+# | echo "== haiku package: $(ls /boot/system/packages | grep -E '^haiku-' | tr '\n' ' ')"
+# | echo "== kernel/libroot sha256"; sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | echo "== id: $(id)"
+# | pkgman refresh 2>&1 | tail -1
+# | echo "== install from the DeBeOS repo (no -y, answers on stdin)"
+# | { for i in $(seq 60); do echo 1; done; echo yes; } | pkgman install nodejs24 python3.14 gcc haiku_devel binutils curl tar gzip patch 2>&1 | grep -v '^ *$' | tail -40
+# | echo "pkgman rc=${PIPESTATUS[1]}"
+# | echo "== after: $(ls /boot/system/packages | grep -E '^(nodejs24|libuv|python3|gcc|haiku_devel|binutils|curl|tar|gzip|patch)' | tr '\n' ' ')"
+# | command -v node python3 gcc as curl tar gzip patch
+# | node --version; python3 --version; gcc --version | head -1
+# ---- raw output ----
+== image: Haiku ip-10-128-13-217.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+== haiku package: haiku-r1~beta6_hrev59996-1-arm64.hpkg 
+== kernel/libroot sha256
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+== id: uid=0(baron) gid=0(root) groups=0(root)
+Activating repository cache for DeBeOS ...
+== install from the DeBeOS repo (no -y, answers on stdin)
+       nghttp2-1.63.0-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/nghttp2-1.63.0-1-arm64.hpkg...done.
+       bzip2-1.0.8-3-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/bzip2-1.0.8-3-arm64.hpkg...done.
+       expat-2.8.2-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/expat-2.8.2-1-arm64.hpkg...done.
+       libedit-20230828_3.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libedit-20230828_3.1-1-arm64.hpkg...done.
+       libffi-3.4.6-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libffi-3.4.6-1-arm64.hpkg...done.
+       xz_utils-5.8.3-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/xz_utils-5.8.3-1-arm64.hpkg...done.
+       libssh2-1.11.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libssh2-1.11.1-1-arm64.hpkg...done.
+       file_data-5.43-2-any.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/file_data-5.43-2-any.hpkg...done.
+       libiconv-1.18-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libiconv-1.18-1-arm64.hpkg...done.
+       readline-8.3.003-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/readline-8.3.003-1-arm64.hpkg...done.
+       nodejs24-24.21.0-2-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/nodejs24-24.21.0-2-arm64.hpkg...done.
+       file-5.43-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/file-5.43-2-arm64.hpkg...done.
+       libunistring-1.3-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libunistring-1.3-1-arm64.hpkg...done.
+       gettext_libintl-1.0-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/gettext_libintl-1.0-1-arm64.hpkg...done.
+       sqlite-3.50.4.0-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/sqlite-3.50.4.0-1-arm64.hpkg...done.
+       libpsl-0.21.5-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libpsl-0.21.5-2-arm64.hpkg...done.
+       python3.14-3.14.7-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/python3.14-3.14.7-1-arm64.hpkg...done.
+       curl-8.21.0-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/curl-8.21.0-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_01:13:14"
+[system] Cleaning up ...
+[system] Done.
+pkgman rc=0
+== after: binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg curl-8.21.0-1-arm64.hpkg gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg gzip-1.14-1-arm64.hpkg haiku_devel-r1~beta6_hrev59996-1-arm64.hpkg libuv-1.52.1-4-arm64.hpkg nodejs24-24.21.0-2-arm64.hpkg patch-2.7.6-2-arm64.hpkg python3.14-3.14.7-1-arm64.hpkg tar-1.35-2-arm64.hpkg 
+/boot/system/bin/node
+/boot/system/bin/python3
+/boot/system/bin/gcc
+/boot/system/bin/as
+/boot/system/bin/curl
+/boot/system/bin/tar
+/boot/system/bin/gzip
+/boot/system/bin/patch
+v24.21.0
+Python 3.14.7
+gcc (2026_03_29) 13.3.0
