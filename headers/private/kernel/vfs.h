@@ -76,6 +76,7 @@ status_t	vfs_init(struct kernel_args *args);
 status_t	vfs_bootstrap_file_systems(void);
 void		vfs_mount_boot_file_system(struct kernel_args *args);
 void		vfs_exec_io_context(io_context *context);
+void		vfs_close_io_context_fds(io_context *context);
 io_context*	vfs_new_io_context(const io_context *parentContext,
 				bool purgeCloseOnExec);
 void		vfs_get_io_context(io_context *context);

@@ -1,0 +1,85 @@
+# evidence: canon-probe
+# instance: i-080e5c6c2074c7e3c   region: us-west-2
+# ssm command: d8d6d47d-f54b-4e3c-b8a6-f9bac1c42abf (agent status: Success)
+# start: 20261101T171928Z   end: 20261101T172038Z   rc: 0   log bytes: 2920
+# script sha256: 070c1bf045954fa12f209ff2ded88c02552b7cd0b23bf5753af7a84ef4a1198b
+# ---- script ----
+# | uname -a
+# | ls -l /boot/system/packages/haiku-*.hpkg /boot/system/packages/haiku_*.hpkg 2>/dev/null
+# | sha256sum /boot/system/packages/haiku-*.hpkg
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/runtime_loader 2>&1
+# | ls -l /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | strings /boot/system/kernel_arm64 | grep -E "^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [ 0-9][0-9] 20[0-9][0-9]|^[0-2][0-9]:[0-5][0-9]:[0-5][0-9]$" | sort | uniq -c
+# | which package; package 2>&1 | head -3
+# | cat /boot/system/packages/administrative/activated-packages 2>/dev/null | head -5
+# | df -k /boot
+# | pkgman search -a bash 2>&1 | head; pkgman list-repos 2>&1 | head
+# | bash -c 'echo <(true)'; bash -c 'cat <(echo procsubst)' 2>&1; ls /dev
+# ---- raw output ----
+Haiku ip-10-128-14-138.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+-rw-r--r-- 1 baron root 20644552 Oct 19 21:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+-rw-r--r-- 1 baron root   661790 Oct 19 21:14 /boot/system/packages/haiku_datatranslators-r1~beta6_hrev59996-1-arm64.hpkg
+-rw-r--r-- 1 baron root   573644 Oct 19 21:14 /boot/system/packages/haiku_loader-r1~beta6_hrev59996-1-arm64.hpkg
+422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  /boot/system/lib/libroot.so
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  /boot/system/runtime_loader
+-r-xr-xr-x 1 baron root 2539425 Oct 19 21:10 /boot/system/kernel_arm64
+-r-xr-xr-x 1 baron root 1366587 Oct 19 21:10 /boot/system/lib/libroot.so
+/tmp/ccrun/cc-20261101T171928Z-65162.sh: line 6: strings: command not found
+/tmp/ccrun/cc-20261101T171928Z-65162.sh: line 7: which: command not found
+Usage: package <command> <command args>
+Creates, inspects, or extracts a Haiku package.
+
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:   20.0 GiB (10467319 blocks)
+  Used Blocks:    5.1 GiB (2684373 blocks)
+  Free Blocks:   14.8 GiB (7782946 blocks)
+      Usage %:   25.6 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288
+Error: Failed to open repository file "/boot/system/cache/package-repositories/DeBeOS": No such file or directory
+Error: Failed to open repository file "/boot/system/cache/package-repositories/DeBeOS": No such file or directory
+ à¥z¥¸ repochecksum-1 []
+Validating checksum for DeBeOS...done.
+ à¥z¥¸ repocache-2 [ KiB]
+Validating checksum for DeBeOS...done.
+Status  Name                                     Description                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+        0ad_data                                 O A.D. - Game Data                                                                                  
+        2048                                     The tile-matching game 2048                                                                         
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+/dev/fd/63
+cat: /dev/fd/63: No such file or directory
+acpi
+bus
+disk
+dprintf
+dvb
+full
+graphics
+input
+misc
+net
+null
+ports
+power
+pt
+ptmx
+random
+tt
+tty
+urandom
+zero
