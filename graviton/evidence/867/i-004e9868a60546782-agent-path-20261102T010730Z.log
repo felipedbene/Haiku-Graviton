@@ -1,0 +1,69 @@
+# aws ssm send-command --instance-ids i-004e9868a60546782 (AMI ami-058776e58bd902fba, current canonical) AWS-RunShellScript
+# command-id 16a7b081-961e-4882-9a2b-1414bc91dc46  sent 20261102T010730Z
+# script:
+#   echo "== uname"; uname -a; echo "== S3-client / agent candidates"; for p in /boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent /boot/system/bin/amazon-ssm-agent /boot/system/bin/ssm-cli; do if [ -e "$p" ]; then ls -l "$p"; else echo "ABSENT $p"; fi; done; echo "== command -v"; for c in debeos-aws debeos-ssm-agent amazon-ssm-agent aws; do printf "%s -> " "$c"; command -v "$c" || echo "(not found)"; done; echo "== find ssm/debeos-aws binaries"; find /boot/system/bin /boot/system/non-packaged /boot/home/config/bin /boot/home/config/non-packaged -maxdepth 2 \( -name "*ssm*" -o -name "debeos-aws*" \) 2>/dev/null; echo "== agent packages"; ls -l /boot/system/packages | awk "/ssm|debeos_aws/"; echo "== package list of installed agent hpkg"; for f in /boot/system/packages/amazon_ssm_agent*.hpkg; do echo "-- $f"; package list "$f"; done; echo "== ssm processes"; ps | awk "/ssm/ && !/awk/"; echo END
+# status: Success
+# --- stdout ---
+== uname
+Haiku ip-10-128-14-12.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+== S3-client / agent candidates
+ABSENT /boot/system/bin/debeos-aws
+ABSENT /boot/system/bin/debeos-ssm-agent
+-r-xr-xr-x 1 baron root 13435148 Oct 19 20:36 /boot/system/bin/amazon-ssm-agent
+-r-xr-xr-x 1 baron root 18350348 Oct 19 20:36 /boot/system/bin/ssm-cli
+== command -v
+debeos-aws -> (not found)
+debeos-ssm-agent -> (not found)
+amazon-ssm-agent -> /boot/system/bin/amazon-ssm-agent
+aws -> (not found)
+== find ssm/debeos-aws binaries
+/boot/system/bin/ssm-setup-cli
+/boot/system/bin/ssm-session-worker
+/boot/system/bin/ssm-session-logger
+/boot/system/bin/ssm-document-worker
+/boot/system/bin/ssm-cli
+/boot/system/bin/ssm-agent-worker
+/boot/system/bin/amazon-ssm-agent
+== agent packages
+-rw-r--r-- 1 baron root 36811697 Oct 19 21:14 amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg
+== package list of installed agent hpkg
+-- /boot/system/packages/amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg
+package-attributes:
+	name: amazon_ssm_agent
+	summary: AWS Systems Manager Agent (amazon-ssm-agent) for DeBeOS on Graviton
+	description: The real upstream AWS Systems Manager agent (github.com/aws/amazon-ssm-agent, tag v3.3.3270.0, Apache-2.0), cross-compiled for DeBeOS (Haiku) arm64 with the korli/go gc-Go fork plus the DeBeOS haiku/arm64 toolchain patchset. Registers the instance as an EC2-native SSM managed node (i- node) using the instance role over IMDS -- no hybrid activation code -- and executes Run Command and Session Manager. The bundled launch_daemon job starts the agent EC2-native on every boot with a PATH that lets ssm-document-worker resolve the shell. Replaces the interim debeos-ssm-agent as the fleet SSM agent.
+	vendor: DeBeOS
+	packager: DeBeOS <debeos@debene.dev>
+	architecture: arm64
+	version: 3.3.3270.0-2
+	copyright: Amazon.com, Inc. or its affiliates
+	license: Apache-2.0
+	URL: https://github.com/aws/amazon-ssm-agent
+	provides: amazon_ssm_agent = 3.3.3270.0
+	provides: cmd:amazon_ssm_agent = 3.3.3270.0
+	provides: cmd:ssm_cli = 3.3.3270.0
+	requires: haiku
+bin                                      0  2026-10-19 20:36:20  drwxr-xr-x
+  amazon-ssm-agent                13435148  2026-10-19 20:36:20  -r-xr-xr-x
+  ssm-agent-worker                21889292  2026-10-19 20:36:20  -r-xr-xr-x
+  ssm-cli                         18350348  2026-10-19 20:36:20  -r-xr-xr-x
+  ssm-document-worker             20381964  2026-10-19 20:36:20  -r-xr-xr-x
+  ssm-session-logger               9502988  2026-10-19 20:36:20  -r-xr-xr-x
+  ssm-session-worker              16580876  2026-10-19 20:36:20  -r-xr-xr-x
+  ssm-setup-cli                   10682636  2026-10-19 20:36:20  -r-xr-xr-x
+  updater                         16449804  2026-10-19 20:36:20  -r-xr-xr-x
+data                                     0  2026-10-19 20:36:20  drwxr-xr-x
+  launch                                 0  2026-10-19 20:36:20  drwxr-xr-x
+    amazon_ssm_agent                  1923  2026-10-19 20:36:20  -rw-r--r--
+  licenses                               0  2026-10-19 20:36:20  drwxr-xr-x
+    Apache-2.0                       11358  2026-10-19 20:36:20  -rw-r--r--
+.PackageInfo                          1075  2026-10-19 20:36:20  -rw-r--r--
+== ssm processes
+/boot/system/bin/amazon-ssm-agent                     40       13    0    0 
+/boot/system/bin/ssm-agent-worker                    185       15    0    0 
+/boot/system/bin/ssm-document-worker 16a7b081-961e-4882-9a2b-14   479       11    0    0 
+/boot/system/bin/sh -c /var/lib/amazon/ssm/i-004e9868a60546782/   490        1    0    0 
+END
+
+# --- stderr ---
+
