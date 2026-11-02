@@ -1,0 +1,24 @@
+# evidence: probe-ctrl
+# instance: i-004e9868a60546782   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T010508Z   end: 20261102T010530Z   rc: 0
+# script sha256: a755789aad7a83085db1e0c4d243132ba90852143f17d681f7fc2f9c19718a58
+# ---- script ----
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/bfs
+# | ls /boot/system/packages/ | grep -E "^haiku-|nodejs|python|gcc"
+# | df -k /boot | tail -1
+# | id; ls -ld /boot/home /tmp
+# | command -v gcc node python3 touch stat
+# ---- raw output ----
+Haiku ip-10-128-14-12.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  /boot/system/lib/libroot.so
+4fde601af2da0fb6c3a198479832dbd85831eb9d0130fae2f663dd7aacabe99a  /boot/system/add-ons/kernel/file_systems/bfs
+gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+haiku-r1~beta6_hrev59996-1-arm64.hpkg
+   Root Inode: 524288
+uid=0(baron) gid=0(root) groups=0(root)
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 /boot/home
+lrwxrwxrwx 1 baron root   22 Nov  2 01:03 /tmp -> /boot/system/cache/tmp
+/boot/system/bin/touch
+/boot/system/bin/stat

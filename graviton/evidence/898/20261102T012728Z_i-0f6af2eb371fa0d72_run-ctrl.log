@@ -1,0 +1,199 @@
+# evidence: run-ctrl
+# instance: i-0f6af2eb371fa0d72   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T012728Z   end: 20261102T012750Z   rc: 0
+# script sha256: a3aa8845303d62d4d41599fb98bb002501b639b132ac39675ec95f9083c23047
+# ---- script ----
+# | # Issue 898 run (repro rebuilt with the fflush fix): the atime898 matrix on BFS (/boot/home and /tmp), coreutils
+# | # touch as owner/writer/non-writer, a quick health check. Node tests: hnode.sh.
+# | cd /boot/home/td
+# | echo 'LyoKICogYXRpbWU4OTggLS0gd2hvIG1heSBzZXQgYSBmaWxlJ3MgdGltZXMgKGlzc3VlIDg5OCkuCiAqCiAqIFBPU0lYIHV0aW1lbnNhdCgpL2Z1dGltZW5zKCksIGFuZCB1dGltZXMoKS91dGltZSgpIHdpdGggYSBOVUxMIHRpbWVzOgogKiAgIC0gc2V0dGluZyBib3RoIHRpbWVzIHRvIHRoZSBjdXJyZW50IHRpbWUgKHRpbWVzID09IE5VTEwsIG9yIFVUSU1FX05PVwogKiAgICAgZm9yIGJvdGgpIGlzIGFsbG93ZWQgdG8gdGhlIG93bmVyLCB0byBhIHByb2Nlc3Mgd2l0aCB3cml0ZSBhY2Nlc3MgdG8KICogICAgIHRoZSBmaWxlLCBhbmQgdG8gcm9vdDsKICogICAtIGFueXRoaW5nIGVsc2UgdGhhdCBzZXRzIGEgdGltZSBuZWVkcyB0aGUgb3duZXIgb3Igcm9vdCAoRVBFUk0pLCB3cml0ZQogKiAgICAgYWNjZXNzIGlzIG5vdCBlbm91Z2g6IGFuIGV4cGxpY2l0IHRpbWUsIGZvciBlaXRoZXIgb3IgYm90aCB0aW1lcywgYW5kCiAqICAgICBhbHNvIFVUSU1FX05PVyBmb3Igb25lIHRpbWUgd2l0aCBVVElNRV9PTUlUIGZvciB0aGUgb3RoZXIgKFBPU0lYOgogKiAgICAgImRvZXMgbm90IGhhdmUgYm90aCB0dl9uc2VjIGZpZWxkcyBzZXQgdG8gVVRJTUVfTk9XIjsgTGludXggYWdyZWVzKTsKICogICAtIFVUSU1FX09NSVQgZm9yIGJvdGggdGltZXMgc3VjY2VlZHMgd2l0aG91dCBhbnkgcGVybWlzc2lvbiBjaGVjay4KICoKICogRWFjaCBjYXNlIHJ1bnMgaW4gYSBjaGlsZCB0aGF0IGhhcyBzd2l0Y2hlZCB0byB0aGUgaWRlbnRpdHkgdW5kZXIgdGVzdCwgb24gYQogKiBmcmVzaCBmaWxlIHdob3NlIHRpbWVzIHdlcmUgc2V0IHRvIGEga25vd24gb2xkIHZhbHVlIGZpcnN0LiBFdmVyeSBvdXRjb21lIGlzCiAqIGNoZWNrZWQgdHdpY2U6IHRoZSBjYWxsJ3MgcmVzdWx0LCBhbmQgdGhlIHRpbWVzIHN0YXQoKSByZXBvcnRzIGFmdGVyd2FyZHMKICogKGNoYW5nZWQgYXMgcmVxdWVzdGVkIG9uIHN1Y2Nlc3MsIHVudG91Y2hlZCBvbiBmYWlsdXJlKS4KICoKICogQSBkZW5pZWQgIm5vdyIgcmVxdWVzdCBpcyBFQUNDRVMgaW4gUE9TSVggYW5kIG9uIExpbnV4OyBpdCBpcyBjb3VudGVkIGFzIGEKICogcGFzcyB3aXRoIEVQRVJNIHRvbywgYnV0IHJlcG9ydGVkIGFzIGFuIGVycm5vIG5vdGUgKHNlZSB0aGUgc3VtbWFyeSkuCiAqCiAqIFVzYWdlOiBhdGltZTg5OCBkaXIuLi4gICAgICAgICAgICAgICAgICAgICAobXVzdCBydW4gYXMgcm9vdCkKICogICAgICAgIGF0aW1lODk4IC0tYXMgdWlkIGdpZCBjbWQgYXJncy4uLiAgIHJ1biBjbWQgYXMgdWlkL2dpZCwgcmVwb3J0IHN0YXR1cwogKiBCdWlsZDogY2MgLU8yIC1XYWxsIC1vIGF0aW1lODk4IGF0aW1lODk4LmMgICAgICBFeGl0IHN0YXR1czogZmFpbHVyZXMuCiAqLwojaW5jbHVkZSA8ZXJybm8uaD4KI2luY2x1ZGUgPGZjbnRsLmg+CiNpbmNsdWRlIDxncnAuaD4KI2luY2x1ZGUgPHN0ZGlvLmg+CiNpbmNsdWRlIDxzdGRsaWIuaD4KI2luY2x1ZGUgPHN0cmluZy5oPgojaW5jbHVkZSA8c3lzL3N0YXQuaD4KI2luY2x1ZGUgPHN5cy90aW1lLmg+CiNpbmNsdWRlIDxzeXMvd2FpdC5oPgojaW5jbHVkZSA8dGltZS5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CiNpbmNsdWRlIDx1dGltZS5oPgoKI2RlZmluZSBPV05FUl9VSUQJMTAwMQojZGVmaW5lIE9USEVSX1VJRAkxMDAyCiNkZWZpbmUgT0xEX1RJTUUJMTAwMDAwMDAwMAkJLyogMjAwMS0wOS0wOSAqLwojZGVmaW5lIEFfVElNRQkJMTIzNDU2Nzg5MAkJLyogZXhwbGljaXQgYWNjZXNzIHRpbWUgKi8KI2RlZmluZSBNX1RJTUUJCTExMTExMTExMTEJCS8qIGV4cGxpY2l0IG1vZGlmaWNhdGlvbiB0aW1lICovCiNkZWZpbmUgTlNFQwkJNTAwMDAwMDAwCgpzdGF0aWMgaW50IHNGYWlsdXJlcywgc0Nhc2VzLCBzRXJybm9Ob3RlczsKCmVudW0gd2hvIHsgUk9PVCwgT1dORVIsIFdSSVRFUiwgTk9OV1JJVEVSIH07CnN0YXRpYyBjb25zdCBjaGFyKiBrV2hvTmFtZVtdID0geyAicm9vdCIsICJvd25lciIsICJ3cml0ZXIiLCAibm9ud3JpdGVyIiB9OwoKLyogV2hhdCBhIGNhbGwgYXNrcyBmb3IsIHBlciB0aW1lOiBrZWVwIGl0LCBzZXQgaXQgdG8gbm93LCBzZXQgaXQgZXhwbGljaXRseS4gKi8KZW51bSB3YW50IHsgS0VFUCwgTk9XLCBTRVQgfTsKCnN0cnVjdCBvcCB7Cgljb25zdCBjaGFyKgluYW1lOwoJZW51bSB3YW50CWF0aW1lLCBtdGltZTsKCWludAkJCWtpbmQ7CS8qIDAgdXRpbWVuc2F0LCAxIGZ1dGltZW5zIE9fUkRPTkxZLCAyIHV0aW1lcywgMyB1dGltZSAqLwoJaW50CQkJbnVsbDsJLyogdGltZXMgPT0gTlVMTCAqLwoJc3RydWN0IHRpbWVzcGVjCXRzWzJdOwp9OwoKI2RlZmluZSBUUyhzLCBuKSB7IChzKSwgKG4pIH0Kc3RhdGljIGNvbnN0IHN0cnVjdCBvcCBrT3BzW10gPSB7Cgl7ICJ1dGltZW5zYXQoTlVMTCkiLCAgICAgICAgICBOT1csICBOT1csICAwLCAxLCB7IFRTKDAsIDApLCBUUygwLCAwKSB9IH0sCgl7ICJ1dGltZW5zYXR7Tk9XLE5PV30iLCAgICAgICBOT1csICBOT1csICAwLCAwLCB7IFRTKDAsIFVUSU1FX05PVyksIFRTKDAsIFVUSU1FX05PVykgfSB9LAoJeyAidXRpbWVuc2F0e05PVyxPTUlUfSIsICAgICAgTk9XLCAgS0VFUCwgMCwgMCwgeyBUUygwLCBVVElNRV9OT1cpLCBUUygwLCBVVElNRV9PTUlUKSB9IH0sCgl7ICJ1dGltZW5zYXR7T01JVCxOT1d9IiwgICAgICBLRUVQLCBOT1csICAwLCAwLCB7IFRTKDAsIFVUSU1FX09NSVQpLCBUUygwLCBVVElNRV9OT1cpIH0gfSwKCXsgInV0aW1lbnNhdHthLG19IiwgICAgICAgICAgIFNFVCwgIFNFVCwgIDAsIDAsIHsgVFMoQV9USU1FLCBOU0VDKSwgVFMoTV9USU1FLCBOU0VDKSB9IH0sCgl7ICJ1dGltZW5zYXR7YSxPTUlUfSIsICAgICAgICBTRVQsICBLRUVQLCAwLCAwLCB7IFRTKEFfVElNRSwgTlNFQyksIFRTKDAsIFVUSU1FX09NSVQpIH0gfSwKCXsgInV0aW1lbnNhdHtPTUlULG19IiwgICAgICAgIEtFRVAsIFNFVCwgIDAsIDAsIHsgVFMoMCwgVVRJTUVfT01JVCksIFRTKE1fVElNRSwgTlNFQykgfSB9LAoJeyAidXRpbWVuc2F0e05PVyxtfSIsICAgICAgICAgTk9XLCAgU0VULCAgMCwgMCwgeyBUUygwLCBVVElNRV9OT1cpLCBUUyhNX1RJTUUsIE5TRUMpIH0gfSwKCXsgInV0aW1lbnNhdHthLE5PV30iLCAgICAgICAgIFNFVCwgIE5PVywgIDAsIDAsIHsgVFMoQV9USU1FLCBOU0VDKSwgVFMoMCwgVVRJTUVfTk9XKSB9IH0sCgl7ICJ1dGltZW5zYXR7T01JVCxPTUlUfSIsICAgICBLRUVQLCBLRUVQLCAwLCAwLCB7IFRTKDAsIFVUSU1FX09NSVQpLCBUUygwLCBVVElNRV9PTUlUKSB9IH0sCgl7ICJmdXRpbWVucyhOVUxMKSIsICAgICAgICAgICBOT1csICBOT1csICAxLCAxLCB7IFRTKDAsIDApLCBUUygwLCAwKSB9IH0sCgl7ICJmdXRpbWVuc3thLE9NSVR9IiwgICAgICAgICBTRVQsICBLRUVQLCAxLCAwLCB7IFRTKEFfVElNRSwgTlNFQyksIFRTKDAsIFVUSU1FX09NSVQpIH0gfSwKCXsgImZ1dGltZW5ze09NSVQsT01JVH0iLCAgICAgIEtFRVAsIEtFRVAsIDEsIDAsIHsgVFMoMCwgVVRJTUVfT01JVCksIFRTKDAsIFVUSU1FX09NSVQpIH0gfSwKCXsgInV0aW1lcyhOVUxMKSIsICAgICAgICAgICAgIE5PVywgIE5PVywgIDIsIDEsIHsgVFMoMCwgMCksIFRTKDAsIDApIH0gfSwKCXsgInV0aW1lc3thLG19IiwgICAgICAgICAgICAgIFNFVCwgIFNFVCwgIDIsIDAsIHsgVFMoQV9USU1FLCBOU0VDKSwgVFMoTV9USU1FLCBOU0VDKSB9IH0sCgl7ICJ1dGltZShOVUxMKSIsICAgICAgICAgICAgICBOT1csICBOT1csICAzLCAxLCB7IFRTKDAsIDApLCBUUygwLCAwKSB9IH0sCgl7ICJ1dGltZXthLG19IiwgICAgICAgICAgICAgICBTRVQsICBTRVQsICAzLCAwLCB7IFRTKEFfVElNRSwgMCksIFRTKE1fVElNRSwgMCkgfSB9LAp9OwoKCnN0YXRpYyB2b2lkCmJlY29tZSh1aWRfdCB1aWQsIGdpZF90IGdpZCkKewoJaWYgKHNldGdyb3VwcygwLCBOVUxMKSAhPSAwIHx8IHNldGdpZChnaWQpICE9IDAgfHwgc2V0dWlkKHVpZCkgIT0gMCkgewoJCWZwcmludGYoc3RkZXJyLCAiY2Fubm90IGJlY29tZSAlZDolZDogJXNcbiIsIChpbnQpdWlkLCAoaW50KWdpZCwKCQkJc3RyZXJyb3IoZXJybm8pKTsKCQlfZXhpdCgxMjUpOwoJfQp9CgoKLyogUnVucyB0aGUgY2FsbCBpbiB0aGUgY3VycmVudCBwcm9jZXNzOyByZXR1cm5zIDAgb3IgYW4gZXJybm8uICovCnN0YXRpYyBpbnQKZG9fb3AoY29uc3Qgc3RydWN0IG9wKiBvcCwgY29uc3QgY2hhciogcGF0aCkKewoJY29uc3Qgc3RydWN0IHRpbWVzcGVjKiB0ID0gb3AtPm51bGwgPyBOVUxMIDogb3AtPnRzOwoJaW50IHIsIGZkOwoKCXN3aXRjaCAob3AtPmtpbmQpIHsKCQljYXNlIDA6CgkJCXIgPSB1dGltZW5zYXQoQVRfRkRDV0QsIHBhdGgsIHQsIDApOwoJCQlicmVhazsKCQljYXNlIDE6CgkJCWZkID0gb3BlbihwYXRoLCBPX1JET05MWSk7CgkJCWlmIChmZCA8IDApCgkJCQlyZXR1cm4gZXJybm87CgkJCXIgPSBmdXRpbWVucyhmZCwgdCkgPT0gMCA/IDAgOiBlcnJubzsKCQkJY2xvc2UoZmQpOwoJCQlyZXR1cm4gcjsKCQljYXNlIDI6IHsKCQkJc3RydWN0IHRpbWV2YWwgdHZbMl07CgkJCXR2WzBdLnR2X3NlYyA9IG9wLT50c1swXS50dl9zZWM7CgkJCXR2WzBdLnR2X3VzZWMgPSBvcC0+dHNbMF0udHZfbnNlYyAvIDEwMDA7CgkJCXR2WzFdLnR2X3NlYyA9IG9wLT50c1sxXS50dl9zZWM7CgkJCXR2WzFdLnR2X3VzZWMgPSBvcC0+dHNbMV0udHZfbnNlYyAvIDEwMDA7CgkJCXIgPSB1dGltZXMocGF0aCwgb3AtPm51bGwgPyBOVUxMIDogdHYpOwoJCQlicmVhazsKCQl9CgkJZGVmYXVsdDogewoJCQlzdHJ1Y3QgdXRpbWJ1ZiB1YjsKCQkJdWIuYWN0aW1lID0gb3AtPnRzWzBdLnR2X3NlYzsKCQkJdWIubW9kdGltZSA9IG9wLT50c1sxXS50dl9zZWM7CgkJCXIgPSB1dGltZShwYXRoLCBvcC0+bnVsbCA/IE5VTEwgOiAmdWIpOwoJCQlicmVhazsKCQl9Cgl9CglyZXR1cm4gciA9PSAwID8gMCA6IGVycm5vOwp9CgoKLyogSXMgb25lIHRpbWUgd2hhdCB0aGUgY2FsbCBhc2tlZCBmb3IgKG9yIHVudG91Y2hlZCwgaWYgaXQgZmFpbGVkKT8gKi8Kc3RhdGljIGludAp0aW1lX29rKGVudW0gd2FudCB3YW50LCBpbnQgc3VjY2VlZGVkLCBjb25zdCBzdHJ1Y3QgdGltZXNwZWMqIGdvdCwKCWNvbnN0IHN0cnVjdCB0aW1lc3BlYyogYXNrZWQsIHRpbWVfdCB0MCwgdGltZV90IHQxKQp7CglpZiAoIXN1Y2NlZWRlZCB8fCB3YW50ID09IEtFRVApCgkJcmV0dXJuIGdvdC0+dHZfc2VjID09IE9MRF9USU1FICYmIGdvdC0+dHZfbnNlYyA9PSAwOwoJaWYgKHdhbnQgPT0gTk9XKQoJCXJldHVybiBnb3QtPnR2X3NlYyA+PSB0MCAtIDEgJiYgZ290LT50dl9zZWMgPD0gdDEgKyAxOwoJLyogZXhwbGljaXQ6IHRoZSBmaWxlIHN5c3RlbSBtYXkgcm91bmQgdG8gaXRzIHJlc29sdXRpb24sIGFsbG93IDEgbXMgKi8KCWxvbmcgZGlmZiA9IGdvdC0+dHZfbnNlYyAtIGFza2VkLT50dl9uc2VjOwoJcmV0dXJuIGdvdC0+dHZfc2VjID09IGFza2VkLT50dl9zZWMgJiYgZGlmZiA+IC0xMDAwMDAwICYmIGRpZmYgPCAxMDAwMDAwOwp9CgoKc3RhdGljIHZvaWQKcnVuX2Nhc2UoY29uc3QgY2hhciogZGlyLCBlbnVtIHdobyB3aG8sIGNvbnN0IHN0cnVjdCBvcCogb3ApCnsKCWNoYXIgcGF0aFs1MTJdOwoJc25wcmludGYocGF0aCwgc2l6ZW9mKHBhdGgpLCAiJXMvYXRpbWU4OTguJWQuJXMuJWQiLCBkaXIsIChpbnQpZ2V0cGlkKCksCgkJa1dob05hbWVbd2hvXSwgc0Nhc2VzKTsKCXVubGluayhwYXRoKTsKCWludCBmZCA9IG9wZW4ocGF0aCwgT19DUkVBVCB8IE9fUkRXUiB8IE9fVFJVTkMsIDA2MDApOwoJaWYgKGZkIDwgMCB8fCB3cml0ZShmZCwgIngiLCAxKSAhPSAxKSB7CgkJcHJpbnRmKCJGQUlMICUtOXMgJS0yMnMgY2Fubm90IGNyZWF0ZSAlczogJXNcbiIsIGtXaG9OYW1lW3dob10sCgkJCW9wLT5uYW1lLCBwYXRoLCBzdHJlcnJvcihlcnJubykpOwoJCXNGYWlsdXJlcysrOwoJCXJldHVybjsKCX0KCWNsb3NlKGZkKTsKCgkvKiBUaGUgb3duZXIgZ2V0cyBhIHJlYWQtb25seSBmaWxlOiBvd25lcnNoaXAgYWxvbmUgbXVzdCBiZSBlbm91Z2guICovCgltb2RlX3QgbW9kZSA9IHdobyA9PSBXUklURVIgPyAwNjY2IDogd2hvID09IE9XTkVSID8gMDQ0NCA6IDA2NDQ7CglzdHJ1Y3QgdGltZXNwZWMgb2xkWzJdID0geyBUUyhPTERfVElNRSwgMCksIFRTKE9MRF9USU1FLCAwKSB9OwoJaWYgKGNob3duKHBhdGgsIE9XTkVSX1VJRCwgT1dORVJfVUlEKSAhPSAwIHx8IGNobW9kKHBhdGgsIG1vZGUpICE9IDAKCQl8fCB1dGltZW5zYXQoQVRfRkRDV0QsIHBhdGgsIG9sZCwgMCkgIT0gMCkgewoJCXByaW50ZigiRkFJTCAlLTlzICUtMjJzIHNldHVwOiAlc1xuIiwga1dob05hbWVbd2hvXSwgb3AtPm5hbWUsCgkJCXN0cmVycm9yKGVycm5vKSk7CgkJc0ZhaWx1cmVzKys7CgkJdW5saW5rKHBhdGgpOwoJCXJldHVybjsKCX0KCgkvKiBIYWlrdSdzIF9leGl0KCkgZmx1c2hlcyBzdGRpbyAoaXNzdWUgOTE5KTogZW1wdHkgdGhlIGJ1ZmZlciBmaXJzdCwgb3IKCSAgIHRoZSBjaGlsZCB3b3VsZCBwcmludCBpdCBhZ2Fpbi4gKi8KCWZmbHVzaChzdGRvdXQpOwoJLyogVGhlIGVycm5vIGNvbWVzIGJhY2sgdGhyb3VnaCBhIHBpcGU6IEhhaWt1J3MgZXJybm8gdmFsdWVzIGFyZSBuZWdhdGl2ZQoJICAgYW5kIGRvIG5vdCBzdXJ2aXZlIGFuIDgtYml0IGV4aXQgc3RhdHVzLiAqLwoJaW50IGZkc1syXTsKCWlmIChwaXBlKGZkcykgIT0gMCkgewoJCXByaW50ZigiRkFJTCAlLTlzICUtMjJzIHBpcGU6ICVzXG4iLCBrV2hvTmFtZVt3aG9dLCBvcC0+bmFtZSwKCQkJc3RyZXJyb3IoZXJybm8pKTsKCQlzRmFpbHVyZXMrKzsKCQl1bmxpbmsocGF0aCk7CgkJcmV0dXJuOwoJfQoJdGltZV90IHQwID0gdGltZShOVUxMKTsKCXBpZF90IGNoaWxkID0gZm9yaygpOwoJaWYgKGNoaWxkID09IDApIHsKCQljbG9zZShmZHNbMF0pOwoJCWlmICh3aG8gPT0gT1dORVIpCgkJCWJlY29tZShPV05FUl9VSUQsIE9XTkVSX1VJRCk7CgkJZWxzZSBpZiAod2hvICE9IFJPT1QpCgkJCWJlY29tZShPVEhFUl9VSUQsIE9USEVSX1VJRCk7CgkJaW50IGNoaWxkRXJyID0gZG9fb3Aob3AsIHBhdGgpOwoJCV9leGl0KHdyaXRlKGZkc1sxXSwgJmNoaWxkRXJyLCBzaXplb2YoY2hpbGRFcnIpKSA9PSBzaXplb2YoY2hpbGRFcnIpCgkJCT8gMCA6IDEpOwoJfQoJY2xvc2UoZmRzWzFdKTsKCWludCBlcnIgPSAtMTsKCXNzaXplX3QgZ290ID0gcmVhZChmZHNbMF0sICZlcnIsIHNpemVvZihlcnIpKTsKCWNsb3NlKGZkc1swXSk7CglpbnQgc3RhdHVzOwoJd2FpdHBpZChjaGlsZCwgJnN0YXR1cywgMCk7Cgl0aW1lX3QgdDEgPSB0aW1lKE5VTEwpOwoJaWYgKGdvdCAhPSBzaXplb2YoZXJyKSB8fCAhV0lGRVhJVEVEKHN0YXR1cykgfHwgV0VYSVRTVEFUVVMoc3RhdHVzKSAhPSAwKSB7CgkJcHJpbnRmKCJGQUlMICUtOXMgJS0yMnMgY2hpbGQgZmFpbGVkIChzdGF0dXMgJSN4KVxuIiwga1dob05hbWVbd2hvXSwKCQkJb3AtPm5hbWUsIHN0YXR1cyk7CgkJc0ZhaWx1cmVzKys7CgkJdW5saW5rKHBhdGgpOwoJCXJldHVybjsKCX0KCglzdHJ1Y3Qgc3RhdCBzdDsKCXN0YXQocGF0aCwgJnN0KTsKCXVubGluayhwYXRoKTsKCXNDYXNlcysrOwoKCS8qIGV4cGVjdGVkIG91dGNvbWU6IG9ubHkgImJvdGggbm93IiBpcyBvcGVuIHRvIGEgd3JpdGVyICovCglpbnQgYW55VGltZSA9IG9wLT5hdGltZSAhPSBLRUVQIHx8IG9wLT5tdGltZSAhPSBLRUVQOwoJaW50IGV4cGxpY2l0VGltZSA9IGFueVRpbWUgJiYgIShvcC0+YXRpbWUgPT0gTk9XICYmIG9wLT5tdGltZSA9PSBOT1cpOwoJaW50IGFsbG93ZWQgPSB3aG8gPT0gUk9PVCB8fCB3aG8gPT0gT1dORVIgfHwgIWFueVRpbWUKCQl8fCAoIWV4cGxpY2l0VGltZSAmJiB3aG8gPT0gV1JJVEVSKTsKCglpbnQgb2ssIGVycm5vTm90ZSA9IDA7CgljaGFyIGRldGFpbFsyMDBdOwoJaWYgKGFsbG93ZWQpCgkJb2sgPSBlcnIgPT0gMDsKCWVsc2UgaWYgKGV4cGxpY2l0VGltZSkKCQlvayA9IGVyciA9PSBFUEVSTTsKCWVsc2UgewoJCW9rID0gZXJyID09IEVBQ0NFUyB8fCBlcnIgPT0gRVBFUk07CgkJZXJybm9Ob3RlID0gZXJyID09IEVQRVJNOwoJfQoJaW50IHN1Y2NlZWRlZCA9IGVyciA9PSAwOwoJaW50IGF0aW1lT2sgPSB0aW1lX29rKG9wLT5hdGltZSwgc3VjY2VlZGVkLCAmc3Quc3RfYXRpbSwgJm9wLT50c1swXSwgdDAsIHQxKTsKCWludCBtdGltZU9rID0gdGltZV9vayhvcC0+bXRpbWUsIHN1Y2NlZWRlZCwgJnN0LnN0X210aW0sICZvcC0+dHNbMV0sIHQwLCB0MSk7CglvayA9IG9rICYmIGF0aW1lT2sgJiYgbXRpbWVPazsKCglzbnByaW50ZihkZXRhaWwsIHNpemVvZihkZXRhaWwpLCAiLT4gJS03cyAoZXhwZWN0ICUtN3MpIGF0aW1lICVsZC4lMDlsZCVzIgoJCSIgbXRpbWUgJWxkLiUwOWxkJXMlcyIsIGVyciA9PSAwID8gIm9rIiA6IGVyciA9PSBFUEVSTSA/ICJFUEVSTSIKCQkJOiBlcnIgPT0gRUFDQ0VTID8gIkVBQ0NFUyIgOiBzdHJlcnJvcihlcnIpLAoJCWFsbG93ZWQgPyAib2siIDogZXhwbGljaXRUaW1lID8gIkVQRVJNIiA6ICJFQUNDRVMiLAoJCShsb25nKXN0LnN0X2F0aW0udHZfc2VjLCBzdC5zdF9hdGltLnR2X25zZWMsIGF0aW1lT2sgPyAiIiA6ICIoQkFEKSIsCgkJKGxvbmcpc3Quc3RfbXRpbS50dl9zZWMsIHN0LnN0X210aW0udHZfbnNlYywgbXRpbWVPayA/ICIiIDogIihCQUQpIiwKCQllcnJub05vdGUgPyAiICBbZXJybm8gbm90ZTogUE9TSVggc2F5cyBFQUNDRVNdIiA6ICIiKTsKCXByaW50ZigiJXMgJS05cyAlLTIycyAlc1xuIiwgb2sgPyAiUEFTUyIgOiAiRkFJTCIsIGtXaG9OYW1lW3dob10sCgkJb3AtPm5hbWUsIGRldGFpbCk7CglpZiAoIW9rKQoJCXNGYWlsdXJlcysrOwoJaWYgKGVycm5vTm90ZSkKCQlzRXJybm9Ob3RlcysrOwp9CgoKaW50Cm1haW4oaW50IGFyZ2MsIGNoYXIqKiBhcmd2KQp7CglpZiAoYXJnYyA+IDQgJiYgc3RyY21wKGFyZ3ZbMV0sICItLWFzIikgPT0gMCkgewoJCWZmbHVzaChzdGRvdXQpOwoJCXBpZF90IGNoaWxkID0gZm9yaygpOwoJCWlmIChjaGlsZCA9PSAwKSB7CgkJCWJlY29tZShhdG9pKGFyZ3ZbMl0pLCBhdG9pKGFyZ3ZbM10pKTsKCQkJZXhlY3ZwKGFyZ3ZbNF0sIGFyZ3YgKyA0KTsKCQkJZnByaW50ZihzdGRlcnIsICJleGVjICVzOiAlc1xuIiwgYXJndls0XSwgc3RyZXJyb3IoZXJybm8pKTsKCQkJX2V4aXQoMTI3KTsKCQl9CgkJaW50IHN0YXR1czsKCQl3YWl0cGlkKGNoaWxkLCAmc3RhdHVzLCAwKTsKCQlpbnQgcmMgPSBXSUZFWElURUQoc3RhdHVzKSA/IFdFWElUU1RBVFVTKHN0YXR1cykgOiAxMjggKyBXVEVSTVNJRyhzdGF0dXMpOwoJCXByaW50ZigiYXMgJXM6JXM6ICVzIC0+IGV4aXQgJWRcbiIsIGFyZ3ZbMl0sIGFyZ3ZbM10sIGFyZ3ZbNF0sIHJjKTsKCQlyZXR1cm4gcmM7Cgl9CgoJaWYgKGFyZ2MgPCAyIHx8IGdldGV1aWQoKSAhPSAwKSB7CgkJZnByaW50ZihzdGRlcnIsICJ1c2FnZTogYXRpbWU4OTggZGlyLi4uIChhcyByb290KVxuIgoJCQkiICAgICAgIGF0aW1lODk4IC0tYXMgdWlkIGdpZCBjbWQgYXJncy4uLlxuIik7CgkJcmV0dXJuIDI7Cgl9CgoJZm9yIChpbnQgZCA9IDE7IGQgPCBhcmdjOyBkKyspIHsKCQlwcmludGYoIj09ICVzXG4iLCBhcmd2W2RdKTsKCQlmb3IgKGludCB3ID0gUk9PVDsgdyA8PSBOT05XUklURVI7IHcrKykgewoJCQlmb3IgKHNpemVfdCBpID0gMDsgaSA8IHNpemVvZihrT3BzKSAvIHNpemVvZihrT3BzWzBdKTsgaSsrKQoJCQkJcnVuX2Nhc2UoYXJndltkXSwgdywgJmtPcHNbaV0pOwoJCX0KCX0KCglwcmludGYoIlNVTU1BUlkgY2FzZXM9JWQgZmFpbHVyZXM9JWQgZXJybm8tbm90ZXM9JWRcbiIsIHNDYXNlcywgc0ZhaWx1cmVzLAoJCXNFcnJub05vdGVzKTsKCXJldHVybiBzRmFpbHVyZXMgPiAyNTUgPyAyNTUgOiBzRmFpbHVyZXM7Cn0K' | base64 -d > atime898.c && sha256sum atime898.c && gcc -O2 -Wall -o atime898 atime898.c || exit 1
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/bfs
+# | sleep 3 & listimage $! | grep -E "libroot"; wait
+# | df /boot/home /tmp 2>&1 | head -3
+# | mkdir -p /boot/home/a898 /tmp/a898 && chmod 0777 /boot/home/a898 /tmp/a898
+# | echo "=== atime898"
+# | ./atime898 /boot/home/a898 /tmp/a898; echo "atime898 rc=$?"
+# | echo "=== touch matrix /boot/home"
+# | bash touchmatrix.sh /boot/home/a898 /boot/home/td/atime898
+# | echo "=== touch as root"
+# | f=/tmp/a898/root.t; echo x > $f; touch -d @1000000000 $f
+# | touch -a $f; echo "touch -a rc=$? $(stat -c '%X %Y' $f)"
+# | touch -d @1000000000 $f; touch -m $f; echo "touch -m rc=$? $(stat -c '%X %Y' $f)"
+# | touch -d 2005-03-18T01:58:31Z $f; echo "touch -d rc=$? $(stat -c '%X %Y' $f)"; rm -f $f
+# | echo "=== health"
+# | python3 -c 'print("python ok")'; node -e 'console.log("node ok")'
+# | echo "kernel log panic/assert lines: $(grep -aciE 'panic|assert' /var/log/syslog)"
+# ---- raw output ----
+ae6994728657c1ea1e060403d95de10d46e3aede523a34edcf3f447c7369a993  atime898.c
+Haiku ip-10-128-14-252.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  /boot/system/add-ons/kernel/file_systems/bfs
+10463 0x0000013fc7353000 0x0000013fc7470000     0          0 /boot/system/lib/libroot.so
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+=== atime898
+== /boot/home/a898
+PASS root      utimensat(NULL)        -> ok      (expect ok     ) atime 1793582859.221229000 mtime 1793582859.220987392
+PASS root      utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793582859.221888000 mtime 1793582859.221773824
+PASS root      utimensat{NOW,OMIT}    -> ok      (expect ok     ) atime 1793582859.222478000 mtime 1000000000.000000000
+PASS root      utimensat{OMIT,NOW}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1793582859.223084544
+PASS root      utimensat{a,m}         -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS root      utimensat{a,OMIT}      -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS root      utimensat{OMIT,m}      -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1111111111.499908608
+PASS root      utimensat{NOW,m}       -> ok      (expect ok     ) atime 1793582859.225357000 mtime 1111111111.499908608
+PASS root      utimensat{a,NOW}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1793582859.225705984
+PASS root      utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS root      futimens(NULL)         -> ok      (expect ok     ) atime 1793582859.227039000 mtime 1793582859.227016704
+PASS root      futimens{a,OMIT}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS root      futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS root      utimes(NULL)           -> ok      (expect ok     ) atime 1793582859.228672000 mtime 1793582859.228589568
+PASS root      utimes{a,m}            -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS root      utime(NULL)            -> ok      (expect ok     ) atime 1793582859.229766000 mtime 1793582859.229638144
+PASS root      utime{a,m}             -> ok      (expect ok     ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS owner     utimensat(NULL)        -> ok      (expect ok     ) atime 1793582859.230897000 mtime 1793582859.230686720
+PASS owner     utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793582859.231476000 mtime 1793582859.231473152
+PASS owner     utimensat{NOW,OMIT}    -> ok      (expect ok     ) atime 1793582859.232033000 mtime 1000000000.000000000
+PASS owner     utimensat{OMIT,NOW}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1793582859.232521728
+PASS owner     utimensat{a,m}         -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS owner     utimensat{a,OMIT}      -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS owner     utimensat{OMIT,m}      -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1111111111.499908608
+PASS owner     utimensat{NOW,m}       -> ok      (expect ok     ) atime 1793582859.234777000 mtime 1111111111.499908608
+PASS owner     utimensat{a,NOW}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1793582859.235143168
+PASS owner     utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS owner     futimens(NULL)         -> ok      (expect ok     ) atime 1793582859.236426000 mtime 1793582859.236191744
+PASS owner     futimens{a,OMIT}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS owner     futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS owner     utimes(NULL)           -> ok      (expect ok     ) atime 1793582859.238045000 mtime 1793582859.238026752
+PASS owner     utimes{a,m}            -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS owner     utime(NULL)            -> ok      (expect ok     ) atime 1793582859.239202000 mtime 1793582859.239075328
+PASS owner     utime{a,m}             -> ok      (expect ok     ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS writer    utimensat(NULL)        -> ok      (expect ok     ) atime 1793582859.240292000 mtime 1793582859.240123904
+PASS writer    utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793582859.240852000 mtime 1793582859.240648192
+FAIL writer    utimensat{NOW,OMIT}    -> ok      (expect EPERM  ) atime 1793582859.241401000 mtime 1000000000.000000000
+FAIL writer    utimensat{OMIT,NOW}    -> ok      (expect EPERM  ) atime 1000000000.000000000 mtime 1793582859.241958912
+FAIL writer    utimensat{a,m}         -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1111111111.499908608
+FAIL writer    utimensat{a,OMIT}      -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+FAIL writer    utimensat{OMIT,m}      -> ok      (expect EPERM  ) atime 1000000000.000000000 mtime 1111111111.499908608
+FAIL writer    utimensat{NOW,m}       -> ok      (expect EPERM  ) atime 1793582859.244107000 mtime 1111111111.499908608
+FAIL writer    utimensat{a,NOW}       -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1793582859.244580352
+PASS writer    utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    futimens(NULL)         -> ok      (expect ok     ) atime 1793582859.245773000 mtime 1793582859.245628928
+FAIL writer    futimens{a,OMIT}       -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS writer    futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimes(NULL)           -> ok      (expect ok     ) atime 1793582859.247433000 mtime 1793582859.247201792
+FAIL writer    utimes{a,m}            -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS writer    utime(NULL)            -> ok      (expect ok     ) atime 1793582859.248545000 mtime 1793582859.248512512
+FAIL writer    utime{a,m}             -> ok      (expect EPERM  ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS nonwriter utimensat(NULL)        -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utimensat{NOW,NOW}     -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+FAIL nonwriter utimensat{NOW,OMIT}    -> ok      (expect EPERM  ) atime 1793582859.250731000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,NOW}    -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{a,m}         -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+FAIL nonwriter utimensat{a,OMIT}      -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,m}      -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{NOW,m}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{a,NOW}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter futimens(NULL)         -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+FAIL nonwriter futimens{a,OMIT}       -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS nonwriter futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimes(NULL)           -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utimes{a,m}            -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utime(NULL)            -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utime{a,m}             -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+== /tmp/a898
+PASS root      utimensat(NULL)        -> ok      (expect ok     ) atime 1793582859.259005000 mtime 1793582859.258998272
+PASS root      utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793582859.259589000 mtime 1793582859.259522560
+PASS root      utimensat{NOW,OMIT}    -> ok      (expect ok     ) atime 1793582859.260168000 mtime 1000000000.000000000
+PASS root      utimensat{OMIT,NOW}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1793582859.260571136
+PASS root      utimensat{a,m}         -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS root      utimensat{a,OMIT}      -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS root      utimensat{OMIT,m}      -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1111111111.499908608
+PASS root      utimensat{NOW,m}       -> ok      (expect ok     ) atime 1793582859.263069000 mtime 1111111111.499908608
+PASS root      utimensat{a,NOW}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1793582859.263454720
+PASS root      utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS root      futimens(NULL)         -> ok      (expect ok     ) atime 1793582859.264778000 mtime 1793582859.264765440
+PASS root      futimens{a,OMIT}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS root      futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS root      utimes(NULL)           -> ok      (expect ok     ) atime 1793582859.266451000 mtime 1793582859.266338304
+PASS root      utimes{a,m}            -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS root      utime(NULL)            -> ok      (expect ok     ) atime 1793582859.267597000 mtime 1793582859.267386880
+PASS root      utime{a,m}             -> ok      (expect ok     ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS owner     utimensat(NULL)        -> ok      (expect ok     ) atime 1793582859.268787000 mtime 1793582859.268697600
+PASS owner     utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793582859.269371000 mtime 1793582859.269221888
+PASS owner     utimensat{NOW,OMIT}    -> ok      (expect ok     ) atime 1793582859.269951000 mtime 1000000000.000000000
+PASS owner     utimensat{OMIT,NOW}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1793582859.270270464
+PASS owner     utimensat{a,m}         -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS owner     utimensat{a,OMIT}      -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS owner     utimensat{OMIT,m}      -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1111111111.499908608
+PASS owner     utimensat{NOW,m}       -> ok      (expect ok     ) atime 1793582859.272792000 mtime 1111111111.499908608
+PASS owner     utimensat{a,NOW}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1793582859.273154048
+PASS owner     utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS owner     futimens(NULL)         -> ok      (expect ok     ) atime 1793582859.274521000 mtime 1793582859.274464768
+PASS owner     futimens{a,OMIT}       -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS owner     futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS owner     utimes(NULL)           -> ok      (expect ok     ) atime 1793582859.276255000 mtime 1793582859.276037632
+PASS owner     utimes{a,m}            -> ok      (expect ok     ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS owner     utime(NULL)            -> ok      (expect ok     ) atime 1793582859.277403000 mtime 1793582859.277348352
+PASS owner     utime{a,m}             -> ok      (expect ok     ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS writer    utimensat(NULL)        -> ok      (expect ok     ) atime 1793582859.278531000 mtime 1793582859.278396928
+PASS writer    utimensat{NOW,NOW}     -> ok      (expect ok     ) atime 1793582859.279119000 mtime 1793582859.278921216
+FAIL writer    utimensat{NOW,OMIT}    -> ok      (expect EPERM  ) atime 1793582859.279685000 mtime 1000000000.000000000
+FAIL writer    utimensat{OMIT,NOW}    -> ok      (expect EPERM  ) atime 1000000000.000000000 mtime 1793582859.280231936
+FAIL writer    utimensat{a,m}         -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1111111111.499908608
+FAIL writer    utimensat{a,OMIT}      -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+FAIL writer    utimensat{OMIT,m}      -> ok      (expect EPERM  ) atime 1000000000.000000000 mtime 1111111111.499908608
+FAIL writer    utimensat{NOW,m}       -> ok      (expect EPERM  ) atime 1793582859.282571000 mtime 1111111111.499908608
+FAIL writer    utimensat{a,NOW}       -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1793582859.283115520
+PASS writer    utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    futimens(NULL)         -> ok      (expect ok     ) atime 1793582859.284353000 mtime 1793582859.284164096
+FAIL writer    futimens{a,OMIT}       -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS writer    futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS writer    utimes(NULL)           -> ok      (expect ok     ) atime 1793582859.286021000 mtime 1793582859.285999104
+FAIL writer    utimes{a,m}            -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1111111111.499908608
+PASS writer    utime(NULL)            -> ok      (expect ok     ) atime 1793582859.287161000 mtime 1793582859.287047680
+FAIL writer    utime{a,m}             -> ok      (expect EPERM  ) atime 1234567890.000000000 mtime 1111111111.000000000
+PASS nonwriter utimensat(NULL)        -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utimensat{NOW,NOW}     -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+FAIL nonwriter utimensat{NOW,OMIT}    -> ok      (expect EPERM  ) atime 1793582859.289410000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,NOW}    -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{a,m}         -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+FAIL nonwriter utimensat{a,OMIT}      -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,m}      -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{NOW,m}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{a,NOW}       -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimensat{OMIT,OMIT}   -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter futimens(NULL)         -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+FAIL nonwriter futimens{a,OMIT}       -> ok      (expect EPERM  ) atime 1234567890.500000000 mtime 1000000000.000000000
+PASS nonwriter futimens{OMIT,OMIT}    -> ok      (expect ok     ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utimes(NULL)           -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utimes{a,m}            -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+PASS nonwriter utime(NULL)            -> EPERM   (expect EACCES ) atime 1000000000.000000000 mtime 1000000000.000000000  [errno note: POSIX says EACCES]
+PASS nonwriter utime{a,m}             -> EPERM   (expect EPERM  ) atime 1000000000.000000000 mtime 1000000000.000000000
+SUMMARY cases=136 failures=26 errno-notes=10
+atime898 rc=26
+=== touch matrix /boot/home
+touch -a as owner: rc=0  -> atime 1793582859 mtime 1000000000
+touch -m as owner: rc=0  -> atime 1000000000 mtime 1793582859
+touch -d 2005-03-18T01:58:31 as owner: rc=0  -> atime 1111111111 mtime 1111111111
+touch -a -d 2005-03-18T01:58:31 as owner: rc=0  -> atime 1111111111 mtime 1000000000
+touch -a as writer: rc=0  -> atime 1793582859 mtime 1000000000
+touch -m as writer: rc=0  -> atime 1000000000 mtime 1793582859
+touch -d 2005-03-18T01:58:31 as writer: rc=0  -> atime 1111111111 mtime 1111111111
+touch -a -d 2005-03-18T01:58:31 as writer: rc=0  -> atime 1111111111 mtime 1000000000
+touch -a as nonwriter: rc=0  -> atime 1793582859 mtime 1000000000
+touch -m as nonwriter: rc=1 touch: cannot touch '/boot/home/a898/touch898.nonwriter': Permission denied  -> atime 1000000000 mtime 1000000000
+touch -d 2005-03-18T01:58:31 as nonwriter: rc=1 touch: cannot touch '/boot/home/a898/touch898.nonwriter': Permission denied  -> atime 1000000000 mtime 1000000000
+touch -a -d 2005-03-18T01:58:31 as nonwriter: rc=0  -> atime 1111111111 mtime 1000000000
+(1000000000 = untouched; 1111111111-ish = explicit 2005-03-18; now = 1793582859)
+=== touch as root
+touch -a rc=0 1793582859 1000000000
+touch -m rc=0 1000000000 1793582859
+touch -d rc=0 1111111111 1111111111
+=== health
+python ok
+node ok
+kernel log panic/assert lines: 0

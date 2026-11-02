@@ -4100,8 +4100,21 @@ check_write_stat_permissions(gid_t nodeGroupID, uid_t nodeUserID, mode_t nodeMod
 			return B_NOT_ALLOWED;
 	}
 
-	if ((mask & (B_STAT_CREATION_TIME | B_STAT_MODIFICATION_TIME | B_STAT_CHANGE_TIME)) != 0) {
-		if (!hasWriteAccess && nodeUserID != uid)
+	// POSIX (utimensat()): only the owner may set a time; whoever may write
+	// the file may also set both the access and the modification time to the
+	// current time, but nothing else. B_STAT_TIMES_NOW is trustworthy here, as
+	// the VFS replaced the times with the current time itself when it saw the
+	// flag. Without it, every time is taken to be explicit, so a caller that
+	// does not know the flag gets the stricter rule, never a laxer one.
+	const uint32 timeMask = B_STAT_ACCESS_TIME | B_STAT_MODIFICATION_TIME
+		| B_STAT_CREATION_TIME | B_STAT_CHANGE_TIME;
+	const uint32 nowMask = B_STAT_ACCESS_TIME | B_STAT_MODIFICATION_TIME;
+	if ((mask & timeMask) != 0 && nodeUserID != uid) {
+		uint32 explicitTimes = mask & timeMask;
+		if ((mask & B_STAT_TIMES_NOW) != 0 && (mask & nowMask) == nowMask)
+			explicitTimes &= ~nowMask;
+
+		if (explicitTimes != 0 || !hasWriteAccess)
 			return B_NOT_ALLOWED;
 	}
 
@@ -7109,6 +7122,34 @@ common_path_read_stat(int fd, char* path, bool traverseLeafLink,
 }
 
 
+/*!	Replaces the access and modification times named in \a statMask with the
+	current time, if the caller asked for that with \c B_STAT_TIMES_NOW.
+	check_write_stat_permissions() lets a writer that is not the owner set
+	"now" only, so the times that come with the flag must not be the caller's.
+*/
+static void
+resolve_stat_times_now(struct stat& stat, int& statMask)
+{
+	if ((statMask & B_STAT_TIMES_NOW) == 0)
+		return;
+
+	if ((statMask & (B_STAT_ACCESS_TIME | B_STAT_MODIFICATION_TIME)) == 0) {
+		statMask &= ~B_STAT_TIMES_NOW;
+		return;
+	}
+
+	bigtime_t now = real_time_clock_usecs();
+	struct timespec nowSpec;
+	nowSpec.tv_sec = now / 1000000;
+	nowSpec.tv_nsec = (now % 1000000) * 1000;
+
+	if ((statMask & B_STAT_ACCESS_TIME) != 0)
+		stat.st_atim = nowSpec;
+	if ((statMask & B_STAT_MODIFICATION_TIME) != 0)
+		stat.st_mtim = nowSpec;
+}
+
+
 static status_t
 common_path_write_stat(int fd, char* path, bool traverseLeafLink,
 	const struct stat* stat, int statMask, bool kernel)
@@ -9131,6 +9172,14 @@ _kern_write_stat(int fd, const char* path, bool traverseLeafLink,
 		stat = &completeStat;
 	}
 
+	if ((statMask & B_STAT_TIMES_NOW) != 0) {
+		if (stat != &completeStat) {
+			memcpy(&completeStat, stat, sizeof(struct stat));
+			stat = &completeStat;
+		}
+		resolve_stat_times_now(completeStat, statMask);
+	}
+
 	status_t status;
 
 	if (path != NULL) {
@@ -10143,6 +10192,8 @@ _user_write_stat(int fd, const char* userPath, bool traverseLeafLink,
 	// clear additional stat fields
 	if (statSize < sizeof(struct stat))
 		memset((uint8*)&stat + statSize, 0, sizeof(struct stat) - statSize);
+
+	resolve_stat_times_now(stat, statMask);
 
 	status_t status;
 

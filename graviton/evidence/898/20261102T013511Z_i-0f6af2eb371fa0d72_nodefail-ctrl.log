@@ -1,0 +1,95 @@
+# evidence: nodefail-ctrl
+# instance: i-0f6af2eb371fa0d72   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T013511Z   end: 20261102T013533Z   rc: 0
+# script sha256: 8df8a414d57f6820ab3c572b107c4d833a70423174f2fd148b959ab27b95152b
+# ---- script ----
+# | # The failing Node tests' output from the last nodetests run (tap.txt), then each run once more on its own.
+# | cd /boot/home/td
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' tap.txt | head -150
+# | cd node-v24.21.0
+# | for t in test/parallel/test-fs-promises.js test/parallel/test-fs-stat-date.mjs; do
+# | 	echo "=== $t alone"; : | node $t > /tmp/one.txt 2>&1; echo "rc=$?"; tail -25 /tmp/one.txt
+# | done
+# ---- raw output ----
+not ok 6 parallel/test-fs-stat-date
+  ---
+  duration_ms: 223.83600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/modules/run_main:107
+        triggerUncaughtException(
+        ^
+    
+    AssertionError [ERR_ASSERTION]: expected -1 ± 2.220446049250313e-16, got -1.2313599999999951
+        at closeEnough (file:///boot/home/td/node-v24.21.0/test/parallel/test-fs-stat-date.mjs:41:10)
+        at runTest (file:///boot/home/td/node-v24.21.0/test/parallel/test-fs-stat-date.mjs:63:3)
+        at async file:///boot/home/td/node-v24.21.0/test/parallel/test-fs-stat-date.mjs:98:5 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 8 parallel/test-fs-promises
+  ---
+  duration_ms: 271.62200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/fs/promises:1767
+      return await PromisePrototypeThen(
+             ^
+    
+    Error: EPERM: operation not permitted, link '/boot/home/td/node-v24.21.0/test/.tmp.7/baz2.js' -> '/boot/home/td/node-v24.21.0/test/.tmp.7/baz4.js'
+        at async link (node:internal/fs/promises:1767:10)
+        at async doTest (/boot/home/td/node-v24.21.0/test/parallel/test-fs-promises.js:359:7) {
+      errno: -2147483633,
+      code: 'EPERM',
+      syscall: 'link',
+      path: '/boot/home/td/node-v24.21.0/test/.tmp.7/baz2.js',
+      dest: '/boot/home/td/node-v24.21.0/test/.tmp.7/baz4.js'
+    }
+    
+    Node.js v24.21.0
+  ...
+=== test/parallel/test-fs-promises.js alone
+rc=1
+node:internal/fs/promises:1767
+  return await PromisePrototypeThen(
+         ^
+
+Error: EPERM: operation not permitted, link '/boot/home/td/node-v24.21.0/test/.tmp.0/baz2.js' -> '/boot/home/td/node-v24.21.0/test/.tmp.0/baz4.js'
+    at async link (node:internal/fs/promises:1767:10)
+    at async doTest (/boot/home/td/node-v24.21.0/test/parallel/test-fs-promises.js:359:7) {
+  errno: -2147483633,
+  code: 'EPERM',
+  syscall: 'link',
+  path: '/boot/home/td/node-v24.21.0/test/.tmp.0/baz2.js',
+  dest: '/boot/home/td/node-v24.21.0/test/.tmp.0/baz4.js'
+}
+
+Node.js v24.21.0
+=== test/parallel/test-fs-stat-date.mjs alone
+rc=1
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: expected -1 ± 2.220446049250313e-16, got -1.2313599999999951
+    at closeEnough (file:///boot/home/td/node-v24.21.0/test/parallel/test-fs-stat-date.mjs:41:10)
+    at runTest (file:///boot/home/td/node-v24.21.0/test/parallel/test-fs-stat-date.mjs:63:3)
+    at async file:///boot/home/td/node-v24.21.0/test/parallel/test-fs-stat-date.mjs:98:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.21.0
