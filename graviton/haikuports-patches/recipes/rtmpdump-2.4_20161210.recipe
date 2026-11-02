@@ -1,0 +1,117 @@
+SUMMARY="Open source command-line RTMP client"
+DESCRIPTION="rtmpdump is an open-source command-line RTMP client intended \
+to stream audio of video flash content."
+HOMEPAGE="http://rtmpdump.mplayerhq.hu/"
+COPYRIGHT="2009 Andrej Stepanchuk
+	2009-2011 Howard Chu
+	2010 2a665470ced7adb7156fcef47f8199a6371c117b8a79e399a2771e0b36384090
+	2011 33ae1ce77301f4b4494faaa5f609f3c48b9dcf82"
+LICENSE="GNU LGPL v2.1
+	GNU GPL v2"
+# 9, not 8: a rebuild against openssl3 3.5.9-3 (issue 930), same source and
+# patches as stock HaikuPorts at 1d23c3a's rtmpdump-2.4_20161210-8. 3.5.9-3 configures arm64 as
+# haiku-aarch64, which widens BN_ULONG in the public headers from 32 to 64 bits
+# under the same soname (lib:libcrypto = 3). This package librtmp imports BN_set_word, BN_sub_word,
+# so a build against the older headers passes its BN_ULONG argument as 32-bit.
+REVISION="9"
+SOURCE_URI="https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz"
+CHECKSUM_SHA256="d6da3b683f1045f02d94a81b0c583318dba021f69bdab970c5d5d73e8c38860f"
+SOURCE_DIR=""
+PATCHES="rtmpdump-2.4_git.patch
+	rtmpdump-openssl-1.1-v2.patch"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+PROVIDES="
+	rtmpdump$secondaryArchSuffix = $portVersion compat >= 2.4
+	lib:librtmp.1$secondaryArchSuffix = 1 compat >= 1
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libssl$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	rtmpdump${secondaryArchSuffix}_devel = $portVersion compat >= 2.4
+	devel:librtmp$secondaryArchSuffix = 1 compat >= 1
+	devel:librtmp.1$secondaryArchSuffix = 1 compat >= 1
+	"
+REQUIRES_devel="
+	rtmpdump$secondaryArchSuffix == $portVersion base
+	"
+
+PROVIDES_tools="
+	rtmpdump${secondaryArchSuffix}_tools = $portVersion compat >= 2.4
+	cmd:rtmpdump = $portVersion compat >= 2.4
+	cmd:rtmpgw = $portVersion compat >= 2.4
+	cmd:rtmpsrv = $portVersion compat >= 2.4
+	cmd:rtmpsuck = $portVersion compat >= 2.4
+	"
+REQUIRES_tools="
+	rtmpdump$secondaryArchSuffix == $portVersion base
+	haiku$secondaryArchSuffix
+	lib:libcrypto$secondaryArchSuffix
+	lib:libssl$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libssl$secondaryArchSuffix >= 3
+	devel:libz$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:awk
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	make $jobArgs SYS=haiku \
+		prefix=$prefix \
+		bindir=$prefix/bin \
+		sbindir=$prefix/bin \
+		incdir=$includeDir \
+		libdir=$libDir \
+		mandir=$manDir
+}
+
+INSTALL()
+{
+	mkdir -p $libDir $prefix/bin $manDir $includeDir
+
+	make $jobArgs SYS=haiku \
+		prefix=$prefix \
+		bindir=$prefix/bin \
+		sbindir=$prefix/bin \
+		incdir=$includeDir \
+		libdir=$libDir \
+		mandir=$manDir \
+		install
+
+	prepareInstalledDevelLibs \
+		librtmp.1
+	rm $libDir/librtmp.so
+	mv $libDir/librtmp.a $developLibDir
+	fixPkgconfig
+
+	mkdir $includeDir/librtmp
+	mv $includeDir/*.h $includeDir/librtmp
+
+	sed -i "s|libdir=.*|libdir=$developLibDir|" $developLibDir/pkgconfig/librtmp.pc
+	sed -i "s|incdir=.*|incdir=$includeDir|" $developLibDir/pkgconfig/librtmp.pc
+
+	# devel package
+	packageEntries devel \
+		$developDir
+
+	# tools package
+	packageEntries tools \
+		$prefix/bin \
+		$manDir
+}
