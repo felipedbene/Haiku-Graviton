@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-setup
+# instance: i-0e3292f9d574c8ea3   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T150403Z   end: 20261102T150545Z   rc: 0
+# script sha256: 885fba09f57feab9153b0deb69c140f8c4d0c03fd65af8d22d580cf0acbc5ea3
+# ---- script ----
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq
+# | apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /dev/null
+# | echo "apt rc=$?"
+# | if ! command -v aws; then
+# | 	curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
+# | 	(cd /tmp && unzip -q a.zip && ./aws/install > /dev/null)
+# | fi
+# | mkdir -p /opt/tw && cd /opt/tw
+# | rm -rf hg buildtools
+# | git clone -q --depth 80 --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg || exit 2
+# | git -C hg log -1 --format='graviton-tip %H %s'
+# | git clone -q --depth 1 https://github.com/felipedbene/buildtools.git buildtools
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /dev/null 2>&1 && ./jam0 install > /dev/null 2>&1)
+# | command -v jam || exit 3
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 4
+# | tar --zstd -xf /tmp/ct.tar.zst -C .
+# | ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix /opt/tw/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32 2>&1 | tail -1
+# | uname -a
+# | echo SETUP-DONE
+# ---- raw output ----
+apt rc=0
+graviton-tip 4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+Linux ip-10-128-8-129 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+SETUP-DONE
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.

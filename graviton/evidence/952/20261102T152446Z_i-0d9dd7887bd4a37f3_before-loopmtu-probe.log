@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-loopmtu-probe
+# instance: i-0d9dd7887bd4a37f3   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T152446Z   end: 20261102T152617Z   rc: 0
+# script sha256: 2ee2909ff8b2befddbd9c8b4c64201122e40dd6dbdd141f1a6d7b41d26c75a14
+# ---- script ----
+# | cd /boot/home/tw
+# | ifconfig loop | grep MTU
+# | echo "=== tcp900, loop mtu 65536 (restored)"; ./tcp900 | grep -vE "udp"; echo "exit=${PIPESTATUS[0]}"
+# | netstat 2>&1 | grep -ciE "tcp" 
+# | ifconfig loop mtu 9001; ifconfig loop | grep MTU
+# | echo "=== tcp900, loop mtu 9001, unfiltered"; ./tcp900; echo "exit=$?"
+# | echo "=== again"; ./tcp900 | head -5; echo "exit=${PIPESTATUS[0]}"
+# | ifconfig loop mtu 65536; ifconfig loop | grep MTU
+# | echo "=== after restore"; ./tcp900 | head -5; echo "exit=${PIPESTATUS[0]}"
+# ---- raw output ----
+	MTU: 65536, Metric: 0, up loopback link
+=== tcp900, loop mtu 65536 (restored)
+tcp ::1               FAIL  setup: no connection to accept within 5 s (timeout)
+tcp ::ffff:127.0.0.1  FAIL  setup: no connection to accept within 5 s (timeout)
+tcp 127.0.0.1         FAIL  setup: no connection to accept within 5 s (timeout)
+total 21.0s, 3 FAIL
+exit=3
+232
+	MTU: 9001, Metric: 0, up loopback link
+=== tcp900, loop mtu 9001, unfiltered
+tcp ::1               FAIL  setup: no connection to accept within 5 s (timeout)
+tcp ::ffff:127.0.0.1  FAIL  setup: no connection to accept within 5 s (timeout)
+tcp 127.0.0.1         FAIL  setup: no connection to accept within 5 s (timeout)
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, NOT DELIVERED within 2 s
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, NOT DELIVERED within 2 s
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, NOT DELIVERED within 2 s
+total 21.0s, 3 FAIL
+exit=3
+=== again
+tcp ::1               FAIL  setup: no connection to accept within 5 s (timeout)
+tcp ::ffff:127.0.0.1  FAIL  setup: no connection to accept within 5 s (timeout)
+tcp 127.0.0.1         FAIL  setup: no connection to accept within 5 s (timeout)
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, NOT DELIVERED within 2 s
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, NOT DELIVERED within 2 s
+exit=3
+	MTU: 65536, Metric: 0, up loopback link
+=== after restore
+tcp ::1               FAIL  setup: no connection to accept within 5 s (timeout)
+tcp ::ffff:127.0.0.1  FAIL  setup: no connection to accept within 5 s (timeout)
+tcp 127.0.0.1         FAIL  setup: no connection to accept within 5 s (timeout)
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, NOT DELIVERED within 2 s
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, NOT DELIVERED within 2 s
+exit=3

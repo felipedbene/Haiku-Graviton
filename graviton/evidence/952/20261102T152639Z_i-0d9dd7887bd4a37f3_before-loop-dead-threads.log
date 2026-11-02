@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-loop-dead-threads
+# instance: i-0d9dd7887bd4a37f3   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T152639Z   end: 20261102T152651Z   rc: 127
+# script sha256: db3879e7482400f828aaa5fe7559dd2456ab4bd082948062e7043b83471754ef
+# ---- script ----
+# | ps -a 2>&1 | grep -iE "loop|net|fragment|reass|timer" | head -30
+# | echo "--- sample 2"
+# | sleep 2
+# | ps -a 2>&1 | grep -iE "loop|fragment|reass" | head -10
+# | uptime
+# ---- raw output ----
+run_on_exit_loop                         39     wait   10        0        0 
+invalidate_loop                          40     wait   10        0        0 
+net timer                               106     wait   10        0        8 
+loop consumer                           114      run   15        0   169624 
+/dev/net/ena/0 consumer                 118     wait   15        0      532 
+ethernet link state checker             123     wait    5        0        2 
+/dev/net/ena/0 reader                   124     wait   90        0       19 
+/boot/system/servers/net_server                       53        4    0    0 
+net_server                               53     wait   10       17       85 
+PathMonitor looper                       94     wait   10        0        0 
+/dev/net/ena/0                          125     wait   10        0        0 
+_power_daemon_event_loop_                90     wait   10        0        0 
+timer_thread                             63     wait   16       17       46 
+_input_server_event_loop_               203     wait  103        0        0 
+PathMonitor looper                      210     wait   10        0        0 
+network receiver                        194     wait   10        0        1 
+event loop                              196     wait   90        0        0 
+launch looper                           202     wait   10        0        0 
+PathMonitor looper                      227     wait   10        0        0 
+TrackerTaskLoop                         239      zzz    5        1        5 
+/boot/system/bin/grep -iE loop|net|fragment|reass|timer   606        1    0    0 
+--- sample 2
+run_on_exit_loop                         39     wait   10        0        0 
+invalidate_loop                          40     wait   10        0        0 
+loop consumer                           114      run   15        0   171630 
+PathMonitor looper                       94     wait   10        0        0 
+_power_daemon_event_loop_                90     wait   10        0        0 
+_input_server_event_loop_               203     wait  103        0        0 
+PathMonitor looper                      210     wait   10        0        0 
+event loop                              196     wait   90        0        0 
+launch looper                           202     wait   10        0        0 
+PathMonitor looper                      227     wait   10        0        0 
+/tmp/run-4945-b47799.sh: line 5: uptime: command not found
+failed to run commands: exit status 127
