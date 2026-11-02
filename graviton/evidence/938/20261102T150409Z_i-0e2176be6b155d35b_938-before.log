@@ -1,0 +1,27 @@
+# evidence: 938-before
+# instance: i-0e2176be6b155d35b   region: us-west-2
+# ssm command: bc7a715a-d386-4a31-95b9-ecbc9e69ad2d (agent status: Success)
+# start: 20261102T150409Z   end: 20261102T150412Z   rc: 0   log bytes: 361
+# script sha256: 8174d10c6465fd2687a6434742e4c43005e57773647886feb4bff58c24055f1a
+# ---- script ----
+# | uname -a
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | sha256sum /boot/system/bin/sysinfo
+# | echo '$ sysinfo -platform'; sysinfo -platform; echo "rc=$?"
+# | echo '$ uname -m'; uname -m
+# | echo '$ sysinfo -cpu'; sysinfo -cpu; echo "rc=$?"
+# | echo "CPU# lines: $(sysinfo -cpu | grep -c 'CPU #')"
+# ---- raw output ----
+Haiku ip-10-128-13-28.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+2026-11-02T15:04:09Z
+ce6d379ea5cd9bd97bec7f4ad41a5b2efe9b8123a530f2da4f3c53c3678e9936  /boot/system/bin/sysinfo
+$ sysinfo -platform
+unknown
+rc=0
+$ uname -m
+arm64
+$ sysinfo -cpu
+8 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+
+rc=0
+CPU# lines: 0

@@ -1,0 +1,42 @@
+# evidence: 938-after-compare
+# instance: i-0e2176be6b155d35b   region: us-west-2
+# ssm command: bd2df86e-e9c3-4492-bcd3-bd8d1ce71956 (agent status: Success)
+# start: 20261102T150853Z   end: 20261102T150856Z   rc: 0   log bytes: 1408
+# script sha256: 18c0a8f366e804f10b5ece0ef926ab2af32d65617eaa7c1af8a19e9ba0d81d5f
+# ---- script ----
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | cd /boot/home/t938 || exit 1
+# | sha256sum sysinfo /boot/system/bin/sysinfo
+# | for o in -cpu -id -kinfo; do
+# | 	a=$(/boot/system/bin/sysinfo $o | sha256sum | cut -c1-16); b=$(./sysinfo $o | sha256sum | cut -c1-16)
+# | 	echo "sysinfo $o: stock=$a fixed=$b $([ "$a" = "$b" ] && echo SAME || echo DIFFERENT)"
+# | done
+# | echo '== stock default output'; /boot/system/bin/sysinfo
+# | echo '== fixed default output'; ./sysinfo
+# ---- raw output ----
+2026-11-02T15:08:53Z
+908757e8e9b2e539cf380fba91d922332ccc05aaf75a2fe64c6749229dd3da8c  sysinfo
+ce6d379ea5cd9bd97bec7f4ad41a5b2efe9b8123a530f2da4f3c53c3678e9936  /boot/system/bin/sysinfo
+sysinfo -cpu: stock=3c5c79a75019a8c3 fixed=3c5c79a75019a8c3 SAME
+sysinfo -id: stock=2bc21eb22284cabb fixed=2bc21eb22284cabb SAME
+sysinfo -kinfo: stock=a5afe6956424a4ac fixed=a5afe6956424a4ac SAME
+== stock default output
+Kernel name: kernel_arm64 built on: Nov  2 2026 00:47:18 version 0xa01
+8 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+
+16014528512 bytes free      (used/max  858238976 / 16872767488)
+                           (cached    205406208)
+     64779 semaphores free (used/max        757 /      65536)
+      3996 ports free      (used/max        100 /       4096)
+      3952 threads free    (used/max        144 /       4096)
+      2023 teams free      (used/max         25 /       2048)
+== fixed default output
+Kernel name: kernel_arm64 built on: Nov  2 2026 00:47:18 version 0xa01
+8 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+
+16014524416 bytes free      (used/max  858243072 / 16872767488)
+                           (cached    205406208)
+     64779 semaphores free (used/max        757 /      65536)
+      3996 ports free      (used/max        100 /       4096)
+      3952 threads free    (used/max        144 /       4096)
+      2023 teams free      (used/max         25 /       2048)

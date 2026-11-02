@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 938-after-v2
+# instance: i-0e2176be6b155d35b   region: us-west-2
+# ssm command: f32ccc16-9820-4520-a714-4ceb441dc906 (agent status: Success)
+# start: 20261102T151205Z   end: 20261102T151208Z   rc: 0   log bytes: 527
+# script sha256: 785dc058fb6359c50daef601f67792c34d6952b9bca741e369eda35c953ecf9e
+# ---- script ----
+# | uname -a
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | cd /boot/home/t938 || exit 1
+# | curl -sSfo sysinfo-v2 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-938/v2/sysinfo?<PRESIGNED>' || exit 1
+# | echo '1db1c64a1fdb028a74b4943ccc8f9b42970a79626f20105e3eb3b55e6f080a8e  sysinfo-v2' | sha256sum -c - || exit 1
+# | chmod +x sysinfo-v2
+# | echo '$ /boot/system/bin/sysinfo -platform'; /boot/system/bin/sysinfo -platform
+# | echo '$ ./sysinfo-v2 -platform'; ./sysinfo-v2 -platform; echo "rc=$?"
+# | echo '$ uname -m'; uname -m
+# | for o in -cpu -id -kinfo; do
+# | 	a=$(/boot/system/bin/sysinfo $o | sha256sum | cut -c1-16); b=$(./sysinfo-v2 $o | sha256sum | cut -c1-16)
+# | 	echo "sysinfo $o: stock=$a v2=$b $([ "$a" = "$b" ] && echo SAME || echo DIFFERENT)"
+# | done
+# | echo '$ ./sysinfo-v2 -cpu'; ./sysinfo-v2 -cpu
+# | echo "CPU# lines: $(./sysinfo-v2 -cpu | grep -c 'CPU #')"
+# ---- raw output ----
+Haiku ip-10-128-13-28.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+2026-11-02T15:12:05Z
+sysinfo-v2: OK
+$ /boot/system/bin/sysinfo -platform
+unknown
+$ ./sysinfo-v2 -platform
+ARM (64 bit)
+rc=0
+$ uname -m
+arm64
+sysinfo -cpu: stock=3c5c79a75019a8c3 v2=3c5c79a75019a8c3 SAME
+sysinfo -id: stock=2bc21eb22284cabb v2=2bc21eb22284cabb SAME
+sysinfo -kinfo: stock=a5afe6956424a4ac v2=a5afe6956424a4ac SAME
+$ ./sysinfo-v2 -cpu
+8 ARM Neoverse-V1, revision 411fd401 running at 2597MHz
+
+CPU# lines: 0
