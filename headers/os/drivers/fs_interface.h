@@ -30,6 +30,12 @@ typedef struct IORequest io_request;
 // src/kits/storage/LibBeAdapter.cpp:_kern_write_stat().
 #define B_STAT_SIZE_INSECURE	0x2000
 	// TODO: this should be faded out once BFS supports sparse files
+#define B_STAT_TIMES_NOW		0x4000
+	// The access and modification times in the mask are to be set to the
+	// current time (utimensat() with UTIME_NOW for both, utimes(path, NULL)).
+	// With both times in the mask, POSIX allows that to anyone with write
+	// access, not only to the owner. The VFS reads the clock itself when it
+	// sees this flag.
 
 /* passed to write_fs_info() */
 #define	FS_WRITE_FSINFO_NAME	0x0001
