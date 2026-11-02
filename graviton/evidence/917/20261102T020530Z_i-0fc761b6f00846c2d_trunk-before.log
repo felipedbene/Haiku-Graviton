@@ -1,0 +1,75 @@
+# evidence: trunk-before
+# instance: i-0fc761b6f00846c2d   region: us-west-2
+# ssm command: 857903b7-0aef-4ea9-bc61-8146c09b4b6e (agent status: Success)
+# start: 20261102T020530Z   end: 20261102T020608Z   rc: 0
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo y; }
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | echo "== sysinfo -cpu"; sysinfo -cpu
+# | echo "== sysinfo -cpu | grep -c 'CPU #'"; sysinfo -cpu | grep -c 'CPU #'
+# | echo "== sysinfo -platform"; sysinfo -platform
+# | feed | pkgman install nodejs24 python3.14 cmd:curl cmd:tar cmd:gzip 2>&1 | tail -2
+# | pkgman search -i -D nodejs24 2>&1 | tail -1; pkgman search -i -D libuv 2>&1 | tail -1
+# | node --version
+# | node -p 'require("os").cpus()'
+# | node -p 'require("os").cpus().length'
+# | node -p 'require("os").availableParallelism()'
+# | cd /boot/home
+# | curl -sSfLO https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz || exit 1
+# | curl -sSfL https://nodejs.org/dist/v24.21.0/SHASUMS256.txt | grep ' node-v24.21.0.tar.gz$' | sha256sum -c - || exit 1
+# | tar xzf node-v24.21.0.tar.gz node-v24.21.0/test node-v24.21.0/tools || exit 1
+# | cd node-v24.21.0
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap -v parallel/test-os 2>&1 | tail -30
+# ---- raw output ----
+Haiku ip-10-128-6-33.us-west-2.comput R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+== sysinfo -cpu
+8 ARM Neoverse-V1, revision 411fd401 running at 2598MHz
+
+== sysinfo -cpu | grep -c 'CPU #'
+0
+== sysinfo -platform
+unknown
+[system] Cleaning up ...
+[system] Done.
+<system>    nodejs24  24.21.0-2  arm64
+<system>    libuv  1.52.1-4  arm64
+v24.21.0
+[]
+0
+8
+node-v24.21.0.tar.gz: OK
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert.ok(cpus.length > 0)
+    
+        at Object.<anonymous> (/boot/home/node-v24.21.0/test/parallel/test-os.js:104:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/node-v24.21.0/test/parallel/test-os.js
+
+

@@ -1,0 +1,49 @@
+# evidence: before-test-os-ps2
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: e94a428a-0873-472b-a482-712f495c80cc (agent status: Success)
+# start: 20261102T015922Z   end: 20261102T020027Z   rc: 0
+# ---- script ----
+# | ps -a 2>/dev/null | head -40 || ps | head -40
+# ---- raw output ----
+Team                                                  Id #Threads  Gid  Uid 
+kernel_team                                            1       38    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+idle thread 1                             1      rdy    0        0  3163373 
+idle thread 2                             2      rdy    0        0   997281 
+idle thread 3                             3      rdy    0        0  3161771 
+idle thread 4                             4      run    0        0  3164302 
+idle thread 5                             5      run    0        0  3164461 
+idle thread 6                             6      rdy    0        0  3164167 
+idle thread 7                             7      rdy    0        0   998963 
+idle thread 8                             8      rdy    0        0  3164587 
+thread undertaker                         9     wait   15        0        8 
+kernel daemon                            10     wait    5        0       47 
+resource resizer                         11     wait    5        0       23 
+page scrubber                            12      zzz    1        0      273 
+page writer: default                     13     wait   11        0        6 
+page daemon                              14     wait   10        0     1024 
+object cache resizer                     15     wait  110        0        5 
+low resource manager                     16     wait    5        0        4 
+device watchdog                          17     wait   20        0       11 
+dpc: normal priority                     18     wait   10        0        0 
+dpc: high priority                       19     wait   20        0        0 
+dpc: real-time priority                  20     wait  100        0        0 
+vnode undertaker                         21     wait   10        0        4 
+block notifier/writer                    22     wait    5        0       19 
+usb explore                              24     wait    5        0       15 
+acpi_task                                25     wait   21        0        0 
+media checker                            26      zzz   10        0       17 
+page writer: /dev/disk/nvme/0/r          27     wait   11        0       17 
+bfs log flusher                          28     wait   10        0       17 
+serial debug listener                    30      zzz    5        0      424 
+run_on_exit_loop                         31     wait   10        0        0 
+invalidate_loop                          32     wait   10        0        0 
+pl061 events                             33     wait   10        0        0 
+net timer                                80     wait   10        0        5 
+loop consumer                            81     wait   15        0        0 
+/dev/net/ena/0 consumer                  82     wait   15        0     1373 
+ena watchdog                             83     wait   20        0       17 
+ethernet link state checker              85     wait    5        0       15 
+
+

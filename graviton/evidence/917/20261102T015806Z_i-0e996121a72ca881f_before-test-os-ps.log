@@ -1,0 +1,17 @@
+# evidence: before-test-os-ps
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: a3be34c0-b4d4-460b-8fab-acc08a4dffb6 (agent status: Failed)
+# start: 20261102T015806Z   end: 20261102T015912Z   rc: 1
+# ---- script ----
+# | ps | grep -E "tar|curl|python|node|pkgman|gzip" | grep -v grep | head
+# | ls -la /boot/home/ | head; du -sk /boot/home/node-v24.21.0 2>/dev/null
+# ---- raw output ----
+total 16
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 .
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 ..
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 Desktop
+dr-xr-xr-x 1 baron root    0 Oct 19 21:14 config
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 mail
+
+---- stderr ----
+failed to run commands: exit status 1

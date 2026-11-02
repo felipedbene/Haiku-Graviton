@@ -1,0 +1,31 @@
+# evidence: builder-progress1
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: f016abdc-259e-4d5f-be1d-10eea3dcdb18 (agent status: Success)
+# start: 20261102T020509Z   end: 20261102T020517Z   rc: 0
+# ---- script ----
+# | tail -c 1500 /boot/home/n24r3.log; echo; grep -n "Applying patch" /boot/home/n24r3.log
+# ---- raw output ----
+ CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-display-names.o
+[693/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-function.o
+[694/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-date-time-format.o
+[695/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-locale.o
+[696/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-number-format.o
+[697/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-raw-json.o
+[698/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-regexp.o
+[699/2019] CXX obj/deps/v8/src/heap/v8_base_without_compiler.scavenger.o
+[700/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-relative-time-format.o
+[701/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-plural-rules.o
+[702/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-struct.o
+[703/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-segment-iterator.o
+[704/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-segmenter.o
+[705/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-segments.o
+[706/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-objects.o
+[707/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.js-weak-refs.o
+[708/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.keys.o
+[709/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.type-hints.o
+[710/2019] CXX obj/deps/v8/src/objects/v8_base_without_compiler.literal-objects.o
+
+11:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0.patchset" ...
+18:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0-debeos.patchset" ...
+
+

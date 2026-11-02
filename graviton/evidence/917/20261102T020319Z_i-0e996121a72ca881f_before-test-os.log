@@ -1,0 +1,49 @@
+# evidence: before-test-os
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: 6f5ed0bb-4223-431b-85e5-d977b49bd763 (agent status: Success)
+# start: 20261102T020319Z   end: 20261102T020445Z   rc: 0
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo y; }
+# | feed | pkgman install cmd:tar cmd:gzip 2>&1 | tail -1
+# | cd /boot/home && tar xzf node-v24.21.0.tar.gz node-v24.21.0/test node-v24.21.0/tools || exit 1
+# | cd node-v24.21.0 && ls
+# | node --version; pkgman search -i nodejs24 2>&1 | tail -1
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap -v parallel/test-os 2>&1 | tail -30
+# ---- raw output ----
+[system] Done.
+test
+tools
+v24.21.0
+s       nodejs24  A JavaScript runtime built on Chrome's V8 Engine
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    9 !== 10
+    
+        at Object.<anonymous> (/boot/home/node-v24.21.0/test/parallel/test-os.js:92:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 9,
+      expected: 10,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/node-v24.21.0/test/parallel/test-os.js
+
+

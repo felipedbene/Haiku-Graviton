@@ -1,0 +1,20 @@
+# evidence: builder-start-nodejs24r3
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: a592e6e6-4ea2-4e31-82b3-3165680d6aaa (agent status: Success)
+# start: 20261102T013514Z   end: 20261102T013546Z   rc: 0
+# ---- script ----
+# | pkgman search -i -D openssl3_devel 2>&1 | tail -1
+# | cd /boot/home/haikuports && rm -rf net-libs/nodejs/work-24.21.0
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | which haikuporter
+# | nohup sh -c 'cd /boot/home/haikuports && : | haikuporter -y -j32 --no-dependencies nodejs24 > /boot/home/n24r3.log 2>&1; echo "exit $?" >> /boot/home/n24r3.log' > /dev/null 2>&1 &
+# | sleep 30; tail -5 /boot/home/n24r3.log
+# ---- raw output ----
+<system>    openssl3_devel  3.5.9-2  arm64
+/boot/home/config/non-packaged/bin/haikuporter
+Usage: haikuporter [options] portname[-portversion]
+
+haikuporter: error: no such option: --no-dependencies
+exit 2
+
+

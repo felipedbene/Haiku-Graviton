@@ -1,0 +1,21 @@
+# evidence: before-node-symbols
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: 0a1c9e67-2632-4692-8c20-f2dd3cdafcdd (agent status: Failed)
+# start: 20261102T011429Z   end: 20261102T011537Z   rc: 1
+# ---- script ----
+# | nm -D /boot/system/bin/node 2>&1 | grep -E " uv_(cpu_info|replace_allocator|free_cpu_info|os_getpriority|version)" 
+# | echo "== libuv"
+# | nm -D /boot/system/lib/libuv.so.1 | grep -E " uv_(cpu_info|replace_allocator)"
+# | nm -D /boot/system/bin/node | grep -c " T uv_"
+# ---- raw output ----
+                 U uv_cpu_info
+                 U uv_free_cpu_info
+                 U uv_os_getpriority
+                 U uv_version_string
+== libuv
+0000000000028120 T uv_cpu_info
+00000000000147c4 T uv_replace_allocator
+0
+
+---- stderr ----
+failed to run commands: exit status 1
