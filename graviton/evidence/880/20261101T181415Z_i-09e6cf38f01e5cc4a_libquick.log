@@ -1,0 +1,71 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: libquick
+# instance: i-09e6cf38f01e5cc4a   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T181415Z   end: 20261101T181602Z   rc: 0
+# script sha256: e3fb549f5f8ed0d39b3c3928f20136889573cb458c3bf274b38b0f13a0a1c376
+# ---- script ----
+# | cd /boot/home/td
+# | mkdir -p lib-trunk && curl -sSf -o lib-trunk/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.trunk?<PRESIGNED>'
+# | echo '638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  lib-trunk/libroot.so' | sha256sum -c
+# | mkdir -p lib-876 && curl -sSf -o lib-876/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.876?<PRESIGNED>'
+# | echo 'b82f81f5cb4d6eafdec7dcf0e88a39f28f0286516900661e8596fe1262a5307a  lib-876/libroot.so' | sha256sum -c
+# | mkdir -p lib-880 && curl -sSf -o lib-880/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.880?<PRESIGNED>'
+# | echo '7afadf1c9be3c9bf3199765ff44c32911982e62a8f41bc51862ddcdef391e1c9  lib-880/libroot.so' | sha256sum -c
+# | mkdir -p lib-881 && curl -sSf -o lib-881/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.881?<PRESIGNED>'
+# | echo '182e30f5cc55be7b391d771cf17568fa55db14ade868933c7b7680b191348a6c  lib-881/libroot.so' | sha256sum -c
+# | mkdir -p lib-872 && curl -sSf -o lib-872/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.872?<PRESIGNED>'
+# | echo '38783a255c93db7961f130b5ccbd62b92238da0946fc0f7f49ba4296a308aaf4  lib-872/libroot.so' | sha256sum -c
+# | mkdir -p lib-874 && curl -sSf -o lib-874/libroot.so 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.874?<PRESIGNED>'
+# | echo 'a331ffab25be4a790ab3958b10f6d13ce98d878e6818de007ca81018bd7f993a  lib-874/libroot.so' | sha256sum -c
+# | sha256sum /boot/system/lib/libroot.so
+# | cd /boot/home/td
+# | for t in "880 umask880" "881 prio881" "872 shebang872" "874 forkonce874 40"; do
+# | 	set -- $t; arm=$1; shift
+# | 	echo "=== $* before (system libroot)"; ./"$@" 2>&1 | tail -4
+# | 	echo "=== $* after (LIBRARY_PATH=lib-$arm)"; LIBRARY_PATH=$PWD/lib-$arm ./"$@" 2>&1 | tail -4
+# | done
+# ---- raw output ----
+lib-trunk/libroot.so: OK
+lib-876/libroot.so: OK
+lib-880/libroot.so: OK
+lib-881/libroot.so: OK
+lib-872/libroot.so: OK
+lib-874/libroot.so: OK
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  /boot/system/lib/libroot.so
+=== umask880 before (system libroot)
+umask(017777): reads back 017777 (want 0777), file 0777 -> 0  FAIL
+umask(0): reads back 0 (want 0), file 0777 -> 0777  PASS
+exec'd sh after umask(010664) reports "10664" (want 0664)  FAIL
+umask880: 4 failed
+=== umask880 after (LIBRARY_PATH=lib-880)
+umask(017777): reads back 0777 (want 0777), file 0777 -> 0  PASS
+umask(0): reads back 0 (want 0), file 0777 -> 0777  PASS
+exec'd sh after umask(010664) reports "0664" (want 0664)  PASS
+umask880: 0 failed
+=== prio881 before (system libroot)
+set  16  get(0)= 15  get(pid)= 15  FAIL
+set  18  get(0)= 17  get(pid)= 17  FAIL
+forked child reads 9, parent 9  PASS
+prio881: 10 failed
+=== prio881 after (LIBRARY_PATH=lib-881)
+set  10  get(0)= 10  get(pid)= 10  PASS
+set  15  get(0)= 15  get(pid)= 15  PASS
+forked child reads 10, parent 10  PASS
+prio881: 0 failed
+=== shebang872 before (system libroot)
+posix_spawn #!/bin/sh                  error=0 (-), child status 0  PASS
+execv       #!/bin/sh -e               errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh -e               error=0 (-), child status 0  PASS
+shebang872: 3 failed
+=== shebang872 after (LIBRARY_PATH=lib-872)
+posix_spawn #!/bin/sh                  error=0 (-), child status 0  PASS
+execv       #!/bin/sh -e               errno=0 (-), child exit 0  PASS
+posix_spawn #!/bin/sh -e               error=0 (-), child status 0  PASS
+shebang872: 0 failed
+=== forkonce874 40 before (system libroot)
+round 0: fork child could not start a thread 
+round 1: fork child could not start a thread 
+round 2: fork child could not start a thread 
+forkonce874: 40 of 40 rounds failed (child 40, runner 0)
+=== forkonce874 40 after (LIBRARY_PATH=lib-874)
+forkonce874: 0 of 40 rounds failed (child 0, runner 0)
