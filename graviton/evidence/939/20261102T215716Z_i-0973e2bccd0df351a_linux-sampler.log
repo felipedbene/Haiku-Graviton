@@ -1,0 +1,53 @@
+# evidence: linux-sampler
+# instance: i-0973e2bccd0df351a   region: us-west-2
+# ssm command: ccadf75c-3650-4ba1-b1e1-7270d82e771e (agent status: Success)
+# start: 20261102T215716Z   end: 20261102T215744Z   rc: 0   log bytes: 374
+# script sha256: 765c7a4eae3678b4bacc68c977ae157b896d0212b4f469bfb3c3aee7efb84088
+# ---- script ----
+# | set -eu
+# | export PATH=/tmp/l939/node-v24.21.0-linux-arm64/bin:$PATH; cd /tmp/l939
+# | cat > sampler.js <<'JS'
+# | // sampler.js <busy-processes> <seconds> <interval-ms>: sample os.cpus() every
+# | // <interval-ms> while <busy-processes> children spin; count per-CPU samples
+# | // where idle went backwards or the busy share of the interval left [0, 100%].
+# | 'use strict';
+# | const os = require('os');
+# | const { spawn } = require('child_process');
+# | const n = Number(process.argv[2]), secs = Number(process.argv[3]), iv = Number(process.argv[4]);
+# | const kids = [];
+# | for (let i = 0; i < n; i++)
+# | 	kids.push(spawn(process.execPath, ['-e',
+# | 		`const e = Date.now() + ${secs * 1000}; let x = 0; while (Date.now() < e) x++;`],
+# | 		{ stdio: 'ignore' }));
+# | let prev = os.cpus().map(c => c.times), samples = 0, back = 0, maxBack = 0, over = 0, maxShare = 0;
+# | const timer = setInterval(() => {
+# | 	const cur = os.cpus().map(c => c.times);
+# | 	cur.forEach((t, i) => {
+# | 		const p = prev[i];
+# | 		const dIdle = t.idle - p.idle;
+# | 		const dBusy = (t.user + t.nice + t.sys + t.irq) - (p.user + p.nice + p.sys + p.irq);
+# | 		const dAll = dIdle + dBusy;
+# | 		samples++;
+# | 		if (dIdle < 0) { back++; maxBack = Math.max(maxBack, -dIdle); }
+# | 		const share = dAll > 0 ? dBusy / dAll : 0;
+# | 		if (share > 1 || share < 0) over++;
+# | 		maxShare = Math.max(maxShare, share);
+# | 	});
+# | 	prev = cur;
+# | }, iv);
+# | Promise.all(kids.map(k => new Promise((res, rej) => {
+# | 	k.on('error', rej);
+# | 	k.on('exit', (code, sig) => code === 0 ? res() : rej(new Error(`child exit ${code} ${sig}`)));
+# | }))).then(() => {
+# | 	clearInterval(timer);
+# | 	console.log(`sampler: ${n} busy x ${secs} s, every ${iv} ms: ${samples} per-CPU samples, idle went back in ${back} (max ${maxBack} ms), busy share outside [0,1] in ${over}, max busy share ${(100 * maxShare).toFixed(1)}%`);
+# | }).catch(e => { console.error(e); process.exit(1); });
+# | JS
+# | sha256sum sampler.js; node --version
+# | node sampler.js 4 10 100
+# | node sampler.js 4 10 1000
+# ---- raw output ----
+cf24410882696dd16738a74aa10169b75a0715ef0a8e5b151508e7264934dd12  sampler.js
+v24.21.0
+sampler: 4 busy x 10 s, every 100 ms: 800 per-CPU samples, idle went back in 0 (max 0 ms), busy share outside [0,1] in 0, max busy share 100.0%
+sampler: 4 busy x 10 s, every 1000 ms: 80 per-CPU samples, idle went back in 0 (max 0 ms), busy share outside [0,1] in 0, max busy share 100.0%

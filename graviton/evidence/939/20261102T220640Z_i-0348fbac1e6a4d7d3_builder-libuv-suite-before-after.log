@@ -1,0 +1,231 @@
+# evidence: builder-libuv-suite-before-after
+# instance: i-0348fbac1e6a4d7d3   region: us-west-2
+# ssm command: 34cbbccc-62b1-438b-ac68-4746b2d186fd (agent status: Success)
+# start: 20261102T220640Z   end: 20261102T220918Z   rc: 0   log bytes: 4432
+# script sha256: 97cce0aa27dd188facddf44ff9445569b44e6600fc0760bb2ef3ae4b2efafb1e
+# ---- script ----
+# | set -u
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | P=/tmp/uvst   # recipe + patches staged and sha256-checked by the build step
+# | cd $P && sha256sum -c sums || exit 1
+# | W=/boot/home/uvw/suite; rm -rf $W; mkdir -p $W; cd $W || exit 1
+# | cp /boot/home/haikuports/dev-libs/libuv/download/libuv-1.52.1.tar.gz . 2>/dev/null || curl -sSfL -o libuv-1.52.1.tar.gz https://github.com/libuv/libuv/archive/v1.52.1/libuv-1.52.1.tar.gz || exit 1
+# | echo '478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c  libuv-1.52.1.tar.gz' | sha256sum -c - || exit 1
+# | build() {	# build <dir> <patches...>
+# | 	d=$1; shift
+# | 	mkdir $d && tar xzf libuv-1.52.1.tar.gz -C $d --strip-components=1 && cd $d || return 1
+# | 	for p in "$@"; do patch -p1 -s < $P/$p || return 1; done
+# | 	(./autogen.sh && LDFLAGS=-lnetwork ./configure --disable-static && make -j8 && make -j8 test/run-tests) > build.log 2>&1
+# | 	rc=$?; echo "== $d (patches: $*) build rc=$rc; warnings in haiku.c: $(grep -c 'haiku\.c:.*warning' build.log)"
+# | 	cd ..; return $rc
+# | }
+# | R5="libuv-1.52.1.patchset libuv-1.52.1-haiku-proctitle.patch libuv-1.52.1-haiku-getrusage-thread.patch libuv-1.52.1-haiku-cpu-model.patch"
+# | build before $R5 || exit 1
+# | build after $R5 libuv-1.52.1-haiku-cpu-times.patch || exit 1
+# | for d in before after; do
+# | 	echo "===== platform_output, $d (uv_cpu_info section)"
+# | 	cd $W/$d && : | ./test/run-tests platform_output > po.out 2>&1; echo "rc=$?"
+# | 	sed -n '/uv_cpu_info/,/uv_interface_addresses/p' po.out | head -60
+# | 	head -1 po.out
+# | done
+# | for d in before after; do
+# | 	echo "===== full suite, $d"
+# | 	cd $W/$d
+# | 	start=$(date +%s)
+# | 	: | ./test/run-tests > full.tap 2>&1; echo "run-tests rc=$? in $(( $(date +%s) - start ))s"
+# | 	head -1 full.tap
+# | 	echo "ok: $(grep -c '^ok' full.tap) (of which SKIP: $(grep -c '^ok.*# SKIP' full.tap)), not ok: $(grep -c '^not ok' full.tap)"
+# | 	grep '^not ok' full.tap
+# | done
+# | echo "===== suite diff (before -> after): every test whose result changed"
+# | norm() { grep -E '^(not )?ok' $1 | sed -E 's/^ok ([0-9]+) - ([^ ]+) # SKIP.*/\2 skip/; s/^not ok ([0-9]+) - ([^ ]+).*/\2 FAIL/; s/^ok ([0-9]+) - ([^ ]+).*/\2 ok/' | sort; }
+# | norm $W/before/full.tap > /tmp/n-before; norm $W/after/full.tap > /tmp/n-after
+# | wc -l /tmp/n-before /tmp/n-after
+# | diff /tmp/n-before /tmp/n-after; echo "diff rc=$? (0 = no test changed result)"
+# ---- raw output ----
+libuv-1.52.1.recipe: OK
+libuv-1.52.1.patchset: OK
+libuv-1.52.1-haiku-cpu-model.patch: OK
+libuv-1.52.1-haiku-cpu-times.patch: OK
+libuv-1.52.1-haiku-getrusage-thread.patch: OK
+libuv-1.52.1-haiku-proctitle.patch: OK
+libuv-1.52.1.tar.gz: OK
+== before (patches: libuv-1.52.1.patchset libuv-1.52.1-haiku-proctitle.patch libuv-1.52.1-haiku-getrusage-thread.patch libuv-1.52.1-haiku-cpu-model.patch) build rc=0; warnings in haiku.c: 0
+== after (patches: libuv-1.52.1.patchset libuv-1.52.1-haiku-proctitle.patch libuv-1.52.1-haiku-getrusage-thread.patch libuv-1.52.1-haiku-cpu-model.patch libuv-1.52.1-haiku-cpu-times.patch) build rc=0; warnings in haiku.c: 0
+===== platform_output, before (uv_cpu_info section)
+rc=0
+# uv_cpu_info:
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 0
+#   times.idle: 0
+#   times.irq: 0
+#   times.nice: 0
+# uv_interface_addresses:
+ok 1 - platform_output
+===== platform_output, after (uv_cpu_info section)
+rc=0
+# uv_cpu_info:
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 71123
+#   times.idle: 1748577
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 87793
+#   times.idle: 1731907
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 107758
+#   times.idle: 1711943
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 93371
+#   times.idle: 1726330
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 101958
+#   times.idle: 1717742
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 90815
+#   times.idle: 1728886
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 103596
+#   times.idle: 1716104
+#   times.irq: 0
+#   times.nice: 0
+#   model: unknown
+#   speed: 2597
+#   times.sys: 0
+#   times.user: 98942
+#   times.idle: 1720758
+#   times.irq: 0
+#   times.nice: 0
+# uv_interface_addresses:
+ok 1 - platform_output
+===== full suite, before
+run-tests rc=21 in 52s
+1..449
+ok: 428 (of which SKIP: 11), not ok: 21
+not ok 28 - dlerror
+not ok 30 - embed
+not ok 80 - fs_futime
+not ok 81 - fs_get_system_error
+not ok 82 - fs_link
+not ok 83 - fs_lutime
+not ok 115 - fs_statfs
+not ok 119 - fs_utime
+not ok 120 - fs_utime_round
+not ok 130 - get_passwd2
+not ok 216 - poll_bad_fdtype
+not ok 220 - poll_duplex
+not ok 222 - poll_unidirectional
+not ok 268 - spawn_setgid_fails
+not ok 269 - spawn_setuid_fails
+not ok 270 - spawn_setuid_setgid
+not ok 293 - tcp_bind_error_addrinuse_connect
+not ok 402 - udp_connect
+not ok 403 - udp_connect6
+not ok 413 - udp_multicast_join
+not ok 422 - udp_options6
+===== full suite, after
+run-tests rc=21 in 51s
+1..449
+ok: 428 (of which SKIP: 11), not ok: 21
+not ok 28 - dlerror
+not ok 30 - embed
+not ok 80 - fs_futime
+not ok 81 - fs_get_system_error
+not ok 82 - fs_link
+not ok 83 - fs_lutime
+not ok 115 - fs_statfs
+not ok 119 - fs_utime
+not ok 120 - fs_utime_round
+not ok 130 - get_passwd2
+not ok 216 - poll_bad_fdtype
+not ok 220 - poll_duplex
+not ok 222 - poll_unidirectional
+not ok 268 - spawn_setgid_fails
+not ok 269 - spawn_setuid_fails
+not ok 270 - spawn_setuid_setgid
+not ok 293 - tcp_bind_error_addrinuse_connect
+not ok 402 - udp_connect
+not ok 403 - udp_connect6
+not ok 413 - udp_multicast_join
+not ok 422 - udp_options6
+===== suite diff (before -> after): every test whose result changed
+  449 /tmp/n-before
+  449 /tmp/n-after
+  898 total
+diff rc=0 (0 = no test changed result)
