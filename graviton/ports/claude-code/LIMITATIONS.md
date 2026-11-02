@@ -534,3 +534,19 @@ don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
 - **Fix would need:** either a Haiku `uv_fs_event` backend in libuv (over node monitoring,
   `watch_node`/`B_WATCH_DIRECTORY`), or polling in the compat layer. That is an owner
   decision. Nothing is implemented in the meantime.
+
+### BFS timestamps have ~262 µs resolution (#929, accepted as a filesystem limit)
+- **What:** on BFS, a sub-second time does not read back exactly. A millisecond `utimes()`
+  comes back off by up to about 0.26 ms (`-1 ms -> -1.23136 ms`, `1 ms -> 0.786432 ms`).
+  Node's `parallel/test-fs-stat-date` therefore fails 5/5 on the fresh trunk image. It used
+  to skip itself, until the access-time fix for #879 made atime round-trip.
+- **Why:** BFS stores each time as `sec << 16 | fraction`. `unique_from_nsec()` keeps
+  `nsec >> 14` masked to bits 4–15 (`INODE_TIME_MASK` 0xfff0). The low 4 bits are a
+  uniqueness counter for the time indices. The step is therefore 2^18 ns = 262.144 µs
+  (`src/add-ons/kernel/file_systems/bfs/bfs.h:226,276-294,346`). The field and the counter
+  are part of the on-disk inode format.
+- **Decision (owner, 2026-11-01):** accept it as a documented BFS limit, the way ext3 has
+  1 s and FAT 2 s. No format change. The test stays failing, honestly; it is not skipped or
+  weakened.
+- **Evidence:** `evidence/20261101T223330Z_i-09e325e6c72394c08_trunk-bfs-time-resolution-probe.log`,
+  `evidence/20261101T223226Z_i-09e325e6c72394c08_trunk-fs-stat-date-repro.log`.
