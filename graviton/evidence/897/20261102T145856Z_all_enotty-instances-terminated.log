@@ -1,0 +1,8 @@
+# evidence: every instance launched for the issue 897 ENOTTY follow-up is terminated
+# captured: 20261102T145856Z via aws ec2 describe-instances
+i-0abff197a0b83cdb9	hg897b-after	ami-0736eac8984ce2e81	terminated
+i-09603a7db581ad4e2	hg897b-prep	ami-03c3545c37f391c1f	terminated
+i-0e5e2ac0aac74c660	hg897b-prep-ctl	ami-03c3545c37f391c1f	terminated
+i-0c332b49b90a6975d	hg897b-before	ami-03c3545c37f391c1f	terminated
+i-08dca655adb493aa9	hg897b-control	ami-08c8b2b6cb4023805	terminated
+i-0064bf438aae1b9d6	hg897b-xbuild	ami-0dcf79589cb11e193	terminated

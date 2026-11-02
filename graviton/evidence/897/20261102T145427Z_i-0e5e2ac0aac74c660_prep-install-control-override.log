@@ -1,0 +1,97 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# note: this first attempt broke the presigned URL while generating the script (sed treated "&" in the URL as the match), so the download failed and the module was not installed; the -retry log is the real install
+# evidence: prep-install-control-override
+# instance: i-0e5e2ac0aac74c660   region: us-west-2   transport: SSM (script started detached with nohup, output file polled)
+# start: 20261102T145427Z   end: 20261102T145448Z
+# script sha256: fbd4cdab1323684bed72d24cf671d5dac97bc4a4ba9a5e2f5930415afa294b24
+# ---- script ----
+# | pkgman install -y gcc binutils haiku_devel python3.14 2>&1 | tail -2
+# | gcc --version | head -1; command -v as; python3 --version
+# | URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/hg897b/out/base/random?<PRESIGNED>
+# | SHA=b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df
+# | # Keep bus_managers/random/device_v1 referenced while the new file lands, so
+# | # the running kernel never binds it to a second image (issue 940).
+# | nohup sh -c 'exec 9</dev/urandom; exec sleep 999999' > /dev/null 2>&1 &
+# | sleep 2
+# | ps | grep "sleep 999999" | grep -v grep
+# | echo "before install:"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | D=/boot/home/config/non-packaged/add-ons/kernel/bus_managers
+# | mkdir -p $D && cd /boot/home && python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "random.fix")' "$URL"
+# | echo "$SHA  random.fix" | sha256sum -c || exit 5
+# | cp random.fix $D/random.new && chmod 755 $D/random.new && mv $D/random.new $D/random
+# | ls -la $D; sha256sum $D/random
+# | sync; sleep 5; sync
+# | for k in 1 2 3; do head -c 16 /dev/urandom | od -An -tx1; sleep 5; done
+# | echo "after install (running kernel must still use the packaged image only):"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | sync; sleep 10; sync
+# | echo SETUP_DONE
+# ---- raw output ----
+JOB_RC=5
+[system] Cleaning up ...
+[system] Done.
+gcc (2026_03_29) 13.3.0
+/boot/system/bin/as
+Python 3.14.7
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED>: command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> No such file or directory
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED>: command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> No such file or directory
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED>: command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> No such file or directory
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED>: command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> No such file or directory
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED>: command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> No such file or directory
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED> command not found
+/boot/home/jobs/prep-install-control-override.sh: line 3: <PRESIGNED>: command not found
+/boot/system/bin/sleep 999999                        416        1    0    0 
+before install:
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "random.fix")
+                               ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/boot/system/lib/python3.14/urllib/request.py", line 212, in urlretrieve
+    with contextlib.closing(urlopen(url, data)) as fp:
+                            ~~~~~~~^^^^^^^^^^^
+  File "/boot/system/lib/python3.14/urllib/request.py", line 187, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/boot/system/lib/python3.14/urllib/request.py", line 471, in open
+    req = Request(fullurl, data)
+  File "/boot/system/lib/python3.14/urllib/request.py", line 290, in __init__
+    self.full_url = url
+    ^^^^^^^^^^^^^
+  File "/boot/system/lib/python3.14/urllib/request.py", line 316, in full_url
+    self._parse()
+    ~~~~~~~~~~~^^
+  File "/boot/system/lib/python3.14/urllib/request.py", line 345, in _parse
+    raise ValueError("unknown url type: %r" % self.full_url)
+ValueError: unknown url type: ''
+sha256sum: random.fix: No such file or directory
+random.fix: FAILED open or read
+sha256sum: WARNING: 1 listed file could not be read

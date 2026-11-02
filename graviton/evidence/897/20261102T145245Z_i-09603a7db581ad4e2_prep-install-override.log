@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: prep-install-override
+# instance: i-09603a7db581ad4e2   region: us-west-2   transport: SSM (script started detached with nohup, output file polled)
+# start: 20261102T145245Z   end: 20261102T145346Z
+# script sha256: 6875dde44d6c8426704ee75d9f08f61a1296a53f468e7e8227ff4e3339921d70
+# ---- script ----
+# | pkgman install -y gcc binutils haiku_devel python3.14 2>&1 | tail -2
+# | gcc --version | head -1; command -v as; python3 --version
+# | URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/hg897b/out/fix/random?<PRESIGNED>
+# | SHA=57a6af5a6d45b5077a80af4b3bc1a44a02e485f183ba121aa2b848004a36db84
+# | # Keep bus_managers/random/device_v1 referenced while the new file lands, so
+# | # the running kernel never binds it to a second image (issue 940).
+# | nohup sh -c 'exec 9</dev/urandom; exec sleep 999999' > /dev/null 2>&1 &
+# | sleep 2
+# | ps | grep "sleep 999999" | grep -v grep
+# | echo "before install:"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | D=/boot/home/config/non-packaged/add-ons/kernel/bus_managers
+# | mkdir -p $D && cd /boot/home && python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "random.fix")' "$URL"
+# | echo "$SHA  random.fix" | sha256sum -c || exit 5
+# | cp random.fix $D/random.new && chmod 755 $D/random.new && mv $D/random.new $D/random
+# | ls -la $D; sha256sum $D/random
+# | sync; sleep 5; sync
+# | for k in 1 2 3; do head -c 16 /dev/urandom | od -An -tx1; sleep 5; done
+# | echo "after install (running kernel must still use the packaged image only):"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | sync; sleep 10; sync
+# | echo SETUP_DONE
+# ---- raw output ----
+JOB_RC=0
+[system] Cleaning up ...
+[system] Done.
+gcc (2026_03_29) 13.3.0
+/boot/system/bin/as
+Python 3.14.7
+/boot/system/bin/sleep 999999                        431        1    0    0 
+before install:
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+random.fix: OK
+total 30
+drwxr-xr-x 1 baron root  2048 Nov  2 14:52 .
+drwxr-xr-x 1 baron root  2048 Nov  2 14:52 ..
+-rwxr-xr-x 1 baron root 17739 Nov  2 14:52 random
+57a6af5a6d45b5077a80af4b3bc1a44a02e485f183ba121aa2b848004a36db84  /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+ 53 12 b2 3d e8 eb 94 bf c9 4f e9 27 c7 4b f5 68
+ e4 94 0c 68 6c fa fe 54 13 ce 3f 27 e4 8b 0c 0e
+ e1 a8 7e c4 9d bd 02 5b 37 ed bc d0 23 b1 5a 6c
+after install (running kernel must still use the packaged image only):
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+SETUP_DONE
