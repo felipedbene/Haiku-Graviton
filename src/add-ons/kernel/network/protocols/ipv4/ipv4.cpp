@@ -1801,6 +1801,18 @@ ipv4_read_avail(net_protocol* _protocol)
 }
 
 
+bool
+ipv4_message_queued(net_protocol* _protocol)
+{
+	ipv4_protocol* protocol = (ipv4_protocol*)_protocol;
+	RawSocket* raw = protocol->raw;
+	if (raw == NULL)
+		return false;
+
+	return raw->MessageQueued();
+}
+
+
 struct net_domain*
 ipv4_get_domain(net_protocol* protocol)
 {
@@ -2257,7 +2269,8 @@ net_protocol_module_info gIPv4Module = {
 	NULL,		// process_ancillary_data()
 	ipv4_process_ancillary_data_no_container,
 	NULL,		// send_data_no_buffer()
-	NULL		// read_data_no_buffer()
+	NULL,		// read_data_no_buffer()
+	ipv4_message_queued
 };
 
 module_dependency module_dependencies[] = {

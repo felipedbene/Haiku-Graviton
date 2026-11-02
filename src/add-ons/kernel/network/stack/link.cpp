@@ -605,6 +605,13 @@ link_read_avail(net_protocol* protocol)
 }
 
 
+static bool
+link_message_queued(net_protocol* protocol)
+{
+	return ((LinkProtocol*)protocol)->MessageQueued();
+}
+
+
 static struct net_domain*
 link_get_domain(net_protocol* protocol)
 {
@@ -715,5 +722,6 @@ net_protocol_module_info gLinkModule = {
 	NULL,		// process_ancillary_data()
 	NULL,		// process_ancillary_data_no_container()
 	NULL,		// send_data_no_buffer()
-	NULL		// read_data_no_buffer()
+	NULL,		// read_data_no_buffer()
+	link_message_queued
 };

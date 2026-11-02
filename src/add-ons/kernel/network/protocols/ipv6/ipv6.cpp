@@ -1559,6 +1559,18 @@ ipv6_read_avail(net_protocol* _protocol)
 }
 
 
+bool
+ipv6_message_queued(net_protocol* _protocol)
+{
+	ipv6_protocol* protocol = (ipv6_protocol*)_protocol;
+	RawSocket* raw = protocol->raw;
+	if (raw == NULL)
+		return false;
+
+	return raw->MessageQueued();
+}
+
+
 struct net_domain*
 ipv6_get_domain(net_protocol* protocol)
 {
@@ -2022,7 +2034,8 @@ net_protocol_module_info gIPv6Module = {
 	NULL,		// process_ancillary_data()
 	ipv6_process_ancillary_data_no_container,
 	NULL,		// send_data_no_buffer()
-	NULL		// read_data_no_buffer()
+	NULL,		// read_data_no_buffer()
+	ipv6_message_queued
 };
 
 module_dependency module_dependencies[] = {

@@ -145,6 +145,7 @@ public:
 			void				Clear();
 
 			bool				IsEmpty() const { return fBuffers.IsEmpty(); }
+			bool				MessageQueued() const;
 			ssize_t				AvailableData() const;
 
 			void				WakeAll();
@@ -288,6 +289,13 @@ DECL_DATAGRAM_SOCKET(inline void)::Clear()
 {
 	AutoLocker _(fLock);
 	_Clear();
+}
+
+
+DECL_DATAGRAM_SOCKET(inline bool)::MessageQueued() const
+{
+	AutoLocker _(fLock);
+	return !fBuffers.IsEmpty();
 }
 
 

@@ -126,6 +126,11 @@ struct net_protocol_module_info {
 					size_t vecCount, ancillary_data_container** _ancillaryData,
 					struct sockaddr* _address, socklen_t* _addressLength,
 					int flags);
+
+	// Optional, for NET_PROTOCOL_ATOMIC_MESSAGES protocols: whether a message
+	// is queued for reading. read_avail() counts bytes, so it cannot tell an
+	// empty datagram from an empty queue.
+	bool		(*message_queued)(net_protocol* self);
 };
 
 
