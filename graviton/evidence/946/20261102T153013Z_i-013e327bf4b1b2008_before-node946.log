@@ -1,0 +1,100 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-node946
+# instance: i-013e327bf4b1b2008   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T153013Z   end: 20261102T153930Z   rc: 0
+# script sha256: 80aecba50b9c8dd00c8c081d3529ddfe1bdc748eae5a5acb4d3c410282ffe163
+# ---- script ----
+# | set -u
+# | cd /boot/home/tw || exit 3
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\).*/\1/p' | head -1)
+# | echo "own address: $OWN"
+# | cd /boot/home/tw/node-v24.21.0 || exit 7
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 180 -p tap --repeat 64 parallel/test-net-connect-abort-controller > /boot/home/tw/node946.tap 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s"
+# | echo "ok: $(grep -c '^ok ' /boot/home/tw/node946.tap)  not ok: $(grep -c '^not ok ' /boot/home/tw/node946.tap)"
+# | grep -A12 '^not ok ' /boot/home/tw/node946.tap | head -60
+# ---- raw output ----
+Haiku ip-10-128-7-97.us-west-2.comput R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- non-packaged overrides
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2510 0xffff00000247f000 0xffff0000024a1000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2529 0xffff0000024a3000 0xffff0000024ab000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2530 0xffff0000024ac000 0xffff0000024b7000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2531 0xffff0000024b9000 0xffff0000024cb000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2535 0xffff0000024cc000 0xffff0000024d7000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2538 0xffff0000024d9000 0xffff0000024e7000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+own address: 10.128.7.97
+test.py rc=1 wall=548s
+ok: 49  not ok: 15
+not ok 50 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540076.11200
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 51 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540082.16400
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 52 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540098.87300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 53 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540044.60500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 54 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540103.03800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 55 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540086.43000
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 56 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540037.89600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+not ok 57 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 540104.97800
+  severity: fail
