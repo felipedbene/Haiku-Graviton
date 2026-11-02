@@ -1,0 +1,56 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-ntfsfix1
+# instance: i-005cad58f260bbedf   region: us-west-2
+# ssm command: e120dcbe-63cb-43f1-8b8d-5a0dced3cf94 (agent status: detached)
+# start: 20261102T153613Z   end: 20261102T153726Z   rc: 0   log bytes: 1560
+# script sha256: ccc5fae8fab024514c58e1ca81224f247f3adb91da40e18930ff54148b7824ab
+# ---- script ----
+# | # Repack arm "ntfsfix1": canonical haiku.hpkg with trunk kernel_arm64 + libroot.so (#937 rules) and
+# | # ntfs.fix1 + fat.trunk, so a fresh launch boots them (the boot loader preloads
+# | # system/add-ons/kernel/file_systems; a non-packaged fs add-on is never used for a
+# | # volume present at boot). Method of #898's repack.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O 'kernel_arm64.trunk' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out933/kernel_arm64.trunk?<PRESIGNED>'
+# | echo '829991755235f7add36318c81fdfaaab7edb4ca3cf1303d0dd11a0a1801ef3fd  kernel_arm64.trunk' | sha256sum -c
+# | wget -q -O 'libroot.so.trunk' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out933/libroot.so.trunk?<PRESIGNED>'
+# | echo '2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk' | sha256sum -c
+# | wget -q -O 'ntfs.fix1' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out933/ntfs.fix1?<PRESIGNED>'
+# | echo '4f0c0c74fc010d8b6eaced2527f0740d6974b53af2b4164f7a5e9d9778003675  ntfs.fix1' | sha256sum -c
+# | wget -q -O 'fat.trunk' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out933/fat.trunk?<PRESIGNED>'
+# | echo '4d79f1cc98b758828971160b5fdd17a4a266044e38f8b44f45b6f7418bcc9b76  fat.trunk' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | sha256sum x/kernel_arm64 x/lib/libroot.so x/add-ons/kernel/file_systems/ntfs x/add-ons/kernel/file_systems/fat
+# | cat kernel_arm64.trunk > x/kernel_arm64; cat libroot.so.trunk > x/lib/libroot.so
+# | cat ntfs.fix1 > x/add-ons/kernel/file_systems/ntfs; cat fat.trunk > x/add-ons/kernel/file_systems/fat
+# | sha256sum x/kernel_arm64 x/lib/libroot.so x/add-ons/kernel/file_systems/ntfs x/add-ons/kernel/file_systems/fat
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+kernel_arm64.trunk: OK
+libroot.so.trunk: OK
+ntfs.fix1: OK
+fat.trunk: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+c1c17f4eab272823074ef7ecc4f113454723ed5832286f7c15702c7da0697789  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  x/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  x/lib/libroot.so
+2dc15f09aed3104b6010e5bd875f0e8d13a3dea01d5bf9c4bb701fb6b281f99c  x/add-ons/kernel/file_systems/ntfs
+4d79f1cc98b758828971160b5fdd17a4a266044e38f8b44f45b6f7418bcc9b76  x/add-ons/kernel/file_systems/fat
+829991755235f7add36318c81fdfaaab7edb4ca3cf1303d0dd11a0a1801ef3fd  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+4f0c0c74fc010d8b6eaced2527f0740d6974b53af2b4164f7a5e9d9778003675  x/add-ons/kernel/file_systems/ntfs
+4d79f1cc98b758828971160b5fdd17a4a266044e38f8b44f45b6f7418bcc9b76  x/add-ons/kernel/file_systems/fat
+----- Package Info ----------------
+header size:                     80
+heap size:                 20502991
+TOC size:                    324054
+package attributes size:       1100
+total size:                20503071
+-----------------------------------
+-rw-r--r-- 1 baron root 20503071 Nov  2 15:37 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20645394 Nov  2 00:50 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+c9e473320ff7eaa3485d95ce16fef9b17e5ef03bbd2fcf7c6308edf937f074fc  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

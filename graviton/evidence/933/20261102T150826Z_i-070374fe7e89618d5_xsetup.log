@@ -1,0 +1,86 @@
+# evidence: xsetup
+# instance: i-070374fe7e89618d5   region: us-west-2
+# ssm command: d38daf0a-c38b-46bd-9c51-93907e77eaa2 (agent status: detached)
+# start: 20261102T150826Z   end: 20261102T151011Z   rc: 0   log bytes: 2087
+# script sha256: 14d958492a7bde77c4032a91d62169576555a170c195802f1faff4104983a4fc
+# ---- script ----
+# | # Cross-build host setup for issues 933/934 (method of #898's xsetup): toolchain,
+# | # jam, cross-tools from the oven's cache, configure; plus ntfs-3g/ntfs3 and
+# | # dosfstools for formatting the test volumes and the Linux reference runs.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g dosfstools nvme-cli > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -r; modinfo ntfs3 2>&1 | head -3; command -v mkntfs mkfs.vfat ntfs-3g
+# | mkdir -p /opt/t && cd /opt/t
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg log -1 --format='%H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | nproc; df -h /opt | tail -1
+# ---- raw output ----
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g dosfstools nvme-cli
++ echo 'apt rc=0'
+apt rc=0
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ uname -r
+7.0.0-1014-aws
++ modinfo ntfs3
++ head -3
+filename:       /lib/modules/7.0.0-1014-aws/kernel/fs/ntfs3/ntfs3.ko.zst
+alias:          fs-ntfs3
+author:         Konstantin Komarov
++ command -v mkntfs mkfs.vfat ntfs-3g
+/usr/sbin/mkntfs
+/usr/sbin/mkfs.vfat
+/usr/bin/ntfs-3g
++ mkdir -p /opt/t
++ cd /opt/t
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg log -1 '--format=%H %s'
+4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
+buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
+/usr/local/bin/jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j16
+Configured successfully!
++ nproc
+16
++ df -h /opt
++ tail -1
+/dev/root        58G  5.9G   52G  11% /
