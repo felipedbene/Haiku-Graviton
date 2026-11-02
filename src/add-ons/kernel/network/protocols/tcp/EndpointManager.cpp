@@ -134,6 +134,56 @@ static const uint16 kLastReservedPort = 1023;
 static const uint16 kFirstEphemeralPort = 40000;
 
 
+/*!	Holds a manager's lock for a bind and, when the bind must also respect the
+	bindings of the other address family (see _DualStackCounterpart()), that
+	manager's lock for reading. The IPv4 manager's lock is always taken
+	first, so that binds in the two families cannot deadlock each other.
+*/
+class EndpointManager::BindLocker {
+public:
+	BindLocker(EndpointManager* manager, EndpointManager* counterpart)
+		:
+		fManager(manager),
+		fCounterpart(counterpart),
+		fLocked(false)
+	{
+		Lock();
+	}
+
+	~BindLocker()
+	{
+		Unlock();
+	}
+
+	void Lock()
+	{
+		bool counterpartFirst = fCounterpart != NULL
+			&& fCounterpart->Domain()->family == AF_INET;
+		if (counterpartFirst)
+			rw_lock_read_lock(&fCounterpart->fLock);
+		rw_lock_write_lock(&fManager->fLock);
+		if (fCounterpart != NULL && !counterpartFirst)
+			rw_lock_read_lock(&fCounterpart->fLock);
+		fLocked = true;
+	}
+
+	void Unlock()
+	{
+		if (!fLocked)
+			return;
+		if (fCounterpart != NULL)
+			rw_lock_read_unlock(&fCounterpart->fLock);
+		rw_lock_write_unlock(&fManager->fLock);
+		fLocked = false;
+	}
+
+private:
+	EndpointManager*	fManager;
+	EndpointManager*	fCounterpart;
+	bool				fLocked;
+};
+
+
 ConnectionHashDefinition::ConnectionHashDefinition(EndpointManager* manager)
 	:
 	fManager(manager)
@@ -313,14 +363,16 @@ EndpointManager::SetConnection(TCPEndpoint* endpoint, const sockaddr* _local,
 status_t
 EndpointManager::SetPassive(TCPEndpoint* endpoint)
 {
-	WriteLocker _(fLock);
+	SocketAddressStorage local(AddressModule());
+	local.SetToEmpty();
+
+	EndpointManager* counterpart = endpoint->IsBound()
+		? NULL : _DualStackCounterpart(endpoint, *local);
+	BindLocker _(this, counterpart);
 
 	if (!endpoint->IsBound()) {
 		// if the socket is unbound first bind it to ephemeral
-		SocketAddressStorage local(AddressModule());
-		local.SetToEmpty();
-
-		status_t status = _BindToEphemeral(endpoint, *local);
+		status_t status = _BindToEphemeral(endpoint, *local, counterpart);
 		if (status < B_OK)
 			return status;
 	}
@@ -382,6 +434,38 @@ EndpointManager::FindConnection(sockaddr* local, sockaddr* peer)
 }
 
 
+/*!	Returns the IPv6 endpoint listening on \a port of :: that also takes IPv4
+	connections (IPV6_V6ONLY off), if there is one, with a reference to its
+	socket. This manager must be the IPv6 one; it is asked for an IPv4 segment
+	that no IPv4 endpoint wants.
+	Only a wildcard listener qualifies: one bound to a specific IPv6 address
+	cannot be reached by an IPv4 address, and one bound to a mapped address
+	lives in the IPv4 manager.
+*/
+TCPEndpoint*
+EndpointManager::FindDualStackListener(uint16 port)
+{
+	ReadLocker _(fLock);
+
+	SocketAddressStorage local(AddressModule());
+	local.SetToEmpty();
+	local.SetPort(port);
+
+	SocketAddressStorage peer(AddressModule());
+	peer.SetToEmpty();
+
+	TCPEndpoint* endpoint = _LookupConnection(*local, *peer);
+	if (endpoint == NULL || endpoint->State() != LISTEN
+		|| is_ipv6_only(endpoint->next)
+		|| !gSocketModule->acquire_socket(endpoint->socket))
+		return NULL;
+
+	TRACE(("TCP: IPv4 segment corresponds to dual-stack listener %p\n",
+		endpoint));
+	return endpoint;
+}
+
+
 //	#pragma mark - endpoints
 
 
@@ -392,12 +476,13 @@ EndpointManager::Bind(TCPEndpoint* endpoint, const sockaddr* address)
 	if (!AddressModule()->is_same_family(address))
 		return EAFNOSUPPORT;
 
-	WriteLocker locker(fLock);
+	EndpointManager* counterpart = _DualStackCounterpart(endpoint, address);
+	BindLocker locker(this, counterpart);
 
 	if (AddressModule()->get_port(address) == 0)
-		return _BindToEphemeral(endpoint, address);
+		return _BindToEphemeral(endpoint, address, counterpart);
 
-	return _BindToAddress(locker, endpoint, address);
+	return _BindToAddress(locker, endpoint, address, counterpart);
 }
 
 
@@ -409,10 +494,75 @@ EndpointManager::BindChild(TCPEndpoint* endpoint, const sockaddr* address)
 }
 
 
+/*!	Returns the manager of the other address family whose bindings a bind of
+	\a endpoint to \a address here conflicts with, if any. An IPv6 socket
+	bound to :: that does not refuse IPv4 (IPV6_V6ONLY off) holds its port
+	for IPv4 as well, as on Linux: so any IPv4 bind has to look at the IPv6
+	manager, and such an IPv6 bind at the IPv4 one. A socket bound to a
+	specific IPv6 address, or with IPV6_V6ONLY on, shares nothing with IPv4.
+*/
+EndpointManager*
+EndpointManager::_DualStackCounterpart(TCPEndpoint* endpoint,
+	const sockaddr* address) const
+{
+	switch (Domain()->family) {
+		case AF_INET:
+			return existing_endpoint_manager(AF_INET6);
+		case AF_INET6:
+			if (AddressModule()->is_empty_address(address, false)
+				&& !is_ipv6_only(endpoint->next))
+				return existing_endpoint_manager(AF_INET);
+			break;
+	}
+
+	return NULL;
+}
+
+
+/*!	Applies the rules of _BindToAddress() to the users of \a port in the other
+	family's manager \a counterpart: there an IPv6 socket bound to :: that
+	takes IPv4 counts as bound to INADDR_ANY, and when this bind is such a
+	socket, it counts as a bind to INADDR_ANY. So, as within one family, a
+	wildcard binding conflicts with any binding of the port made before it,
+	and a specific binding only with a wildcard one.
+	A closing local connection of the other family is not waited for, as
+	_BindToAddress() does for its own: that would mean dropping both locks.
+	You must hold both managers' locks.
+*/
+status_t
+EndpointManager::_CheckDualStackConflict(EndpointManager* counterpart,
+	TCPEndpoint* endpoint, uint16 port)
+{
+	EndpointTable::ValueIterator portUsers
+		= counterpart->fEndpointHash.Lookup(port);
+	while (portUsers.HasNext()) {
+		TCPEndpoint* user = portUsers.Next();
+
+		// Only a wildcard user can conflict: an IPv4 user bound to a specific
+		// address was there before this wildcard bind, and an IPv6 one cannot
+		// be reached by IPv4 at all.
+		if (!user->LocalAddress().IsEmpty(false))
+			continue;
+		if (counterpart->Domain()->family == AF_INET6
+			&& is_ipv6_only(user->next))
+			continue;
+
+		if ((endpoint->socket->options & SO_REUSEADDR) == 0)
+			return EADDRINUSE;
+
+		tcp_state userState = user->State();
+		if (userState != TIME_WAIT && userState != CLOSED)
+			return EADDRINUSE;
+	}
+
+	return B_OK;
+}
+
+
 /*! You must have fLock write locked when calling this method. */
 status_t
-EndpointManager::_BindToAddress(WriteLocker& locker, TCPEndpoint* endpoint,
-	const sockaddr* _address)
+EndpointManager::_BindToAddress(BindLocker& locker, TCPEndpoint* endpoint,
+	const sockaddr* _address, EndpointManager* counterpart)
 {
 	ConstSocketAddress address(AddressModule(), _address);
 	uint16 port = address.Port();
@@ -466,14 +616,24 @@ EndpointManager::_BindToAddress(WriteLocker& locker, TCPEndpoint* endpoint,
 		}
 	} while (retry-- > 0);
 
+	if (counterpart != NULL) {
+		status_t status = _CheckDualStackConflict(counterpart, endpoint, port);
+		if (status != B_OK)
+			return status;
+	}
+
 	return _Bind(endpoint, *address);
 }
 
 
-/*! You must have fLock write locked when calling this method. */
+/*!	You must have fLock write locked, and \a counterpart's lock if it is
+	given, when calling this method. A port in use in \a counterpart at all
+	is skipped: a stricter test than _CheckDualStackConflict(), which costs
+	nothing when choosing a free port.
+*/
 status_t
 EndpointManager::_BindToEphemeral(TCPEndpoint* endpoint,
-	const sockaddr* address)
+	const sockaddr* address, EndpointManager* counterpart)
 {
 	TRACE(("EndpointManager::BindToEphemeral(%p)\n", endpoint));
 
@@ -492,7 +652,9 @@ EndpointManager::_BindToEphemeral(TCPEndpoint* endpoint,
 			fLastPort = port;
 			port = htons(port);
 
-			if (!fEndpointHash.Lookup(port).HasNext()) {
+			if (!fEndpointHash.Lookup(port).HasNext()
+				&& (counterpart == NULL
+					|| !counterpart->fEndpointHash.Lookup(port).HasNext())) {
 				// found a port
 				SocketAddressStorage newAddress(AddressModule());
 				newAddress.SetTo(address);

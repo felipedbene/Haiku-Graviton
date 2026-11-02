@@ -1,0 +1,87 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after2-node19
+# instance: i-0be618740143cf4e6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T015845Z   end: 20261102T020016Z   rc: 0
+# script sha256: 557a5684d74bd41e27fb2eb54cf50ef11eefd42d5377dc429cd4d634443d3066
+# ---- script ----
+# | cd /boot/home/t873/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/(ipv4|ipv6|tcp|udp))' | awk '{print $NF}' | sort -u
+# | T="parallel/test-cluster-net-listen-ipv6only-false parallel/test-http-autoselectfamily parallel/test-http2-connect parallel/test-http2-ip-address-host parallel/test-https-autoselectfamily parallel/test-https-connect-address-family parallel/test-net-autoselectfamily parallel/test-net-autoselectfamily-ipv4first parallel/test-net-boundsocket parallel/test-net-connect-options-ipv6 parallel/test-net-dns-custom-lookup parallel/test-net-dns-lookup-skip parallel/test-net-pingpong parallel/test-tls-connect-address-family sequential/test-net-server-listen-ipv6-link-local parallel/test-tcp-wrap-listen sequential/test-net-connect-local-error sequential/test-net-server-address sequential/test-tls-psk-client"
+# | echo "tests: $(echo $T | wc -w)"
+# | for run in 1 2 3; do
+# | 	s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 8 -t 120 -p tap $T > /tmp/node19-$run.tap 2>&1
+# | 	echo "=== run $run: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/node19-$run.tap) notok=$(grep -c '^not ok ' /tmp/node19-$run.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/node19-$run.tap | sed 's/^/  /' | sort -k3
+# | done
+# | echo "=== failure detail, run 1"
+# | awk "/^not ok /{p=1} /^ok /{p=0} p" /tmp/node19-1.tap > /tmp/node19-1.fail; head -c 60000 /tmp/node19-1.fail; echo "detail lines: $(wc -l < /tmp/node19-1.fail)"
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+/boot/system/add-ons/kernel/network/protocols/ipv4
+tests: 19
+=== run 1: rc=0 wall=8s ok=19 notok=0
+  ok 7 parallel/test-cluster-net-listen-ipv6only-false
+  ok 5 parallel/test-http-autoselectfamily
+  ok 2 parallel/test-http2-connect
+  ok 3 parallel/test-http2-ip-address-host
+  ok 4 parallel/test-https-autoselectfamily
+  ok 6 parallel/test-https-connect-address-family
+  ok 19 parallel/test-net-autoselectfamily
+  ok 1 parallel/test-net-autoselectfamily-ipv4first
+  ok 8 parallel/test-net-boundsocket
+  ok 9 parallel/test-net-connect-options-ipv6
+  ok 10 parallel/test-net-dns-custom-lookup
+  ok 11 parallel/test-net-dns-lookup-skip
+  ok 17 parallel/test-net-pingpong
+  ok 12 parallel/test-tcp-wrap-listen
+  ok 13 parallel/test-tls-connect-address-family
+  ok 15 sequential/test-net-connect-local-error
+  ok 16 sequential/test-net-server-address
+  ok 14 sequential/test-net-server-listen-ipv6-link-local
+  ok 18 sequential/test-tls-psk-client
+=== run 2: rc=0 wall=7s ok=19 notok=0
+  ok 4 parallel/test-cluster-net-listen-ipv6only-false
+  ok 7 parallel/test-http-autoselectfamily
+  ok 2 parallel/test-http2-connect
+  ok 3 parallel/test-http2-ip-address-host
+  ok 6 parallel/test-https-autoselectfamily
+  ok 5 parallel/test-https-connect-address-family
+  ok 19 parallel/test-net-autoselectfamily
+  ok 1 parallel/test-net-autoselectfamily-ipv4first
+  ok 8 parallel/test-net-boundsocket
+  ok 10 parallel/test-net-connect-options-ipv6
+  ok 9 parallel/test-net-dns-custom-lookup
+  ok 11 parallel/test-net-dns-lookup-skip
+  ok 17 parallel/test-net-pingpong
+  ok 12 parallel/test-tcp-wrap-listen
+  ok 13 parallel/test-tls-connect-address-family
+  ok 15 sequential/test-net-connect-local-error
+  ok 16 sequential/test-net-server-address
+  ok 14 sequential/test-net-server-listen-ipv6-link-local
+  ok 18 sequential/test-tls-psk-client
+=== run 3: rc=0 wall=6s ok=19 notok=0
+  ok 7 parallel/test-cluster-net-listen-ipv6only-false
+  ok 1 parallel/test-http-autoselectfamily
+  ok 3 parallel/test-http2-connect
+  ok 6 parallel/test-http2-ip-address-host
+  ok 5 parallel/test-https-autoselectfamily
+  ok 4 parallel/test-https-connect-address-family
+  ok 19 parallel/test-net-autoselectfamily
+  ok 2 parallel/test-net-autoselectfamily-ipv4first
+  ok 8 parallel/test-net-boundsocket
+  ok 9 parallel/test-net-connect-options-ipv6
+  ok 10 parallel/test-net-dns-custom-lookup
+  ok 11 parallel/test-net-dns-lookup-skip
+  ok 17 parallel/test-net-pingpong
+  ok 12 parallel/test-tcp-wrap-listen
+  ok 14 parallel/test-tls-connect-address-family
+  ok 15 sequential/test-net-connect-local-error
+  ok 16 sequential/test-net-server-address
+  ok 13 sequential/test-net-server-listen-ipv6-link-local
+  ok 18 sequential/test-tls-psk-client
+=== failure detail, run 1
+detail lines: 0

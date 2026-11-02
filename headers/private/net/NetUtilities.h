@@ -8,9 +8,56 @@
 
 #include <netinet/in.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <net_buffer.h>
 #include <net_datalink.h>
+
+
+/*!	An IPv6 socket names an IPv4 peer with an IPv4-mapped address,
+	::ffff:a.b.c.d (RFC 4291 section 2.5.5.2, RFC 3493 section 3.7). A
+	dual-stack socket (IPV6_V6ONLY off) that carries IPv4 traffic keeps its
+	addresses in plain IPv4 form inside the stack, so that the IPv4 domain can
+	route, checksum and demultiplex them, and only presents them in the mapped
+	form to the application. These convert between the two.
+*/
+static inline bool
+is_ipv4_mapped_address(const sockaddr* address)
+{
+	return address != NULL && address->sa_family == AF_INET6
+		&& address->sa_len >= sizeof(sockaddr_in6)
+		&& IN6_IS_ADDR_V4MAPPED(&((const sockaddr_in6*)address)->sin6_addr);
+}
+
+
+static inline void
+ipv4_address_from_mapped(const sockaddr* mapped, sockaddr_in* address)
+{
+	const sockaddr_in6* source = (const sockaddr_in6*)mapped;
+
+	memset(address, 0, sizeof(sockaddr_in));
+	address->sin_len = sizeof(sockaddr_in);
+	address->sin_family = AF_INET;
+	address->sin_port = source->sin6_port;
+	memcpy(&address->sin_addr, &source->sin6_addr.s6_addr[12],
+		sizeof(in_addr));
+}
+
+
+static inline void
+mapped_address_from_ipv4(const sockaddr* ipv4, sockaddr_in6* mapped)
+{
+	const sockaddr_in* source = (const sockaddr_in*)ipv4;
+
+	memset(mapped, 0, sizeof(sockaddr_in6));
+	mapped->sin6_len = sizeof(sockaddr_in6);
+	mapped->sin6_family = AF_INET6;
+	mapped->sin6_port = source->sin_port;
+	mapped->sin6_addr.s6_addr[10] = 0xff;
+	mapped->sin6_addr.s6_addr[11] = 0xff;
+	memcpy(&mapped->sin6_addr.s6_addr[12], &source->sin_addr,
+		sizeof(in_addr));
+}
 
 
 class Checksum {

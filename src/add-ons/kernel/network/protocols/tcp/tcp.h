@@ -322,6 +322,7 @@ extern bool gTCPExplicitCongestionNotification;
 
 
 EndpointManager* get_endpoint_manager(net_domain* domain);
+EndpointManager* existing_endpoint_manager(int family);
 void put_endpoint_manager(EndpointManager* manager);
 
 status_t add_tcp_header(net_address_module_info* addressModule,

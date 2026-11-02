@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-slice
+# instance: i-0720acfcee0e914b6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T015237Z   end: 20261102T032243Z   rc: 1
+# script sha256: bc59ff4d5f9d9659697f1da8088af3f88833f18e59470ac9d054f6911d0e097c
+# ---- script ----
+# | cd /boot/home/t873/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/(ipv4|ipv6|tcp|udp))' | awk '{print $NF}' | sort -u
+# | run() {
+# | 	local name=$1; shift
+# | 	local s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap "$@" > /tmp/slice-$name.tap 2>&1
+# | 	echo "=== $name: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/slice-$name.tap) notok=$(grep -c '^not ok ' /tmp/slice-$name.tap) plan=$(grep -E '^1\.\.' /tmp/slice-$name.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/slice-$name.tap | sed -E 's/^(ok|not ok) [0-9]+ /\1 /' | sed 's/^/  /' | sort -k2
+# | }
+# | run net 'parallel/test-net-*'
+# | run dgram 'parallel/test-dgram-*'
+# | run tls 'parallel/test-tls-*'
+# | run http 'parallel/test-http-*'
+# | run http2 'parallel/test-http2-*'
+# ---- raw output ----

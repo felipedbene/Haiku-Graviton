@@ -20,6 +20,8 @@
 #include <net_socket.h>
 #include <net_stack.h>
 
+#include <netinet/in.h>
+
 
 class MutexLocking {
 public:
@@ -43,6 +45,25 @@ public:
 	static net_stack_module_info* Stack() { return gStackModule; }
 	static net_buffer_module_info* Buffer() { return gBufferModule; }
 };
+
+
+/*!	Whether the IPv6 socket that \a networkProtocol (the transport's next
+	protocol) belongs to refuses IPv4 traffic (IPV6_V6ONLY). The IPv6 protocol
+	holds the option; the transports ask it rather than keep a copy. The value
+	is passed through a kernel buffer, which getsockopt() accepts as it does on
+	the syscall path.
+*/
+static inline bool
+is_ipv6_only(net_protocol* networkProtocol)
+{
+	int value = 1;
+	int length = sizeof(value);
+	if (networkProtocol->module->getsockopt(networkProtocol, IPPROTO_IPV6,
+			IPV6_V6ONLY, &value, &length) != B_OK)
+		return true;
+
+	return value != 0;
+}
 
 
 class ProtocolSocket {

@@ -99,6 +99,10 @@ private:
 		}
 	};
 
+			status_t	_SetDomainFamily(int family);
+			status_t	_MoveToFamily(int family);
+			status_t	_BindToWildcard(uint16 port);
+
 			void		_StartPersistTimer();
 			void		_EnterTimeWait();
 			void		_UpdateTimeWait();

@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-c2-sys
+# instance: i-0937bdaf58b383052   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T025116Z   end: 20261102T025127Z   rc: 1
+# script sha256: 79bda5464585d51d4ba10f36574428aa6458c6d74062fa23e1b332bf7e7cfc2d
+# ---- script ----
+# | uname -a
+# | echo "--- listeners"
+# | netstat 2>/dev/null | grep -iE "listen" 
+# | echo "--- pkgman refresh (HTTPS out)"
+# | pkgman refresh 2>&1 | tail -2; echo "pkgman rc=$?"
+# | echo "--- loopback sshd banner over 127.0.0.1 and ::1"
+# | python3 -I -c '
+# | import socket
+# | for fam, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1"), (socket.AF_INET6, "::ffff:127.0.0.1")):
+# |     try:
+# |         s = socket.socket(fam); s.settimeout(5); s.connect((host, 22)); print(host, s.recv(64))
+# |     except Exception as e: print(host, "FAIL", repr(e))
+# | '
+# | echo "--- syslog: network-stack messages, panics"
+# | grep -ciE "kdl|panic" /var/log/syslog
+# | grep -E "IPv6::|IPv4::|tcp|udp|net_socket" /var/log/syslog | grep -viE "ssm|sshd\[" | tail -15
+# ---- raw output ----
+Haiku ip-10-128-10-62.us-west-2.compu R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- listeners
+tcp         0      0 *:10902               *:0                   listen       61/remote_broker
+tcp         0      0 *:ssh                 *:0                   listen       74/sshd
+tcp         0      0 localhost.localdomain:10900 *:0                   listen       159/app_server
+tcp         0      0 [::]:18730            [::]:0                listen       3774/python3
+--- pkgman refresh (HTTPS out)
+Fetching repository checksum from http://packages.debene.dev/arm64 ...
+Validating checksum for DeBeOS ...
+pkgman rc=0
+--- loopback sshd banner over 127.0.0.1 and ::1
+127.0.0.1 b'SSH-2.0-OpenSSH_10.4\r\n'
+::1 FAIL ConnectionRefusedError(-2147454944, 'Connection refused')
+::ffff:127.0.0.1 b'SSH-2.0-OpenSSH_10.4\r\n'
+--- syslog: network-stack messages, panics
+0
+failed to run commands: exit status 1

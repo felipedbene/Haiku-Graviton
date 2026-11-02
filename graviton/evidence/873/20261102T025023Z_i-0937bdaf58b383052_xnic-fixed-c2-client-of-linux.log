@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xnic-fixed-c2-client-of-linux
+# instance: i-0937bdaf58b383052   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T025023Z   end: 20261102T025034Z   rc: 0
+# script sha256: c9533729bf4f451c85f3c6d17c6641bc1048b45a4c9830d7be7c6cb884a38ad8
+# ---- script ----
+# | cd /tmp && echo IyBDbGllbnQ6IDxmYW1pbHkgNHw2PiA8aG9zdD4gPHBvcnQ+LiBGYW1pbHkgNiB1c2VzIGFuIEFGX0lORVQ2IHNvY2tldCAoc28gYW4KIyBJUHY0IGhvc3QgbXVzdCBiZSBnaXZlbiBhcyA6OmZmZmY6YS5iLmMuZCkuIFRDUCB0byA8cG9ydD4sIFVEUCB0byA8cG9ydD4rMS4KaW1wb3J0IHNvY2tldCwgc3lzCmZhbSA9IHNvY2tldC5BRl9JTkVUIGlmIHN5cy5hcmd2WzFdID09ICI0IiBlbHNlIHNvY2tldC5BRl9JTkVUNgpob3N0LCBwb3J0ID0gc3lzLmFyZ3ZbMl0sIGludChzeXMuYXJndlszXSkKZm9yIGtpbmQgaW4gKCJ0Y3AiLCAidWRwIik6Cgl0cnk6CgkJcyA9IHNvY2tldC5zb2NrZXQoZmFtLCBzb2NrZXQuU09DS19TVFJFQU0gaWYga2luZCA9PSAidGNwIiBlbHNlIHNvY2tldC5TT0NLX0RHUkFNKQoJCXMuc2V0dGltZW91dCg1KQoJCWlmIGtpbmQgPT0gInRjcCI6CgkJCXMuY29ubmVjdCgoaG9zdCwgcG9ydCkpOyBzLnNlbmRhbGwoYiJoZWxsby0iICsga2luZC5lbmNvZGUoKSkKCQkJcmVwbHkgPSBzLnJlY3YoMTI4KQoJCWVsc2U6CgkJCXMuc2VuZHRvKGIiaGVsbG8tIiArIGtpbmQuZW5jb2RlKCksIChob3N0LCBwb3J0ICsgMSkpCgkJCXJlcGx5LCBhID0gcy5yZWN2ZnJvbSgxMjgpCgkJcHJpbnQoa2luZCwgImZhbWlseSIsIHN5cy5hcmd2WzFdLCAidG8iLCBob3N0LCAibG9jYWwiLCBzLmdldHNvY2tuYW1lKCksCgkJCSJyZXBseSIsIHJlcGx5LCAiUEFTUyIpCglleGNlcHQgRXhjZXB0aW9uIGFzIGU6CgkJcHJpbnQoa2luZCwgImZhbWlseSIsIHN5cy5hcmd2WzFdLCAidG8iLCBob3N0LCAiRkFJTCIsIHJlcHIoZSkpCg== | base64 -d > xclient.py && sha256sum xclient.py
+# | hostname
+# | python3 -I xclient.py 6 ::ffff:10.128.7.61 18740
+# | python3 -I xclient.py 4 10.128.7.61 18740
+# ---- raw output ----
+b2a92cbaae33443696685ab8239ce4db695bab445211f4287bc73025c680a8d2  xclient.py
+ip-10-128-10-62.us-west-2.compute.internal
+tcp family 6 to ::ffff:10.128.7.61 local ('::ffff:10.128.10.62', 45792, 0, 0) reply b"echo ('::ffff:10.128.10.62', 45792, 0, 0)" PASS
+udp family 6 to ::ffff:10.128.7.61 local ('::', 55869, 0, 0) reply b"echo ('::ffff:10.128.10.62', 55869, 0, 0)" PASS
+tcp family 4 to 10.128.7.61 local ('10.128.10.62', 52827) reply b"echo ('::ffff:10.128.10.62', 52827, 0, 0)" PASS
+udp family 4 to 10.128.7.61 local ('0.0.0.0', 61548) reply b"echo ('::ffff:10.128.10.62', 61548, 0, 0)" PASS

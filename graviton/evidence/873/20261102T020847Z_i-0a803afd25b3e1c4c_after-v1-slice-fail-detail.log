@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-v1-slice-fail-detail
+# instance: i-0a803afd25b3e1c4c   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T020847Z   end: 20261102T021052Z   rc: 1
+# script sha256: 2e61ce31f8dabd0d2bc4281c16e516b143c7c49aeb5475f83638b70e93b0079b
+# ---- script ----
+# | for t in test-net-connect-abort-controller test-tls-enable-keylog-cli; do
+# | 	f=$(grep -l "$t\$" /tmp/slice-*.tap | head -1)
+# | 	echo "##### $t in $f"
+# | 	awk -v t="$t" '$0 ~ "^(not ok|ok) [0-9]+ parallel/"t"$" {p=1; print; next} /^(ok|not ok) [0-9]+ /{p=0} p' $f | head -80
+# | done
+# ---- raw output ----

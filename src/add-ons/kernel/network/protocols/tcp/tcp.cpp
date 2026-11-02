@@ -345,6 +345,18 @@ get_endpoint_manager(net_domain* domain)
 }
 
 
+/*!	Returns the endpoint manager of the address family \a family, if one has
+	been created; managers are not deleted before the module is unloaded.
+*/
+EndpointManager*
+existing_endpoint_manager(int family)
+{
+	ReadLocker _(sEndpointManagersLock);
+
+	return endpoint_manager_for_locked(family);
+}
+
+
 void
 put_endpoint_manager(EndpointManager* endpointManager)
 {
@@ -624,6 +636,11 @@ tcp_setsockopt(net_protocol* _protocol, int level, int option,
 		}
 	} else if (level == IPPROTO_TCP)
 		return protocol->SetOption(option, _value, length);
+	else if (level == IPPROTO_IPV6 && option == IPV6_V6ONLY
+		&& protocol->socket->family == AF_INET6 && protocol->IsBound()) {
+		// the binding was checked against the value it had (Linux, FreeBSD)
+		return EINVAL;
+	}
 
 	return protocol->next->module->setsockopt(protocol->next, level, option,
 		_value, length);
@@ -766,6 +783,17 @@ tcp_receive_data(net_buffer* buffer)
 
 	TCPEndpoint* endpoint = endpointManager->FindConnection(
 		buffer->destination, buffer->source);
+	if (endpoint == NULL && domain->family == AF_INET) {
+		// No IPv4 socket has it. An IPv6 socket listening on :: that does not
+		// refuse IPv4 (IPV6_V6ONLY off) accepts IPv4 connections as well; the
+		// connection it spawns lives in this IPv4 manager, which is where its
+		// later segments find it.
+		EndpointManager* ipv6Manager = existing_endpoint_manager(AF_INET6);
+		if (ipv6Manager != NULL) {
+			endpoint = ipv6Manager->FindDualStackListener(
+				addressModule->get_port(buffer->destination));
+		}
+	}
 	if (endpoint != NULL) {
 		segmentAction = endpoint->SegmentReceived(segment, buffer);
 

@@ -1,0 +1,717 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-c2-node19
+# instance: i-011211270347f8e60   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T023830Z   end: 20261102T025647Z   rc: 0
+# script sha256: 557a5684d74bd41e27fb2eb54cf50ef11eefd42d5377dc429cd4d634443d3066
+# ---- script ----
+# | cd /boot/home/t873/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/(ipv4|ipv6|tcp|udp))' | awk '{print $NF}' | sort -u
+# | T="parallel/test-cluster-net-listen-ipv6only-false parallel/test-http-autoselectfamily parallel/test-http2-connect parallel/test-http2-ip-address-host parallel/test-https-autoselectfamily parallel/test-https-connect-address-family parallel/test-net-autoselectfamily parallel/test-net-autoselectfamily-ipv4first parallel/test-net-boundsocket parallel/test-net-connect-options-ipv6 parallel/test-net-dns-custom-lookup parallel/test-net-dns-lookup-skip parallel/test-net-pingpong parallel/test-tls-connect-address-family sequential/test-net-server-listen-ipv6-link-local parallel/test-tcp-wrap-listen sequential/test-net-connect-local-error sequential/test-net-server-address sequential/test-tls-psk-client"
+# | echo "tests: $(echo $T | wc -w)"
+# | for run in 1 2 3; do
+# | 	s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 8 -t 120 -p tap $T > /tmp/node19-$run.tap 2>&1
+# | 	echo "=== run $run: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/node19-$run.tap) notok=$(grep -c '^not ok ' /tmp/node19-$run.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/node19-$run.tap | sed 's/^/  /' | sort -k3
+# | done
+# | echo "=== failure detail, run 1"
+# | awk "/^not ok /{p=1} /^ok /{p=0} p" /tmp/node19-1.tap > /tmp/node19-1.fail; head -c 60000 /tmp/node19-1.fail; echo "detail lines: $(wc -l < /tmp/node19-1.fail)"
+# ---- raw output ----
+/boot/system/add-ons/kernel/network/protocols/ipv4
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/stack
+tests: 19
+=== run 1: rc=1 wall=363s ok=0 notok=19
+  not ok 1 parallel/test-net-autoselectfamily-ipv4first
+  not ok 10 parallel/test-cluster-net-listen-ipv6only-false
+  not ok 11 parallel/test-net-dns-lookup-skip
+  not ok 12 parallel/test-net-pingpong
+  not ok 13 parallel/test-tcp-wrap-listen
+  not ok 14 parallel/test-net-dns-custom-lookup
+  not ok 15 parallel/test-tls-connect-address-family
+  not ok 16 sequential/test-net-server-listen-ipv6-link-local
+  not ok 17 sequential/test-net-connect-local-error
+  not ok 18 sequential/test-net-server-address
+  not ok 19 sequential/test-tls-psk-client
+  not ok 2 parallel/test-net-autoselectfamily
+  not ok 3 parallel/test-http-autoselectfamily
+  not ok 4 parallel/test-https-autoselectfamily
+  not ok 5 parallel/test-http2-connect
+  not ok 6 parallel/test-http2-ip-address-host
+  not ok 7 parallel/test-https-connect-address-family
+  not ok 8 parallel/test-net-connect-options-ipv6
+  not ok 9 parallel/test-net-boundsocket
+=== run 2: rc=1 wall=362s ok=0 notok=19
+  not ok 1 parallel/test-http-autoselectfamily
+  not ok 10 parallel/test-net-connect-options-ipv6
+  not ok 11 parallel/test-net-dns-custom-lookup
+  not ok 12 parallel/test-net-dns-lookup-skip
+  not ok 13 parallel/test-net-pingpong
+  not ok 14 parallel/test-tcp-wrap-listen
+  not ok 15 parallel/test-tls-connect-address-family
+  not ok 16 sequential/test-net-server-listen-ipv6-link-local
+  not ok 17 sequential/test-net-connect-local-error
+  not ok 18 sequential/test-net-server-address
+  not ok 19 sequential/test-tls-psk-client
+  not ok 2 parallel/test-http2-ip-address-host
+  not ok 3 parallel/test-net-autoselectfamily
+  not ok 4 parallel/test-https-connect-address-family
+  not ok 5 parallel/test-net-autoselectfamily-ipv4first
+  not ok 6 parallel/test-http2-connect
+  not ok 7 parallel/test-https-autoselectfamily
+  not ok 8 parallel/test-cluster-net-listen-ipv6only-false
+  not ok 9 parallel/test-net-boundsocket
+=== run 3: rc=1 wall=362s ok=0 notok=19
+  not ok 1 parallel/test-http-autoselectfamily
+  not ok 10 parallel/test-net-dns-lookup-skip
+  not ok 11 parallel/test-net-connect-options-ipv6
+  not ok 12 parallel/test-net-dns-custom-lookup
+  not ok 13 parallel/test-tcp-wrap-listen
+  not ok 14 parallel/test-tls-connect-address-family
+  not ok 15 parallel/test-net-pingpong
+  not ok 16 sequential/test-net-server-listen-ipv6-link-local
+  not ok 17 sequential/test-net-connect-local-error
+  not ok 18 sequential/test-net-server-address
+  not ok 19 sequential/test-tls-psk-client
+  not ok 2 parallel/test-https-connect-address-family
+  not ok 3 parallel/test-http2-ip-address-host
+  not ok 4 parallel/test-net-autoselectfamily-ipv4first
+  not ok 5 parallel/test-http2-connect
+  not ok 6 parallel/test-net-autoselectfamily
+  not ok 7 parallel/test-https-autoselectfamily
+  not ok 8 parallel/test-cluster-net-listen-ipv6only-false
+  not ok 9 parallel/test-net-boundsocket
+=== failure detail, run 1
+not ok 1 parallel/test-net-autoselectfamily-ipv4first
+  ---
+  duration_ms: 534.17400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:43214
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 43214
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 2 parallel/test-net-autoselectfamily
+  ---
+  duration_ms: 542.74900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:43291
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 43291
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 3 parallel/test-http-autoselectfamily
+  ---
+  duration_ms: 657.14900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:43355
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 43355
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 4 parallel/test-https-autoselectfamily
+  ---
+  duration_ms: 653.40000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:43426
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 43426
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 5 parallel/test-http2-connect
+  ---
+  duration_ms: 666.90400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Http2Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Http2Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 6 parallel/test-http2-ip-address-host
+  ---
+  duration_ms: 663.23700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error [ERR_HTTP2_STREAM_CANCEL]: The pending stream has been canceled (caused by: connect ECONNREFUSED ::1:43416)
+        at closeSession (node:internal/http2/core:1243:20)
+        at ClientHttp2Session.destroy (node:internal/http2/core:1623:5)
+        at TLSSocket.socketOnError (node:internal/http2/core:3310:13)
+        at TLSSocket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on ClientHttp2Stream instance at:
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'ERR_HTTP2_STREAM_CANCEL',
+      cause: Error: connect ECONNREFUSED ::1:43416
+          at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2021:16) {
+        errno: -2147454944,
+        code: 'ECONNREFUSED',
+        syscall: 'connect',
+        address: '::1',
+        port: 43416
+      }
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 7 parallel/test-https-connect-address-family
+  ---
+  duration_ms: 656.16700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 8 parallel/test-net-connect-options-ipv6
+  ---
+  duration_ms: 127.41000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 9 parallel/test-net-boundsocket
+  ---
+  duration_ms: 148.62300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:net:455
+          throw new ExceptionWithHostPort(err, 'bind', host, port);
+          ^
+    
+    Error: bind EINVAL ::1
+        at new BoundSocket (node:net:455:13)
+        at Object.<anonymous> (/boot/home/t873/node-v24.21.0/test/parallel/test-net-boundsocket.js:430:19)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 10 parallel/test-cluster-net-listen-ipv6only-false
+  ---
+  duration_ms: 783.58400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: bind EINVAL ::
+        at listenOnPrimaryHandle (node:net:2461:18)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+    Emitted 'error' event on Server instance at:
+        at listenOnPrimaryHandle (node:net:2462:21)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: bind EINVAL ::
+        at listenOnPrimaryHandle (node:net:2461:18)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+    Emitted 'error' event on Server instance at:
+        at listenOnPrimaryHandle (node:net:2462:21)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: bind EINVAL ::
+        at listenOnPrimaryHandle (node:net:2461:18)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+    Emitted 'error' event on Server instance at:
+        at listenOnPrimaryHandle (node:net:2462:21)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::'
+    }
+    
+    Node.js v24.21.0
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    1 !== 0
+    
+        at Worker.<anonymous> (/boot/home/t873/node-v24.21.0/test/parallel/test-cluster-net-listen-ipv6only-false.js:23:16)
+        at Worker.<anonymous> (/boot/home/t873/node-v24.21.0/test/common/index.js:481:15)
+        at Worker.emit (node:events:514:28)
+        at ChildProcess.<anonymous> (node:internal/cluster/primary:187:12)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 11 parallel/test-net-dns-lookup-skip
+  ---
+  duration_ms: 240.05900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 12 parallel/test-net-pingpong
+  ---
+  duration_ms: 233.01600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 13 parallel/test-tcp-wrap-listen
+  ---
+  duration_ms: 227.46300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    -2147483643 !== 0
+    
+        at Object.<anonymous> (/boot/home/t873/node-v24.21.0/test/parallel/test-tcp-wrap-listen.js:20:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: -2147483643,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 14 parallel/test-net-dns-custom-lookup
+  ---
+  duration_ms: 295.01000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 15 parallel/test-tls-connect-address-family
+  ---
+  duration_ms: 279.36300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 16 sequential/test-net-server-listen-ipv6-link-local
+  ---
+  duration_ms: 267.14800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:204
+      throw err;
+      ^
+    
+    AssertionError [ERR_ASSERTION]: function should not have been called at /boot/home/t873/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js:122
+    called with arguments: Error: listen EINVAL: invalid argument ::1:12350
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at Object.<anonymous> (/boot/home/t873/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js:111:7)
+        at Object.apply (node:internal/test_runner/mock/mock:805:20)
+        at lookupAndListen (node:net:2656:7)
+        at Server.listen (node:net:2558:7)
+        at Object.<anonymous> (/boot/home/t873/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js:124:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 12350
+    }
+        at Server.mustNotCall (/boot/home/t873/node-v24.21.0/test/common/index.js:539:12)
+        at Server.emit (node:events:514:28)
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 17 sequential/test-net-connect-local-error
+  ---
+  duration_ms: 138.71300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert.ok(expectedErrorCodes.includes(err.code))
+    
+        at onError (/boot/home/t873/node-v24.21.0/test/sequential/test-net-connect-local-error.js:26:10)
+        at Socket.<anonymous> (/boot/home/t873/node-v24.21.0/test/sequential/test-net-connect-local-error.js:46:49)
+        at Socket.<anonymous> (/boot/home/t873/node-v24.21.0/test/common/index.js:481:15)
+        at Socket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 18 sequential/test-net-server-address
+  ---
+  duration_ms: 112.64600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    '0.0.0.0' !== '::'
+    
+        at Server.<anonymous> (/boot/home/t873/node-v24.21.0/test/sequential/test-net-server-address.js:78:12)
+        at Server.<anonymous> (/boot/home/t873/node-v24.21.0/test/common/index.js:481:15)
+        at Server.wrapper (node:events:639:12)
+        at Server.emit (node:events:514:28)
+        at emitListeningNT (node:net:2423:10)
+        at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '0.0.0.0',
+      expected: '::',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+not ok 19 sequential/test-tls-psk-client
+  ---
+  duration_ms: 360067.06800
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    Failed: Timed out
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-autoselectfamily-ipv4first.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-autoselectfamily.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-http-autoselectfamily.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-https-autoselectfamily.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-http2-connect.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-http2-ip-address-host.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-https-connect-address-family.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-connect-options-ipv6.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-boundsocket.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-cluster-net-listen-ipv6only-false.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-dns-lookup-skip.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-pingpong.js
+/boot/system/bin/node --expose-internals /boot/home/t873/node-v24.21.0/test/parallel/test-tcp-wrap-listen.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-dns-custom-lookup.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-tls-connect-address-family.js
+/boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/t873/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/sequential/test-net-connect-local-error.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/sequential/test-net-server-address.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/sequential/test-tls-psk-client.js
+detail lines: 630

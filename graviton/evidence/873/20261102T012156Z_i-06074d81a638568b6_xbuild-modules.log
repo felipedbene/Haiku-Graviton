@@ -1,0 +1,74 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-06074d81a638568b6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T012156Z   end: 20261102T012307Z   rc: 0
+# script sha256: 5568c283897b6631a267fcb6f7602f948d304d4bd058dcc037b99d78c7b34b9f
+# ---- script ----
+# | export HOME=/root
+# | OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/t873
+# | cd /opt/t873/hg/generated || exit 1
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | objdir_of() { dirname "$(path_of $1)"; }
+# | # build <label> <ref> <patch-or-none> <targets...>
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		git -C .. apply --whitespace=nowarn "$patch" || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	sleep 3
+# | 	for t in "$@"; do rm -rf "$(objdir_of $t)"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'network/(stack|protocols/(ipv6|tcp|udp))|private/net' | head -20
+# | 	mkdir -p /opt/t873/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/t873/out/$label/$t && sha256sum /opt/t873/out/$label/$t | sed "s|/opt/t873/out/||"
+# | 	done
+# | 	return $rc
+# | }
+# | aws s3 cp --quiet $OUT/fix.patch /opt/t873/fix.patch && sha256sum /opt/t873/fix.patch
+# | M="stack ipv6 tcp udp ipv4"
+# | build canon a9d5585b19 none $M
+# | build trunk origin/graviton none $M
+# | build fix origin/graviton /opt/t873/fix.patch $M
+# | for d in canon trunk fix; do
+# | 	for f in /opt/t873/out/$d/*; do aws s3 cp --quiet "$f" "$OUT/mod/$d/$(basename $f)"; done
+# | done
+# | aws s3 ls --recursive $OUT/mod/ | wc -l
+# ---- raw output ----
+1ae10da9627ac369246053dcd7a002c8a10c7740118ef8cb8043163978de062a  /opt/t873/fix.patch
+JAM canon ref=a9d5585b19 head=a9d5585b19 patch=none rc=0 wall=17s failed=0 warnings=122
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+41d989d30a9389d1f54ea14aa7d2b860b6f63ac5bd49746e45813dd7fa68d392  canon/stack
+09f4fdbc06f628da7bd2030fa214b6a6e6101e534433284912945ec432098fba  canon/ipv6
+a275262053d51bd688c6315ccb3e1f22e08f6d473094a7ad21bc18fd0c59ce38  canon/tcp
+0133f16134b5fef4bccf13cfb7cc45c9ae93882410538f390de9991bc1055cac  canon/udp
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  canon/ipv4
+JAM trunk ref=origin/graviton head=fe7fef0b47 patch=none rc=0 wall=13s failed=0 warnings=104
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+41d989d30a9389d1f54ea14aa7d2b860b6f63ac5bd49746e45813dd7fa68d392  trunk/stack
+cd4b81a95f6c984d1d84eed4d03fc875b040f64b0ddc37565db212fe2a84ec28  trunk/ipv6
+5d1fdabccc1ad4159f2145b0299e785bef94a22ece12687e4933b4490488d80c  trunk/tcp
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  trunk/udp
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  trunk/ipv4
+JAM fix ref=origin/graviton head=fe7fef0b47 patch=/opt/t873/fix.patch rc=0 wall=10s failed=0 warnings=2
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+8f733e1303838d42fb6729c4576e08c8482f95ee0857dced5d91f5699de6c448  fix/stack
+d4d8408918a23f5df380d66390920387be39925244a6d2cd87630b663f29e370  fix/ipv6
+147a42ad5acb76707e244e985d27218416517ae9a841510db215876448a620a5  fix/tcp
+14f077dd6dbccc2c7b02e70ab8fcea11a64ac084d1c70b35f398c51042246e9f  fix/udp
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  fix/ipv4
+15

@@ -1,0 +1,76 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-c2-abort-hang-capture
+# instance: i-0937bdaf58b383052   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T030214Z   end: 20261102T030726Z   rc: 137
+# script sha256: 2864a61bf685cfcce22dce5c4f582e04b905287b0457491dd736d1a3aa3d49f2
+# ---- script ----
+# | cd /boot/home/t873/node-v24.21.0
+# | rm -rf /tmp/ab; mkdir -p /tmp/ab
+# | for i in $(seq 1 24); do
+# | 	(NODE_DEBUG=net /boot/system/bin/node test/parallel/test-net-connect-abort-controller.js > /tmp/ab/$i.out 2>&1; echo "exit=$?" >> /tmp/ab/$i.out) &
+# | done
+# | sleep 40
+# | hung=""
+# | for i in $(seq 1 24); do grep -q "^exit=" /tmp/ab/$i.out || hung="$hung $i"; done
+# | echo "hung after 40s:$hung"
+# | echo "--- tcp sockets"
+# | netstat 2>/dev/null | grep -E "^tcp" | grep -vE "ssh|10900|10902|https" | head -60
+# | for i in $hung; do echo "##### instance $i (last 30 lines)"; tail -30 /tmp/ab/$i.out; done | head -150
+# | pkill -f test-net-connect-abort-controller; sleep 1
+# ---- raw output ----
+hung after 40s: 9
+--- tcp sockets
+tcp         0      0 localhost.localdomain:5846 localhost.localdomain:22864 time-wait    14928
+tcp         0      0 localhost.localdomain:5850 localhost.localdomain:22866 time-wait    14931
+tcp         0      0 localhost.localdomain:5866 localhost.localdomain:22885 time-wait    14940
+tcp         0      0 localhost.localdomain:5877 localhost.localdomain:22900 time-wait    14946
+tcp         0      0 localhost.localdomain:5894 localhost.localdomain:22911 time-wait    14948
+tcp         0      0 localhost.localdomain:5903 localhost.localdomain:22915 time-wait    14950
+tcp         0      0 localhost.localdomain:5919 localhost.localdomain:22944 time-wait    14953
+tcp         0      0 localhost.localdomain:5954 localhost.localdomain:23000 time-wait    14960
+tcp         0      0 localhost.localdomain:5947 localhost.localdomain:22970 time-wait    14957
+tcp         0      0 localhost.localdomain:5972 localhost.localdomain:23024 time-wait    14961
+tcp         0      0 localhost.localdomain:23054 localhost.localdomain:5978 established  14958/node
+tcp         0      0 localhost.localdomain:23200 localhost.localdomain:6117 fin-wait2    14972
+tcp         0      0 localhost.localdomain:6021 localhost.localdomain:23064 time-wait    14963
+tcp         0      0 localhost.localdomain:5991 localhost.localdomain:23097 time-wait    14964
+tcp         0      0 localhost.localdomain:6052 localhost.localdomain:23089 time-wait    14970
+tcp         0      0 localhost.localdomain:6066 localhost.localdomain:23128 time-wait    14968
+tcp         0      0 localhost.localdomain:6044 localhost.localdomain:23139 time-wait    14962
+tcp         0      0 localhost.localdomain:6088 localhost.localdomain:23165 time-wait    14965
+tcp         0      0 localhost.localdomain:6129 localhost.localdomain:23260 time-wait    14967
+tcp         0      0 localhost.localdomain:6113 localhost.localdomain:23229 time-wait    14969
+tcp         0      0 localhost.localdomain:6117 localhost.localdomain:23178 time-wait    14972
+tcp         0      0 localhost.localdomain:6181 localhost.localdomain:23274 time-wait    14975
+##### instance 9 (last 30 lines)
+    signal: AbortSignal { aborted: false }
+  },
+  null,
+  Symbol(normalizedArgs): true
+]
+NET 14958: pipe false undefined
+NET 14958: connect: find host localhost
+NET 14958: connect: dns options { family: undefined, hints: 1024 }
+NET 14958: connect: autodetecting
+NET 14958: destroy
+NET 14958: close
+NET 14958: close handle
+NET 14958: destroy
+NET 14958: close
+NET 14958: SERVER: emit close
+NET 14958: destroy
+NET 14958: close
+NET 14958: SERVER: emit close
+NET 14958: emit close
+NET 14958: emit close
+NET 14958: connect/multiple: only one address found, switching back to single connection
+NET 14958: connect: attempting to connect to 127.0.0.1:5978 (addressType: 4)
+NET 14958: destroy
+NET 14958: close
+NET 14958: SERVER: emit close
+NET 14958: SERVER _emitCloseIfDrained
+NET 14958: SERVER: emit close
+NET 14958: afterConnect
+NET 14958: _read - n 65536 isConnecting? false hasHandle? true
+NET 14958: Socket._handle.readStart
+/tmp/run-87041-71082b.sh: line 13: pkill: command not found
