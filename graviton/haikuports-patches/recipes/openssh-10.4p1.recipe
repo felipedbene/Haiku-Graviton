@@ -1,0 +1,206 @@
+SUMMARY="Secure Shell client and server (remote login program)"
+DESCRIPTION="OpenSSH is a free version of the SSH connectivity tools that \
+technical users of the Internet rely on. Users of telnet, rlogin, and ftp may \
+not realize that their password is transmitted across the Internet \
+unencrypted, but it is.
+
+OpenSSH encrypts all traffic (including passwords) to effectively eliminate \
+eavesdropping, connection hijacking, and other attacks. Additionally, OpenSSH \
+provides secure tunneling capabilities and several authentication methods, and \
+supports all SSH protocol versions.
+
+The OpenSSH suite replaces rlogin and telnet with the ssh program, rcp with \
+scp, and ftp with sftp. Also included is sshd (the server side of the \
+package), and the other utilities like ssh-add, ssh-agent, ssh-keysign, \
+ssh-keyscan, ssh-keygen and sftp-server."
+HOMEPAGE="http://www.openssh.com/"
+COPYRIGHT="2005-2020 Tatu Ylonen et al."
+LICENSE="OpenSSH"
+# 2, not 1: (a) a rebuild against openssl3 3.5.9-3 (issue 930), which widens BN_ULONG
+# in the public headers from 32 to 64 bits under the same soname (lib:libcrypto = 3);
+# ssh-keygen imports BN_add_word, BN_mod_word and BN_set_word. (b) the headless keymaker
+# fix for issue 987. Otherwise HaikuPorts abfcb50d's openssh-10.4p1.recipe unchanged.
+REVISION="2"
+SOURCE_URI="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$portVersion.tar.gz"
+CHECKSUM_SHA256="ef6026dd2aea8d56059638d5d3262902c892ceba9f88395835e0d06d3fb63238"
+PATCHES="openssh-$portVersion.patchset"
+ADDITIONAL_FILES="
+	sshd_keymaker.sh
+	fix_openssh_config_paths.sh
+	"
+
+ARCHITECTURES="all"
+
+GLOBAL_WRITABLE_FILES="
+	settings/ssh directory keep-old
+	settings/ssh/ssh_config keep-old
+	settings/ssh/sshd_config keep-old
+	"
+USER_SETTINGS_FILES="
+	settings/ssh directory
+	settings/ssh/ssh_config template data/openssh/ssh_config.default
+	settings/ssh/sshd_config template data/openssh/sshd_config.default
+	"
+POST_INSTALL_SCRIPTS="
+	$relativePostInstallDir/sshd_keymaker.sh
+	$relativePostInstallDir/fix_openssh_config_paths.sh
+	"
+sshdUserHomeDir="/packages/$portVersionedName-$REVISION/.self/$relativeDataDir/openssh/empty"
+PACKAGE_USERS="
+	sshd real-name \"sshd user\" home \"$sshdUserHomeDir\" shell \"/bin/true\" groups \"sshd\"
+	"
+PACKAGE_GROUPS="sshd"
+
+PROVIDES="
+	openssh = $portVersion compat >= 5
+	cmd:scp = $portVersion compat >= 5
+	cmd:sftp = $portVersion compat >= 5
+	cmd:ssh = $portVersion compat >= 5
+	cmd:ssh_add = $portVersion compat >= 5
+	cmd:ssh_agent = $portVersion compat >= 5
+	cmd:ssh_copy_id = $portVersion compat >= 5
+	cmd:ssh_keygen = $portVersion compat >= 5
+	cmd:ssh_keyscan = $portVersion compat >= 5
+	cmd:sshd = $portVersion compat >= 5
+	"
+REQUIRES="
+	haiku
+	cmd:grep
+	cmd:login
+	cmd:passwd
+	cmd:sed
+	lib:libcrypto
+	lib:libedit
+	lib:libncurses
+	lib:libssl
+	lib:libz
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	devel:libcrypto >= 3
+	devel:libedit
+	devel:libncurses
+	devel:libssl >= 3
+	devel:libz
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:ld
+	cmd:libtoolize
+	cmd:make
+	cmd:pkg_config
+	"
+
+BUILD()
+{
+	touch configure
+	defaultPath=".:/boot/home/config/non-packaged/bin:/boot/home/config/bin"
+	defaultPath+=":/boot/system/non-packaged/bin:/boot/system/bin:/bin"
+	defaultPath+=":/boot/system/apps:/boot/system/preferences"
+
+	# Note: override sysconfdir and libexecdir since ssh doesn't create
+	# subdirectories as it should.
+	PATH_PASSWD_PROG=$portPackageLinksDir/cmd~passwd/bin/passwd \
+	LOGIN_PROGRAM=$portPackageLinksDir/cmd~login/bin/login \
+	runConfigure ./configure \
+		--sysconfdir=$sysconfDir/ssh \
+		--libexecdir=$libExecDir/openssh \
+		--with-privsep-path=$dataDir/openssh/empty \
+		--with-pid-dir=$prefix/var/run \
+		--with-default-path="$defaultPath" \
+		--disable-utmpx \
+		--with-libedit
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install-nokeys
+	mkdir -p $postInstallDir
+	# The overlay cannot carry additional-files, so the fixed keymaker
+	# (issue 987) is written here instead of copied.
+	cat > $postInstallDir/sshd_keymaker.sh <<'KEYMAKER'
+#!/bin/sh
+
+# notify is a BApplication. With no app_server -- every headless box -- it
+# cannot initialise and exits 1, so its status says nothing about the keys and
+# must not become this script's exit status (issue 987). The keys are what
+# matters: the script exits non-zero only when an ssh-keygen call fails.
+_progress () {
+	notify --type progress --group ssh-keygen \
+		--icon /system/kernel_`uname -p` \
+		--messageID $0_$$ \
+		--title "Generating ssh keys..." \
+		--progress "$1" "$2" >/dev/null
+}
+
+status=0
+_keygen () {
+	if ! ssh-keygen "$@"; then
+		echo "sshd_keymaker: ssh-keygen $* failed" >&2
+		status=1
+	fi
+}
+
+# generate SSH host keys
+
+SETTINGSSSHDIR=`finddir B_SYSTEM_SETTINGS_DIRECTORY`/ssh
+mkdir -p ${SETTINGSSSHDIR} || exit 1
+
+hostKeyDir=${SETTINGSSSHDIR}
+
+
+if [ ! -f "$hostKeyDir/ssh_host_ecdsa_key" ] ; then
+	_progress 0.2 "ecdsa"
+	_keygen -t ecdsa -f "$hostKeyDir/ssh_host_ecdsa_key" -N ""
+fi
+
+if [ ! -f "$hostKeyDir/ssh_host_rsa_key" ] ; then
+	_progress 0.4 "rsa"
+	_keygen -t rsa -f "$hostKeyDir/ssh_host_rsa_key" -N ""
+fi
+
+if [ ! -f "$hostKeyDir/ssh_host_ed25519_key" ] ; then
+	_progress 0.6 "ed25519"
+	_keygen -t ed25519 -f "$hostKeyDir/ssh_host_ed25519_key" -N ""
+fi
+
+if [ ! -f "$hostKeyDir/ssh_host_mldsa44-ed25519_key" ] ; then
+	_progress 0.8 "mldsa44-ed25519"
+	_keygen -t mldsa44-ed25519 -f "$hostKeyDir/ssh_host_mldsa44-ed25519_key" -N ""
+fi
+
+# generate what's eventually missing
+_keygen -A
+_progress 1.0 ""
+exit $status
+KEYMAKER
+	cp -f $portDir/additional-files/fix_openssh_config_paths.sh $postInstallDir
+
+	install -m 755 contrib/ssh-copy-id $binDir
+	install -m 644 contrib/ssh-copy-id.1 $manDir/man1
+
+	local USER_SETTINGS_DIR="`finddir B_USER_SETTINGS_DIRECTORY`"
+	sed -i \
+		-e "s| ~/\.ssh/| $USER_SETTINGS_DIR/ssh/|" \
+		$sysconfDir/ssh/ssh_config
+
+	local SYSTEM_SETTINGS_DIR="`finddir B_SYSTEM_SETTINGS_DIRECTORY`"
+	local VAR_DIR="`finddir B_SYSTEM_VAR_DIRECTORY`"
+	local LIB_DIR="`finddir B_SYSTEM_LIB_DIRECTORY`"
+	sed -i \
+		-e "s|$sysconfDir/ssh/|$SYSTEM_SETTINGS_DIR/ssh/|" \
+		-e "s|$prefix/var/run/|$VAR_DIR/run/|" \
+		-e "s|$libExecDir/openssh/|$LIB_DIR/openssh/|" \
+		$sysconfDir/ssh/sshd_config
+
+	mkdir -p $dataDir/openssh/empty
+	cp $sysconfDir/ssh/ssh_config $dataDir/openssh/ssh_config.default
+	cp $sysconfDir/ssh/sshd_config $dataDir/openssh/sshd_config.default
+}
+
+TEST()
+{
+	make tests
+}
