@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: control-abort-repeat32
+# instance: i-03927ced0af5b0a33   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T023255Z   end: 20261102T023707Z   rc: 0
+# script sha256: 58c64139388a314ec47f5541ce6758844d632c3ce9bd728d3d68d946d66a2a63
+# ---- script ----
+# | cd /boot/home/t873/node-v24.21.0
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/(ipv6|tcp|udp))' | awk '{print $NF}' | sort -u
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 60 -p tap --repeat 32 parallel/test-net-connect-abort-controller > /tmp/abort-rep.tap 2>&1
+# | echo "rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/abort-rep.tap) notok=$(grep -c '^not ok ' /tmp/abort-rep.tap)"
+# | grep -E '^not ok' -A6 /tmp/abort-rep.tap | grep -E 'not ok|duration|exitcode|stack' | head -20
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/stack
+rc=1 wall=181s ok=29 notok=3
+not ok 30 parallel/test-net-connect-abort-controller
+  duration_ms: 180048.99400
+  exitcode: -15
+  stack: |-
+not ok 31 parallel/test-net-connect-abort-controller
+  duration_ms: 180124.73300
+  exitcode: -15
+  stack: |-
+not ok 32 parallel/test-net-connect-abort-controller
+  duration_ms: 180109.60000
+  exitcode: -15
+  stack: |-

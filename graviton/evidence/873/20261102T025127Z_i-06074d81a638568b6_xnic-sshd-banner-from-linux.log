@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xnic-sshd-banner-from-linux
+# instance: i-06074d81a638568b6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T025127Z   end: 20261102T025138Z   rc: 0
+# script sha256: 8425cf96a5f08943ab033af723e70d44814c685de345010dc54f4463c9a5fa51
+# ---- script ----
+# | for h in 10.128.13.15 10.128.10.62; do
+# | 	python3 -c "import socket,sys; s=socket.create_connection(('$h',22),5); print('$h', s.recv(64))" 2>&1
+# | done
+# ---- raw output ----
+10.128.13.15 b'SSH-2.0-OpenSSH_10.4\r\n'
+10.128.10.62 b'SSH-2.0-OpenSSH_10.4\r\n'

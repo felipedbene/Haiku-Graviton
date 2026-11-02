@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xnic-linux-server-log
+# instance: i-06074d81a638568b6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T025045Z   end: 20261102T025056Z   rc: 0
+# script sha256: 79d13bb434ccc604c78afc1991fdaaaecce1af1a1ddae4b61cb9f78a8c23066a
+# ---- script ----
+# | cat /tmp/xserver.log
+# ---- raw output ----
+server tcp ('::', 18740, 0, 0) udp ('::', 18741, 0, 0) v6only 0
+tcp accept ('::ffff:10.128.10.62', 45792, 0, 0) local ('::ffff:10.128.7.61', 18740, 0, 0) data b'hello-tcp'
+udp from ('::ffff:10.128.10.62', 55869, 0, 0) data b'hello-udp'
+tcp accept ('::ffff:10.128.10.62', 52827, 0, 0) local ('::ffff:10.128.7.61', 18740, 0, 0) data b'hello-tcp'
+udp from ('::ffff:10.128.10.62', 61548, 0, 0) data b'hello-udp'
+tcp accept ('::ffff:10.128.13.15', 57131, 0, 0) local ('::ffff:10.128.7.61', 18740, 0, 0) data b'hello-tcp'
+udp from ('::ffff:10.128.13.15', 61270, 0, 0) data b'hello-udp'

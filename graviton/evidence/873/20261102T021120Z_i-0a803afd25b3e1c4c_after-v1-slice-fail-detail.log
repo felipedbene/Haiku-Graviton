@@ -1,0 +1,73 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-v1-slice-fail-detail
+# instance: i-0a803afd25b3e1c4c   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T021120Z   end: 20261102T021230Z   rc: 0
+# script sha256: 3504e07f7a88311a5a7424dedc1d1adb06b7ce85d501bfd6f9273b8ec8a834fd
+# ---- script ----
+# | ls -la /tmp/slice-*.tap
+# | for t in test-net-connect-abort-controller test-tls-enable-keylog-cli; do
+# | 	grep -n "$t" /tmp/slice-*.tap | head -3 | cat -v
+# | 	f=$(grep -l "parallel/$t" /tmp/slice-*.tap | head -1)
+# | 	[ -n "$f" ] || continue
+# | 	n=$(grep -n "^not ok [0-9]* parallel/$t" "$f" | head -1 | cut -d: -f1)
+# | 	echo "##### $t in $f at line $n"
+# | 	[ -n "$n" ] && tail -n +$n "$f" | awk 'NR>1 && /^(ok|not ok) [0-9]+ /{exit} {print}' | head -80
+# | done
+# ---- raw output ----
+-rw-r--r-- 1 baron root  9349 Nov  2 02:04 /tmp/slice-dgram.tap
+-rw-r--r-- 1 baron root 34859 Nov  2 02:05 /tmp/slice-http.tap
+-rw-r--r-- 1 baron root 27605 Nov  2 02:05 /tmp/slice-http2.tap
+-rw-r--r-- 1 baron root 15298 Nov  2 01:58 /tmp/slice-net.tap
+-rw-r--r-- 1 baron root 19660 Nov  2 02:05 /tmp/slice-tls.tap
+/tmp/slice-net.tap:681:not ok 159 parallel/test-net-connect-abort-controller
+/tmp/slice-net.tap:693:/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-connect-abort-controller.js
+##### test-net-connect-abort-controller in /tmp/slice-net.tap at line 681
+not ok 159 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 360082.96500
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-pipe-connect-errors.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-server-listen-path.js
+/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-net-connect-abort-controller.js
+/tmp/slice-tls.tap:323:not ok 81 parallel/test-tls-enable-keylog-cli
+/tmp/slice-tls.tap:340:        at ChildProcess.<anonymous> (/boot/home/t873/node-v24.21.0/test/parallel/test-tls-enable-keylog-cli.js:29:10)
+/tmp/slice-tls.tap:921:/boot/system/bin/node /boot/home/t873/node-v24.21.0/test/parallel/test-tls-enable-keylog-cli.js
+##### test-tls-enable-keylog-cli in /tmp/slice-tls.tap at line 323
+not ok 81 parallel/test-tls-enable-keylog-cli
+  ---
+  duration_ms: 745.00300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    (node:4735) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+    (node:4735) Warning: Using --tls-keylog makes TLS connections insecure by writing secret key material to file /boot/home/t873/node-v24.21.0/test/.tmp.75/keylog.log
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    1 !== 2
+    
+        at ChildProcess.<anonymous> (/boot/home/t873/node-v24.21.0/test/parallel/test-tls-enable-keylog-cli.js:29:10)
+        at ChildProcess.<anonymous> (/boot/home/t873/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at ChildProcess._handle.onexit (node:internal/child_process:306:5) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 2,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...

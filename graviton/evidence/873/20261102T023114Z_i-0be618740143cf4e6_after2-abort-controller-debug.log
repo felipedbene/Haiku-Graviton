@@ -1,0 +1,128 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after2-abort-controller-debug
+# instance: i-0be618740143cf4e6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T023114Z   end: 20261102T023242Z   rc: 0
+# script sha256: 418e34106b0c4a7ded50c10b962d793513793e6b68bd9a6e1f74991d50d65139
+# ---- script ----
+# | cd /boot/home/t873/node-v24.21.0
+# | (NODE_DEBUG=net /boot/system/bin/node test/parallel/test-net-connect-abort-controller.js > /tmp/abort.out 2>&1; echo "exit=$?" >> /tmp/abort.out) &
+# | pid=$!
+# | sleep 15
+# | echo "--- netstat while running (tcp)"
+# | netstat 2>/dev/null | grep -iE "tcp" | head -40
+# | kill $pid 2>/dev/null; sleep 1
+# | pkill -f test-net-connect-abort-controller 2>/dev/null
+# | sleep 1
+# | echo "--- node output (head 150)"
+# | head -150 /tmp/abort.out
+# | echo "--- tail"
+# | tail -20 /tmp/abort.out
+# ---- raw output ----
+--- netstat while running (tcp)
+tcp         0      0 *:10902               *:0                   listen       63/remote_broker
+tcp         0      0 *:ssh                 *:0                   listen       76/sshd
+tcp         0      0 localhost.localdomain:10900 *:0                   listen       157/app_server
+tcp         0      0 ip-10-128-7-134.us-west-2.compute.internal:40792 ec2-44-254-15-121.us-west-2.compute.amazonaws.com:https established  240/ssm-agent-worker
+tcp         0      0 localhost.localdomain:5442 localhost.localdomain:20949 time-wait    14078
+--- node output (head 150)
+NET 14078: setupListenHandle null 0 4 0 undefined
+NET 14078: setupListenHandle: create a handle
+NET 14078: bind to ::
+NET 14078: createConnection [
+  {
+    port: 5442,
+    host: 'localhost',
+    signal: AbortSignal { aborted: false }
+  },
+  null,
+  Symbol(normalizedArgs): true
+]
+NET 14078: pipe false undefined
+NET 14078: connect: find host localhost
+NET 14078: connect: dns options { family: undefined, hints: 1024 }
+NET 14078: connect: autodetecting
+NET 14078: destroy
+NET 14078: close
+NET 14078: close handle
+NET 14078: createConnection [
+  {
+    port: 5442,
+    host: 'localhost',
+    signal: AbortSignal { aborted: true }
+  },
+  null,
+  Symbol(normalizedArgs): true
+]
+NET 14078: destroy
+NET 14078: close
+NET 14078: pipe false undefined
+NET 14078: connect: find host localhost
+NET 14078: connect: dns options { family: undefined, hints: 1024 }
+NET 14078: connect: autodetecting
+NET 14078: SERVER: emit close
+NET 14078: createConnection [
+  {
+    port: 5442,
+    host: 'localhost',
+    signal: AbortSignal { aborted: false }
+  },
+  null,
+  Symbol(normalizedArgs): true
+]
+NET 14078: pipe false undefined
+NET 14078: connect: find host localhost
+NET 14078: connect: dns options { family: undefined, hints: 1024 }
+NET 14078: connect: autodetecting
+NET 14078: connect/multiple: only one address found, switching back to single connection
+NET 14078: connect: attempting to connect to 127.0.0.1:5442 (addressType: 4)
+NET 14078: destroy
+NET 14078: close
+NET 14078: close handle
+NET 14078: destroy
+NET 14078: close
+NET 14078: SERVER: emit close
+NET 14078: destroy
+NET 14078: close
+NET 14078: SERVER: emit close
+NET 14078: emit close
+NET 14078: emit close
+NET 14078: onconnection
+NET 14078: _read - n 65536 isConnecting? false hasHandle? true
+NET 14078: Socket._handle.readStart
+NET 14078: afterConnect
+NET 14078: _read - n 65536 isConnecting? false hasHandle? true
+NET 14078: Socket._handle.readStart
+NET 14078: destroy
+NET 14078: close
+NET 14078: SERVER: emit close
+NET 14078: destroy
+NET 14078: close
+NET 14078: close handle
+NET 14078: has server
+NET 14078: SERVER _emitCloseIfDrained
+NET 14078: SERVER handle? true   connections? 0
+NET 14078: SERVER _emitCloseIfDrained
+NET 14078: SERVER: emit close
+NET 14078: emit close
+exit=0
+--- tail
+NET 14078: emit close
+NET 14078: onconnection
+NET 14078: _read - n 65536 isConnecting? false hasHandle? true
+NET 14078: Socket._handle.readStart
+NET 14078: afterConnect
+NET 14078: _read - n 65536 isConnecting? false hasHandle? true
+NET 14078: Socket._handle.readStart
+NET 14078: destroy
+NET 14078: close
+NET 14078: SERVER: emit close
+NET 14078: destroy
+NET 14078: close
+NET 14078: close handle
+NET 14078: has server
+NET 14078: SERVER _emitCloseIfDrained
+NET 14078: SERVER handle? true   connections? 0
+NET 14078: SERVER _emitCloseIfDrained
+NET 14078: SERVER: emit close
+NET 14078: emit close
+exit=0

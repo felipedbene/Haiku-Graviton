@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: listener-close-reset-linux
+# instance: i-06074d81a638568b6   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T030838Z   end: 20261102T030849Z   rc: 0
+# script sha256: bb67d94117b8c5c94f397e026a58a1f473a468921941b13ce77a6ef410a11401
+# ---- script ----
+# | cd /tmp && echo LyogQSBjb25uZWN0aW9uIHRoYXQgY29tcGxldGVkIHRoZSBoYW5kc2hha2UgYnV0IHdhcyBuZXZlciBhY2NlcHQoKWVkIG11c3QKICogYmUgcmVzZXQgd2hlbiB0aGUgbGlzdGVuaW5nIHNvY2tldCBpcyBjbG9zZWQgKExpbnV4OiBSU1QsIHRoZSBjbGllbnQncwogKiByZWN2KCkgZmFpbHMgd2l0aCBFQ09OTlJFU0VUKS4gRXhpdCBzdGF0dXMgMCBpZiB0aGUgY2xpZW50IHdhcyB0b2xkLiAqLwojaW5jbHVkZSA8YXJwYS9pbmV0Lmg+CiNpbmNsdWRlIDxlcnJuby5oPgojaW5jbHVkZSA8bmV0aW5ldC9pbi5oPgojaW5jbHVkZSA8cG9sbC5oPgojaW5jbHVkZSA8c3RkaW8uaD4KI2luY2x1ZGUgPHN0cmluZy5oPgojaW5jbHVkZSA8c3lzL3NvY2tldC5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CgppbnQKbWFpbigpCnsKCWludCBsaXN0ZW5lciA9IHNvY2tldChBRl9JTkVULCBTT0NLX1NUUkVBTSwgMCk7CglzdHJ1Y3Qgc29ja2FkZHJfaW4gYWRkcmVzczsKCW1lbXNldCgmYWRkcmVzcywgMCwgc2l6ZW9mKGFkZHJlc3MpKTsKCWFkZHJlc3Muc2luX2ZhbWlseSA9IEFGX0lORVQ7CglhZGRyZXNzLnNpbl9hZGRyLnNfYWRkciA9IGh0b25sKElOQUREUl9MT09QQkFDSyk7CgliaW5kKGxpc3RlbmVyLCAoc3RydWN0IHNvY2thZGRyKikmYWRkcmVzcywgc2l6ZW9mKGFkZHJlc3MpKTsKCWxpc3RlbihsaXN0ZW5lciwgNCk7Cglzb2NrbGVuX3QgbGVuZ3RoID0gc2l6ZW9mKGFkZHJlc3MpOwoJZ2V0c29ja25hbWUobGlzdGVuZXIsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhZGRyZXNzLCAmbGVuZ3RoKTsKCglpbnQgY2xpZW50ID0gc29ja2V0KEFGX0lORVQsIFNPQ0tfU1RSRUFNLCAwKTsKCWludCByID0gY29ubmVjdChjbGllbnQsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhZGRyZXNzLCBzaXplb2YoYWRkcmVzcykpOwoJcHJpbnRmKCJjb25uZWN0IHI9JWQgKCVzKVxuIiwgciwgciA9PSAwID8gIm9rIiA6IHN0cmVycm9yKGVycm5vKSk7Cgl1c2xlZXAoMTAwMDAwKTsKCWNsb3NlKGxpc3RlbmVyKTsKCXByaW50ZigibGlzdGVuZXIgY2xvc2VkIHdpdGhvdXQgYWNjZXB0KClcbiIpOwoKCXN0cnVjdCBwb2xsZmQgcCA9IHsgY2xpZW50LCBQT0xMSU4sIDAgfTsKCWludCByZWFkeSA9IHBvbGwoJnAsIDEsIDUwMDApOwoJY2hhciBieXRlOwoJc3NpemVfdCBuID0gcmVhZHkgPiAwID8gcmVjdihjbGllbnQsICZieXRlLCAxLCAwKSA6IC0yOwoJaW50IGUgPSBlcnJubzsKCWlmIChyZWFkeSA8PSAwKSB7CgkJcHJpbnRmKCJGQUlMICBjbGllbnQgbm90IHRvbGQgd2l0aGluIDUgcyAocG9sbD0lZCk6IGl0cyBjb25uZWN0aW9uICIKCQkJInN0YXlzIGVzdGFibGlzaGVkXG4iLCByZWFkeSk7CgkJcmV0dXJuIDE7Cgl9CglwcmludGYoIlBBU1MgIGNsaWVudCB0b2xkOiBwb2xsIHJldmVudHM9JSN4IHJlY3Y9JXpkIGVycm5vPSVkICglcylcbiIsCgkJcC5yZXZlbnRzLCBuLCBuIDwgMCA/IGUgOiAwLCBuIDwgMCA/IHN0cmVycm9yKGUpIDogIkVPRiIpOwoJcmV0dXJuIDA7Cn0K | base64 -d > listenrst.c && sha256sum listenrst.c
+# | uname -a
+# | (gcc -O2 -Wall -o listenrst listenrst.c -lnetwork 2>/dev/null || gcc -O2 -Wall -o listenrst listenrst.c) && for i in 1 2 3; do ./listenrst; echo "exit=$?"; done
+# ---- raw output ----
+365a287e9a07f75ad98ec811f4ead0021657030c516f51238afe368f57220c31  listenrst.c
+Linux ip-10-128-7-61 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+connect r=0 (ok)
+listener closed without accept()
+PASS  client told: poll revents=0x19 recv=-1 errno=104 (Connection reset by peer)
+exit=0
+connect r=0 (ok)
+listener closed without accept()
+PASS  client told: poll revents=0x19 recv=-1 errno=104 (Connection reset by peer)
+exit=0
+connect r=0 (ok)
+listener closed without accept()
+PASS  client told: poll revents=0x19 recv=-1 errno=104 (Connection reset by peer)
+exit=0

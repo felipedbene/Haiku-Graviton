@@ -1,0 +1,73 @@
+# evidence: slice-diffs (per-test ok/not-ok comparison of the regression slice logs)
+# host: workstation   start: 20261102T032536Z
+# script sha256: 7a991eacee2cb64147f15d18378acf86fcc2b59ed1b1208f19b2880ee3dfd4cb
+# ---- script ----
+# | import re, sys
+# | def parse(path):
+# |     res = {}
+# |     for line in open(path, errors="replace"):
+# |         m = re.match(r"^  (ok|not ok) (\S+)", line)
+# |         if m:
+# |             res[m.group(2)] = m.group(1)
+# |     return res
+# | a, b = parse(sys.argv[1]), parse(sys.argv[2])
+# | la, lb = sys.argv[3], sys.argv[4]
+# | print(f"{la}: {sum(v=='ok' for v in a.values())} ok / {sum(v!='ok' for v in a.values())} not ok of {len(a)}")
+# | print(f"{lb}: {sum(v=='ok' for v in b.values())} ok / {sum(v!='ok' for v in b.values())} not ok of {len(b)}")
+# | for t in sorted(set(a) | set(b)):
+# |     x, y = a.get(t, "-"), b.get(t, "-")
+# |     if x != y:
+# |         print(f"  {t}: {la} {x} -> {lb} {y}")
+# | for t in sorted(t for t in b if b[t] != "ok" and a.get(t) != "ok"):
+# |     print(f"  still not ok in both: {t}")
+# ---- raw output ----
+### final A/B, new canonical ami-03c3545c37f391c1f (trunk fe7fef0b47): before-c2 i-011211270347f8e60 vs after-c2 i-0937bdaf58b383052
+before-c2: 1125 ok / 17 not ok of 1142
+after-c2: 1138 ok / 4 not ok of 1142
+  parallel/test-http-autoselectfamily: before-c2 not ok -> after-c2 ok
+  parallel/test-http2-close-while-writing: before-c2 not ok -> after-c2 ok
+  parallel/test-http2-connect: before-c2 not ok -> after-c2 ok
+  parallel/test-http2-ip-address-host: before-c2 not ok -> after-c2 ok
+  parallel/test-net-autoselectfamily: before-c2 not ok -> after-c2 ok
+  parallel/test-net-autoselectfamily-ipv4first: before-c2 not ok -> after-c2 ok
+  parallel/test-net-boundsocket: before-c2 not ok -> after-c2 ok
+  parallel/test-net-child-process-connect-reset: before-c2 not ok -> after-c2 ok
+  parallel/test-net-connect-options-ipv6: before-c2 not ok -> after-c2 ok
+  parallel/test-net-dns-custom-lookup: before-c2 not ok -> after-c2 ok
+  parallel/test-net-dns-lookup-skip: before-c2 not ok -> after-c2 ok
+  parallel/test-net-pingpong: before-c2 not ok -> after-c2 ok
+  parallel/test-tls-connect-address-family: before-c2 not ok -> after-c2 ok
+  still not ok in both: parallel/test-dgram-connect-send-empty-array
+  still not ok in both: parallel/test-http-writable-true-after-close
+  still not ok in both: parallel/test-http2-misbehaving-flow-control
+  still not ok in both: parallel/test-http2-misbehaving-flow-control-paused
+
+### old canonical ami-058776e58bd902fba + trunk modules (control i-03927ced0af5b0a33) vs + fix v2 modules (after2 i-0be618740143cf4e6)
+control: 1122 ok / 20 not ok of 1142
+after2: 1132 ok / 10 not ok of 1142
+  parallel/test-http-autoselectfamily: control not ok -> after2 ok
+  parallel/test-http2-connect: control not ok -> after2 ok
+  parallel/test-http2-ip-address-host: control not ok -> after2 ok
+  parallel/test-net-autoselectfamily: control not ok -> after2 ok
+  parallel/test-net-autoselectfamily-ipv4first: control not ok -> after2 ok
+  parallel/test-net-boundsocket: control not ok -> after2 ok
+  parallel/test-net-connect-abort-controller: control ok -> after2 not ok
+  parallel/test-net-connect-options-ipv6: control not ok -> after2 ok
+  parallel/test-net-dns-custom-lookup: control not ok -> after2 ok
+  parallel/test-net-dns-lookup-skip: control not ok -> after2 ok
+  parallel/test-net-pingpong: control not ok -> after2 ok
+  parallel/test-tls-connect-address-family: control not ok -> after2 ok
+  still not ok in both: parallel/test-dgram-connect-send-empty-array
+  still not ok in both: parallel/test-dgram-connect-send-empty-buffer
+  still not ok in both: parallel/test-dgram-send-empty-array
+  still not ok in both: parallel/test-dgram-send-empty-buffer
+  still not ok in both: parallel/test-http-writable-true-after-close
+  still not ok in both: parallel/test-http2-misbehaving-flow-control
+  still not ok in both: parallel/test-http2-misbehaving-flow-control-paused
+  still not ok in both: parallel/test-net-pipe-connect-errors
+  still not ok in both: parallel/test-net-server-listen-path
+
+### old canonical stock (before i-0720acfcee0e914b6, TAP files read after the 90-min deadline) vs control
+before: 869 ok / 218 not ok of 1087
+control: 1122 ok / 20 not ok of 1142
+  parallel/test-dgram-error-message-address: before not ok -> control ok
