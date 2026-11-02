@@ -1,0 +1,33 @@
+# evidence: verify-f509-940-trigger
+# instance: i-03808abf0d54fbd30   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T183814Z   end: 20261102T183849Z   rc: 0
+# script sha256: 34b31b764c63136ab6bcd3c25862d623888f18536ef557723ab4f1040d6cbcaa
+# ---- script ----
+# | set +e
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo "== open and close /dev/urandom and /dev/random 20 times each"
+# | ok=0
+# | for i in $(seq 1 20); do
+# | 	for dev in /dev/urandom /dev/random; do
+# | 		b=$(head -c 16 $dev | od -An -tx1 | tr -d ' \n')
+# | 		[ ${#b} = 32 ] && ok=$((ok + 1))
+# | 	done
+# | 	[ $i = 1 ] && echo "first read: $b"
+# | 	sleep 1
+# | done
+# | echo "reads returning 16 bytes: $ok of 40"
+# | echo "== random add-on images loaded in the kernel team, after the reads"
+# | listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | ls -l /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo TRIGGER_DONE
+# ---- raw output ----
+2026-11-02T18:38:21Z
+== open and close /dev/urandom and /dev/random 20 times each
+first read: 88c35f1607c88a9b112839605b5cd78b
+reads returning 16 bytes: 40 of 40
+== random add-on images loaded in the kernel team, after the reads
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+-rwxr-xr-x 1 baron root 17739 Nov  2 18:37 /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+2026-11-02T18:38:42Z
+TRIGGER_DONE

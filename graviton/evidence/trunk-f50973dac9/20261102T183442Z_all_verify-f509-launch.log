@@ -1,0 +1,72 @@
+# evidence: verify-f509-launch (workstation)
+# Fresh launches of the trunk bake; none rebooted, nothing promoted or pruned. c8g.4xlarge had
+# no capacity in us-west-2c (InsufficientInstanceCapacity), so c7g.4xlarge was used, as in #969/#977.
+# common: --region us-west-2 --subnet-id subnet-0d4f6b196024e9b92 --security-group-ids sg-0efc97cc673949063 --key-name haiku-rdclient --iam-instance-profile Name=ssm-instance-profile, tags Project=haiku-graviton auto-stop=no Name=<name>
+# node  i-08890dda54122f363 2026-11-02T18:34:42Z ami-0d9d8bc80a314ef9e c7g.4xlarge root 60 GiB gp3  (Node 24 slices)
+# m940  i-03808abf0d54fbd30 2026-11-02T18:34:44Z ami-0d9d8bc80a314ef9e c7g.4xlarge root 60 GiB gp3  (#940 repro, alone because a regression would KDL it)
+# fmt   i-048d7c46b3b303b50 2026-11-02T18:34:46Z ami-0dcf79589cb11e193 (Ubuntu 24.04 arm64) c7g.large  (formats the test volumes)
+# test volumes: vol-02e7288272ac6cbbd (1 GiB, NTFS) and vol-090f694572ee53ce8 (1 GiB, FAT32), us-west-2c; snapshots snap-0c7cc92b87bbbb0ef (ntfs), snap-0d5d2708a7a1710a8 (fat)
+# main  i-06f92e935077c4223 2026-11-02T18:42:02Z ami-0d9d8bc80a314ef9e c7g.4xlarge, block device mappings:
+#   [{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":60,"VolumeType":"gp3","DeleteOnTermination":true}},{"DeviceName":"/dev/sdf","Ebs":{"SnapshotId":"snap-0c7cc92b87bbbb0ef","VolumeType":"gp3","DeleteOnTermination":true}},{"DeviceName":"/dev/sdg","Ebs":{"SnapshotId":"snap-0d5d2708a7a1710a8","VolumeType":"gp3","DeleteOnTermination":true}}]
+$ aws ec2 describe-images --image-ids ami-0d9d8bc80a314ef9e (name, tags)
+{
+    "Name": "haiku-oven-1793643341",
+    "Tags": [
+        {
+            "Key": "source-commit",
+            "Value": "f50973dac958aef801521405a28909dd3253e821"
+        },
+        {
+            "Key": "source-branch",
+            "Value": "unknown"
+        },
+        {
+            "Key": "project",
+            "Value": "haiku-graviton"
+        },
+        {
+            "Key": "perf-rx-mbps",
+            "Value": "6280.3"
+        },
+        {
+            "Key": "debeos-revision",
+            "Value": "debeos-r70771-gf50973dac9"
+        },
+        {
+            "Key": "baked-by",
+            "Value": "cdk-pipeline"
+        },
+        {
+            "Key": "perf-mtu",
+            "Value": "9001"
+        },
+        {
+            "Key": "perf-gate",
+            "Value": "pass"
+        },
+        {
+            "Key": "perf-gate-at",
+            "Value": "2026-11-02T18:30:06Z"
+        },
+        {
+            "Key": "candidate",
+            "Value": "true"
+        },
+        {
+            "Key": "haiku-revision",
+            "Value": "hrev59996"
+        },
+        {
+            "Key": "Name",
+            "Value": "haiku-oven-1793643341"
+        },
+        {
+            "Key": "oven",
+            "Value": "true"
+        },
+        {
+            "Key": "perf-tx-mbps",
+            "Value": "6106.4"
+        }
+    ]
+}

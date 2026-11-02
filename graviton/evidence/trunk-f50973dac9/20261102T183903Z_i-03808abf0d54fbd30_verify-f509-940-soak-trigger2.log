@@ -1,0 +1,36 @@
+# evidence: verify-f509-940-soak-trigger2
+# instance: i-03808abf0d54fbd30   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T183903Z   end: 20261102T184202Z   rc: 0
+# script sha256: 31afdb6995ee96d60772e00c45fb652cb70b31456a0be3551e04770eb5977240
+# ---- script ----
+# | echo "== a 150 s soak, so debeos-cloudwatch reads /dev/urandom on its own schedule too"; date -u +%Y-%m-%dT%H:%M:%SZ; sleep 150
+# | set +e
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo "== open and close /dev/urandom and /dev/random 20 times each"
+# | ok=0
+# | for i in $(seq 1 20); do
+# | 	for dev in /dev/urandom /dev/random; do
+# | 		b=$(head -c 16 $dev | od -An -tx1 | tr -d ' \n')
+# | 		[ ${#b} = 32 ] && ok=$((ok + 1))
+# | 	done
+# | 	[ $i = 1 ] && echo "first read: $b"
+# | 	sleep 1
+# | done
+# | echo "reads returning 16 bytes: $ok of 40"
+# | echo "== random add-on images loaded in the kernel team, after the reads"
+# | listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | ls -l /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo TRIGGER_DONE
+# ---- raw output ----
+== a 150 s soak, so debeos-cloudwatch reads /dev/urandom on its own schedule too
+2026-11-02T18:39:11Z
+2026-11-02T18:41:41Z
+== open and close /dev/urandom and /dev/random 20 times each
+first read: 69ac1c3054fa595a75e3be107e8e27e3
+reads returning 16 bytes: 40 of 40
+== random add-on images loaded in the kernel team, after the reads
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+-rwxr-xr-x 1 baron root 17739 Nov  2 18:37 /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+2026-11-02T18:42:01Z
+TRIGGER_DONE

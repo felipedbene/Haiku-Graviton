@@ -1,0 +1,62 @@
+# evidence: verify-f509-random897
+# instance: i-06f92e935077c4223   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T184414Z   end: 20261102T184436Z   rc: 0
+# script sha256: fad1ee497ee4678d0339eeb0a41b4b42bad799f1f1e11c2012ccfb73b4363e31
+# ---- script ----
+# | set -u
+# | cd /boot/home/vf || exit 3
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- non-packaged overrides (expect none)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n "s/.*inet addr: \([0-9.]*\).*/\1/p" | head -1)
+# | echo "own address: $OWN"
+# | echo "loaded random module image:"; listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | sha256sum random897.c random897
+# | ./random897; echo "rc=$?"
+# | echo "== python: F_SETFL on a random-device stdin, ioctl errno as Python sees it"
+# | for dev in /dev/random /dev/urandom; do
+# | python3 -I -c 'import errno,fcntl,os,sys,termios
+# | fcntl.fcntl(0, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(0, fcntl.F_GETFL)); print(sys.argv[1], "F_SETFL ok read", len(os.read(0, 64)))
+# | print(sys.argv[1], "isatty", os.isatty(0))
+# | try:
+# |     termios.tcgetattr(0); print(sys.argv[1], "tcgetattr succeeded")
+# | except termios.error as e:
+# |     print(sys.argv[1], "tcgetattr", e, "ENOTTY" if e.args[0] == errno.ENOTTY else "")' $dev < $dev
+# | done
+# | echo CORE_DONE
+# ---- raw output ----
+Haiku ip-10-128-14-149.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 18:07:55 arm64 other Haiku
+830e8f13b85124244e4ef20acb7f53e1c8232c6bfcb9b1dc74626fbda955cef7  /boot/system/kernel_arm64
+--- non-packaged overrides (expect none)
+own address: 10.128.14.149
+loaded random module image:
+ 266 0xffff000002158000 0xffff00000215a000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+3a95ea9bbb9105b6bbe5564a6a94e2ece71fba0966e702512dc36afb7b93d93d  random897.c
+9a6ce819e08cb0bf04beccd6f68762d84419735a956447fe173d82565c3974f0  random897
+PASS F_SETFL /dev/random (rdonly)   getfl=0x0 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS F_SETFL /dev/random (rdwr)     getfl=0x2 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS FIONBIO /dev/random            on=ok nb=1 read=ok off=ok nb=0
+PASS open(O_NONBLOCK) /dev/random   nb=1 read=ok poll=1 revents=0x1 clear-NB=ok nb=0
+PASS isatty /dev/random             isatty=0 errno=0 (No error)
+PASS FIONREAD /dev/random           r=-1 errno=-2147454966 (Not a tty) want ENOTTY
+PASS unknown ioctl /dev/random      op=0x7e5a1897 r=-1 errno=-2147454966 (Not a tty) want ENOTTY
+INFO lseek(SEEK_DATA)               r=-1 errno=-2147483643 (Invalid Argument)
+PASS F_SETFL /dev/urandom (rdonly)  getfl=0x0 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS F_SETFL /dev/urandom (rdwr)    getfl=0x2 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS FIONBIO /dev/urandom           on=ok nb=1 read=ok off=ok nb=0
+PASS open(O_NONBLOCK) /dev/urandom  nb=1 read=ok poll=1 revents=0x1 clear-NB=ok nb=0
+PASS isatty /dev/urandom            isatty=0 errno=0 (No error)
+PASS FIONREAD /dev/urandom          r=-1 errno=-2147454966 (Not a tty) want ENOTTY
+PASS unknown ioctl /dev/urandom     op=0x7e5a1897 r=-1 errno=-2147454966 (Not a tty) want ENOTTY
+INFO lseek(SEEK_DATA)               r=-1 errno=-2147483643 (Invalid Argument)
+random897: 0 failed
+rc=0
+== python: F_SETFL on a random-device stdin, ioctl errno as Python sees it
+/dev/random F_SETFL ok read 64
+/dev/random isatty False
+/dev/random tcgetattr (-2147454966, 'Not a tty') ENOTTY
+/dev/urandom F_SETFL ok read 64
+/dev/urandom isatty False
+/dev/urandom tcgetattr (-2147454966, 'Not a tty') ENOTTY
+CORE_DONE

@@ -1,0 +1,1191 @@
+# evidence: verify-f509-940-console (workstation)
+# instance: i-03808abf0d54fbd30   region: us-west-2   aws ec2 get-console-output --latest at 20261102T184223Z
+# ---- raw output ----
+UEFI firmware (version  built at 09:00:00 on Nov  1 2018)
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[0m[35m[40m[2J[01;01H[=3h[2J[01;01H[2J[01;01Hacpi_init: found ACPI RSDP signature at 0x00000000786e0014
+acpi: found rsdp at 0x00000000786e0014 oem id: AMAZON, rev 2
+acpi: rsdp points to rsdt at 0x786d0074
+acpi: found valid XSDT at 0x00000000786d00e8
+acpi: searching 8 entries for table 'SPCR'
+acpi: Looking for 'SPCR'. Skipping 'FACP'
+acpi: Looking for 'SPCR'. Skipping 'APIC'
+acpi: Found 'SPCR' @ 0x00000000786d011c
+acpi: spcr pci check: revision 2, length 80, pci 1d0f:8250 at 0:00:01.0
+acpi: spcr pci check: LocateHandleBuffer(PciRootBridgeIo) status 0x0, 1 handle(s)
+acpi: spcr pci check: bridge 0: segment 0, id read ok 0x82501d0f
+acpi: spcr pci check: id 0x82501d0f, command 0x10, BAR 0 0x80108000, BAR 1 0x0
+acpi: spcr pci check: enabled memory decode (command 0x10 -> 0x12)
+acpi: spcr pci check: uart at BAR 0 reads LCR 0x3, LSR 0x60
+acpi: spcr console 0x90a0000, pci 1d0f:8250 at 0:00:01.0 has BAR 0 0x80108000; spcr address is not that device, using the BAR
+discovered uart from acpi: base=80108000, irq=37, clock=0, reg_shift=0
+acpi: searching 8 entries for table 'APIC'
+acpi: Looking for 'APIC'. Skipping 'FACP'
+acpi: Found 'APIC' @ 0x00000000786d0114
+discovered gic from acpi: version=3, gicd=10000000, gicr=10200000 (size fdf0000), its=10080000, 16 pes
+acpi: pmu overflow gsiv (madt gicc performance interrupt) = 23
+acpi: searching 8 entries for table 'GTDT'
+acpi: Looking for 'GTDT'. Skipping 'FACP'
+acpi: Looking for 'GTDT'. Skipping 'APIC'
+acpi: Looking for 'GTDT'. Skipping 'SPCR'
+acpi: Found 'GTDT' @ 0x00000000786d0124
+generic timer from acpi gtdt (revision 2, 96 bytes):
+  frequency: not stated by this table; kernel uses CNTFRQ_EL0
+  counter block: 0xffffffffffffffff (not provided)
+  sec-phys timer interrupt: 29
+  phys timer interrupt: 30
+  virt timer interrupt: 27
+  hyp-phys timer interrupt: 26
+acpi: searching 8 entries for table 'FACP'
+acpi: Found 'FACP' @ 0x00000000786d010c
+discovered psci from acpi: conduit=hvc
+efi/fdt: Probing for device trees from UEFI...
+GOP protocol not found
+Welcome to the DeBeOS boot loader! (based on Haiku)
+Haiku revision: hrev59996
+efi/network: EFI reports network unavaiable
+efi/devices: growing boot GPT partition 1 end 38985727 -> 125829086 (disk last block 125829119)
+add_partitions_for(0x000000007842a558, mountFS = no)
+add_partitions_for(fd = 0, mountFS = no)
+0x000000007842a5b0 Partition::Partition
+0x000000007842a5b0 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 7a7cb5ad
+absolute block: 1
+alternate block: 125829119
+first usable block: 34
+last usable block: 125829086
+disk GUID: 988a4a72-8549-407d-bcd2-985faec72255
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: 8e03bbc9
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: f4820de6
+absolute block: 125829119
+alternate block: 1
+first usable block: 34
+last usable block: 125829086
+disk GUID: 988a4a72-8549-407d-bcd2-985faec72255
+entries block: 125829087
+entry size:  128
+entry count: 128
+entries CRC: 8e03bbc9
+[  0] partition type: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+      unique id: 94f90623-d7f5-40db-8377-28452c956f86
+      start block: 8192
+      end block: 73727
+      size: 31.999 MB
+      attributes: 0
+      name: EFI system partition
+[  1] partition type: 42465331-3ba3-10f1-802a-4861696b7521
+      unique id: 4cebe586-c1dc-4c0e-972e-0ea36952f1ee
+      start block: 73728
+      end block: 125829086
+      size: 61403.983 MB
+      attributes: 0
+      name: Haiku BFS
+  priority: 960
+check for partitioning_system: Intel Partition Map
+intel: Found GPT signature, ignoring.
+check for partitioning_system: Intel Extended Partition
+efi_gpt_scan_partition(cookie = 0x000000007842a6b8)
+0x000000007842e798 Partition::Partition
+0x000000007842a5b0 Partition::AddChild 0x000000007842e798
+0x000000007842e798 Partition::SetParent 0x000000007842a5b0
+new child partition!
+0x000000007842e898 Partition::Partition
+0x000000007842a5b0 Partition::AddChild 0x000000007842e898
+0x000000007842e898 Partition::SetParent 0x000000007842a5b0
+new child partition!
+0x000000007842a5b0 Partition::Scan(): scan child 0x000000007842e798 (start = 4194304, size = 33554432, parent = 0x000000007842a5b0)!
+0x000000007842e798 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+check for partitioning_system: Intel Partition Map
+check for partitioning_system: Intel Extended Partition
+0x000000007842a5b0 Partition::Scan(): scan child 0x000000007842e898 (start = 37748736, size = 64386743808, parent = 0x000000007842a5b0)!
+0x000000007842e898 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+check for partitioning_system: Intel Partition Map
+check for partitioning_system: Intel Extended Partition
+0x000000007842a5b0 Partition::~Partition
+0x000000007842e798 Partition::SetParent 0x0000000000000000
+0x000000007842e898 Partition::SetParent 0x0000000000000000
+0x000000007842e898 Partition::_Mount check for file_system: BFS Filesystem
+PackageVolumeInfo::SetTo()
+PackageVolumeInfo::_InitState(): failed to parse activated-packages: No such file or directory
+load kernel kernel_arm64...
+smbios: found v2 at 0x000000007bed0000
+smbios: found v3 at 0x000000007beb0000
+Chosen UART:
+  kind: 8250
+  regs: 0x80108000, 0x1000
+  irq: 37
+  clock: 0
+Chosen interrupt controller:
+  kind: gicv3
+  regs: 0x10000000, 0x10000
+        0x10200000, 0xfdf0000
+Generic timer from fdt:
+  frequency: 0 Hz (not stated; kernel uses CNTFRQ_EL0)
+  sec-phys: INTID 29
+  phys: INTID 30
+  virt: INTID 27
+  hyp-phys: INTID 26
+kernel:
+  text: 0xffff000000000000, 0x1cc000
+  data: 0xffff0000001dc000, 0xb3000
+  entry: 0xffff000000092fa0
+rtc: firmware time is 2026-11-02 18:34:49 (1793644489)
+Kernel stack at 0xffff0000026ad000
+System provided memory map:
+  phys: 0x40000000-0x77ae9000, virt: 0x00000000-0x37ae9000, size = 0x37ae9000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x77ae9000-0x785aa000, virt: 0x00000000-0x00ac1000, size = 0x00ac1000, type: EfiLoaderData (0x2), attr: 0x8
+  phys: 0x785aa000-0x78630000, virt: 0x00000000-0x00086000, size = 0x00086000, type: EfiLoaderCode (0x1), attr: 0x8
+  phys: 0x78630000-0x78640000, virt: 0x00000000-0x00010000, size = 0x00010000, type: EfiACPIMemoryNVS (0xa), attr: 0x8
+  phys: 0x78640000-0x786f0000, virt: 0x00000000-0x000b0000, size = 0x000b0000, type: EfiACPIReclaimMemory (0x9), attr: 0x8
+  phys: 0x786f0000-0x78730000, virt: 0x00000000-0x00040000, size = 0x00040000, type: EfiRuntimeServicesCode (0x5), attr: 0x8000000000000008
+  phys: 0x78730000-0x7a58c000, virt: 0x00000000-0x01e5c000, size = 0x01e5c000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7a58c000-0x7a58d000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7a58d000-0x7a614000, virt: 0x00000000-0x00087000, size = 0x00087000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7a614000-0x7b624000, virt: 0x00000000-0x01010000, size = 0x01010000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7b624000-0x7b912000, virt: 0x00000000-0x002ee000, size = 0x002ee000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7b912000-0x7bc00000, virt: 0x00000000-0x002ee000, size = 0x002ee000, type: EfiBootServicesCode (0x3), attr: 0x8
+  phys: 0x7bc00000-0x7bd90000, virt: 0x00000000-0x00190000, size = 0x00190000, type: EfiRuntimeServicesCode (0x5), attr: 0x8000000000000008
+  phys: 0x7bd90000-0x7bfe0000, virt: 0x00000000-0x00250000, size = 0x00250000, type: EfiRuntimeServicesData (0x6), attr: 0x8000000000000008
+  phys: 0x7bfe0000-0x7bfff000, virt: 0x00000000-0x0001f000, size = 0x0001f000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7bfff000-0x7c000000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7c000000-0x7f28f000, virt: 0x00000000-0x0328f000, size = 0x0328f000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7f28f000-0x7f2c4000, virt: 0x00000000-0x00035000, size = 0x00035000, type: EfiBootServicesCode (0x3), attr: 0x8
+  phys: 0x7f2c4000-0x80000000, virt: 0x00000000-0x00d3c000, size = 0x00d3c000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x400000000-0xb9e000000, virt: 0x00000000-0x79e000000, size = 0x79e000000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x09010000-0x09011000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiMemoryMappedIO (0xb), attr: 0x8000000000000001
+  phys: 0x09050000-0x09051000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiMemoryMappedIO (0xb), attr: 0x8000000000000001
+Efi loader symbols offset: 0x785aa000:
+Current Exception Level EL1
+TTBR0: 7fffb000 TTBRx: 1de7ec7edbadc0dc SCTLR: 30d5187d TCR: 580803510
+MMU Enabled, Granularity 4KB, bits 48
+Kernel entry accessibility W: 0 R: 0
+kernel_args: version 1, 4209 bytes
+Calling ExitBootServices. So long, EFI!
+Welcome to kernel debugger output!
+DeBeOS -- ARM-first, descended from Haiku/BeOS
+Haiku revision: hrev59996, debug level: 2
+kernel build roottable-guard-1, compiled Nov  2 2026 18:07:55
+PSCI conduit: hvc
+arm64_pmu: overflow interrupt gsiv from madt = 23 (architected PPI 7)
+arm64_pmu: PMUv3 present (PMUVer 5), 32 bit event counters, enabled by boot setting
+arm64: cpu 0 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64_pmu: 1 of 2 event counters programmed on all CPUs (1 reserved for sampling)
+arm64_pmu:   [0] 0x0008 inst-retired
+arm64_pmu:   [1] 0x0011 cpu-cycles -- sampling, period 10000000 cycles
+early: pulling page 400002000
+early: pulling page 400203000
+early: pulling page 400404000
+early: pulling page 400605000
+kernel malloc: using slab_heap
+early: pulling page 400953000
+early: pulling page 400b54000
+early: pulling page 400d55000
+early: pulling page 400f56000
+early: pulling page 401157000
+early: pulling page 401358000
+early: pulling page 401559000
+early: pulling page 40175a000
+early: pulling page 40195b000
+early: pulling page 401b5c000
+early: pulling page 401d5d000
+early: pulling page 401f5e000
+early: pulling page 40215f000
+early: pulling page 402360000
+early: pulling page 402561000
+early: pulling page 402762000
+early: pulling page 402963000
+early: pulling page 402b64000
+early: pulling page 402d65000
+early: pulling page 402f66000
+early: pulling page 403167000
+early: pulling page 403368000
+early: pulling page 403569000
+early: pulling page 40376a000
+early: pulling page 40396b000
+early: pulling page 403b6c000
+early: pulling page 403d6d000
+early: pulling page 403f6e000
+early: pulling page 40416f000
+early: pulling page 404370000
+early: pulling page 404571000
+early: pulling page 404772000
+early: pulling page 404973000
+early: pulling page 404b74000
+early: pulling page 404d75000
+early: pulling page 404f76000
+early: pulling page 405177000
+early: pulling page 405378000
+early: pulling page 405579000
+early: pulling page 40577a000
+early: pulling page 40597b000
+early: pulling page 405b7c000
+early: pulling page 405d7d000
+early: pulling page 405f7e000
+early: pulling page 40617f000
+early: pulling page 406380000
+early: pulling page 406581000
+early: pulling page 406782000
+early: pulling page 406983000
+early: pulling page 406b84000
+early: pulling page 406d85000
+early: pulling page 406f86000
+early: pulling page 407187000
+early: pulling page 407388000
+early: pulling page 407589000
+early: pulling page 40778a000
+early: pulling page 40798b000
+early: pulling page 407b8c000
+early: pulling page 407d8d000
+early: pulling page 407f8e000
+early: pulling page 40818f000
+early: pulling page 408390000
+early: pulling page 408591000
+early: pulling page 408792000
+early: pulling page 408993000
+early: pulling page 408b94000
+early: pulling page 408d95000
+early: pulling page 408f96000
+early: pulling page 409197000
+early: pulling page 409398000
+early: pulling page 409599000
+early: pulling page 40979a000
+early: pulling page 40999b000
+early: pulling page 409b9c000
+early: pulling page 409d9d000
+early: pulling page 409f9e000
+early: pulling page 40a19f000
+early: pulling page 40a3a0000
+early: pulling page 40a5a1000
+early: pulling page 40a7a2000
+early: pulling page 40a9a3000
+early: pulling page 40aba4000
+early: pulling page 40ada5000
+early: pulling page 40afa6000
+early: pulling page 40b1a7000
+early: pulling page 40b3a8000
+early: pulling page 40b5a9000
+early: pulling page 40b7aa000
+early: pulling page 40b9ab000
+early: pulling page 40bbac000
+early: pulling page 40bdad000
+early: pulling page 40bfae000
+early: pulling page 40c1af000
+early: pulling page 40c3b0000
+early: pulling page 40c5b1000
+early: pulling page 40c7b2000
+early: pulling page 40c9b3000
+early: pulling page 40cbb4000
+early: pulling page 40cdb5000
+early: pulling page 40cfb6000
+early: pulling page 40d1b7000
+early: pulling page 40d3b8000
+early: pulling page 40d5b9000
+early: pulling page 40d7ba000
+early: pulling page 40d9bb000
+early: pulling page 40dbbc000
+early: pulling page 40ddbd000
+early: pulling page 40dfbe000
+early: pulling page 40e1bf000
+early: pulling page 40e3c0000
+early: pulling page 40e5c1000
+early: pulling page 40e7c2000
+early: pulling page 40e9c3000
+early: pulling page 40ebc4000
+early: pulling page 40edc5000
+early: pulling page 40efc6000
+early: pulling page 40f1c7000
+early: pulling page 40f3c8000
+early: pulling page 40f5c9000
+early: pulling page 40f7ca000
+early: pulling page 40f9cb000
+early: pulling page 40fbcc000
+early: pulling page 40fdcd000
+early: pulling page 40ffce000
+early: pulling page 4101cf000
+early: pulling page 4103d0000
+early: pulling page 4105d1000
+early: pulling page 4107d2000
+early: pulling page 4109d3000
+early: pulling page 410bd4000
+early: pulling page 410dd5000
+early: pulling page 410fd6000
+early: pulling page 4111d7000
+early: pulling page 4113d8000
+early: pulling page 4115d9000
+early: pulling page 4117da000
+early: pulling page 4119db000
+early: pulling page 411bdc000
+early: pulling page 411ddd000
+early: pulling page 411fde000
+early: pulling page 4121df000
+early: pulling page 4123e0000
+early: pulling page 4125e1000
+early: pulling page 4127e2000
+early: pulling page 4129e3000
+early: pulling page 412be4000
+early: pulling page 412de5000
+early: pulling page 412fe6000
+early: pulling page 4131e7000
+early: pulling page 4133e8000
+early: pulling page 4135e9000
+early: pulling page 4137ea000
+early: pulling page 4139eb000
+early: pulling page 413bec000
+early: pulling page 413ded000
+early: pulling page 413fee000
+early: pulling page 4141ef000
+early: pulling page 4143f0000
+early: pulling page 4145f1000
+early: pulling page 4147f2000
+early: pulling page 4149f3000
+early: pulling page 414bf4000
+early: pulling page 414df5000
+early: pulling page 414ff6000
+early: pulling page 4151f7000
+early: pulling page 4153f8000
+early: pulling page 4155f9000
+early: pulling page 4157fa000
+early: pulling page 4159fb000
+early: pulling page 415bfc000
+early: pulling page 415dfd000
+early: pulling page 415ffe000
+early: pulling page 4161ff000
+early: pulling page 416400000
+early: pulling page 416601000
+early: pulling page 416802000
+early: pulling page 416a03000
+early: pulling page 416c04000
+early: pulling page 416e05000
+early: pulling page 417006000
+early: pulling page 417207000
+early: pulling page 417408000
+early: pulling page 417609000
+early: pulling page 41780a000
+early: pulling page 417a0b000
+early: pulling page 417c0c000
+early: pulling page 417e0d000
+early: pulling page 41800e000
+early: pulling page 41820f000
+early: pulling page 418410000
+early: pulling page 418611000
+early: pulling page 418812000
+early: pulling page 418a13000
+early: pulling page 418c14000
+early: pulling page 418e15000
+early: pulling page 419016000
+early: pulling page 419217000
+early: pulling page 419418000
+early: pulling page 419619000
+early: pulling page 41981a000
+early: pulling page 419a1b000
+early: pulling page 419c1c000
+early: pulling page 419e1d000
+early: pulling page 41a01e000
+early: pulling page 41a21f000
+early: pulling page 41a420000
+early: pulling page 41a621000
+early: pulling page 41a822000
+early: pulling page 41aa23000
+early: pulling page 41ac24000
+early: pulling page 41ae25000
+early: pulling page 41b026000
+early: pulling page 41b227000
+early: pulling page 41b428000
+early: pulling page 41b629000
+early: pulling page 41b82a000
+early: pulling page 41ba2b000
+early: pulling page 41bc2c000
+early: pulling page 41be2d000
+early: pulling page 41c02e000
+early: pulling page 41c22f000
+early: pulling page 41c430000
+early: pulling page 41c631000
+early: pulling page 41c832000
+early: pulling page 41ca33000
+early: pulling page 41cc34000
+early: pulling page 41ce35000
+early: pulling page 41d036000
+early: pulling page 41d237000
+early: pulling page 41d438000
+early: pulling page 41d639000
+early: pulling page 41d83a000
+early: pulling page 41da3b000
+early: pulling page 41dc3c000
+early: pulling page 41de3d000
+early: pulling page 41e03e000
+early: pulling page 41e23f000
+early: pulling page 41e440000
+early: pulling page 41e641000
+early: pulling page 41e842000
+early: pulling page 41ea43000
+early: pulling page 41ec44000
+early: pulling page 41ee45000
+early: pulling page 41f046000
+early: pulling page 41f247000
+early: pulling page 41f448000
+early: pulling page 41f649000
+early: pulling page 41f84a000
+early: pulling page 41fa4b000
+early: pulling page 41fc4c000
+early: pulling page 41fe4d000
+early: pulling page 42004e000
+early: pulling page 42024f000
+early: pulling page 420450000
+early: pulling page 420651000
+early: pulling page 420852000
+early: pulling page 420a53000
+early: pulling page 420c54000
+early: pulling page 420e55000
+early: pulling page 421056000
+early: pulling page 421257000
+early: pulling page 421458000
+early: pulling page 421659000
+early: pulling page 42185a000
+early: pulling page 421a5b000
+early: pulling page 421c5c000
+early: pulling page 421e5d000
+early: pulling page 42205e000
+early: pulling page 42225f000
+early: pulling page 422460000
+early: pulling page 422661000
+early: pulling page 422862000
+early: pulling page 422a63000
+early: pulling page 422c64000
+early: pulling page 422e65000
+early: pulling page 423066000
+early: pulling page 423267000
+early: pulling page 423468000
+early: pulling page 423669000
+early: pulling page 42386a000
+early: pulling page 423a6b000
+early: pulling page 423c6c000
+early: pulling page 423e6d000
+early: pulling page 42406e000
+early: pulling page 42426f000
+early: pulling page 424470000
+early: pulling page 424671000
+early: pulling page 424872000
+early: pulling page 424a73000
+early: pulling page 424c74000
+early: pulling page 424e75000
+early: pulling page 425076000
+early: pulling page 425277000
+early: pulling page 425478000
+early: pulling page 425679000
+early: pulling page 42587a000
+early: pulling page 425a7b000
+early: pulling page 425c7c000
+early: pulling page 425e7d000
+early: pulling page 42607e000
+early: pulling page 42627f000
+early: pulling page 426480000
+early: pulling page 426681000
+early: pulling page 426882000
+early: pulling page 426a83000
+early: pulling page 426c84000
+early: pulling page 426e85000
+early: pulling page 427086000
+early: pulling page 427287000
+early: pulling page 427488000
+early: pulling page 427689000
+early: pulling page 42788a000
+early: pulling page 427a8b000
+early: pulling page 427c8c000
+early: pulling page 427e8d000
+early: pulling page 42808e000
+early: pulling page 42828f000
+early: pulling page 428490000
+early: pulling page 428691000
+early: pulling page 428892000
+early: pulling page 428a93000
+early: pulling page 428c94000
+early: pulling page 428e95000
+early: pulling page 429096000
+early: pulling page 429297000
+early: pulling page 429498000
+early: pulling page 429699000
+early: pulling page 42989a000
+early: pulling page 429a9b000
+early: pulling page 429c9c000
+early: pulling page 429e9d000
+early: pulling page 42a09e000
+early: pulling page 42a29f000
+early: pulling page 42a4a0000
+early: pulling page 42a6a1000
+early: pulling page 42a8a2000
+early: pulling page 42aaa3000
+early: pulling page 42aca4000
+early: pulling page 42aea5000
+early: pulling page 42b0a6000
+early: pulling page 42b2a7000
+early: pulling page 42b4a8000
+early: pulling page 42b6a9000
+early: pulling page 42b8aa000
+early: pulling page 42baab000
+early: pulling page 42bcac000
+early: pulling page 42bead000
+early: pulling page 42c0ae000
+early: pulling page 42c2af000
+early: pulling page 42c4b0000
+early: pulling page 42c6b1000
+early: pulling page 42c8b2000
+early: pulling page 42cab3000
+early: pulling page 42ccb4000
+early: pulling page 42ceb5000
+early: pulling page 42d0b6000
+early: pulling page 42d2b7000
+early: pulling page 42d4b8000
+early: pulling page 42d6b9000
+early: pulling page 42d8ba000
+early: pulling page 42dabb000
+early: pulling page 42dcbc000
+early: pulling page 42debd000
+early: pulling page 42e0be000
+early: pulling page 42e2bf000
+early: pulling page 42e4c0000
+early: pulling page 42e6c1000
+early: pulling page 42e8c2000
+early: pulling page 42eac3000
+early: pulling page 42ecc4000
+early: pulling page 42eec5000
+early: pulling page 42f0c6000
+early: pulling page 42f2c7000
+early: pulling page 42f4c8000
+early: pulling page 42f6c9000
+early: pulling page 42f8ca000
+early: pulling page 42facb000
+early: pulling page 42fccc000
+early: pulling page 42fecd000
+early: pulling page 4300ce000
+early: pulling page 4302cf000
+early: pulling page 4304d0000
+early: pulling page 4306d1000
+early: pulling page 4308d2000
+early: pulling page 430ad3000
+early: pulling page 430cd4000
+early: pulling page 430ed5000
+early: pulling page 4310d6000
+early: pulling page 4312d7000
+early: pulling page 4314d8000
+early: pulling page 4316d9000
+early: pulling page 4318da000
+early: pulling page 431adb000
+early: pulling page 431cdc000
+early: pulling page 431edd000
+early: pulling page 4320de000
+early: pulling page 4322df000
+early: pulling page 4324e0000
+early: pulling page 4326e1000
+early: pulling page 4328e2000
+early: pulling page 432ae3000
+early: pulling page 432ce4000
+early: pulling page 432ee5000
+early: pulling page 4330e6000
+early: pulling page 4332e7000
+early: pulling page 4334e8000
+early: pulling page 4336e9000
+early: pulling page 4338ea000
+early: pulling page 433aeb000
+early: pulling page 433cec000
+early: pulling page 433eed000
+early: pulling page 4340ee000
+early: pulling page 4342ef000
+early: pulling page 4344f0000
+early: pulling page 4346f1000
+early: pulling page 4348f2000
+early: pulling page 434af3000
+early: pulling page 434cf4000
+early: pulling page 434ef5000
+early: pulling page 4350f6000
+early: pulling page 4352f7000
+early: pulling page 4354f8000
+early: pulling page 4356f9000
+early: pulling page 4358fa000
+early: pulling page 435afb000
+early: pulling page 435cfc000
+early: pulling page 435efd000
+early: pulling page 4360fe000
+early: pulling page 4362ff000
+early: pulling page 436500000
+early: pulling page 436701000
+early: pulling page 436902000
+early: pulling page 436b03000
+early: pulling page 436d04000
+early: pulling page 436f05000
+early: pulling page 437106000
+early: pulling page 437307000
+early: pulling page 437508000
+early: pulling page 437709000
+early: pulling page 43790a000
+early: pulling page 437b0b000
+early: pulling page 437d0c000
+early: pulling page 437f0d000
+early: pulling page 43810e000
+early: pulling page 43830f000
+early: pulling page 438510000
+early: pulling page 438711000
+early: pulling page 438912000
+early: pulling page 438b13000
+early: pulling page 438d14000
+early: pulling page 438f15000
+early: pulling page 439116000
+early: pulling page 439317000
+early: pulling page 439518000
+early: pulling page 439719000
+mark_page_range_in_use(0x0, 0x40000): start page is before free list
+reserve_boot_loader_ranges(): Skipping range: 0xffffff0040000000, 946012160
+reserve_boot_loader_ranges(): Skipping range: 0xffffff0078730000, 55377920
+reserve_boot_loader_ranges(): Skipping range: 0xffffff007bfe0000, 67239936
+reserve_boot_loader_ranges(): Skipping range: 0xffffff0400000000, 32715571200
+arch_vm_translation_map_init_post_area
+uart 8250: tx fifo reported enabled, tx batch 4 bytes per status poll
+reserve_io_interrupt_vectors: reserved 1020 vectors starting from 0
+gicv3: gicd 0x10000000 (size 0x10000), arch rev 3, typer 0x7a4003, fallback stride 0x20000
+gicv3: region 0 spans 2031 strides for 16 pe(s); walking 16
+gicv3: redistributor region 0: 0x10200000 size 0xfdf0000, stride 0x20000, 16 PEs, arch rev 3
+gicv3: 128 interrupt lines, 0 extended spis, gicd_ctlr 0x52
+gicv3: 16 redistributor(s) across 1 region(s) for 16 cpu(s); 0 report vlpis, 1 report last
+arm64: cpu 6 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 3 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 5 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 9 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 4 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 7 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 8 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 11 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 1 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 2 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 15 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 13 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 10 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 14 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 12 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64 CPU: MIDR_EL1 0x411fd401 -- ARM Neoverse-V1 r1p1
+arm64 CPU: core clock 2597964577 Hz (2597 MHz), measured against the generic timer
+arch_timer: generic timer at 1050000000 Hz (CNTFRQ_EL0), max interval 2045222 us, EL1 physical timer on INTID 30 (firmware)
+io-interrupt: vector 30 assigned to CPU 0
+allocate_commpage_entry(2, 8) -> 0x0000000000000200
+arch_rtc_init: firmware time 1793644489 s at 2651965 us uptime
+arch_vm_translation_map_init_post_sem
+scheduler_init: found 16 logical cpus and 0 cache levels
+scheduler switches: single core: false, cpu load tracking: true, core load tracking: true, cpu freq scaling: false
+scheduler: switching to low latency mode
+gicv3-its: typer 0x1ef71: itt entry size 8, 16 event id bits, 16 device id bits, pta 0, up to 65536 collections
+gicv3-its: lpis enabled on 16 redistributor(s), 0 skipped as cpu-less, 14 lpi intid bits, 1024 KiB of pending tables, collection target 0x0
+allocate_io_interrupt_vectors: allocated 256 vectors starting from 1020
+gicv3-its: ready, 256 vectors from 1020, 16 collection(s), translater 0x10090040
+allocate_commpage_entry(3, 4) -> 0x0000000000000208
+slab memory manager: created area 0xffff0000dd001000 (185)
+allocate_commpage_entry(4, 72) -> 0x0000000000000210
+allocate_commpage_entry(5, 16) -> 0x0000000000000258
+slab memory manager: created area 0xffff0000dd801000 (187)
+PCI: pci_module_init
+ACPI: RSDP 0x00000000786E0014 000024 (v02 AMAZON)
+ACPI: XSDT 0x00000000786D00E8 000064 (v01 AMAZON AMZNFACP 00000001      01000013)
+ACPI: FACP 0x00000000786B0000 000114 (v06 AMAZON AMZNFACP 00000001 AMZN 00000001)
+ACPI: DSDT 0x0000000078640000 001568 (v02 AMAZON AMZNDSDT 00000001 AMZN 00000001)
+ACPI: FACS 0x0000000078630000 000040
+ACPI: APIC 0x00000000786C0000 000568 (v04 AMAZON AMZNAPIC 00000001 AMZN 00000001)
+ACPI: SPCR 0x00000000786A0000 000050 (v02 AMAZON AMZNSPCR 00000001 AMZN 00000001)
+ACPI: GTDT 0x0000000078690000 000060 (v02 AMAZON AMZNGTDT 00000001 AMZN 00000001)
+ACPI: MCFG 0x0000000078680000 00003C (v02 AMAZON AMZNMCFG 00000001 AMZN 00000001)
+ACPI: SLIT 0x0000000078670000 00002D (v01 AMAZON AMZNSLIT 00000001 AMZN 00000001)
+ACPI: IORT 0x0000000078660000 000078 (v01 AMAZON AMZNIORT 00000001 AMZN 00000001)
+ACPI: PPTT 0x0000000078650000 00025C (v02 AMAZON AMZNPPTT 00000001 AMZN 00000001)
+ACPI: Forced DSDT copy: length 0x01568 copied locally, original unmapped
+ACPI: 1 ACPI AML tables successfully acquired and loaded
+publish device: node 0xffff0000009403c0, path acpi/namespace, module bus_managers/acpi/namespace/device_v1
+publish device: node 0xffff0000009403c0, path acpi/call, module bus_managers/acpi/call/device_v1
++ECAMPCIController::InitDriver()
+initialize PCI controller from ACPI
+PCI: range from ACPI [0(1),0(1)] with length 1
+PCI: range from ACPI [80000000(1),ffffffff(1)] with length 80000000
+PCI: range from ACPI [0(1),ffff(1)] with length 10000
+PCI: range from ACPI [400000000000(1),407fffffffff(1)] with length 8000000000
+PCI: ecam region: addr 20000000, segment: 0, buses: 0-ff
+PCI: ECAM at 20000000 (bus 0 base 20000000), segment 0, buses 0-0 from _CRS, 1 decoded, 1 MiB; 0 of 1 MCFG entries are other windows
+-ECAMPCIController::InitDriver()
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+finalize PCI controller from ACPI
+IRQ routing table with 3 entries
+address 0x1ffff; pin 1; source 0xffff0000dd10e960 0; pci 0:1 pin 2 func mask 1; bios irq: 255; gsi 37; config 0x0a
+address 0x4ffff; pin 0; source 0xffff0000dd10e720 0; pci 0:4 pin 1 func mask 1; bios irq: 3; gsi 35; config 0x0a
+address 0x5ffff; pin 0; source 0xffff0000dd10e840 0; pci 0:5 pin 1 func mask 1; bios irq: 4; gsi 36; config 0x0a
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+PCI: 0:00:00.0 vendor 1d0f device 0200 class 06.00.00 rev 00
+PCI: 0:00:01.0 vendor 1d0f device 8250 class 07.00.03 rev 00
+PCI: 0:00:04.0 vendor 1d0f device 8061 class 01.08.02 rev 00
+PCI: 0:00:05.0 vendor 1d0f device ec20 class 02.00.00 rev 00
+PCI: 4 device(s)
+driver bus_managers/fdt/root/driver_v1 init failed: No such device
+get_boot_partitions(): boot volume message:
+KMessage: buffer: 0xffff0000024e2000 (size/capacity: 360/360), flags: 0xa
+  field: "partition offset"  (LLNG): 37748736 (0x2400000)
+  field: "packaged"          (BOOL): true
+  field: "boot method"       (LONG): 0 (0x0)
+  field: "disk identifier"   (RAWT): data at 0xffff0000024e20b0, 79 bytes
+  field: "_boot_efi smbiosv2root" (LLNG): 2079129600 (0x7bed0000)
+  field: "_boot_efi smbiosv3root" (LLNG): 2078998528 (0x7beb0000)
+get_boot_partitions(): boot method type: 0
+devfs: scanned "": mode 1 -> 1, latched 1, probe No error, legacy No error
+publish device: node 0xffff0000009437a0, path disk/nvme/0/raw, module drivers/disk/nvme_disk/device_v1
+devfs: scanned "disk": mode 1 -> 1, latched 1, probe No error, legacy No error
+devfs: scanned "disk/nvme": mode 1 -> 1, latched 1, probe No error, legacy No error
+devfs: scanned "disk/nvme/0": mode 1 -> 1, latched 1, probe No error, legacy No error
+nvme_disk: attached to NVMe device "Amazon Elastic Block Store (vol0b71508ee1b82dff7)"
+nvme_disk: 	maximum transfer size: 262144
+nvme_disk: 	qpair count: 2
+nvme_disk: 	io batch size: 8
+nvme_disk: namespace 0
+nvme_disk: 	block size: 512, stripe size: 0
+msix configured for 1 vectors
+msi-x enabled: 0x8002
+nvme_disk: using MSI-X
+io-interrupt: vector 1020 assigned to CPU 1
+DMAResource@0xffff0000dd0300a8: low/high 0/ffffffffffffffff, max segment count 126, align 4096, boundary 0, max transfer 262144, max segment size 18446744073709551615
+intel: Found GPT signature, ignoring.
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 7a7cb5ad
+absolute block: 1
+alternate block: 125829119
+first usable block: 34
+last usable block: 125829086
+disk GUID: 988a4a72-8549-407d-bcd2-985faec72255
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: 8e03bbc9
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: f4820de6
+absolute block: 125829119
+alternate block: 1
+first usable block: 34
+last usable block: 125829086
+disk GUID: 988a4a72-8549-407d-bcd2-985faec72255
+entries block: 125829087
+entry size:  128
+entry count: 128
+entries CRC: 8e03bbc9
+[  0] partition type: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+      unique id: 94f90623-d7f5-40db-8377-28452c956f86
+      start block: 8192
+      end block: 73727
+      size: 31.999 MB
+      attributes: 0
+      name: EFI system partition
+[  1] partition type: 42465331-3ba3-10f1-802a-4861696b7521
+      unique id: 4cebe586-c1dc-4c0e-972e-0ea36952f1ee
+      start block: 73728
+      end block: 125829086
+      size: 61403.983 MB
+      attributes: 0
+      name: Haiku BFS
+identify(0, 0xffff0000dd1165d0)
+efi_gpt_scan_partition(cookie = 0xffff0000008b0460)
+identify(0, 0xffff0000dd116618)
+identify(0, 0xffff0000dd116660)
+device 0: /dev/disk/nvme/0/raw
+  media status:      No error
+  device flags:      2
+  offset:            0
+  size:              64424509440 (61440 MB)
+  content size:      64424509440
+  block size:        512
+  physical block size: 512
+  child count:       2
+  index:             -1
+  status:            0
+  flags:             5
+  volume:            -1
+  disk system:       partitioning_systems/efi_gpt/v1
+  name:              <NULL>
+  content name:      <NULL>
+  type:              <NULL>
+  content type:      GUID Partition Map
+  params:            <NULL>
+  content params:    <NULL>
+  partition 1: /dev/disk/nvme/0/0
+    offset:            4194304
+    size:              33554432 (32 MB)
+    content size:      33554432
+    block size:        512
+    physical block size: 512
+    child count:       0
+    index:             0
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/fat/v1
+    name:              EFI system partition
+    content name:      haiku boot
+    type:              EFI system data
+    content type:      FAT32 File System
+    params:            <NULL>
+    content params:    <NULL>
+  partition 2: /dev/disk/nvme/0/1
+    offset:            37748736
+    size:              64386743808 (61403.983 MB)
+    content size:      19922944000
+    block size:        2048
+    physical block size: 512
+    child count:       0
+    index:             1
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/bfs/v1
+    name:              Haiku BFS
+    content name:      Haiku
+    type:              Be File System
+    content type:      Be File System
+    params:            <NULL>
+    content params:    <NULL>
+Identified boot partition by partition offset.
+bfs: bfs grow: growing 9728000 -> 31438839 blocks (594 -> 1919 bitmap blocks)
+bfs: mounted "Haiku" (root node at 524288, device = /dev/disk/nvme/0/1)
+Mounted boot partition: /dev/disk/nvme/0/1
+unknown: [4036518:    31] Adding packages from "/boot/system/packages"
+unknown: [4037210:    31] Failed to open packages activation file: No such file or directory
+unknown: [4038306:    31] Loading packages from activation file failed. Loading all packages in packages directory.
+slab memory manager: created area 0xffff0000de001000 (280)
+unknown: [6814813:    31] StringPool usage:
+unknown: [6815224:    31]   total unique strings:        6185,    65866 bytes, overhead: 98960 bytes + 65536 bytes
+unknown: [6816561:    31]   total strings with dups:    39060,   449190 bytes
+unknown: [6817496:    31]   unshared strings:             789
+unknown: [6818230:    31]   bytes saved:               218828
+unknown: [6823272:    31] Adding packages from "/boot/home/config/packages"
+unknown: [6824012:    31] Failed to open packages activation file: No such file or directory
+unknown: [6825109:    31] Loading packages from activation file failed. Loading all packages in packages directory.
+unknown: [6828838:    31] StringPool usage:
+unknown: [6829232:    31]   total unique strings:        6185,    65866 bytes, overhead: 98960 bytes + 65536 bytes
+unknown: [6830571:    31]   total strings with dups:    39071,   449255 bytes
+unknown: [6831504:    31]   unshared strings:             783
+unknown: [6832248:    31]   bytes saved:               218893
+module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ede0, "fat"
+module: Search for file_cache/launch_speedup/v1 failed.
+publish device: node 0xffff000000945d20, path disk/virtual/ram/control, module drivers/disk/virtual/ram_disk/control/device_v1
+usb_modeswitch: init_hardware()
+usb_modeswitch: init_driver()
+usb_modeswitch: trying module bus_managers/usb/v3.1
+usb_modeswitch: publish_devices()
+usb_modeswitch: uninit_driver()
+loaded driver /boot/system/add-ons/kernel/drivers/dev/usb_modeswitch
+loaded driver /boot/system/add-ons/kernel/drivers/dev/pty
+loaded driver /boot/system/add-ons/kernel/drivers/dev/null
+loaded driver /boot/system/add-ons/kernel/drivers/dev/dprintf
+con_init: trying module console/frame_buffer/v1
+con_init: trying module console/vga_text/v1
+module: Search for bus_managers/isa/v1 failed.
+text module_init: no isa bus found..
+devfs: scanned "": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme/0": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/virtual": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/virtual/ram": mode 2 -> 2, latched 2, probe No error, legacy No error
+identify(5, 0xffff0000dd80d9a8)
+slab memory manager: created area 0xffff00003c001000 (595)
+io-interrupt: vector 23 assigned to CPU 0
+arm64_pmu: sampling overflow interrupt on INTID 23 (madt gicc performance gsiv), counter [1] cpu-cycles, period 10000000 cycles
+no valid cpufreq module found
+no valid cpuidle module found
+kernel debugger extension "debugger/run_on_exit/v1": loaded
+kernel debugger extension "debugger/usb_keyboard/v1": loaded
+kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+kernel debugger extension "debugger/hangman/v1": loaded
+publish device: node 0xffff00000094bd60, path random, module bus_managers/random/device_v1
+publish device: node 0xffff00000094bd60, path urandom, module bus_managers/random/device_v1
+driver bus_managers/fdt/root/driver_v1 init failed: No such device
+pl061: pin 3 -> _E03 (edge triggered, active high)
+pl061: pin 4 -> _E04 (edge triggered, active high)
+io-interrupt: vector 39 assigned to CPU 3
+pl061: \_SB_.GPO0: 2 event pin(s) armed on irq 39
+publish device: node 0xffff00000094c1c0, path power/button/power, module drivers/power/acpi_button/device_v1
+publish device: node 0xffff00000094c3a0, path power/button/sleep, module drivers/power/acpi_button/device_v1
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+slab memory manager: created area 0xffff00003c801000 (3884)
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091d200, 9, unix)
+unregister_domain(0xffff00000091d400, 1, internet)
+unregister_domain(0xffff00000091d380, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000091d500, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091d580, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091d880, 9, unix)
+unregister_domain(0xffff00000091d980, 1, internet)
+unregister_domain(0xffff00000091d900, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000091da80, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091db00, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091dc00, 9, unix)
+unregister_domain(0xffff00000091dd00, 1, internet)
+unregister_domain(0xffff00000091dc80, 5, internet6)
+slab memory manager: created area 0xffff00003d001000 (4060)
+register_domain(5, internet6)
+unregister_domain(0xffff00000091de00, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091de80, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091df80, 9, unix)
+unregister_domain(0xffff00000091e080, 1, internet)
+unregister_domain(0xffff00000091e000, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000091e180, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091e200, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091e300, 9, unix)
+unregister_domain(0xffff00000091e400, 1, internet)
+unregister_domain(0xffff00000091e380, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000091e500, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091e580, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091e680, 9, unix)
+unregister_domain(0xffff00000091e780, 1, internet)
+unregister_domain(0xffff00000091e700, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000091e600, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091e580, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091e480, 9, unix)
+unregister_domain(0xffff00000091e400, 1, internet)
+unregister_domain(0xffff00000091e380, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000091e280, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000091e200, 1, internet)
+REG: Failed to open shadow passwd DB file "/etc/shadow": No such file or directory
+package_daemon: [9654280:    54] root at "/boot" (device: 3, node: 524288) registered
+package_daemon: [9655405:    54] volume at "/boot/system" registered
+devfs: scanned "power": mode 2 -> 2, latched 2, probe No error, legacy No error
+package_daemon: [9656251:    54] net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+volume at "/boot/home/config" registered
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00003c050180, 9, unix)
+unregister_domain(0xffff00003c050280, 1, internet)
+unregister_domain(0xffff00003c050200, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00003c050380, 5, internet6)
+register_domain(4, link)
+unregister_domain(0xffff00003c050400, 4, link)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00003c050500, 9, unix)
+unregister_domain(0xffff00003c050600, 1, internet)
+unregister_domain(0xffff00003c050580, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00003c050700, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00003c050880, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+Test: and [file_exists [/system/bin/FirstBootPrompt], or [not [file_exists [/boot/home/config/settings/Locale settings]], readonly ]] -> 0
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00003c050b80, 9, unix)
+unregister_domain(0xffff00003c050c80, 1, internet)
+unregister_domain(0xffff00003c050c00, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00003c050d80, 5, internet6)
+register_domain(1, internet)
+register_domain(5, internet6)
+unregister_domain(0xffff00003c050e80, 1, internet)
+unregister_domain(0xffff00003c051000, 5, internet6)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00003c051180, 9, unix)
+unregister_domain(0xffff00003c051280, 1, internet)
+unregister_domain(0xffff00003c051200, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00003c051380, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00003c051200, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00003c051180, 9, unix)
+unregister_domain(0xffff00003c051000, 1, internet)
+unregister_domain(0xffff00003c051100, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00003c050d80, 5, internet6)
+register_domain(1, internet)
+devfs: scanned "power/button": mode 2 -> 2, latched 2, probe No error, legacy No error
+register_domain(5, internet6)
+ena: found an ENA device
+publish device: node 0xffff0000de7a8e88, path net/ena/0, module drivers/network/ena/device_v1
+loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_rndis
+[33musb_davicom:[0m00.09.732:init_driver::ver.0.9.5
+loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_davicom
+etherpci: init_driver init_driver: etherpci not found
+devfs: scanned "net": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "net/ena": mode 2 -> 2, latched 2, probe No error, legacy No error
+ena: driver build rxbuf-1920, compiled Nov  2 2026 18:08:01 (hrev59996)
+ena: ena_com_validate_version(): ENA device version: 0.10
+ena: ena_com_validate_version(): ENA controller version: 0.0.1 implementation version 1
+ena: device drives 48 physical address bits
+slab memory manager: created area 0xffff00003d801000 (4905)
+ena: queue counts (ext v1): tx_sq 8 tx_cq 8 rx_sq 8 rx_cq 8, per-packet tx 17 rx 12, max_tx_header 96
+ena: supported_features 0x14205df6, capabilities 0x1f
+ena: device reports AENQ supported_groups 0xff
+ena: configuring AENQ groups 0x9f
+ena: MAC 0a:ff:eb:52:d2:59, device MTU limit 9216
+ena: offloads: tx 0x3, rx supported 0x7, rx enabled 0x0
+ena: LLQ negotiation: max_llq_num 8, max_llq_depth 1024, max_wide_llq_depth 512, entry_size_recommended 4, entry_size_supported 0x5, accel_mode supported 0x3
+ena: LLQ configured: 256 byte entries, 16 descriptors per entry, max 2 per burst, transmit header limit 224
+ena: offload: tx 0x3 (ipv4 l3 csum 1, ipv4 l4 csum part 1 full 0, ipv6 l4 csum part 0 full 0, tso v4 0 v6 0), rx supported 0x7, rx enabled 0x0
+ena: transmit checksum offload: advertising 0x1
+ena: wide LLQ caps the transmit depth at 512 (was 1024)
+ena: ring sizes: 512 tx, 1024 rx (device limits: 512 tx, 8192 rx, queue-ext feature yes)
+ena: MTU 9001 (device limit 9216, stack ceiling 9001, chain capacity 15090); a frame may span 8 receive and 8 transmit descriptors; receive refill batch 128
+msix configured for 2 vectors
+msi-x enabled: 0x800b
+ena: using MSI-X, management irq 1021, io irq 1022
+io-interrupt: vector 1021 assigned to CPU 4
+io-interrupt: vector 1022 assigned to CPU 5
+ena: interrupt moderation feature not advertised
+ena: interrupt delay resolution 0; rx interval 20, tx interval 50
+ena: first management interrupt delivered
+ena: link is up
+ena: creating queue pair: tx depth 512, rx depth 1024, msix vector 1, tx placement device, tx max header 224
+ena: cdesc sizes: tx 8 bytes (2 words), rx 16 bytes (4 words)
+ena: set device MTU 9001 after queue creation (matching what we report to the stack): ok
+ena: watchdog running: 6000 ms keep-alive timeout, 1000 ms cadence
+ena: attached [build Nov  2 2026 18:08:01]; interrupts so far: 13 management, 0 io
+/dev/net/ena/0: transmit checksum offload 0x1
+register_domain(4, link)
+ena: first io interrupt delivered
+package_daemon: [9775938:    75] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+package_daemon: [9777751:    75] The latest volume state is also the currently active one
+package_daemon: [9779303:    75] Volume::InitPackages Requesting delayed first boot processing for packages dir /boot/system/packages.
+package_daemon: [9781297:    75] Volume::InitialVerify((nil), (nil))
+register_domain(9, unix)
+package_daemon: [9791239:    75] Volume::InitialVerify(): volume at "/boot/system" is consistent
+package_daemon: [9792431:    75] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+package_daemon: [9794212:    75] The latest volume state is also the currently active one
+package_daemon: [9795805:    75] Volume::InitPackages Requesting delayed first boot processing for packages dir /boot/home/config/packages.
+package_daemon: [9797307:    75] Volume::InitialVerify(0x6db56fc200, (nil))
+package_daemon: [9798590:    75] Volume::InitialVerify(): volume at "/boot/home/config" is consistent
+package_daemon: [9799807:    75] Starting First Boot Processing for 27 packages in /boot/system/packages/administrative/transaction-1.
+package_daemon: [9801255:    75] Doing first boot processing #0 for package noto-20170202_bootstrap-7-any.hpkg.
+package_daemon: [9802570:    75] Doing first boot processing #1 for package amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg.
+package_daemon: [9803973:    75] Doing first boot processing #2 for package haiku-r1~beta6_hrev59996-1-arm64.hpkg.
+package_daemon: [9805339:    75] Doing first boot processing #3 for package grep-3.11_bootstrap-1-arm64.hpkg.
+package_daemon: [9806648:    75] Doing first boot processing #4 for package ca_root_certificates-2026_07_16-1-any.hpkg.
+package_daemon: [9808062:    75] Doing first boot processing #5 for package zstd-1.5.7-1-arm64.hpkg.
+package_daemon: [9809281:    75] Doing first boot processing #6 for package bash-5.3_bootstrap-1-arm64.hpkg.
+package_daemon: [9810581:    75] Doing first boot processing #7 for package libpng16-1.6.53-1-arm64.hpkg.
+package_daemon: [9811825:    75] Doing first boot processing #8 for package icu74-74.1_bootstrap-1-arm64.hpkg.
+package_daemon: [9813142:    75] Doing first boot processing #9 for package debeos_cloudwatch-0.1.0-1-arm64.hpkg.
+package_daemon: [9814505:    75] Doing first boot processing #10 for package less-668_bootstrap-1-arm64.hpkg.
+package_daemon: [9815816:    75] Doing first boot processing #11 for package gawk-3.1.8_bootstrap-2-arm64.hpkg.
+package_daemon: [9817122:    75] Doing first boot processing #12 for package freetype-2.6.3_bootstrap-1-arm64.hpkg.
+package_daemon: [9818507:    75] Doing first boot processing #13 for package tiff-4.7.0-1-arm64.hpkg.
+package_daemon: [9819729:    75] Doing first boot processing #14 for package gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg.
+package_daemon: [9821288:    75] Doing first boot processing #15 for package ncurses6-6.6-1-arm64.hpkg.
+package_daemon: [9822502:    75] Doing first boot processing #16 for package haiku_datatranslators-r1~beta6_hrev59996-1-arm64.hpkg.
+package_daemon: [9824082:    75] Doing first boot processing #17 for package sed-4.9_bootstrap-1-arm64.hpkg.
+package_daemon: [9825386:    75] Doing first boot processing #18 for package openssl3-3.5.9-2-arm64.hpkg.
+package_daemon: [9826640:    75] Doing first boot processing #19 for package zlib-1.3.2-1-arm64.hpkg.
+package_daemon: [9827857:    75] Doing first boot processing #20 for package jasper-2.0.33-2-arm64.hpkg.
+package_daemon: [9829103:    75] Doing first boot processing #21 for package openssh-10.4p1-1-arm64.hpkg.
+package_daemon: [9830358:    75] Doing first boot processing #22 for package findutils-4.9.0_bootstrap-1-arm64.hpkg.
+package_daemon: [9831749:    75] Doing first boot processing #23 for package openssl3_man-3.5.9-2-any.hpkg.
+package_daemon: [9833023:    75] Doing first boot processing #24 for package libjpeg_turbo-3.1.4.1-1-arm64.hpkg.
+package_daemon: [9834378:    75] Doing first boot processing #25 for package coreutils-9.9_bootstrap-1-arm64.hpkg.
+package_daemon: [9835750:    75] Doing first boot processing #26 for package haiku_loader-r1~beta6_hrev59996-1-arm64.hpkg.
+Launching x-vnd.haiku-media_server failed: No such file or directory
+slab memory manager: created area 0xffff00003e001000 (6010)
+Running first login script /boot/system/boot/first-login/default_deskbar_items.sh ...
+framebuffer: init_hardware()
+devfs: scanned "graphics": mode 2 -> 2, latched 2, probe No error, legacy No error
+RemoteHWInterface: session cookie for port 10900 published in /boot/system/settings/remote_desktop/session_cookie.10900
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/wacom
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+ps2_hid: init_hardware
+ps2_hid: init_driver
+module: Search for bus_managers/ps2/v1 failed.
+devfs: scanned "input": mode 2 -> 2, latched 2, probe No error, legacy No error
+AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+load addon /boot/system/add-ons/input_server/filters/screen_saver failed
+slab memory manager: created area 0xffff00003e801000 (9028)
+slab memory manager: created area 0xffff00003f001000 (12485)
+ena: rx offload observed after 1000 frames: l4_csum_checked 790, l4_csum_err 0, l3_proto==ipv4 995, l3_csum_err 0 (rx_supported 0x7, rx_enabled 0x0)
+
