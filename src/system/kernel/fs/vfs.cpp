@@ -5043,9 +5043,13 @@ vfs_new_io_context(const io_context* parentContext, bool purgeCloseOnExec)
 	ReadLocker parentLocker;
 
 	size_t tableSize;
+	uint32 tableSizeHardLimit = MAX_FD_TABLE_SIZE;
+	uint32 monitorsHardLimit = MAX_NODE_MONITORS;
 	if (parentContext != NULL) {
 		parentLocker.SetTo(parentContext->lock, false);
 		tableSize = parentContext->table_size;
+		tableSizeHardLimit = parentContext->table_size_hard_limit;
+		monitorsHardLimit = parentContext->max_monitors_hard_limit;
 	} else
 		tableSize = DEFAULT_FD_TABLE_SIZE;
 
@@ -5105,7 +5109,11 @@ vfs_new_io_context(const io_context* parentContext, bool purgeCloseOnExec)
 	}
 
 	list_init(&context->node_monitors);
-	context->max_monitors = DEFAULT_NODE_MONITORS;
+	context->max_monitors = min_c(DEFAULT_NODE_MONITORS, monitorsHardLimit);
+
+	// hard limits are inherited, like the rest of the resource limits
+	context->table_size_hard_limit = tableSizeHardLimit;
+	context->max_monitors_hard_limit = monitorsHardLimit;
 
 	return context;
 }
@@ -5326,7 +5334,7 @@ vfs_getrlimit(int resource, struct rlimit* rlp)
 			ReadLocker _(context->lock);
 
 			rlp->rlim_cur = context->table_size;
-			rlp->rlim_max = MAX_FD_TABLE_SIZE;
+			rlp->rlim_max = context->table_size_hard_limit;
 			return 0;
 		}
 
@@ -5336,13 +5344,40 @@ vfs_getrlimit(int resource, struct rlimit* rlp)
 			ReadLocker _(context->lock);
 
 			rlp->rlim_cur = context->max_monitors;
-			rlp->rlim_max = MAX_NODE_MONITORS;
+			rlp->rlim_max = context->max_monitors_hard_limit;
 			return 0;
 		}
 
 		default:
 			return B_BAD_VALUE;
 	}
+}
+
+
+/*!	Checks a new soft and hard limit for a resource whose current hard limit
+	is \a hardLimit and whose system-wide maximum is \a maxLimit, and returns
+	the new hard limit in \a _newHardLimit.
+	Any process may lower its hard limit, only the superuser may raise it, and
+	the soft limit must not exceed it. RLIM_INFINITY (which is also
+	RLIM_SAVED_MAX) as hard limit stands for the system-wide maximum.
+*/
+static status_t
+check_new_rlimit(const struct rlimit* rlp, uint32 hardLimit, uint32 maxLimit,
+	uint32* _newHardLimit)
+{
+	rlim_t newHardLimit = rlp->rlim_max;
+	if (newHardLimit == RLIM_INFINITY)
+		newHardLimit = maxLimit;
+
+	if (newHardLimit > maxLimit
+		|| (newHardLimit > hardLimit && geteuid() != 0)) {
+		return B_NOT_ALLOWED;
+	}
+	if (rlp->rlim_cur > newHardLimit)
+		return B_BAD_VALUE;
+
+	*_newHardLimit = newHardLimit;
+	return B_OK;
 }
 
 
@@ -5354,22 +5389,36 @@ vfs_setrlimit(int resource, const struct rlimit* rlp)
 
 	switch (resource) {
 		case RLIMIT_NOFILE:
-			/* TODO: check getuid() */
-			if (rlp->rlim_max != RLIM_SAVED_MAX
-				&& rlp->rlim_max != MAX_FD_TABLE_SIZE)
-				return B_NOT_ALLOWED;
+		{
+			struct io_context* context = get_current_io_context(false);
+			WriteLocker locker(context->lock);
+				// vfs_resize_fd_table() locks it again, which is fine
 
-			return vfs_resize_fd_table(get_current_io_context(false),
-				rlp->rlim_cur);
+			uint32 hardLimit;
+			status_t status = check_new_rlimit(rlp,
+				context->table_size_hard_limit, MAX_FD_TABLE_SIZE, &hardLimit);
+			if (status == B_OK)
+				status = vfs_resize_fd_table(context, rlp->rlim_cur);
+			if (status == B_OK)
+				context->table_size_hard_limit = hardLimit;
+			return status;
+		}
 
 		case RLIMIT_NOVMON:
-			/* TODO: check getuid() */
-			if (rlp->rlim_max != RLIM_SAVED_MAX
-				&& rlp->rlim_max != MAX_NODE_MONITORS)
-				return B_NOT_ALLOWED;
+		{
+			struct io_context* context = get_current_io_context(false);
+			WriteLocker locker(context->lock);
 
-			return resize_monitor_table(get_current_io_context(false),
-				rlp->rlim_cur);
+			uint32 hardLimit;
+			status_t status = check_new_rlimit(rlp,
+				context->max_monitors_hard_limit, MAX_NODE_MONITORS,
+				&hardLimit);
+			if (status == B_OK)
+				status = resize_monitor_table(context, rlp->rlim_cur);
+			if (status == B_OK)
+				context->max_monitors_hard_limit = hardLimit;
+			return status;
+		}
 
 		default:
 			return B_BAD_VALUE;
