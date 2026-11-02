@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: prep-install-control-override-retry
+# instance: i-0e5e2ac0aac74c660   region: us-west-2   transport: SSM (script started detached with nohup, output file polled)
+# start: 20261102T145458Z   end: 20261102T145558Z
+# script sha256: 519ccfaeb660904d7eb064bcb2de3c9789bcc4296dba205dced5cdcfdb3c1ba2
+# ---- script ----
+# | URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/hg897b/out/base/random?<PRESIGNED>
+# | SHA=b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df
+# | # Keep bus_managers/random/device_v1 referenced while the new file lands, so
+# | # the running kernel never binds it to a second image (issue 940).
+# | nohup sh -c 'exec 9</dev/urandom; exec sleep 999999' > /dev/null 2>&1 &
+# | sleep 2
+# | ps | grep "sleep 999999" | grep -v grep
+# | echo "before install:"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | D=/boot/home/config/non-packaged/add-ons/kernel/bus_managers
+# | mkdir -p $D && cd /boot/home && python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "random.fix")' "$URL"
+# | echo "$SHA  random.fix" | sha256sum -c || exit 5
+# | cp random.fix $D/random.new && chmod 755 $D/random.new && mv $D/random.new $D/random
+# | ls -la $D; sha256sum $D/random
+# | sync; sleep 5; sync
+# | for k in 1 2 3; do head -c 16 /dev/urandom | od -An -tx1; sleep 5; done
+# | echo "after install (running kernel must still use the packaged image only):"; listimage 1 | grep -E "random" | sed 's/  */ /g'
+# | sync; sleep 10; sync
+# | echo SETUP_DONE
+# ---- raw output ----
+JOB_RC=0
+/boot/system/bin/sleep 999999                        416        1    0    0 
+/boot/system/bin/sleep 999999                        480        1    0    0 
+before install:
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+random.fix: OK
+total 30
+drwxr-xr-x 1 baron root  2048 Nov  2 14:55 .
+drwxr-xr-x 1 baron root  2048 Nov  2 14:54 ..
+-rwxr-xr-x 1 baron root 17739 Nov  2 14:55 random
+b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df  /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+ 8b 92 f0 b1 9e e5 c0 0a 8e 57 4d 4e 2b c4 4d e4
+ 73 56 8c 3c 88 77 57 1f 98 6e 0d 84 bb 91 d8 ff
+ 8c 13 7c a0 5d bd 47 07 46 3b 0f 44 2d ad e3 8d
+after install (running kernel must still use the packaged image only):
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+SETUP_DONE

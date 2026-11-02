@@ -1,0 +1,80 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: core-before
+# instance: i-0c332b49b90a6975d   region: us-west-2   transport: SSM (script started detached with nohup, output file polled)
+# start: 20261102T145245Z   end: 20261102T145321Z
+# script sha256: 34e1e82674573c9f7b722bef2f953a0cbefd13c9ae0a5f130b224f9eea6a22f0
+# ---- script ----
+# | pkgman install -y gcc binutils haiku_devel python3.14 2>&1 | tail -2
+# | gcc --version | head -1; command -v as; python3 --version
+# | ARM=before-canonical-ami-03c3545c37f391c1f
+# | R='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/hg897b/repro/random897.c?<PRESIGNED>
+# | set +e
+# | echo "== identity ($ARM)"
+# | uname -v
+# | sha256sum /boot/system/kernel_arm64
+# | sha256sum /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random 2>&1
+# | P=$(ls /boot/system/packages/haiku-*.hpkg | head -1); rm -rf /tmp/px && mkdir /tmp/px && package extract -C /tmp/px $P add-ons/kernel/bus_managers/random && sha256sum /tmp/px/add-ons/kernel/bus_managers/random | sed 's/$/  (packaged copy)/'
+# | echo "loaded random module image:"; listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | echo "== repro"
+# | mkdir -p /boot/home/rep && cd /boot/home/rep
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "random897.c")' "$R"
+# | sha256sum random897.c
+# | gcc -O2 -Wall -o random897 random897.c 2>&1
+# | ./random897; echo "rc=$?"
+# | echo "== python: F_SETFL on a random-device stdin, ioctl errno as Python sees it"
+# | for dev in /dev/random /dev/urandom; do
+# | python3 -I -c 'import errno,fcntl,os,sys,termios
+# | fcntl.fcntl(0, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(0, fcntl.F_GETFL)); print(sys.argv[1], "F_SETFL ok read", len(os.read(0, 64)))
+# | print(sys.argv[1], "isatty", os.isatty(0))
+# | try:
+# |     termios.tcgetattr(0); print(sys.argv[1], "tcgetattr succeeded")
+# | except termios.error as e:
+# |     print(sys.argv[1], "tcgetattr", e, "ENOTTY" if e.args[0] == errno.ENOTTY else "")' $dev < $dev
+# | done
+# | echo CORE_DONE
+# ---- raw output ----
+JOB_RC=0
+[system] Cleaning up ...
+[system] Done.
+gcc (2026_03_29) 13.3.0
+/boot/system/bin/as
+Python 3.14.7
+== identity (before-canonical-ami-03c3545c37f391c1f)
+hrev59996 Nov  2 2026 00:47:18
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+sha256sum: /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random: No such file or directory
+bc296db6c84e7540634e2b4c5aa5e13fc6107896ae89d29980cfef3e25ed599b  /tmp/px/add-ons/kernel/bus_managers/random  (packaged copy)
+loaded random module image:
+ 216 0xffff000002276000 0xffff000002278000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+== repro
+3a95ea9bbb9105b6bbe5564a6a94e2ece71fba0966e702512dc36afb7b93d93d  random897.c
+FAIL F_SETFL /dev/random (rdonly)   getfl=0x0 clear-NB=General system error set-NB=General system error set-APPEND=General system error restore=General system error
+FAIL F_SETFL /dev/random (rdwr)     getfl=0x2 clear-NB=General system error set-NB=General system error set-APPEND=General system error restore=General system error
+FAIL FIONBIO /dev/random            on=General system error nb=0 read=ok off=General system error nb=0
+FAIL open(O_NONBLOCK) /dev/random   nb=1 read=ok poll=1 revents=0x1 clear-NB=General system error nb=1
+PASS isatty /dev/random             isatty=0 errno=0 (No error)
+FAIL FIONREAD /dev/random           r=-1 errno=-1 (General system error) want ENOTTY
+FAIL unknown ioctl /dev/random      op=0x7e5a1897 r=-1 errno=-1 (General system error) want ENOTTY
+INFO lseek(SEEK_DATA)               r=-1 errno=-1 (General system error)
+FAIL F_SETFL /dev/urandom (rdonly)  getfl=0x0 clear-NB=General system error set-NB=General system error set-APPEND=General system error restore=General system error
+FAIL F_SETFL /dev/urandom (rdwr)    getfl=0x2 clear-NB=General system error set-NB=General system error set-APPEND=General system error restore=General system error
+FAIL FIONBIO /dev/urandom           on=General system error nb=0 read=ok off=General system error nb=0
+FAIL open(O_NONBLOCK) /dev/urandom  nb=1 read=ok poll=1 revents=0x1 clear-NB=General system error nb=1
+PASS isatty /dev/urandom            isatty=0 errno=0 (No error)
+FAIL FIONREAD /dev/urandom          r=-1 errno=-1 (General system error) want ENOTTY
+FAIL unknown ioctl /dev/urandom     op=0x7e5a1897 r=-1 errno=-1 (General system error) want ENOTTY
+INFO lseek(SEEK_DATA)               r=-1 errno=-1 (General system error)
+random897: 12 failed
+rc=12
+== python: F_SETFL on a random-device stdin, ioctl errno as Python sees it
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+    fcntl.fcntl(0, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(0, fcntl.F_GETFL)); print(sys.argv[1], "F_SETFL ok read", len(os.read(0, 64)))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno -1] General system error
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+    fcntl.fcntl(0, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(0, fcntl.F_GETFL)); print(sys.argv[1], "F_SETFL ok read", len(os.read(0, 64)))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno -1] General system error
+CORE_DONE

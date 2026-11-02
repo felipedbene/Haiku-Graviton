@@ -1,0 +1,267 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query string -> <PRESIGNED>
+# evidence: xbuild-and-linux-reference
+# instance: i-0064bf438aae1b9d6   region: us-west-2
+# ssm command: b96480fc-6a72-465e-91a1-2a8e9c16e995 (agent status: Success)
+# start: 20261102T144926Z   end: 20261102T145141Z   rc: 0
+# script sha256: 82ca3909f2873fa5d2df9ebd1b611af7014a54825dc3f2fdb26ddeaf7a7b515f
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root SOURCE_DATE_EPOCH=1793480000
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897b
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | mkdir -p /opt/d && cd /opt/d
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch fix/897-random-enotty https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg log -3 --format='%H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | for V in base:4ef344f5fa fix:92fac23709; do
+# | 	N=${V%%:*}; C=${V#*:}
+# | 	git -C /opt/d/hg checkout -q -f $C && git -C /opt/d/hg log -1 --format="variant $N: %H %s"
+# | 	git -C /opt/d/hg diff --stat 4ef344f5fa -- src
+# | 	s=$(date +%s); jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 random > jam-$N.log 2>&1; rc=$?
+# | 	echo "JAM_RC($N)=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$N.log)"
+# | 	grep -E "error:|warning:" jam-$N.log | grep -i random | head -20
+# | 	tail -3 jam-$N.log
+# | 	F=objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
+# | 	ls -l $F && mkdir -p /opt/d/out/$N && cp $F /opt/d/out/$N/random
+# | 	cross-tools-arm64/bin/aarch64-unknown-haiku-true
+# | done
+# | cd /opt/d/out && sha256sum */random | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive /opt/d/out $B/out/ && aws s3 ls --recursive $B/out/
+# | set +e
+# | export HOME=/root
+# | uname -a; grep PRETTY /etc/os-release
+# | cd /opt/d/hg && git log -1 --format='%H %s' && sha256sum graviton/scripts/random897.c
+# | mkdir -p /tmp/r && cd /tmp/r
+# | gcc -O2 -Wall -o random897 /opt/d/hg/graviton/scripts/random897.c && ./random897; echo "rc=$?"
+# | echo "== F_SETFL on a /dev/urandom stdin (what tools/test.py does after every test)"
+# | for dev in /dev/random /dev/urandom; do
+# | python3 -I -c 'import fcntl,os,sys
+# | for fd in (0,):
+# |     try:
+# |         fcntl.fcntl(fd, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(fd, fcntl.F_GETFL)); print(sys.argv[1], "fd", fd, "F_SETFL ok", "read", len(os.read(fd, 16)))
+# |     except OSError as e:
+# |         print(sys.argv[1], "fd", fd, "F_SETFL", type(e).__name__, e)' $dev < $dev
+# | done
+# | echo "== node 24.21.0 tools/test.py with stdin /dev/urandom"
+# | cd /tmp/r
+# | curl -sSfL -o node.tar.xz https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz && tar -xJf node.tar.xz
+# | NODE=/tmp/r/node-v24.21.0-linux-arm64/bin/node; $NODE --version
+# | curl -sSfL -o src.tgz https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+# | echo "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  src.tgz" | sha256sum -c || exit 5
+# | tar -xzf src.tgz node-v24.21.0/test node-v24.21.0/tools
+# | cd node-v24.21.0
+# | T="parallel/test-fs-stat parallel/test-fs-access parallel/test-fs-exists parallel/test-stream-readable-to-web"
+# | s=$(date +%s)
+# | python3 tools/test.py --shell=$NODE -j 2 -t 120 -p tap $T < /dev/urandom > /tmp/urandom.tap 2>&1
+# | echo "urandom-stdin rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -cE "^(ok|not ok) " /tmp/urandom.tap | sed 's/^/tap result lines: /'
+# | grep -E "^(ok|not ok) |^# |Error|Traceback" /tmp/urandom.tap | head -20
+# | tail -5 /tmp/urandom.tap
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+apt rc=0
+92fac237098c58bddc6b5fc202166f2ebab4b7a7 tests: random897 checks the errno of rejected ioctls
+33c41f9595fc3a66fd159fdf781841ed598825f2 random: answer unknown ioctls with B_DEV_INVALID_IOCTL
+4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+variant base: 4ef344f5fa939afeae9c18310d81968b3225d094 ipv6: allow 65536-byte packets, so TCP over ::1 stops stalling with 0 bytes (#955)
+JAM_RC(base)=0 wall=13s failed=0
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+...updated 862 target(s)...
+-rwxr-xr-x 1 root root 17739 Nov  2 14:51 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
+variant fix: 92fac237098c58bddc6b5fc202166f2ebab4b7a7 tests: random897 checks the errno of rejected ioctls
+ src/add-ons/kernel/bus_managers/random/driver.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+JAM_RC(fix)=0 wall=5s failed=0
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random 
+...updated 2 target(s)...
+-rwxr-xr-x 1 root root 17739 Nov  2 14:51 objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
+b57c2482ceee93f4bdd8de43ed8156bbda8f8bfbf670f1a3d8e1628a94a442df  base/random
+57a6af5a6d45b5077a80af4b3bc1a44a02e485f183ba121aa2b848004a36db84  fix/random
+2026-11-02 14:51:25        155 hg897b/out/SHA256SUMS
+2026-11-02 14:51:26      17739 hg897b/out/base/random
+2026-11-02 14:51:26      17739 hg897b/out/fix/random
+Linux ip-10-128-6-56 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+92fac237098c58bddc6b5fc202166f2ebab4b7a7 tests: random897 checks the errno of rejected ioctls
+3a95ea9bbb9105b6bbe5564a6a94e2ece71fba0966e702512dc36afb7b93d93d  graviton/scripts/random897.c
+PASS F_SETFL /dev/random (rdonly)   getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS F_SETFL /dev/random (rdwr)     getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS FIONBIO /dev/random            on=ok nb=1 read=ok off=ok nb=0
+PASS open(O_NONBLOCK) /dev/random   nb=1 read=ok poll=1 revents=0x1 clear-NB=ok nb=0
+PASS isatty /dev/random             isatty=0 errno=22 (Invalid argument)
+PASS FIONREAD /dev/random           r=-1 errno=22 (Invalid argument) want EINVAL
+PASS unknown ioctl /dev/random      op=0x7e5a1897 r=-1 errno=22 (Invalid argument) want EINVAL
+PASS F_SETFL /dev/urandom (rdonly)  getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS F_SETFL /dev/urandom (rdwr)    getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS FIONBIO /dev/urandom           on=ok nb=1 read=ok off=ok nb=0
+PASS open(O_NONBLOCK) /dev/urandom  nb=1 read=ok poll=1 revents=0x1 clear-NB=ok nb=0
+PASS isatty /dev/urandom            isatty=0 errno=22 (Invalid argument)
+PASS FIONREAD /dev/urandom          r=-1 errno=22 (Invalid argument) want EINVAL
+PASS unknown ioctl /dev/urandom     op=0x7e5a1897 r=-1 errno=22 (Invalid argument) want EINVAL
+random897: 0 failed
+rc=0
+== F_SETFL on a /dev/urandom stdin (what tools/test.py does after every test)
+/dev/random fd 0 F_SETFL ok read 16
+/dev/urandom fd 0 F_SETFL ok read 16
+== node 24.21.0 tools/test.py with stdin /dev/urandom
+v24.21.0
+src.tgz: OK
+urandom-stdin rc=0 wall=3s
+tap result lines: 4
+ok 1 parallel/test-fs-access # skip as this test should not be run as `root`
+ok 2 parallel/test-fs-stat
+ok 3 parallel/test-fs-exists
+ok 4 parallel/test-stream-readable-to-web
+  ---
+  duration_ms: 2307.04000
+  ...
+
+All tests passed.
+# ---- raw stderr ----
++ export DEBIAN_FRONTEND=noninteractive HOME=/root SOURCE_DATE_EPOCH=1793480000
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897b
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo apt rc=0
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ mkdir -p /opt/d
++ cd /opt/d
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch fix/897-random-enotty https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg log -3 --format=%H %s
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
++ nproc
++ ../configure --cross-tools-prefix /opt/d/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ N=base
++ C=4ef344f5fa
++ git -C /opt/d/hg checkout -q -f 4ef344f5fa
++ git -C /opt/d/hg log -1 --format=variant base: %H %s
++ git -C /opt/d/hg diff --stat 4ef344f5fa -- src
++ date +%s
++ s=1793631066
++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 random
++ rc=0
++ date +%s
++ grep -cE \.\.\.failed jam-base.log
++ echo JAM_RC(base)=0 wall=13s failed=0
++ grep -E error:|warning: jam-base.log
++ grep -i random
++ head -20
++ tail -3 jam-base.log
++ F=objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ ls -l objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ mkdir -p /opt/d/out/base
++ cp objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random /opt/d/out/base/random
++ cross-tools-arm64/bin/aarch64-unknown-haiku-true
+/var/lib/amazon/ssm/i-0064bf438aae1b9d6/document/orchestration/b96480fc-6a72-465e-91a1-2a8e9c16e995/awsrunShellScript/0.awsrunShellScript/_script.sh: 28: cross-tools-arm64/bin/aarch64-unknown-haiku-true: not found
++ N=fix
++ C=92fac23709
++ git -C /opt/d/hg checkout -q -f 92fac23709
++ git -C /opt/d/hg log -1 --format=variant fix: %H %s
++ git -C /opt/d/hg diff --stat 4ef344f5fa -- src
++ date +%s
++ s=1793631079
++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 random
++ rc=0
++ date +%s
++ grep -cE \.\.\.failed jam-fix.log
++ echo JAM_RC(fix)=0 wall=5s failed=0
++ grep -E error:|warning: jam-fix.log
++ grep -i random
++ head -20
++ tail -3 jam-fix.log
++ F=objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ ls -l objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random
++ mkdir -p /opt/d/out/fix
++ cp objects/haiku/arm64/release/add-ons/kernel/bus_managers/random/random /opt/d/out/fix/random
++ cross-tools-arm64/bin/aarch64-unknown-haiku-true
+/var/lib/amazon/ssm/i-0064bf438aae1b9d6/document/orchestration/b96480fc-6a72-465e-91a1-2a8e9c16e995/awsrunShellScript/0.awsrunShellScript/_script.sh: 28: cross-tools-arm64/bin/aarch64-unknown-haiku-true: not found
++ cd /opt/d/out
++ sha256sum base/random fix/random
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive /opt/d/out s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897b/out/
++ aws s3 ls --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/hg897b/out/
++ set +e
++ export HOME=/root
++ uname -a
++ grep PRETTY /etc/os-release
++ cd /opt/d/hg
++ git log -1 --format=%H %s
++ sha256sum graviton/scripts/random897.c
++ mkdir -p /tmp/r
++ cd /tmp/r
++ gcc -O2 -Wall -o random897 /opt/d/hg/graviton/scripts/random897.c
++ ./random897
++ echo rc=0
++ echo == F_SETFL on a /dev/urandom stdin (what tools/test.py does after every test)
++ python3 -I -c import fcntl,os,sys
+for fd in (0,):
+    try:
+        fcntl.fcntl(fd, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(fd, fcntl.F_GETFL)); print(sys.argv[1], "fd", fd, "F_SETFL ok", "read", len(os.read(fd, 16)))
+    except OSError as e:
+        print(sys.argv[1], "fd", fd, "F_SETFL", type(e).__name__, e) /dev/random
++ python3 -I -c import fcntl,os,sys
+for fd in (0,):
+    try:
+        fcntl.fcntl(fd, fcntl.F_SETFL, ~os.O_NONBLOCK & fcntl.fcntl(fd, fcntl.F_GETFL)); print(sys.argv[1], "fd", fd, "F_SETFL ok", "read", len(os.read(fd, 16)))
+    except OSError as e:
+        print(sys.argv[1], "fd", fd, "F_SETFL", type(e).__name__, e) /dev/urandom
++ echo == node 24.21.0 tools/test.py with stdin /dev/urandom
++ cd /tmp/r
++ curl -sSfL -o node.tar.xz https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz
++ tar -xJf node.tar.xz
++ NODE=/tmp/r/node-v24.21.0-linux-arm64/bin/node
++ /tmp/r/node-v24.21.0-linux-arm64/bin/node --version
++ curl -sSfL -o src.tgz https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
++ echo 622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  src.tgz
++ sha256sum -c
++ tar -xzf src.tgz node-v24.21.0/test node-v24.21.0/tools
++ cd node-v24.21.0
++ T=parallel/test-fs-stat parallel/test-fs-access parallel/test-fs-exists parallel/test-stream-readable-to-web
++ date +%s
++ s=1793631091
++ python3 tools/test.py --shell=/tmp/r/node-v24.21.0-linux-arm64/bin/node -j 2 -t 120 -p tap parallel/test-fs-stat parallel/test-fs-access parallel/test-fs-exists parallel/test-stream-readable-to-web
++ date +%s
++ echo urandom-stdin rc=0 wall=3s
++ grep -cE ^(ok|not ok)  /tmp/urandom.tap
++ sed s/^/tap result lines: /
++ grep -E ^(ok|not ok) |^# |Error|Traceback /tmp/urandom.tap
++ head -20
++ tail -5 /tmp/urandom.tap
