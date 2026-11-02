@@ -1,0 +1,84 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-trunk
+# instance: i-076f99e0a9f4b5976   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T151028Z   end: 20261102T151116Z   rc: 0
+# script sha256: b6961d2630782bc019d2a529fda71b120de205d9d6c48eb0f40781aaea391b43
+# ---- script ----
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | mkdir -p $D/protocols /boot/home/tw && cd /boot/home/tw
+# | pkgman install -y nodejs24 python3.14 gcc binutils haiku_devel 2>&1 | tail -2
+# | node --version; python3 --version; gcc --version | head -1
+# | python3 -I - <<'PY'
+# | import hashlib, tarfile, urllib.request
+# | u = "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
+# | urllib.request.urlretrieve(u, "node-v24.21.0.tar.gz")
+# | h = hashlib.sha256(open("node-v24.21.0.tar.gz", "rb").read()).hexdigest()
+# | assert h == "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777", h
+# | with tarfile.open("node-v24.21.0.tar.gz") as t:
+# |     m = [x for x in t.getmembers() if x.name.split("/")[1:2] in (["test"], ["tools"])]
+# |     t.extractall(".", members=m, filter="data")
+# | print("node tarball sha256 OK, extracted", len(m))
+# | PY
+# | rm -f node-v24.21.0.tar.gz
+# | echo "--- overrides before"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | fetch() {
+# | 	python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$1" "$2" || exit 4
+# | }
+# | fetch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tcpw/mod/trunk/stack?<PRESIGNED>' stack.mod
+# | echo 'df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  stack.mod' | sha256sum -c || exit 5
+# | cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | fetch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tcpw/mod/trunk/ipv4?<PRESIGNED>' ipv4.mod
+# | echo '5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  ipv4.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | fetch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tcpw/mod/trunk/ipv6?<PRESIGNED>' ipv6.mod
+# | echo '7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  ipv6.mod' | sha256sum -c || exit 5
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6
+# | fetch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tcpw/mod/trunk/tcp?<PRESIGNED>' tcp.mod
+# | echo '5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  tcp.mod' | sha256sum -c || exit 5
+# | cp tcp.mod $D/protocols/tcp.new && mv $D/protocols/tcp.new $D/protocols/tcp
+# | fetch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tcpw/mod/trunk/udp?<PRESIGNED>' udp.mod
+# | echo '7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  udp.mod' | sha256sum -c || exit 5
+# | cp udp.mod $D/protocols/udp.new && mv $D/protocols/udp.new $D/protocols/udp
+# | fetch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tcpw/mod/trunk/unix?<PRESIGNED>' unix.mod
+# | echo '883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  unix.mod' | sha256sum -c || exit 5
+# | cp unix.mod $D/protocols/unix.new && mv $D/protocols/unix.new $D/protocols/unix
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | echo "--- packaged"
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/protocols/* /boot/system/kernel_arm64
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+v24.21.0
+Python 3.14.7
+gcc (2026_03_29) 13.3.0
+node tarball sha256 OK, extracted 12111
+--- overrides before
+stack.mod: OK
+ipv4.mod: OK
+ipv6.mod: OK
+tcp.mod: OK
+udp.mod: OK
+unix.mod: OK
+--- overrides after
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- packaged
+41d989d30a9389d1f54ea14aa7d2b860b6f63ac5bd49746e45813dd7fa68d392  /boot/system/add-ons/kernel/network/stack
+598939307eda99d637dacb2e1ca9d5d8cdd54eaae83dd93a670865b938b77bf2  /boot/system/add-ons/kernel/network/protocols/icmp
+79f042caabd0790bbec4724c740c179297898d742084de4c91f4ad4acf71289b  /boot/system/add-ons/kernel/network/protocols/icmp6
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  /boot/system/add-ons/kernel/network/protocols/ipv4
+cd4b81a95f6c984d1d84eed4d03fc875b040f64b0ddc37565db212fe2a84ec28  /boot/system/add-ons/kernel/network/protocols/ipv6
+5d1fdabccc1ad4159f2145b0299e785bef94a22ece12687e4933b4490488d80c  /boot/system/add-ons/kernel/network/protocols/tcp
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  /boot/system/add-ons/kernel/network/protocols/udp
+a785cbd003afecda86cd9312863263679e23e3868bf0d88087bf1ed0cec865b9  /boot/system/add-ons/kernel/network/protocols/unix
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  /boot/system/kernel_arm64
+STAGE-DONE

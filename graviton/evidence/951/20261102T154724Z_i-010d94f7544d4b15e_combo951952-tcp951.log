@@ -1,0 +1,67 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: combo951952-tcp951
+# instance: i-010d94f7544d4b15e   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T154724Z   end: 20261102T154742Z   rc: 0
+# script sha256: d0116829578535f51c14abf18f4729652602235ab8f3241eeda3563bbb813339
+# ---- script ----
+# | set -u
+# | cd /boot/home/tw || exit 3
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | OWN=$(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\).*/\1/p' | head -1)
+# | echo "own address: $OWN"
+# | echo 'LyoKICogdGNwOTUxLmMgLS0gaXNzdWUgOTUxOiBhIFRDUCBzZWdtZW50IHRoZSBJUCBsYXllciByZWZ1c2VzIG11c3Qgbm90IHN0YWxsCiAqIHRoZSBjb25uZWN0aW9uIGZvcmV2ZXIuIFR3byB3YXlzIHRvIG1ha2UgdGhlIElQIGxheWVyIHJlZnVzZSBzZWdtZW50cyBvZgogKiBhbiBlc3RhYmxpc2hlZCBsb29wYmFjayBjb25uZWN0aW9uOgogKgogKiAgIG10dSAgICB0aGUgaW50ZXJmYWNlIE1UVSBpcyBsb3dlcmVkIHVuZGVyIHRoZSBjb25uZWN0aW9uLCBzbyBzZWdtZW50cwogKiAgICAgICAgICBzaXplZCBmb3IgdGhlIG9sZCBvbmUgYXJlIHJlZnVzZWQgKEVNU0dTSVpFLCBhcyBJUF9ET05URlJBRyBpcwogKiAgICAgICAgICBzZXQpLiBMaW51eCByZS1zaXplcyBpdHMgc2VnbWVudHMgYW5kIGNhcnJpZXMgb24uCiAqICAgZG93biAgIHRoZSBpbnRlcmZhY2UgaXMgdGFrZW4gZG93biBmb3IgMiBzLCBzbyBldmVyeSBzZWdtZW50IGlzIHJlZnVzZWQsCiAqICAgICAgICAgIHRoZW4gYnJvdWdodCBiYWNrIHVwLiBUaGUgY29ubmVjdGlvbiBtdXN0IHJlY292ZXIgYnkgaXRzZWxmLgogKgogKiBVc2FnZTogdGNwOTUxIDxhZGRyZXNzPiA8bXR1fGRvd24+IDxsb3dlci1jbWQ+IDxyZXN0b3JlLWNtZD4KICogVGhlIGNvbW1hbmRzIHJ1biB0aHJvdWdoIHN5c3RlbSgpLiBQbGFpbiBQT1NJWDsgYm90aCBlbmRzIGxpdmUgaW4gb25lCiAqIHBvbGwoKSBsb29wLCBldmVyeSBieXRlIGlzIGNoZWNrZWQsIGV2ZXJ5IHdhaXQgaGFzIGEgZGVhZGxpbmUuIEV4aXQgc3RhdHVzCiAqIGlzIHRoZSBudW1iZXIgb2YgRkFJTHMuCiAqLwojaW5jbHVkZSA8YXJwYS9pbmV0Lmg+CiNpbmNsdWRlIDxlcnJuby5oPgojaW5jbHVkZSA8ZmNudGwuaD4KI2luY2x1ZGUgPG5ldGluZXQvaW4uaD4KI2luY2x1ZGUgPG5ldGluZXQvdGNwLmg+CiNpbmNsdWRlIDxwb2xsLmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RkbGliLmg+CiNpbmNsdWRlIDxzdHJpbmcuaD4KI2luY2x1ZGUgPHN5cy9zb2NrZXQuaD4KI2luY2x1ZGUgPHN5cy90aW1lLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KCnN0YXRpYyBkb3VibGUKbm93KCkKewoJc3RydWN0IHRpbWV2YWwgdDsKCWdldHRpbWVvZmRheSgmdCwgTlVMTCk7CglyZXR1cm4gdC50dl9zZWMgKyB0LnR2X3VzZWMgLyAxZTY7Cn0KCnN0YXRpYyB1bnNpZ25lZCBjaGFyCnBhdHRlcm4oc2l6ZV90IG9mZnNldCkKewoJcmV0dXJuICh1bnNpZ25lZCBjaGFyKSgob2Zmc2V0ICogMjY1NDQzNTc2MXUpID4+IDEzKTsKfQoKLyogTW92ZXMgYHRvdGFsYCBieXRlcyBmcm9tIGBvdXRgIHRvIGBpbmAgKG5vbi1ibG9ja2luZyksIGRlYWRsaW5lIGBsaW1pdGAKICogc2Vjb25kcy4gUmV0dXJucyB0aGUgYnl0ZXMgZGVsaXZlcmVkIGFuZCB2ZXJpZmllZC4gYG1pZHdheWAgaXMgcnVuIG9uY2UsCiAqIGFmdGVyIGB0cmlnZ2VyYCBieXRlcyBoYXZlIGJlZW4gd3JpdHRlbi4gKi8Kc3RhdGljIHNpemVfdAp0cmFuc2ZlcihpbnQgb3V0LCBpbnQgaW4sIHNpemVfdCB0b3RhbCwgZG91YmxlIGxpbWl0LCBzaXplX3QgdHJpZ2dlciwKCWNvbnN0IGNoYXIqIG1pZHdheSwgc2l6ZV90KiBjb3JydXB0KQp7CglzdGF0aWMgdW5zaWduZWQgY2hhciBidWZmZXJbNjU1MzZdOwoJc2l6ZV90IHNlbnQgPSAwLCByZWNlaXZlZCA9IDA7CglpbnQgdHJpZ2dlcmVkID0gbWlkd2F5ID09IE5VTEw7Cglkb3VibGUgZW5kID0gbm93KCkgKyBsaW1pdDsKCSpjb3JydXB0ID0gMDsKCgl3aGlsZSAocmVjZWl2ZWQgPCB0b3RhbCAmJiBub3coKSA8IGVuZCkgewoJCXN0cnVjdCBwb2xsZmQgcFsyXSA9IHsKCQkJeyBpbiwgUE9MTElOLCAwIH0sCgkJCXsgb3V0LCBzZW50IDwgdG90YWwgPyBQT0xMT1VUIDogMCwgMCB9LAoJCX07CgkJcG9sbChwLCAyLCAxMDApOwoJCWlmIChzZW50IDwgdG90YWwgJiYgKHBbMV0ucmV2ZW50cyAmIFBPTExPVVQpICE9IDApIHsKCQkJc2l6ZV90IGNodW5rID0gdG90YWwgLSBzZW50OwoJCQlpZiAoY2h1bmsgPiBzaXplb2YoYnVmZmVyKSkKCQkJCWNodW5rID0gc2l6ZW9mKGJ1ZmZlcik7CgkJCWZvciAoc2l6ZV90IGkgPSAwOyBpIDwgY2h1bms7IGkrKykKCQkJCWJ1ZmZlcltpXSA9IHBhdHRlcm4oc2VudCArIGkpOwoJCQlzc2l6ZV90IG4gPSBzZW5kKG91dCwgYnVmZmVyLCBjaHVuaywgMCk7CgkJCWlmIChuID4gMCkKCQkJCXNlbnQgKz0gbjsKCQkJZWxzZSBpZiAobiA8IDAgJiYgZXJybm8gIT0gRUFHQUlOICYmIGVycm5vICE9IEVXT1VMREJMT0NLKSB7CgkJCQlwcmludGYoIiAgc2VuZDogJXNcbiIsIHN0cmVycm9yKGVycm5vKSk7CgkJCQlicmVhazsKCQkJfQoJCX0KCQlpZiAoIXRyaWdnZXJlZCAmJiBzZW50ID49IHRyaWdnZXIpIHsKCQkJdHJpZ2dlcmVkID0gMTsKCQkJaW50IHN0YXR1cyA9IHN5c3RlbShtaWR3YXkpOwoJCQlwcmludGYoIiAgWyUuM2Ygc10gcmFuICclcycgKHN0YXR1cyAlZCkgYXQgJXp1IHNlbnQsICV6dSByZWNlaXZlZFxuIiwKCQkJCWxpbWl0IC0gKGVuZCAtIG5vdygpKSwgbWlkd2F5LCBzdGF0dXMsIHNlbnQsIHJlY2VpdmVkKTsKCQl9CgkJaWYgKChwWzBdLnJldmVudHMgJiAoUE9MTElOIHwgUE9MTEVSUiB8IFBPTExIVVApKSAhPSAwKSB7CgkJCXNzaXplX3QgbiA9IHJlY3YoaW4sIGJ1ZmZlciwgc2l6ZW9mKGJ1ZmZlciksIDApOwoJCQlpZiAobiA+IDApIHsKCQkJCWZvciAoc3NpemVfdCBpID0gMDsgaSA8IG47IGkrKykgewoJCQkJCWlmIChidWZmZXJbaV0gIT0gcGF0dGVybihyZWNlaXZlZCArIGkpKQoJCQkJCQkoKmNvcnJ1cHQpKys7CgkJCQl9CgkJCQlyZWNlaXZlZCArPSBuOwoJCQl9IGVsc2UgaWYgKG4gPT0gMCkgewoJCQkJcHJpbnRmKCIgIHJlY3Y6IHVuZXhwZWN0ZWQgRU9GXG4iKTsKCQkJCWJyZWFrOwoJCQl9IGVsc2UgaWYgKGVycm5vICE9IEVBR0FJTiAmJiBlcnJubyAhPSBFV09VTERCTE9DSykgewoJCQkJcHJpbnRmKCIgIHJlY3Y6ICVzXG4iLCBzdHJlcnJvcihlcnJubykpOwoJCQkJYnJlYWs7CgkJCX0KCQl9Cgl9CglyZXR1cm4gcmVjZWl2ZWQ7Cn0KCnN0YXRpYyBpbnQKc29ja2V0X2Vycm9yKGludCBzKQp7CglpbnQgZXJyb3IgPSAwOwoJc29ja2xlbl90IGxlbmd0aCA9IHNpemVvZihlcnJvcik7CglnZXRzb2Nrb3B0KHMsIFNPTF9TT0NLRVQsIFNPX0VSUk9SLCAmZXJyb3IsICZsZW5ndGgpOwoJcmV0dXJuIGVycm9yOwp9CgppbnQKbWFpbihpbnQgYXJnYywgY2hhcioqIGFyZ3YpCnsKCWlmIChhcmdjICE9IDUpIHsKCQlmcHJpbnRmKHN0ZGVyciwgInVzYWdlOiAlcyA8YWRkcmVzcz4gPG10dXxkb3duPiA8bG93ZXI+IDxyZXN0b3JlPlxuIiwKCQkJYXJndlswXSk7CgkJcmV0dXJuIDEwMDsKCX0KCWNvbnN0IGNoYXIqIGhvc3QgPSBhcmd2WzFdOwoJY29uc3QgY2hhciogbW9kZSA9IGFyZ3ZbMl07CglpbnQgZmFpbHVyZXMgPSAwOwoKCXN0cnVjdCBzb2NrYWRkcl9pbiBhZGRyZXNzOwoJbWVtc2V0KCZhZGRyZXNzLCAwLCBzaXplb2YoYWRkcmVzcykpOwoJYWRkcmVzcy5zaW5fZmFtaWx5ID0gQUZfSU5FVDsKCWluZXRfcHRvbihBRl9JTkVULCBob3N0LCAmYWRkcmVzcy5zaW5fYWRkcik7CglpbnQgbGlzdGVuZXIgPSBzb2NrZXQoQUZfSU5FVCwgU09DS19TVFJFQU0sIDApOwoJc29ja2xlbl90IGxlbmd0aCA9IHNpemVvZihhZGRyZXNzKTsKCWlmIChiaW5kKGxpc3RlbmVyLCAoc3RydWN0IHNvY2thZGRyKikmYWRkcmVzcywgbGVuZ3RoKSAhPSAwCgkJfHwgbGlzdGVuKGxpc3RlbmVyLCAxKSAhPSAwCgkJfHwgZ2V0c29ja25hbWUobGlzdGVuZXIsIChzdHJ1Y3Qgc29ja2FkZHIqKSZhZGRyZXNzLCAmbGVuZ3RoKSAhPSAwKSB7CgkJcHJpbnRmKCJzZXR1cDogJXNcbiIsIHN0cmVycm9yKGVycm5vKSk7CgkJcmV0dXJuIDEwMDsKCX0KCWludCBjbGllbnQgPSBzb2NrZXQoQUZfSU5FVCwgU09DS19TVFJFQU0sIDApOwoJaWYgKGNvbm5lY3QoY2xpZW50LCAoc3RydWN0IHNvY2thZGRyKikmYWRkcmVzcywgbGVuZ3RoKSAhPSAwKSB7CgkJcHJpbnRmKCJjb25uZWN0OiAlc1xuIiwgc3RyZXJyb3IoZXJybm8pKTsKCQlyZXR1cm4gMTAwOwoJfQoJaW50IHNlcnZlciA9IGFjY2VwdChsaXN0ZW5lciwgTlVMTCwgTlVMTCk7CglmY250bChjbGllbnQsIEZfU0VURkwsIE9fTk9OQkxPQ0spOwoJZmNudGwoc2VydmVyLCBGX1NFVEZMLCBPX05PTkJMT0NLKTsKCglpbnQgbWF4U2VnbWVudCA9IDA7Cglzb2NrbGVuX3Qgb3B0aW9uTGVuZ3RoID0gc2l6ZW9mKG1heFNlZ21lbnQpOwoJZ2V0c29ja29wdChzZXJ2ZXIsIElQUFJPVE9fVENQLCBUQ1BfTUFYU0VHLCAmbWF4U2VnbWVudCwgJm9wdGlvbkxlbmd0aCk7CglwcmludGYoIiVzICVzOiBUQ1BfTUFYU0VHICVkXG4iLCBob3N0LCBtb2RlLCBtYXhTZWdtZW50KTsKCglzaXplX3QgY29ycnVwdDsKCWNvbnN0IHNpemVfdCB3YXJtID0gMSA8PCAyMDsKCWRvdWJsZSBzdGFydCA9IG5vdygpOwoJc2l6ZV90IGdvdCA9IHRyYW5zZmVyKHNlcnZlciwgY2xpZW50LCB3YXJtLCAxMCwgMCwgTlVMTCwgJmNvcnJ1cHQpOwoJcHJpbnRmKCIlLTM2cyAlcyAgJXp1LyV6dSBpbiAlLjNmIHMsIGNvcnJ1cHQgJXp1XG4iLCAid2FybS11cCAxIE1pQiIsCgkJZ290ID09IHdhcm0gJiYgY29ycnVwdCA9PSAwID8gIlBBU1MiIDogIkZBSUwiLCBnb3QsIHdhcm0sCgkJbm93KCkgLSBzdGFydCwgY29ycnVwdCk7CglmYWlsdXJlcyArPSBnb3QgIT0gd2FybSB8fCBjb3JydXB0ICE9IDA7CgoJY29uc3Qgc2l6ZV90IHRvdGFsID0gOCA8PCAyMDsKCXN0YXJ0ID0gbm93KCk7Cglnb3QgPSB0cmFuc2ZlcihzZXJ2ZXIsIGNsaWVudCwgdG90YWwsIDMwLCAyNTYgKiAxMDI0LCBhcmd2WzNdLCAmY29ycnVwdCk7Cglkb3VibGUgZWxhcHNlZCA9IG5vdygpIC0gc3RhcnQ7CgljaGFyIG5hbWVbNjRdOwoJc25wcmludGYobmFtZSwgc2l6ZW9mKG5hbWUpLCAiOCBNaUIgYWNyb3NzICclcyciLCBtb2RlKTsKCXByaW50ZigiJS0zNnMgJXMgICV6dS8lenUgaW4gJS4zZiBzLCBjb3JydXB0ICV6dSwgU09fRVJST1IgJWQvJWRcbiIsIG5hbWUsCgkJZ290ID09IHRvdGFsICYmIGNvcnJ1cHQgPT0gMCA/ICJQQVNTIiA6ICJGQUlMIiwgZ290LCB0b3RhbCwgZWxhcHNlZCwKCQljb3JydXB0LCBzb2NrZXRfZXJyb3Ioc2VydmVyKSwgc29ja2V0X2Vycm9yKGNsaWVudCkpOwoJZmFpbHVyZXMgKz0gZ290ICE9IHRvdGFsIHx8IGNvcnJ1cHQgIT0gMDsKCglvcHRpb25MZW5ndGggPSBzaXplb2YobWF4U2VnbWVudCk7CglnZXRzb2Nrb3B0KHNlcnZlciwgSVBQUk9UT19UQ1AsIFRDUF9NQVhTRUcsICZtYXhTZWdtZW50LCAmb3B0aW9uTGVuZ3RoKTsKCXByaW50ZigiICBhZnRlcjogc2VuZGVyIFRDUF9NQVhTRUcgJWRcbiIsIG1heFNlZ21lbnQpOwoKCWludCBzdGF0dXMgPSBzeXN0ZW0oYXJndls0XSk7CglwcmludGYoIiAgcmFuICclcycgKHN0YXR1cyAlZClcbiIsIGFyZ3ZbNF0sIHN0YXR1cyk7CgoJLyogQSBmcmVzaCBjb25uZWN0aW9uIGFmdGVyIHRoZSByZXN0b3JlIG11c3Qgd29yayBhcyB3ZWxsLiAqLwoJc3RhcnQgPSBub3coKTsKCWludCBjbGllbnQyID0gc29ja2V0KEFGX0lORVQsIFNPQ0tfU1RSRUFNLCAwKTsKCWludCBvayA9IGNvbm5lY3QoY2xpZW50MiwgKHN0cnVjdCBzb2NrYWRkciopJmFkZHJlc3MsIGxlbmd0aCkgPT0gMDsKCWludCBzZXJ2ZXIyID0gb2sgPyBhY2NlcHQobGlzdGVuZXIsIE5VTEwsIE5VTEwpIDogLTE7Cglnb3QgPSAwOwoJaWYgKHNlcnZlcjIgPj0gMCkgewoJCWZjbnRsKGNsaWVudDIsIEZfU0VURkwsIE9fTk9OQkxPQ0spOwoJCWZjbnRsKHNlcnZlcjIsIEZfU0VURkwsIE9fTk9OQkxPQ0spOwoJCWdvdCA9IHRyYW5zZmVyKHNlcnZlcjIsIGNsaWVudDIsIHdhcm0sIDEwLCAwLCBOVUxMLCAmY29ycnVwdCk7Cgl9CglwcmludGYoIiUtMzZzICVzICAlenUvJXp1IGluICUuM2Ygc1xuIiwgImZyZXNoIGNvbm5lY3Rpb24gMSBNaUIiLAoJCWdvdCA9PSB3YXJtICYmIGNvcnJ1cHQgPT0gMCA/ICJQQVNTIiA6ICJGQUlMIiwgZ290LCB3YXJtLAoJCW5vdygpIC0gc3RhcnQpOwoJZmFpbHVyZXMgKz0gZ290ICE9IHdhcm0gfHwgY29ycnVwdCAhPSAwOwoKCXByaW50ZigiRkFJTFMgJWRcbiIsIGZhaWx1cmVzKTsKCXJldHVybiBmYWlsdXJlczsKfQo=' | base64 -d > tcp951.c && gcc -O2 -Wall -o tcp951 tcp951.c -lnetwork || exit 6; sha256sum tcp951.c tcp951
+# | ifconfig loop | grep MTU
+# | echo "=== mtu: loop MTU 65536 -> 1500 mid-transfer"
+# | ./tcp951 127.0.0.1 mtu "ifconfig loop mtu 1500" "ifconfig loop mtu 65536"; echo "exit=$?"
+# | ifconfig loop | grep MTU
+# | echo "=== down: loop down for 2 s mid-transfer"
+# | ./tcp951 127.0.0.1 down "ifconfig loop down; sleep 2; ifconfig loop up" "ifconfig loop up"; echo "exit=$?"
+# | ifconfig loop | grep -E 'MTU|inet'
+# ---- raw output ----
+Haiku ip-10-128-15-110.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 00:47:18 arm64 other Haiku
+--- non-packaged overrides
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+bee07190362e0c849505433af54f553572e0ab75b706fc1a4649eeb96497ddc1  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2199 0xffff0000024d6000 0xffff0000024f8000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2219 0xffff000002452000 0xffff00000245a000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2220 0xffff00000245b000 0xffff000002466000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2221 0xffff0000020f1000 0xffff000002103000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2225 0xffff000002104000 0xffff00000210f000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2385 0xffff0000023cd000 0xffff0000023db000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+own address: 10.128.15.110
+e6114e2bdfde25f92cb9ab8022f44f2a561b1a65d6ebea043382eb6da79b3780  tcp951.c
+22e111720374323e151e80b23dffa386fd60bfab7213a9626364ce7b8595a424  tcp951
+	MTU: 65536, Metric: 0, up loopback link
+=== mtu: loop MTU 65536 -> 1500 mid-transfer
+127.0.0.1 mtu: TCP_MAXSEG 65495
+warm-up 1 MiB                        PASS  1048576/1048576 in 0.002 s, corrupt 0
+  [0.022 s] ran 'ifconfig loop mtu 1500' (status 0) at 262144 sent, 64687 received
+8 MiB across 'mtu'                   PASS  8388608/8388608 in 0.155 s, corrupt 0, SO_ERROR 0/0
+  after: sender TCP_MAXSEG 65495
+  ran 'ifconfig loop mtu 65536' (status 0)
+fresh connection 1 MiB               PASS  1048576/1048576 in 0.002 s
+FAILS 0
+exit=0
+	MTU: 65536, Metric: 0, up loopback link
+=== down: loop down for 2 s mid-transfer
+127.0.0.1 down: TCP_MAXSEG 65495
+warm-up 1 MiB                        PASS  1048576/1048576 in 0.002 s, corrupt 0
+  [2.047 s] ran 'ifconfig loop down; sleep 2; ifconfig loop up' (status 0) at 262144 sent, 64687 received
+8 MiB across 'down'                  PASS  8388608/8388608 in 2.061 s, corrupt 0, SO_ERROR 0/0
+  after: sender TCP_MAXSEG 65495
+  ran 'ifconfig loop up' (status 0)
+fresh connection 1 MiB               PASS  1048576/1048576 in 0.002 s
+FAILS 0
+exit=0
+	inet addr: 127.0.0.1, Mask: 255.0.0.0
+	inet6 addr: ::1, Prefix Length: 128
+	MTU: 65536, Metric: 0, up loopback link

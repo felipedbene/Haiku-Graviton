@@ -1,0 +1,67 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-0e3292f9d574c8ea3   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T150618Z   end: 20261102T150741Z   rc: 0
+# script sha256: 32c845e1b3f1e476d530a8a0e4e2b9031bc3e18f11ed8aea7e7bb7da05136c53
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/tcpw
+# | cd /opt/tw/hg/generated || exit 1
+# | git -C .. fetch -q --depth 80 origin graviton
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/tw/$patch || return 1
+# | 		sha256sum /opt/tw/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/tw/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/tcp/' | head -20
+# | 	mkdir -p /opt/tw/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/tw/out/$label/$t && sha256sum /opt/tw/out/$label/$t | sed "s|/opt/tw/out/||"
+# | 		aws s3 cp --quiet /opt/tw/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build trunk origin/graviton none stack ipv4 ipv6 tcp udp unix
+# | build trunk2 origin/graviton none stack ipv4 ipv6 tcp udp unix
+# | build f946v1 origin/graviton 946-v1.patch tcp
+# ---- raw output ----
+JAM trunk ref=origin/graviton head=4ef344f5 patch=none rc=0 wall=16s failed=0 warnings=122
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  trunk/stack
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  trunk/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  trunk/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  trunk/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  trunk/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  trunk/unix
+JAM trunk2 ref=origin/graviton head=4ef344f5 patch=none rc=0 wall=9s failed=0 warnings=2
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  trunk2/stack
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  trunk2/ipv4
+7acfdcf98e376b8eba45d307938bdfa8ef39ed4d48cccf9efe1bd5f9fcb65c2c  trunk2/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  trunk2/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  trunk2/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  trunk2/unix
+ed316b43432f47a3a83cec7772f70b099f9319aafc9fb8a08f918abf5f9e5b36  /opt/tw/946-v1.patch
+ README.md                                          | 184 +++++---------
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp   |  17 ++
+ src/tests/kits/locale/CollatorTest.cpp             | 270 ++++++++++++++-------
+ 3 files changed, 264 insertions(+), 207 deletions(-)
+JAM f946v1 ref=origin/graviton head=4ef344f5 patch=946-v1.patch rc=0 wall=5s failed=0 warnings=0
+f6e915a8676bb0f772bff5413409ae365846e7f489d28a5a434c75ef187d15dd  f946v1/tcp
