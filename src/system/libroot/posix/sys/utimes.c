@@ -9,6 +9,7 @@
 
 #include <errno.h>
 
+#include <fs_interface.h>
 #include <NodeMonitor.h>
 
 #include <errno_private.h>
@@ -25,6 +26,7 @@ _utimes(const char* path, const struct timeval times[2], bool traverseLink)
 {
 	struct stat stat;
 	status_t status;
+	uint32 mask = B_STAT_MODIFICATION_TIME | B_STAT_ACCESS_TIME;
 
 	if (times != NULL) {
 		stat.st_atim.tv_sec = times[0].tv_sec;
@@ -36,11 +38,12 @@ _utimes(const char* path, const struct timeval times[2], bool traverseLink)
 		bigtime_t now = real_time_clock_usecs();
 		stat.st_atim.tv_sec = stat.st_mtim.tv_sec = now / 1000000;
 		stat.st_atim.tv_nsec = stat.st_mtim.tv_nsec = (now % 1000000) * 1000;
+		mask |= B_STAT_TIMES_NOW;
 	}
 
 	// traverseLeafLink == true
 	status = _kern_write_stat(AT_FDCWD, path, traverseLink, &stat,
-		sizeof(struct stat), B_STAT_MODIFICATION_TIME | B_STAT_ACCESS_TIME);
+		sizeof(struct stat), mask);
 
 	RETURN_AND_SET_ERRNO(status);
 }
@@ -98,6 +101,14 @@ utimensat(int fd, const char *path, const struct timespec times[2], int flag)
 		}
 	} else
 		mask |= B_STAT_ACCESS_TIME | B_STAT_MODIFICATION_TIME;
+
+	// Tell the kernel when both times are to be set to the current time:
+	// POSIX lets anyone with write access do that. Anything else that sets a
+	// time, be it explicit or UTIME_NOW for one of the two only, needs the
+	// owner.
+	if (times == NULL
+		|| (times[0].tv_nsec == UTIME_NOW && times[1].tv_nsec == UTIME_NOW))
+		mask |= B_STAT_TIMES_NOW;
 
 	// set the times -- as per spec we even need to do this, if both have
 	// UTIME_OMIT set
