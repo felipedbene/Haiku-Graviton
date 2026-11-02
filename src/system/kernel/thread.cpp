@@ -1454,6 +1454,7 @@ common_getrlimit(int resource, struct rlimit * rlp)
 			rlp->rlim_max = RLIM_INFINITY;
 			return B_OK;
 
+		case RLIMIT_FSIZE:
 		case RLIMIT_NOFILE:
 		case RLIMIT_NOVMON:
 			return vfs_getrlimit(resource, rlp);
@@ -1486,6 +1487,7 @@ common_setrlimit(int resource, const struct rlimit * rlp)
 				return EINVAL;
 			return B_OK;
 
+		case RLIMIT_FSIZE:
 		case RLIMIT_NOFILE:
 		case RLIMIT_NOVMON:
 			return vfs_setrlimit(resource, rlp);

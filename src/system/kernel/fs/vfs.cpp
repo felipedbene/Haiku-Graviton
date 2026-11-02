@@ -5050,8 +5050,13 @@ vfs_new_io_context(const io_context* parentContext, bool purgeCloseOnExec)
 		tableSize = parentContext->table_size;
 		tableSizeHardLimit = parentContext->table_size_hard_limit;
 		monitorsHardLimit = parentContext->max_monitors_hard_limit;
-	} else
+		context->file_size_limit = parentContext->file_size_limit;
+		context->file_size_hard_limit = parentContext->file_size_hard_limit;
+	} else {
 		tableSize = DEFAULT_FD_TABLE_SIZE;
+		context->file_size_limit = RLIM_INFINITY;
+		context->file_size_hard_limit = RLIM_INFINITY;
+	}
 
 	if (vfs_resize_fd_table(context, tableSize) != B_OK) {
 		free(context);
@@ -5348,6 +5353,16 @@ vfs_getrlimit(int resource, struct rlimit* rlp)
 			return 0;
 		}
 
+		case RLIMIT_FSIZE:
+		{
+			struct io_context* context = get_current_io_context(false);
+			ReadLocker _(context->lock);
+
+			rlp->rlim_cur = context->file_size_limit;
+			rlp->rlim_max = context->file_size_hard_limit;
+			return 0;
+		}
+
 		default:
 			return B_BAD_VALUE;
 	}
@@ -5378,6 +5393,20 @@ check_new_rlimit(const struct rlimit* rlp, uint32 hardLimit, uint32 maxLimit,
 
 	*_newHardLimit = newHardLimit;
 	return B_OK;
+}
+
+
+/*!	Returns whether resource limit \a a is greater than \a b. RLIM_INFINITY
+	is greater than any other limit, also than those that are numerically
+	greater (rlim_t is 64 bits wide on 64-bit architectures).
+*/
+static bool
+rlimit_greater(rlim_t a, rlim_t b)
+{
+	if (a == b || b == RLIM_INFINITY)
+		return false;
+
+	return a == RLIM_INFINITY || a > b;
 }
 
 
@@ -5418,6 +5447,25 @@ vfs_setrlimit(int resource, const struct rlimit* rlp)
 			if (status == B_OK)
 				context->max_monitors_hard_limit = hardLimit;
 			return status;
+		}
+
+		case RLIMIT_FSIZE:
+		{
+			struct io_context* context = get_current_io_context(false);
+			WriteLocker locker(context->lock);
+
+			// Any process may lower its hard limit, only the superuser may
+			// raise it.
+			if (rlimit_greater(rlp->rlim_cur, rlp->rlim_max))
+				return B_BAD_VALUE;
+			if (rlimit_greater(rlp->rlim_max, context->file_size_hard_limit)
+				&& geteuid() != 0) {
+				return B_NOT_ALLOWED;
+			}
+
+			context->file_size_limit = rlp->rlim_cur;
+			context->file_size_hard_limit = rlp->rlim_max;
+			return B_OK;
 		}
 
 		default:
@@ -5903,6 +5951,82 @@ file_read(struct file_descriptor* descriptor, off_t pos, void* buffer,
 }
 
 
+/*!	Returns the calling team's RLIMIT_FSIZE soft limit as a file size, or -1
+	if it has none.
+*/
+static off_t
+file_size_limit()
+{
+	rlim_t limit = get_current_io_context(false)->file_size_limit;
+	if (limit == RLIM_INFINITY || limit > (rlim_t)INT64_MAX)
+		return -1;
+
+	return (off_t)limit;
+}
+
+
+/*!	To be returned when a regular file would grow past the calling team's
+	file size limit: POSIX wants the call to fail with EFBIG, and SIGXFSZ to
+	be sent to the thread (its default action kills the team).
+*/
+static status_t
+file_size_limit_exceeded()
+{
+	send_signal(thread_get_current_thread_id(), SIGXFSZ);
+	return B_FILE_TOO_LARGE;
+}
+
+
+/*!	Applies the calling team's file size limit to a write of \a *_length bytes
+	at \a pos through \a descriptor: a write that only partly fits is shortened
+	to the part that does, one of which no byte fits fails.
+*/
+static status_t
+check_file_size_limit(struct file_descriptor* descriptor, off_t pos,
+	size_t* _length)
+{
+	struct vnode* vnode = descriptor->u.vnode;
+	off_t limit = file_size_limit();
+	if (limit < 0 || !S_ISREG(vnode->Type()) || *_length == 0)
+		return B_OK;
+
+	// an O_APPEND write goes to wherever the end of the file is now
+	if ((descriptor->open_mode & O_APPEND) != 0) {
+		struct stat stat;
+		status_t status = vfs_stat_vnode(vnode, &stat);
+		if (status != B_OK)
+			return status;
+		pos = stat.st_size;
+	}
+
+	if (pos >= limit)
+		return file_size_limit_exceeded();
+
+	if (*_length > (uint64)(limit - pos))
+		*_length = limit - pos;
+
+	return B_OK;
+}
+
+
+/*!	Applies the calling team's file size limit to a change of a regular
+	file's size to \a size (truncate(), ftruncate()).
+*/
+static status_t
+check_file_size_limit(struct vnode* vnode, const struct stat* stat,
+	int statMask)
+{
+	if ((statMask & B_STAT_SIZE) == 0 || !S_ISREG(vnode->Type()))
+		return B_OK;
+
+	off_t limit = file_size_limit();
+	if (limit >= 0 && stat->st_size > limit)
+		return file_size_limit_exceeded();
+
+	return B_OK;
+}
+
+
 static status_t
 file_write(struct file_descriptor* descriptor, off_t pos, const void* buffer,
 	size_t* length)
@@ -5918,6 +6042,10 @@ file_write(struct file_descriptor* descriptor, off_t pos, const void* buffer,
 
 	if (!HAS_FS_CALL(vnode, write))
 		return B_READ_ONLY_DEVICE;
+
+	status_t status = check_file_size_limit(descriptor, pos, length);
+	if (status != B_OK)
+		return status;
 
 	return FS_CALL(vnode, write, descriptor->cookie, pos, buffer, length);
 }
@@ -5976,6 +6104,12 @@ file_writev(struct file_descriptor* descriptor, off_t pos,
 	const struct iovec *vecs, int count)
 {
 	FUNCTION(("file_writev: pos %" B_PRIdOFF "\n", pos));
+
+	// Under a file size limit, have the caller write vector by vector through
+	// file_write(), which applies it.
+	if (S_ISREG(descriptor->u.vnode->Type()) && file_size_limit() >= 0)
+		return B_UNSUPPORTED;
+
 	return file_vector_io(descriptor, pos, vecs, count, true);
 }
 
@@ -6931,6 +7065,10 @@ common_write_stat(struct file_descriptor* descriptor, const struct stat* stat,
 	if (!HAS_FS_CALL(vnode, write_stat))
 		return B_READ_ONLY_DEVICE;
 
+	status_t status = check_file_size_limit(vnode, stat, statMask);
+	if (status != B_OK)
+		return status;
+
 	return FS_CALL(vnode, write_stat, stat, statMask);
 }
 
@@ -6967,10 +7105,12 @@ common_path_write_stat(int fd, char* path, bool traverseLeafLink,
 	if (status != B_OK)
 		return status;
 
-	if (HAS_FS_CALL(vnode, write_stat))
+	if (!HAS_FS_CALL(vnode, write_stat))
+		return B_READ_ONLY_DEVICE;
+
+	status = check_file_size_limit(vnode.Get(), stat, statMask);
+	if (status == B_OK)
 		status = FS_CALL(vnode.Get(), write_stat, stat, statMask);
-	else
-		status = B_READ_ONLY_DEVICE;
 
 	return status;
 }

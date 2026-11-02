@@ -17,6 +17,7 @@
 
 #include <dirent.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/select.h>
@@ -62,6 +63,8 @@ typedef struct io_context {
 	uint32		max_monitors;
 	uint32		table_size_hard_limit;		// RLIMIT_NOFILE hard limit
 	uint32		max_monitors_hard_limit;	// RLIMIT_NOVMON hard limit
+	rlim_t		file_size_limit;		// RLIMIT_FSIZE soft limit
+	rlim_t		file_size_hard_limit;	// RLIMIT_FSIZE hard limit
 } io_context;
 
 

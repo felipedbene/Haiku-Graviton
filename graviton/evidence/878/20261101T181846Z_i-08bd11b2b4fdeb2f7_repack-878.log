@@ -1,0 +1,95 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-878
+# instance: i-08bd11b2b4fdeb2f7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T181846Z   end: 20261101T182033Z   rc: 0
+# script sha256: e9f780307a815f52b9692568f674115b47f91335d4a3fcc0831177a940501f96
+# ---- script ----
+# | set -e
+# | echo "repack arm: 878"
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | curl -sSf -o kernel_arm64.new 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/kernel_arm64.878?<PRESIGNED>'
+# | curl -sSf -o libroot.so.new 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/out2/libroot.so.878?<PRESIGNED>'
+# | echo "6c920cc8a73b32de43e7e903003c40fc46e6bcb2c464511d92227ae2a049a803  kernel_arm64.new" | sha256sum -c
+# | echo "638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  libroot.so.new" | sha256sum -c
+# | P="/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg"
+# | sha256sum "$P"
+# | mkdir orig x y
+# | package extract -C orig "$P"
+# | package extract -C x "$P"
+# | echo "installed package: kernel and libroot"; sha256sum orig/kernel_arm64 orig/lib/libroot.so
+# | cat kernel_arm64.new > x/kernel_arm64
+# | cat libroot.so.new > x/lib/libroot.so
+# | package create -C x ../haiku-new.hpkg
+# | package extract -C y ../haiku-new.hpkg
+# | (cd orig && find . -type f -print0 | sort -z | xargs -0 sha256sum) > orig.sums
+# | (cd y && find . -type f -print0 | sort -z | xargs -0 sha256sum) > new.sums
+# | echo "files: $(wc -l < orig.sums) before, $(wc -l < new.sums) after"
+# | echo "--- files whose content differs between the installed and the new package:"
+# | diff orig.sums new.sums | grep '^[<>]' || echo "(none)"
+# | (cd orig && find . | sort) > orig.names; (cd y && find . | sort) > new.names
+# | echo "--- entries added or removed:"; diff orig.names new.names || true
+# | echo "--- attributes of kernel_arm64 and libroot.so, before and after:"
+# | listattr orig/kernel_arm64 orig/lib/libroot.so; listattr y/kernel_arm64 y/lib/libroot.so
+# | ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"
+# | sync
+# | sha256sum "$P"
+# | cd /boot/home && rm -rf rp
+# | sync
+# ---- raw output ----
+repack arm: 878
+kernel_arm64.new: OK
+libroot.so.new: OK
+422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+installed package: kernel and libroot
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  orig/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  orig/lib/libroot.so
+----- Package Info ----------------
+header size:                     80
+heap size:                 20479843
+TOC size:                    324054
+package attributes size:       1100
+total size:                20479923
+-----------------------------------
+files: 3080 before, 3080 after
+--- files whose content differs between the installed and the new package:
+/tmp/ccrun/cc-20261101T181846Z-12046.sh: line 22: diff: command not found
+(none)
+--- entries added or removed:
+/tmp/ccrun/cc-20261101T181846Z-12046.sh: line 24: diff: command not found
+--- attributes of kernel_arm64 and libroot.so, before and after:
+File: orig/kernel_arm64
+        Type       Size  Name                                
+----------------------------------------------------------
+   Mini Icon       256  "BEOS:M:STD_ICON"
+ MIME String        31  "BEOS:APP_SIG"
+        Icon      1024  "BEOS:L:STD_ICON"
+ MIME String        35  "BEOS:TYPE"
+      'APPV'       680  "BEOS:APP_VERSION"
+      'VICN'       420  "BEOS:ICON"
+File: orig/lib/libroot.so
+        Type       Size  Name                                
+----------------------------------------------------------
+ MIME String        35  "BEOS:TYPE"
+      'APPV'       680  "BEOS:APP_VERSION"
+
+3161 bytes total in attributes.
+File: y/kernel_arm64
+        Type       Size  Name                                
+----------------------------------------------------------
+   Mini Icon       256  "BEOS:M:STD_ICON"
+ MIME String        31  "BEOS:APP_SIG"
+        Icon      1024  "BEOS:L:STD_ICON"
+ MIME String        35  "BEOS:TYPE"
+      'APPV'       680  "BEOS:APP_VERSION"
+      'VICN'       420  "BEOS:ICON"
+File: y/lib/libroot.so
+        Type       Size  Name                                
+----------------------------------------------------------
+ MIME String        35  "BEOS:TYPE"
+      'APPV'       680  "BEOS:APP_VERSION"
+
+3161 bytes total in attributes.
+-rw-r--r-- 1 baron root 20479923 Nov  1 18:20 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20644552 Oct 19 21:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+7cd5d836e2ca1a526b8b11ca3bc0dd67f91b62a7863f1a298d86f28067549938  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
