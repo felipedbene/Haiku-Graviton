@@ -1,0 +1,58 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: verify-ctrl
+# instance: i-0f6af2eb371fa0d72   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T013252Z   end: 20261102T013341Z   rc: 1
+# script sha256: 7241d218054288d4a49102bbc2316580d33af7f8b01fa4c1fc5dbb079d970656
+# ---- script ----
+# | # What is this instance running? Kernel and libroot, and how its haiku
+# | # package differs from canonical's, file by file.
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | P="/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg"
+# | sha256sum "$P"
+# | cd /boot/home && rm -rf vf && mkdir vf && cd vf
+# | curl -sSf -o canonical.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/tdeflib/canonical/haiku.hpkg?<PRESIGNED>'
+# | echo "422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  canonical.hpkg" | sha256sum -c
+# | mkdir c a && package extract -C c canonical.hpkg && package extract -C a "$P"
+# | python3 -I - <<'PY'
+# | import hashlib, os
+# | def tree(root):
+# |     out = {}
+# |     for d, dirs, files in os.walk(root):
+# |         for n in dirs + files:
+# |             p = os.path.join(d, n)
+# |             rel = os.path.relpath(p, root)
+# |             if os.path.islink(p):
+# |                 out[rel] = "link:" + os.readlink(p)
+# |             elif os.path.isfile(p):
+# |                 out[rel] = hashlib.sha256(open(p, "rb").read()).hexdigest()
+# |             else:
+# |                 out[rel] = "dir"
+# |     return out
+# | c, a = tree("c"), tree("a")
+# | print("entries: canonical %d, active %d" % (len(c), len(a)))
+# | print("only in canonical:", sorted(set(c) - set(a)))
+# | print("only in active:", sorted(set(a) - set(c)))
+# | diff = sorted(k for k in c if k in a and c[k] != a[k])
+# | print("content differs (%d):" % len(diff))
+# | for k in diff:
+# |     print("  %s  %s -> %s" % (k, c[k][:16], a[k][:16]))
+# | PY
+# | cd /boot/home && rm -rf vf
+# | listimage 1 | grep -E "kernel_arm64|libroot" | head -3
+# | grep -ciE "panic|assert" /var/log/syslog
+# ---- raw output ----
+Haiku ip-10-128-14-252.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+b80ae3fd73b634e79351960dc101e5bb0dcfd84d7e568a34c10ecf2890a58cf9  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+canonical.hpkg: OK
+entries: canonical 3340, active 3340
+only in canonical: []
+only in active: []
+content differs (3):
+  add-ons/kernel/file_systems/bfs  4fde601af2da0fb6 -> fb217722bd181913
+  kernel_arm64  85737000e917732c -> 8be928bd77f3404f
+  lib/libroot.so  638140af0fb2f8e9 -> 6b54b4b5f9e7280e
+    1 0xffff000000000000 0xffff0000001dc000     0          0 kernel_arm64
+0

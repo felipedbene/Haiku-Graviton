@@ -1,0 +1,68 @@
+# evidence: node-ctrl
+# instance: i-0f6af2eb371fa0d72   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T012757Z   end: 20261102T012831Z   rc: 0
+# script sha256: 7e1b821bf0b57701bfc621b1c6f17cd3eb31ad1a0aa269a07ff7a79e92143909
+# ---- script ----
+# | # Node 24.21.0 fs tests only (the tree was missing during run-ctrl)
+# | uname -a; sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | echo "=== node tests"
+# | cd /boot/home/td/node-v24.21.0
+# | echo "$(ls test/parallel | grep -cE '^test-fs-(utimes|stat|promises)') test files match"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap 'parallel/test-fs-utimes*' 'parallel/test-fs-stat*' 'parallel/test-fs-promises*' > /boot/home/td/tap.txt 2>&1
+# | echo "test.py rc=$? wall=$(( $(date +%s) - s ))s"
+# | grep -aE "^(ok|not ok) " /boot/home/td/tap.txt | sed -E 's/^(not ok|ok) [0-9]+ /\1 /' | sort -k2 | uniq
+# | echo "pass=$(grep -ac '^ok ' /boot/home/td/tap.txt) fail=$(grep -ac '^not ok ' /boot/home/td/tap.txt)"
+# ---- raw output ----
+Haiku ip-10-128-14-252.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  /boot/system/kernel_arm64
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  /boot/system/lib/libroot.so
+=== node tests
+45 test files match
+test.py rc=1 wall=16s
+not ok parallel/test-fs-promises
+not ok parallel/test-fs-stat-date
+ok parallel/test-fs-promises-appendfile
+ok parallel/test-fs-promises-exists
+ok parallel/test-fs-promises-file-handle-aggregate-errors
+ok parallel/test-fs-promises-file-handle-append-file
+ok parallel/test-fs-promises-file-handle-chmod
+ok parallel/test-fs-promises-file-handle-close
+ok parallel/test-fs-promises-file-handle-close-errors
+ok parallel/test-fs-promises-file-handle-dispose
+ok parallel/test-fs-promises-file-handle-op-errors
+ok parallel/test-fs-promises-file-handle-pull
+ok parallel/test-fs-promises-file-handle-pullsync
+ok parallel/test-fs-promises-file-handle-read
+ok parallel/test-fs-promises-file-handle-read-worker
+ok parallel/test-fs-promises-file-handle-readFile
+ok parallel/test-fs-promises-file-handle-readLines
+ok parallel/test-fs-promises-file-handle-stat
+ok parallel/test-fs-promises-file-handle-stream
+ok parallel/test-fs-promises-file-handle-sync
+ok parallel/test-fs-promises-file-handle-truncate
+ok parallel/test-fs-promises-file-handle-write
+ok parallel/test-fs-promises-file-handle-writeFile
+ok parallel/test-fs-promises-file-handle-writer
+ok parallel/test-fs-promises-mkdtempDisposable
+ok parallel/test-fs-promises-readfile
+ok parallel/test-fs-promises-readfile-buffer-option
+ok parallel/test-fs-promises-readfile-empty
+ok parallel/test-fs-promises-readfile-with-fd
+ok parallel/test-fs-promises-statfs-validate-path
+ok parallel/test-fs-promises-watch
+ok parallel/test-fs-promises-watch-ignore-function
+ok parallel/test-fs-promises-watch-ignore-glob
+ok parallel/test-fs-promises-watch-ignore-invalid
+ok parallel/test-fs-promises-watch-ignore-mixed
+ok parallel/test-fs-promises-watch-ignore-regexp
+ok parallel/test-fs-promises-watch-iterator
+ok parallel/test-fs-promises-write-optional-params
+ok parallel/test-fs-promises-writefile
+ok parallel/test-fs-stat
+ok parallel/test-fs-stat-abort-test
+ok parallel/test-fs-stat-bigint
+ok parallel/test-fs-statfs
+ok parallel/test-fs-utimes
+ok parallel/test-fs-utimes-y2K38
+pass=43 fail=2

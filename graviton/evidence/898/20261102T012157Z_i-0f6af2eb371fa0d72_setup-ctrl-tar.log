@@ -1,0 +1,31 @@
+# evidence: setup-ctrl-tar
+# instance: i-0f6af2eb371fa0d72   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T012157Z   end: 20261102T012219Z   rc: 0
+# script sha256: 15e4b9b6d76e1365c3e5e7dc71a6579bc1cea1b9ed5bb17e3b5a5c29f61cae09
+# ---- script ----
+# | # setup follow-up: the image has no tar
+# | set -x
+# | pkgman install -y tar 2>&1 | tail -1
+# | cd /boot/home/td && echo "622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  node-v24.21.0.tar.gz" | sha256sum -c || exit 1
+# | tar xzf node-v24.21.0.tar.gz && ls node-v24.21.0 | head -30 && rm -f node-v24.21.0.tar.gz
+# | ls -l atime898; df -k /boot | head -3
+# ---- raw output ----
++ pkgman install -y tar
++ tail -1
+[system] Done.
++ cd /boot/home/td
++ echo '622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  node-v24.21.0.tar.gz'
++ sha256sum -c
+node-v24.21.0.tar.gz: OK
++ tar xzf node-v24.21.0.tar.gz
+tar (child): gzip: Cannot exec: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
++ ls -l atime898
+-rwxr-xr-x 1 baron root 139168 Nov  2 01:21 atime898
++ df -k /boot
++ head -3
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"

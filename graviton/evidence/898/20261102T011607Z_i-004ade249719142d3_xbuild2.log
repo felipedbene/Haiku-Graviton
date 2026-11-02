@@ -1,0 +1,180 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2
+# instance: i-004ade249719142d3   region: us-west-2
+# ssm command: a22a409a-6a83-450c-94e3-5c7166bb411f (agent status: detached)
+# start: 20261102T011607Z   end: 20261102T011646Z   rc: 0   log bytes: 6877
+# script sha256: 7779eaa8123d7f5e651f1db0b1b7e245481b9339fa424cc28d34b7b17602d254
+# ---- script ----
+# | # Build trunk and fix/898-utimes-permissions: kernel_arm64 and libroot.so as the
+# | # revisioned targets the haiku package ships, from a clean system/ object tree,
+# | # revision and __DATE__/__TIME__ pinned to canonical's (method of #928). Plus
+# | # trunk's bfs, which both arms carry (#912 keeps the access time).
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/tdeflib
+# | cd /opt/t && rm -rf out898 canonical && mkdir -p out898 canonical
+# | git -C hg fetch -q origin
+# | aws s3 cp --quiet --recursive $OUT/canonical/ canonical/ && sha256sum canonical/*
+# | cd hg/generated
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | ${X}objcopy -O binary --only-section=_haiku_revision ../../canonical/libroot.so /tmp/rev.bin && REV=$(tr -d '\0' < /tmp/rev.bin)
+# | echo "canonical revision section: '$REV'"; [ -n "$REV" ] || exit 1
+# | export SOURCE_DATE_EPOCH=$(date -u -d '2026-10-19 21:09:42' +%s); echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+# | rm -f haiku-revision build/haiku-revision; ls build/haiku-revision 2>&1
+# | R=objects/haiku/arm64/release/system
+# | build() {	# build <label> <git-ref>
+# | 	git -C .. checkout -q -f "$2" || { echo "CHECKOUT FAILED $2"; return 1; }
+# | 	git -C .. log -1 --format="$1 %H %s"
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION="$REV" "<revisioned>kernel_arm64" "<revisioned>libroot.so" > ../../out898/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' ../../out898/jam-$1.log) updated=$(grep -o 'updated [0-9]* target' ../../out898/jam-$1.log)"
+# | 	grep -E "warning:.*(vfs\.cpp|utimes\.c|utime\.c)" ../../out898/jam-$1.log
+# | 	[ $rc = 0 ] || { tail -30 ../../out898/jam-$1.log; return 1; }
+# | 	cp $R/kernel/revisioned/kernel_arm64 ../../out898/kernel_arm64.$1
+# | 	cp $R/libroot/revisioned/libroot.so ../../out898/libroot.so.$1
+# | 	${X}objcopy -O binary --only-section=_haiku_revision ../../out898/libroot.so.$1 /tmp/r.bin; echo "$1 libroot revision: $(tr -d "\\0" < /tmp/r.bin)"
+# | 	sha256sum ../../out898/kernel_arm64.$1 ../../out898/libroot.so.$1
+# | }
+# | build trunk origin/graviton || exit 1
+# | jam -q -j$(nproc) -sHAIKU_REVISION="$REV" bfs > ../../out898/jam-bfs.log 2>&1; echo "JAM bfs rc=$?"
+# | B=$(find objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs -maxdepth 1 -type f -name bfs | head -1); cp $B ../../out898/bfs.trunk; sha256sum ../../out898/bfs.trunk
+# | build 898 origin/fix/898-utimes-permissions || exit 1
+# | git -C .. diff --stat origin/graviton origin/fix/898-utimes-permissions
+# | git -C .. checkout -q -f origin/graviton
+# | cd ../../out898
+# | for f in kernel_arm64 libroot.so; do echo "$f trunk vs 898: $(cmp -l $f.trunk $f.898 | wc -l) differing bytes"; done
+# | sha256sum kernel_arm64.* libroot.so.* bfs.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive . $OUT/out898/ && aws s3 ls $OUT/out898/ | grep -v jam-
+# ---- raw output ----
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib
++ cd /opt/t
++ rm -rf out898 canonical
++ mkdir -p out898 canonical
++ git -C hg fetch -q origin
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/canonical/ canonical/
++ sha256sum canonical/haiku.hpkg canonical/kernel_arm64 canonical/libroot.so canonical/runtime_loader
+422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  canonical/haiku.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  canonical/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  canonical/libroot.so
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  canonical/runtime_loader
++ cd hg/generated
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision ../../canonical/libroot.so /tmp/rev.bin
+++ tr -d '\0'
++ REV=hrev59996
++ echo 'canonical revision section: '\''hrev59996'\'''
+canonical revision section: 'hrev59996'
++ '[' -n hrev59996 ']'
+++ date -u -d '2026-10-19 21:09:42' +%s
++ export SOURCE_DATE_EPOCH=1792444182
++ SOURCE_DATE_EPOCH=1792444182
++ echo SOURCE_DATE_EPOCH=1792444182
+SOURCE_DATE_EPOCH=1792444182
++ rm -f haiku-revision build/haiku-revision
++ ls build/haiku-revision
+ls: cannot access 'build/haiku-revision': No such file or directory
++ R=objects/haiku/arm64/release/system
++ build trunk origin/graviton
++ git -C .. checkout -q -f origin/graviton
++ git -C .. log -1 '--format=trunk %H %s'
+trunk fe7fef0b47685471f94fce4af712632dc129f86a libroot: keep the current time for UTIME_NOW in utimensat() (#928)
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793582171
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out898/jam-trunk.log
+++ grep -o 'updated [0-9]* target' ../../out898/jam-trunk.log
++ echo 'JAM trunk rc=0 wall=11s failed=0 updated=updated 328 target
+updated 952 target'
+JAM trunk rc=0 wall=11s failed=0 updated=updated 328 target
+updated 952 target
++ grep -E 'warning:.*(vfs\.cpp|utimes\.c|utime\.c)' ../../out898/jam-trunk.log
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out898/kernel_arm64.trunk
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out898/libroot.so.trunk
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision ../../out898/libroot.so.trunk /tmp/r.bin
+++ tr -d '\0'
++ echo 'trunk libroot revision: hrev59996'
+trunk libroot revision: hrev59996
++ sha256sum ../../out898/kernel_arm64.trunk ../../out898/libroot.so.trunk
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  ../../out898/kernel_arm64.trunk
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  ../../out898/libroot.so.trunk
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 bfs
++ echo 'JAM bfs rc=0'
+JAM bfs rc=0
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs -maxdepth 1 -type f -name bfs
+++ head -1
++ B=objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs ../../out898/bfs.trunk
++ sha256sum ../../out898/bfs.trunk
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  ../../out898/bfs.trunk
++ build 898 origin/fix/898-utimes-permissions
++ git -C .. checkout -q -f origin/fix/898-utimes-permissions
++ git -C .. log -1 '--format=898 %H %s'
+898 dc71a76ab6a314a70be9566e63e650cb1ac728ff libroot: tell the kernel when utimensat() sets both times to now
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793582188
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out898/jam-898.log
+++ grep -o 'updated [0-9]* target' ../../out898/jam-898.log
++ echo 'JAM 898 rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target'
+JAM 898 rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target
++ grep -E 'warning:.*(vfs\.cpp|utimes\.c|utime\.c)' ../../out898/jam-898.log
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out898/kernel_arm64.898
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out898/libroot.so.898
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision ../../out898/libroot.so.898 /tmp/r.bin
+++ tr -d '\0'
++ echo '898 libroot revision: hrev59996'
+898 libroot revision: hrev59996
++ sha256sum ../../out898/kernel_arm64.898 ../../out898/libroot.so.898
+02a25b28f6c0fec6fe229064dd9815da07269df7d3c15d53422b35ebc361c10c  ../../out898/kernel_arm64.898
+52119102d6205d951098cff5d36de72447460c2a8a1ed08c507ac3fa47a29005  ../../out898/libroot.so.898
++ git -C .. diff --stat origin/graviton origin/fix/898-utimes-permissions
+ headers/os/drivers/fs_interface.h     |  6 ++++
+ src/system/kernel/fs/vfs.cpp          | 55 +++++++++++++++++++++++++++++++++--
+ src/system/libroot/posix/sys/utimes.c | 13 ++++++++-
+ src/system/libroot/posix/utime.c      |  6 +++-
+ 4 files changed, 76 insertions(+), 4 deletions(-)
++ git -C .. checkout -q -f origin/graviton
++ cd ../../out898
++ for f in kernel_arm64 libroot.so
+++ cmp -l kernel_arm64.trunk kernel_arm64.898
+++ wc -l
+cmp: EOF on kernel_arm64.trunk after byte 2551305
++ echo 'kernel_arm64 trunk vs 898: 933608 differing bytes'
+kernel_arm64 trunk vs 898: 933608 differing bytes
++ for f in kernel_arm64 libroot.so
+++ cmp -l libroot.so.trunk libroot.so.898
+++ wc -l
++ echo 'libroot.so trunk vs 898: 497667 differing bytes'
+libroot.so trunk vs 898: 497667 differing bytes
++ sha256sum kernel_arm64.898 kernel_arm64.trunk libroot.so.898 libroot.so.trunk bfs.trunk
++ tee SHA256SUMS
+02a25b28f6c0fec6fe229064dd9815da07269df7d3c15d53422b35ebc361c10c  kernel_arm64.898
+8be928bd77f3404f0b89f21983a8e83532263d1e6b017f85f77086a10899eba8  kernel_arm64.trunk
+52119102d6205d951098cff5d36de72447460c2a8a1ed08c507ac3fa47a29005  libroot.so.898
+6b54b4b5f9e7280e6ffc2bb433e65efe1396b687029c860050859ef7b853ee91  libroot.so.trunk
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  bfs.trunk
++ aws s3 cp --quiet --recursive . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/out898/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/out898/
++ grep -v jam-
+2026-11-02 01:16:41        408 SHA256SUMS
+2026-11-02 01:16:41     274787 bfs.trunk
+2026-11-02 01:16:41    2551369 kernel_arm64.898
+2026-11-02 01:16:41    2551305 kernel_arm64.trunk
+2026-11-02 01:16:41    1366771 libroot.so.898
+2026-11-02 01:16:41    1366771 libroot.so.trunk
