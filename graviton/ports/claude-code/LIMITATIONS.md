@@ -550,3 +550,15 @@ don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
   weakened.
 - **Evidence:** `evidence/20261101T223330Z_i-09e325e6c72394c08_trunk-bfs-time-resolution-probe.log`,
   `evidence/20261101T223226Z_i-09e325e6c72394c08_trunk-fs-stat-date-repro.log`.
+
+### No hard links on BFS: `link()` fails with EPERM (#882, accepted as a filesystem limit)
+- **What:** `link()` always fails on BFS (the boot volume and `/tmp`). An existing target name
+  gets `EEXIST` as POSIX requires; PR 906 fixed that ordering. Every other call gets `EPERM`,
+  the errno Linux documents for "this filesystem does not support hard links". Node tests that
+  create hard links fail on it, e.g. `parallel/test-fs-promises`, which now reaches the
+  `link()` step (see RESULTS.md, fresh trunk image 7036360701).
+- **Why:** each BFS inode stores its own name and parent directory, and BFS queries and
+  indices depend on that. There is no link count either. Hard links would need an on-disk
+  format change and a rework of the query/index model.
+- **Decision (owner, 2026-11-02):** keep `EPERM`, as on FAT and exFAT. No format change. The
+  affected tests stay failing honestly; they are not skipped or weakened.
