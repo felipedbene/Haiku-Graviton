@@ -1407,6 +1407,14 @@ ipv6_send_routed_data(net_protocol* _protocol, struct net_route* route,
 	if (IN6_IS_ADDR_MULTICAST(&destination.sin6_addr))
 		buffer->msg_flags |= MSG_MCAST;
 
+	// The 16-bit length field counts the payload alone (RFC 8200, section 3),
+	// so a packet may be 65535 bytes plus this header. Limiting the whole
+	// packet to 65535 bytes, as IPv4 has to, refused every full-sized TCP
+	// segment on loopback: its MTU of 65536 makes each one a 65536-byte
+	// packet.
+	if (buffer->size > IPV6_MAXPACKET)
+		return EMSGSIZE;
+
 	uint16 dataLength = buffer->size;
 
 	// Add IPv6 header
@@ -1414,9 +1422,6 @@ ipv6_send_routed_data(net_protocol* _protocol, struct net_route* route,
 	NetBufferPrepend<ip6_hdr> header(buffer);
 	if (header.Status() != B_OK)
 		return header.Status();
-
-	if (buffer->size > 0xffff)
-		return EMSGSIZE;
 
 	uint32 flowinfo = 0;
 		// TODO: fill in the flow id from somewhere
@@ -1614,7 +1619,11 @@ ipv6_receive_data(net_buffer* buffer)
 	// single translate point below.
 	uint8 ecnCodepoint = header.ServiceType() & kIPECNMask;
 
-	uint16 packetLength = header.PayloadLength() + sizeof(ip6_hdr);
+	// Not a uint16: the payload length alone may be 65535, and with the fixed
+	// header a packet can reach 65575 bytes. On loopback (MTU 65536) every
+	// full-sized TCP segment is a 65536-byte packet, which a 16-bit sum
+	// wrapped to 0 and the trim() below then emptied, so it was dropped.
+	uint32 packetLength = header.PayloadLength() + sizeof(ip6_hdr);
 	if (packetLength > buffer->size)
 		return B_BAD_DATA;
 
