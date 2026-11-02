@@ -241,6 +241,9 @@ private:
 	tcp_sequence	fReceiveMaxAdvertised;
 	uint32			fReceiveWindow;
 	uint32			fReceiveMaxSegmentSize;
+	uint32			fReceiveFullSegmentSize;
+		// the size of a full data segment from the peer, as measured in
+		// _AddData(), at most fReceiveMaxSegmentSize: what the ACK rule counts
 	BufferQueue		fReceiveQueue;
 		// #61: now only the out-of-order reorder buffer plus the receive-window
 		// max-bytes scalar. The in-order delivery prefix lives in fReceiveRing.

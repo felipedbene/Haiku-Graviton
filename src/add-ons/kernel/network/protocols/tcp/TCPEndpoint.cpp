@@ -574,6 +574,7 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fReceiveMaxAdvertised(0),
 	fReceiveWindow(socket->receive.buffer_size),
 	fReceiveMaxSegmentSize(TCP_DEFAULT_MAX_SEGMENT_SIZE),
+	fReceiveFullSegmentSize(TCP_DEFAULT_MAX_SEGMENT_SIZE),
 	fReceiveQueue(socket->receive.buffer_size),
 	fReceiveRing(),
 	fPushSequence(0),
@@ -2440,6 +2441,25 @@ TCPEndpoint::_AddData(tcp_segment_header& segment, net_buffer* buffer)
 	// freed there, so cache its size first.
 	const uint32 dataSize = buffer->size;
 
+	// A full-sized segment is what the peer actually sends, which is less
+	// than the MSS we announced: the TCP options it carries -- 12 bytes of
+	// timestamps on every segment -- come out of the MSS (RFC 6691), and its
+	// own path may allow less. Counted in our MSS, two full segments were
+	// 24 bytes short of the "every second full-sized segment" threshold
+	// (RFC 5681 section 4.2), so they were acknowledged only by the delayed
+	// ACK timer: with the two-segment initial congestion window, any
+	// transfer of more than one segment waited the full 100 ms for its
+	// first ACK (#952). So measure it, as Linux does (tcp_measure_rcv_mss()),
+	// capped at the MSS so that the threshold can only come down. A segment
+	// without PSH is not the end of what the peer had queued, so sender
+	// silly window avoidance made it full-sized: it may also lower the
+	// estimate, which keeps up with a path whose MTU shrinks under the
+	// connection. A PSH segment may be any size, so it can only raise it.
+	if (dataSize > 0 && (dataSize > fReceiveFullSegmentSize
+			|| (segment.flags & TCP_FLAG_PUSH) == 0)) {
+		fReceiveFullSegmentSize = min_c(dataSize, fReceiveMaxSegmentSize);
+	}
+
 	if ((segment.flags & TCP_FLAG_FINISH) != 0) {
 		// Remember the position of the finish received flag
 		fFinishReceived = true;
@@ -3307,7 +3327,7 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 			_SendAcknowledge(true);
 	} else if (segmentAction & ACKNOWLEDGE) {
 		if ((fReceiveNext - fLastAcknowledgeSent)
-				>= (fReceiveMaxSegmentSize * 2)) {
+				>= (fReceiveFullSegmentSize * 2)) {
 			if (!_PrepareAcknowledge(false, pendingAcknowledge))
 				_SendAcknowledge();
 		} else
