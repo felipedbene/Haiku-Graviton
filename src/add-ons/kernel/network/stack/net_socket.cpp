@@ -694,6 +694,23 @@ socket_read_avail(net_socket* socket)
 }
 
 
+/*!	Whether a datagram is queued on an atomic-message socket. That makes the
+	socket readable regardless of its size and of SO_RCVLOWAT, as
+	socket_notify() already treats it for a waiter that is blocked when it
+	arrives. An empty datagram adds no bytes to socket_read_avail(), so that
+	cannot answer it.
+*/
+static bool
+socket_message_queued(net_socket* socket)
+{
+	if ((socket->first_info->flags & NET_PROTOCOL_ATOMIC_MESSAGES) == 0
+		|| socket->first_info->message_queued == NULL)
+		return false;
+
+	return socket->first_info->message_queued(socket->first_protocol);
+}
+
+
 ssize_t
 socket_send_avail(net_socket* socket)
 {
@@ -1072,7 +1089,7 @@ socket_request_notification(net_socket* _socket, uint8 event, selectsync* sync)
 		{
 			ssize_t available = socket_read_avail(socket);
 			if ((ssize_t)socket->receive.low_water_mark <= available
-				|| available < B_OK)
+				|| available < B_OK || socket_message_queued(socket))
 				notify_select_event(sync, event);
 			break;
 		}

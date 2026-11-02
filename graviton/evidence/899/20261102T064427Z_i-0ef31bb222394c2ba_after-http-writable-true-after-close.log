@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-http-writable-true-after-close
+# instance: i-0ef31bb222394c2ba   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T064427Z   end: 20261102T064615Z   rc: 0
+# script sha256: 6dfed5f07f78dd46ca2c6c7b09f3805852d6fa3502606ca10f0c12881062f173
+# ---- script ----
+# | cd /boot/home/t899/node-v24.21.0
+# | for run in 1 2 3 4 5 6 7 8; do
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -t 120 -p tap parallel/test-http-writable-true-after-close > /tmp/wtac-$run.tap 2>&1
+# | 	echo "=== alone run $run: rc=$? $(grep -E '^(ok|not ok) ' /tmp/wtac-$run.tap)"
+# | done
+# | for run in 1 2 3; do
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -t 120 -p tap 'parallel/test-http-*' > /tmp/wtacs-$run.tap 2>&1
+# | 	echo "=== http slice run $run: rc=$? ok=$(grep -c '^ok ' /tmp/wtacs-$run.tap) notok=$(grep -c '^not ok ' /tmp/wtacs-$run.tap)"
+# | 	grep -E '^not ok ' /tmp/wtacs-$run.tap
+# | done
+# | echo "=== slice2 failure detail"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/slice2-http.tap | head -80
+# ---- raw output ----
+=== alone run 1: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== alone run 2: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== alone run 3: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== alone run 4: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== alone run 5: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== alone run 6: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== alone run 7: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== alone run 8: rc=1 not ok 1 parallel/test-http-writable-true-after-close
+=== http slice run 1: rc=1 ok=401 notok=1
+not ok 380 parallel/test-http-writable-true-after-close
+=== http slice run 2: rc=1 ok=401 notok=1
+not ok 380 parallel/test-http-writable-true-after-close
+=== http slice run 3: rc=1 ok=401 notok=1
+not ok 380 parallel/test-http-writable-true-after-close
+=== slice2 failure detail
+not ok 380 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 173.73700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/t899/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/t899/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/t899/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...

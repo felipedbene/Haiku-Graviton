@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-branch
+# instance: i-07ebbacc7c65cf797   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T064908Z   end: 20261102T064931Z   rc: 0
+# script sha256: 91b3143cf8ed3b29f0b97ca126266c4ac023366a19572ead3432f42156c8e70a
+# ---- script ----
+# | export HOME=/root
+# | cd /opt/t899/hg/generated || exit 1
+# | git -C .. fetch -q --depth 5 origin fix/899-udp-zero-length-readable || exit 2
+# | git -C .. checkout -q -f --detach FETCH_HEAD || exit 2
+# | git -C .. clean -q -fd -- src headers
+# | git -C .. log -3 --format='%h %s'
+# | M="stack ipv4 ipv6 tcp udp icmp icmp6 unix"
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | sleep 3
+# | for t in $M; do rm -rf "$(dirname $(path_of $t))"; done
+# | jam -q -j32 $M > jam-branch.log 2>&1; rc=$?
+# | echo "JAM branch rc=$rc failed=$(grep -cE '\.\.\.failed' jam-branch.log) warnings=$(grep -c 'warning:' jam-branch.log)"
+# | grep 'warning:' jam-branch.log | grep -v multicast.h | head
+# | for t in $M; do
+# | 	a=$(sha256sum "$(path_of $t)" | cut -d' ' -f1); b=$(sha256sum /opt/t899/out/after/$t | cut -d' ' -f1)
+# | 	[ "$a" = "$b" ] && echo "IDENTICAL $t $a" || echo "DIFFERENT $t branch=$a tested=$b"
+# | done
+# | [ $rc = 0 ] || exit 1
+# ---- raw output ----
+e0e8dc96 tests: add udp899, a check of UDP readability with empty datagrams
+8f843e18 net: report a queued empty datagram to a poll() or select() entered after it
+eaf7d9a1 evidence: issue 873 dual-stack sockets before/after on Graviton
+JAM branch rc=0 failed=0 warnings=2
+IDENTICAL stack df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4
+IDENTICAL ipv4 5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69
+IDENTICAL ipv6 53dacd8c9e98f136dfe5d32e0bfbf1f5bcfec2bb95ab802ee462ab7af9b5e38c
+IDENTICAL tcp 5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff
+IDENTICAL udp 7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c
+IDENTICAL icmp c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7
+IDENTICAL icmp6 4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2
+IDENTICAL unix 883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200

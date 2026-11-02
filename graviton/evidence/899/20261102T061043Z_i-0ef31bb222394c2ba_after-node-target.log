@@ -1,0 +1,71 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-node-target
+# instance: i-0ef31bb222394c2ba   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T061043Z   end: 20261102T061108Z   rc: 1
+# script sha256: f6a76544510d4518e17c5f03434df0dece6d09ab4bc33e7fc43452db3f47721a
+# ---- script ----
+# | cd /boot/home/t899/node-v24.21.0
+# | node --version; pkgman search -i -D nodejs24 2>/dev/null | grep -E '^\S*\s*nodejs24 ' | head -2
+# | listimage 1 2>/dev/null | grep -E 'network/(stack|protocols/)' | awk '{print $NF}' | sort -u
+# | T="parallel/test-dgram-connect-send-empty-array parallel/test-dgram-connect-send-empty-buffer parallel/test-dgram-send-empty-array parallel/test-dgram-send-empty-buffer parallel/test-dgram-connect-send-empty-packet parallel/test-dgram-send-empty-packet"
+# | for t in $T; do [ -f test/${t#*/}.js ] || [ -f test/$t.js ] && echo "present $t" || echo "absent $t"; done
+# | for run in 1 2 3 4 5; do
+# | 	s=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 6 -t 60 -p tap $T > /tmp/target-$run.tap 2>&1
+# | 	echo "=== run $run: rc=$? wall=$(( $(date +%s) - s ))s ok=$(grep -c '^ok ' /tmp/target-$run.tap) notok=$(grep -c '^not ok ' /tmp/target-$run.tap)"
+# | 	grep -E '^(ok|not ok) ' /tmp/target-$run.tap | sed -E 's/^(ok|not ok) [0-9]+ /\1 /' | sed 's/^/  /' | sort -k2
+# | done
+# | echo "=== failure detail, run 1"
+# | awk '/^not ok /{p=1} /^ok /{p=0} p' /tmp/target-1.tap | grep -vE '^\s*$' | head -120
+# ---- raw output ----
+v24.21.0
+<system>    nodejs24  24.21.0-2  arm64
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+present parallel/test-dgram-connect-send-empty-array
+present parallel/test-dgram-connect-send-empty-buffer
+present parallel/test-dgram-send-empty-array
+present parallel/test-dgram-send-empty-buffer
+present parallel/test-dgram-connect-send-empty-packet
+present parallel/test-dgram-send-empty-packet
+=== run 1: rc=0 wall=6s ok=6 notok=0
+  ok parallel/test-dgram-connect-send-empty-array
+  ok parallel/test-dgram-connect-send-empty-buffer
+  ok parallel/test-dgram-connect-send-empty-packet
+  ok parallel/test-dgram-send-empty-array
+  ok parallel/test-dgram-send-empty-buffer
+  ok parallel/test-dgram-send-empty-packet
+=== run 2: rc=0 wall=2s ok=6 notok=0
+  ok parallel/test-dgram-connect-send-empty-array
+  ok parallel/test-dgram-connect-send-empty-buffer
+  ok parallel/test-dgram-connect-send-empty-packet
+  ok parallel/test-dgram-send-empty-array
+  ok parallel/test-dgram-send-empty-buffer
+  ok parallel/test-dgram-send-empty-packet
+=== run 3: rc=0 wall=1s ok=6 notok=0
+  ok parallel/test-dgram-connect-send-empty-array
+  ok parallel/test-dgram-connect-send-empty-buffer
+  ok parallel/test-dgram-connect-send-empty-packet
+  ok parallel/test-dgram-send-empty-array
+  ok parallel/test-dgram-send-empty-buffer
+  ok parallel/test-dgram-send-empty-packet
+=== run 4: rc=0 wall=1s ok=6 notok=0
+  ok parallel/test-dgram-connect-send-empty-array
+  ok parallel/test-dgram-connect-send-empty-buffer
+  ok parallel/test-dgram-connect-send-empty-packet
+  ok parallel/test-dgram-send-empty-array
+  ok parallel/test-dgram-send-empty-buffer
+  ok parallel/test-dgram-send-empty-packet
+=== run 5: rc=0 wall=1s ok=6 notok=0
+  ok parallel/test-dgram-connect-send-empty-array
+  ok parallel/test-dgram-connect-send-empty-buffer
+  ok parallel/test-dgram-connect-send-empty-packet
+  ok parallel/test-dgram-send-empty-array
+  ok parallel/test-dgram-send-empty-buffer
+  ok parallel/test-dgram-send-empty-packet
+=== failure detail, run 1
+failed to run commands: exit status 1

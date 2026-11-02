@@ -1,0 +1,77 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-07ebbacc7c65cf797   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T060041Z   end: 20261102T060203Z   rc: 0
+# script sha256: 18d57a7bf78909df94b6d31f206a305707a5654779dc2221c8f7f82689a9ccf1
+# ---- script ----
+# | export HOME=/root
+# | OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/t899
+# | cd /opt/t899/hg/generated || exit 1
+# | git -C .. fetch -q --depth 1 origin fe7fef0b47685471f94fce4af712632dc129f86a || exit 2
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | objdir_of() { dirname "$(path_of $1)"; }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		git -C .. apply --whitespace=nowarn "$patch" || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	sleep 3
+# | 	for t in "$@"; do rm -rf "$(objdir_of $t)"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'net_socket|link\.cpp|udp\.cpp|ipv4\.cpp|ipv6\.cpp|ProtocolUtilities|net_protocol' | grep -v multicast.h | head -20
+# | 	mkdir -p /opt/t899/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/t899/out/$label/$t && sha256sum /opt/t899/out/$label/$t | sed "s|/opt/t899/out/||"
+# | 	done
+# | 	return $rc
+# | }
+# | aws s3 cp --quiet $OUT/fix.patch /opt/t899/fix.patch && sha256sum /opt/t899/fix.patch
+# | M="stack ipv4 ipv6 tcp udp icmp icmp6 unix"
+# | build canon fe7fef0b47 none $M || exit 1
+# | build before eaf7d9a1ba none $M || exit 1
+# | build after eaf7d9a1ba /opt/t899/fix.patch $M || exit 1
+# | for d in canon before after; do
+# | 	for f in /opt/t899/out/$d/*; do aws s3 cp --quiet "$f" "$OUT/mod/$d/$(basename $f)" || exit 6; done
+# | done
+# | aws s3 ls --recursive $OUT/mod/ | wc -l
+# ---- raw output ----
+c2db9e827bf105aa395881232592a295b72be92fe378b0d19e150e2e6140d663  /opt/t899/fix.patch
+JAM canon ref=fe7fef0b47 head=fe7fef0b patch=none rc=0 wall=22s failed=0 warnings=122
+41d989d30a9389d1f54ea14aa7d2b860b6f63ac5bd49746e45813dd7fa68d392  canon/stack
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  canon/ipv4
+cd4b81a95f6c984d1d84eed4d03fc875b040f64b0ddc37565db212fe2a84ec28  canon/ipv6
+5d1fdabccc1ad4159f2145b0299e785bef94a22ece12687e4933b4490488d80c  canon/tcp
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  canon/udp
+598939307eda99d637dacb2e1ca9d5d8cdd54eaae83dd93a670865b938b77bf2  canon/icmp
+79f042caabd0790bbec4724c740c179297898d742084de4c91f4ad4acf71289b  canon/icmp6
+a785cbd003afecda86cd9312863263679e23e3868bf0d88087bf1ed0cec865b9  canon/unix
+JAM before ref=eaf7d9a1ba head=eaf7d9a1 patch=none rc=0 wall=10s failed=0 warnings=2
+7a8e657953df1809d985fd93d0d259acf8833bfe8cf077e155ab5ec539806cce  before/stack
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  before/ipv4
+d4d8408918a23f5df380d66390920387be39925244a6d2cd87630b663f29e370  before/ipv6
+7638a65d658f4a56e974987da15edf07480d086c39891d2d9e24486a17b3aeb1  before/tcp
+14f077dd6dbccc2c7b02e70ab8fcea11a64ac084d1c70b35f398c51042246e9f  before/udp
+598939307eda99d637dacb2e1ca9d5d8cdd54eaae83dd93a670865b938b77bf2  before/icmp
+79f042caabd0790bbec4724c740c179297898d742084de4c91f4ad4acf71289b  before/icmp6
+a785cbd003afecda86cd9312863263679e23e3868bf0d88087bf1ed0cec865b9  before/unix
+JAM after ref=eaf7d9a1ba head=eaf7d9a1 patch=/opt/t899/fix.patch rc=0 wall=10s failed=0 warnings=2
+df7c54536ab32673ac94ded81e01c75f3676c5a10d797869eda80bb8bca19ac4  after/stack
+5b64042fef0daee4a6013d4a885e0e0e498b7673e13f2e8aa7189447b1665f69  after/ipv4
+53dacd8c9e98f136dfe5d32e0bfbf1f5bcfec2bb95ab802ee462ab7af9b5e38c  after/ipv6
+5ee9083109e5cd8975c94d188227abe002d90131a4fe9bc0b47cd7fe42f4acff  after/tcp
+7e369306ded2c3fa0bf4dc49476ee506e09a1807247867b3c4fc293a3f3d671c  after/udp
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  after/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  after/icmp6
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  after/unix
+24

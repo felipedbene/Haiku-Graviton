@@ -1693,6 +1693,13 @@ udp_read_avail(net_protocol *protocol)
 }
 
 
+bool
+udp_message_queued(net_protocol *protocol)
+{
+	return ((UdpEndpoint *)protocol)->MessageQueued();
+}
+
+
 struct net_domain *
 udp_get_domain(net_protocol *protocol)
 {
@@ -1921,7 +1928,8 @@ net_protocol_module_info sUDPModule = {
 	NULL,		// process_ancillary_data()
 	udp_process_ancillary_data_no_container,
 	NULL,		// send_data_no_buffer()
-	NULL		// read_data_no_buffer()
+	NULL,		// read_data_no_buffer()
+	udp_message_queued
 };
 
 module_dependency module_dependencies[] = {

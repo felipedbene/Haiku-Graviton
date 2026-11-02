@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-other-net-consumers
+# instance: i-07ebbacc7c65cf797   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T064941Z   end: 20261102T064958Z   rc: 0
+# script sha256: e8fbb089e14171ab206252009dd6a4bd77483e58b9649c3f4db0eaaaf6520504
+# ---- script ----
+# | export HOME=/root
+# | cd /opt/t899/hg/generated || exit 1
+# | git -C .. log -1 --format='%h %s'
+# | jam -q -j32 l2cap hci btCoreData ipv6_datagram ethernet_frame loopback_frame arp > jam-others.log 2>&1; rc=$?
+# | echo "JAM others rc=$rc failed=$(grep -cE '\.\.\.failed' jam-others.log) warnings-in-net-headers=$(grep 'warning:' jam-others.log | grep -cE 'net_protocol|ProtocolUtilities')"
+# | tail -3 jam-others.log
+# | exit $rc
+# ---- raw output ----
+e0e8dc96 tests: add udp899, a check of UDP readability with empty datagrams
+JAM others rc=0 failed=0 warnings-in-net-headers=0
+SetVersion1 objects/haiku/arm64/release/bin/network/arp/arp 
+Chmod1 objects/haiku/arm64/release/bin/network/arp/arp 
+...updated 1072 target(s)...
