@@ -2899,6 +2899,21 @@ ensure_debugger_installed()
 void
 _user_debugger(const char *userMessage)
 {
+	Thread* thread = thread_get_current_thread();
+	Team* team = thread->team;
+
+	// abort() raises SIGABRT with the signal blocked before it calls
+	// debugger(), and unblocks it afterwards. So with SIGABRT pending and
+	// blocked, the team is going to die of it: record that, should the
+	// debugger kill the team instead.
+	bool abortPending;
+	{
+		InterruptsSpinLocker locker(team->signal_lock);
+		abortPending = (thread->AllPendingSignals() & thread->sig_block_mask
+			& SIGNAL_TO_MASK(SIGABRT)) != 0;
+	}
+	bool recorded = abortPending && team_set_crash_signal(team, SIGABRT);
+
 	// install the default debugger, if there is none yet
 	status_t error = ensure_debugger_installed();
 	if (error != B_OK) {
@@ -2912,6 +2927,11 @@ _user_debugger(const char *userMessage)
 			dprintf("_user_debugger(): Failed to install debugger. Message is: "
 				"%p (%s)\n", userMessage, strerror(length));
 		}
+
+		// abort() delivers its SIGABRT when we return
+		if (abortPending)
+			return;
+
 		_user_exit_team(1);
 	}
 
@@ -2919,8 +2939,14 @@ _user_debugger(const char *userMessage)
 	debug_debugger_call message;
 	message.message = (void*)userMessage;
 
-	thread_hit_debug_event(B_DEBUGGER_MESSAGE_DEBUGGER_CALL, &message,
-		sizeof(message), true);
+	status_t result = thread_hit_debug_event(B_DEBUGGER_MESSAGE_DEBUGGER_CALL,
+		&message, sizeof(message), true);
+
+	// An error means we were interrupted -- killed -- or there is no debugger
+	// to continue us anymore; then the record has to stay. Only a debugger
+	// that continued us has taken the event off our hands.
+	if (recorded && result >= 0)
+		team_clear_crash_signal(team);
 }
 
 

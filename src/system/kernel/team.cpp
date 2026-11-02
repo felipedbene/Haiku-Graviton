@@ -486,6 +486,7 @@ Team::Team(team_id id, bool kernel)
 
 	// exit status -- setting initialized to false suffices
 	exit.initialized = false;
+	exit.crash_signal = 0;
 
 	B_INITIALIZE_SPINLOCK(&signal_lock);
 
