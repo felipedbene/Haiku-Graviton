@@ -677,6 +677,15 @@ TCPEndpoint::Open()
 	if (fManager == NULL)
 		return EAFNOSUPPORT;
 
+	if (socket->family == AF_INET6) {
+		// An IPv6 socket can carry IPv4 (IPV6_V6ONLY off), and its IPv4
+		// segments are looked up in the IPv4 manager: tcp_receive_data()
+		// needs that one to exist before the first of them arrives.
+		net_domain* ipv4Domain = gStackModule->get_domain(AF_INET);
+		if (ipv4Domain != NULL && get_endpoint_manager(ipv4Domain) == NULL)
+			return ENOBUFS;
+	}
+
 	return B_OK;
 }
 
@@ -770,7 +779,15 @@ TCPEndpoint::Free()
 status_t
 TCPEndpoint::Connect(const sockaddr* address)
 {
-	if (!AddressModule()->is_same_family(address))
+	// An IPv6 socket names an IPv4 peer by its mapped address; the connection
+	// is then carried in the IPv4 domain (see _MoveToFamily()).
+	sockaddr_in ipv4Address;
+	if (socket->family == AF_INET6 && is_ipv4_mapped_address(address)) {
+		if (is_ipv6_only(next))
+			return ENETUNREACH;
+		ipv4_address_from_mapped(address, &ipv4Address);
+		address = (const sockaddr*)&ipv4Address;
+	} else if (address->sa_family != socket->family)
 		return EAFNOSUPPORT;
 
 	MutexLocker locker(fLock);
@@ -795,6 +812,12 @@ TCPEndpoint::Connect(const sockaddr* address)
 		return EISCONN;
 	} else if (fState != CLOSED)
 		return EALREADY;
+
+	if (address->sa_family != Domain()->family) {
+		status_t status = _MoveToFamily(address->sa_family);
+		if (status != B_OK)
+			return status;
+	}
 
 	// consider destination address INADDR_ANY as INADDR_LOOPBACK
 	sockaddr_storage _address;
@@ -924,7 +947,28 @@ TCPEndpoint::Bind(const sockaddr *address)
 	if (fState != CLOSED)
 		return EISCONN;
 
-	return fManager->Bind(this, address);
+	// A bind to a mapped address makes an IPv6 socket an IPv4 one, which an
+	// IPv6-only socket refuses with EINVAL, as on Linux and FreeBSD.
+	sockaddr_in ipv4Address;
+	if (socket->family == AF_INET6 && is_ipv4_mapped_address(address)) {
+		if (is_ipv6_only(next))
+			return EINVAL;
+		ipv4_address_from_mapped(address, &ipv4Address);
+		address = (const sockaddr*)&ipv4Address;
+	} else if (address->sa_family != socket->family)
+		return EAFNOSUPPORT;
+
+	int previousFamily = Domain()->family;
+	if (address->sa_family != previousFamily) {
+		status_t status = _SetDomainFamily(address->sa_family);
+		if (status != B_OK)
+			return status;
+	}
+
+	status_t status = fManager->Bind(this, address);
+	if (status != B_OK && Domain()->family != previousFamily)
+		_SetDomainFamily(previousFamily);
+	return status;
 }
 
 
@@ -1538,6 +1582,91 @@ TCPEndpoint::SetOption(int option, const void* _value, int length)
 
 
 //	#pragma mark - misc
+
+
+/*!	Moves the endpoint of an IPv6 socket into the domain of \a family: a
+	dual-stack socket carries an IPv4 connection in the IPv4 domain, with that
+	domain's endpoint manager, routes and address module, and its addresses
+	in IPv4 form; only the application sees them as mapped IPv6 addresses
+	(see net_socket.cpp). The endpoint must not be bound.
+*/
+status_t
+TCPEndpoint::_SetDomainFamily(int family)
+{
+	net_domain* domain = gStackModule->get_domain(family);
+	if (domain == NULL || domain->address_module == NULL)
+		return EAFNOSUPPORT;
+
+	EndpointManager* manager = get_endpoint_manager(domain);
+	if (manager == NULL)
+		return ENOBUFS;
+
+	if (fRoute != NULL) {
+		// left over from an earlier connection in the other domain
+		gDatalinkModule->put_route(fDomain, fRoute);
+		fRoute = NULL;
+		fFlags &= ~FLAG_LOCAL;
+	}
+
+	put_endpoint_manager(fManager);
+	fDomain = domain;
+	fManager = manager;
+	return B_OK;
+}
+
+
+/*!	Carries a dual-stack socket that is about to connect to a peer of
+	\a family over to that family's domain. The local port is kept: an
+	unbound socket has already been bound to an ephemeral port of :: by
+	socket_connect(), and that bind made sure the port is free in IPv4 too.
+	A socket bound to a specific address of its current family cannot reach
+	the other one (EINVAL). If the port cannot be had in the new family, the
+	socket is put back as it was.
+	You must hold fLock.
+*/
+status_t
+TCPEndpoint::_MoveToFamily(int family)
+{
+	uint16 port = 0;
+	if (IsBound()) {
+		if (!LocalAddress().IsEmpty(false))
+			return EINVAL;
+
+		port = LocalAddress().Port();
+		status_t status = fManager->Unbind(this);
+		if (status != B_OK)
+			return status;
+	}
+
+	int previousFamily = Domain()->family;
+	status_t status = _SetDomainFamily(family);
+	if (status == B_OK) {
+		status = _BindToWildcard(port);
+		if (status == B_OK)
+			return B_OK;
+
+		_SetDomainFamily(previousFamily);
+	}
+
+	_BindToWildcard(port);
+	return status;
+}
+
+
+/*!	Binds the endpoint to the wildcard address of its domain and \a port,
+	unless \a port is 0.
+*/
+status_t
+TCPEndpoint::_BindToWildcard(uint16 port)
+{
+	if (port == 0)
+		return B_OK;
+
+	SocketAddressStorage local(AddressModule());
+	local.SetToEmpty();
+	local.SetPort(port);
+	return fManager->Bind(this, *local);
+}
 
 
 bool
@@ -2463,7 +2592,29 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 	fState = SYNCHRONIZE_RECEIVED;
 	T(Spawn(parent, this));
 
-	fManager = parent->fManager;
+	// ProtocolSocket::Open() took the domain of the socket's family. An IPv4
+	// connection of an IPv6 socket -- accepted by a dual-stack listener on ::,
+	// or by one bound to a mapped address -- lives in the IPv4 domain, and
+	// the application sees mapped addresses.
+	net_domain* domain = buffer->interface_address->domain;
+	fDomain = domain;
+	if (domain == parent->Domain())
+		fManager = parent->fManager;
+	else {
+		fManager = get_endpoint_manager(domain);
+		if (fManager == NULL) {
+			T(Error(this, "no endpoint manager", __LINE__));
+			return DROP;
+		}
+	}
+
+	if (socket->family == AF_INET6) {
+		// IPV6_V6ONLY is inherited, as on Linux; set directly on the IPv6
+		// protocol, since this endpoint already counts as bound
+		int v6only = is_ipv6_only(parent->next) ? 1 : 0;
+		next->module->setsockopt(next, IPPROTO_IPV6, IPV6_V6ONLY, &v6only,
+			sizeof(v6only));
+	}
 
 	if (fManager->BindChild(this, buffer->destination) != B_OK) {
 		T(Error(this, "binding failed", __LINE__));
@@ -4047,8 +4198,13 @@ TCPEndpoint::_PrepareSendPath(const sockaddr* peer)
 
 	fReceiveMaxSegmentSize = _MaxSegmentSize(peer);
 
-	int yes = 1;
-	next->module->setsockopt(next, IPPROTO_IP, IP_DONTFRAG, &yes, sizeof(yes));
+	if (Domain()->family == AF_INET) {
+		// IPv6 is never fragmented on the way; for the IPv4 connection of a
+		// dual-stack socket the IPv6 protocol passes this on to IPv4.
+		int yes = 1;
+		next->module->setsockopt(next, IPPROTO_IP, IP_DONTFRAG, &yes,
+			sizeof(yes));
+	}
 
 	// Compute the window shift we advertise to our peer - if it doesn't support
 	// this option, this will be reset to 0 (when its SYN is received)

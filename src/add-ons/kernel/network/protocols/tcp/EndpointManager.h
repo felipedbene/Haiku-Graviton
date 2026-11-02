@@ -74,6 +74,7 @@ public:
 			status_t		Init();
 
 			TCPEndpoint*	FindConnection(sockaddr* local, sockaddr* peer);
+			TCPEndpoint*	FindDualStackListener(uint16 port);
 
 			status_t		SetConnection(TCPEndpoint* endpoint,
 								const sockaddr* local, const sockaddr* peer,
@@ -96,14 +97,23 @@ public:
 			void			Dump() const;
 
 private:
+			class BindLocker;
+
 			TCPEndpoint*	_LookupConnection(const sockaddr* local,
 								const sockaddr* peer);
+			EndpointManager* _DualStackCounterpart(TCPEndpoint* endpoint,
+								const sockaddr* address) const;
+			status_t		_CheckDualStackConflict(
+								EndpointManager* counterpart,
+								TCPEndpoint* endpoint, uint16 port);
 			status_t		_Bind(TCPEndpoint* endpoint,
 								const sockaddr* address);
-			status_t		_BindToAddress(WriteLocker& locker,
-								TCPEndpoint* endpoint, const sockaddr* address);
+			status_t		_BindToAddress(BindLocker& locker,
+								TCPEndpoint* endpoint, const sockaddr* address,
+								EndpointManager* counterpart);
 			status_t		_BindToEphemeral(TCPEndpoint* endpoint,
-								const sockaddr* address);
+								const sockaddr* address,
+								EndpointManager* counterpart);
 
 	typedef BOpenHashTable<ConnectionHashDefinition> ConnectionTable;
 	typedef MultiHashTable<EndpointHashDefinition> EndpointTable;
