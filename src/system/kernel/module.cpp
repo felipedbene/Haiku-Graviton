@@ -663,6 +663,50 @@ search_module(const char* name, module_image** _moduleImage)
 }
 
 
+/*!	Looks for an image that another module is currently bound to and that
+	also exports a module called \a name. Returns it, and the index of \a name
+	in its module_info array in \a _offset, or \c NULL if there is none.
+
+	The modules of one image share its static data, and usually only one of
+	them sets it up (a driver module from init_driver(), with its device
+	module using the result). Their reference counts are separate, though, so
+	one of them can be released and later reacquired while another stays
+	loaded. Searching the add-on directories again at that point can find a
+	different file, e.g. a copy that was put into a higher-priority directory
+	in the meantime, and would bind the reacquired module to a second,
+	uninitialized copy of the image. Binding it to the image its siblings are
+	using keeps all live modules of an add-on in one copy.
+
+	Needs to be called with the sModulesLock held.
+*/
+static module_image*
+find_sibling_module_image(const char* name, int32* _offset)
+{
+	ASSERT_LOCKED_RECURSIVE(&sModulesLock);
+
+	ModuleTable::Iterator iterator(sModulesHash);
+	while (iterator.HasNext()) {
+		struct module* sibling = iterator.Next();
+
+		// Only a referenced module holds a reference to its image, so only
+		// then is the image known to stay loaded.
+		if ((sibling->flags & B_BUILT_IN_MODULE) != 0
+			|| sibling->module_image == NULL || sibling->ref_count == 0)
+			continue;
+
+		module_info** info = sibling->module_image->info;
+		for (int32 i = 0; info[i] != NULL; i++) {
+			if (info[i]->name != NULL && strcmp(info[i]->name, name) == 0) {
+				*_offset = i;
+				return sibling->module_image;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+
 static status_t
 put_dependent_modules(struct module* module)
 {
@@ -2197,10 +2241,21 @@ get_module(const char* path, module_info** _info)
 	// if we don't have it cached yet, search for it
 	if (module == NULL || ((module->flags & B_BUILT_IN_MODULE) == 0
 			&& module->module_image == NULL)) {
-		module = search_module(path, &moduleImage);
-		if (module == NULL) {
-			FATAL(("module: Search for %s failed.\n", path));
-			return B_ENTRY_NOT_FOUND;
+		// A module of an image that is still in use must come from that
+		// image, not from whatever file a new search turns up.
+		int32 offset;
+		if (module != NULL
+			&& (moduleImage = find_sibling_module_image(path, &offset))
+				!= NULL) {
+			atomic_add(&moduleImage->ref_count, 1);
+			module->offset = offset;
+			module->flags = moduleImage->info[offset]->flags;
+		} else {
+			module = search_module(path, &moduleImage);
+			if (module == NULL) {
+				FATAL(("module: Search for %s failed.\n", path));
+				return B_ENTRY_NOT_FOUND;
+			}
 		}
 
 		module->info = moduleImage->info[module->offset];
@@ -2277,7 +2332,8 @@ put_module(const char* path)
 			put_module_image(module->module_image);
 			// Unless we don't have a boot device yet, we clear the module's
 			// image pointer if the ref count dropped to 0. get_module() will
-			// have to reload the image.
+			// have to rebind it, to the image of a sibling still in use or
+			// else to a freshly searched one.
 			if (has_boot_device())
 				module->module_image = NULL;
 		}

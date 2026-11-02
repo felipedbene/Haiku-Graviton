@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-trunk
+# instance: i-04c376686f90a1907   region: us-west-2   transport: SSM AWS-RunShellScript
+# ssm command: 9ccb56d6-7938-4c80-8fa8-de59729eac5c (agent status: Success)
+# start: 20261102T151203Z   end: 20261102T151301Z   rc: 0
+# script sha256: eb84abd15881be6948712d79855358ddbd5ea5fc71bf7da469da1d341e873cb1
+# ---- script ----
+# | set -e
+# | echo "repack arm: trunk (kernel_arm64.trunk only)"
+# | pkgman install -y curl 2>&1 | tail -2; command -v curl
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | curl -sSf -o kernel_arm64.trunk 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/w943-940/out/kernel_arm64.trunk?X-Amz-Algorithm=<PRESIGNED>&X-Amz-Credential=<PRESIGNED>&X-Amz-Date=<PRESIGNED>&X-Amz-Expires=<PRESIGNED>&X-Amz-SignedHeaders=<PRESIGNED>&X-Amz-Security-Token=<PRESIGNED>&X-Amz-Signature=<PRESIGNED>
+# | echo '8dd8dbec4c38e24478cbda4fae459d38cd80686ce3e0f9dc4f1a5bcda712fcc3  kernel_arm64.trunk' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1~beta6_*-arm64.hpkg); echo "$P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | sha256sum x/kernel_arm64; cat kernel_arm64.trunk > x/kernel_arm64; sha256sum x/kernel_arm64
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# | pkgman uninstall -y curl 2>&1 | tail -2; command -v curl || echo 'curl removed again'
+# | pkgman search -i curl
+# | sync
+# | echo REPACK_DONE
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+repack arm: trunk (kernel_arm64.trunk only)
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/curl
+kernel_arm64.trunk: OK
+/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+c1c17f4eab272823074ef7ecc4f113454723ed5832286f7c15702c7da0697789  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+e1b9a1eaaa376ebe5f27fc2203e0f3bef79a8708294dd96871e5b203a332ce84  x/kernel_arm64
+8dd8dbec4c38e24478cbda4fae459d38cd80686ce3e0f9dc4f1a5bcda712fcc3  x/kernel_arm64
+----- Package Info ----------------
+header size:                     80
+heap size:                 20507357
+TOC size:                    324054
+package attributes size:       1100
+total size:                20507437
+-----------------------------------
+-rw-r--r-- 1 baron root 20507437 Nov  2 15:12 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20645394 Nov  2 00:50 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+7d16fb488d7ceb8ee82ebeb416c07c5b71f0582ea502ec53f07f67a68b5c2245  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/curl
+No matching packages found.
+REPACK_DONE
+# ---- raw stderr ----
+

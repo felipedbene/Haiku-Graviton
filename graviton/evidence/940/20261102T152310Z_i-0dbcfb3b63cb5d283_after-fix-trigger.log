@@ -1,0 +1,37 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-fix-trigger
+# instance: i-0dbcfb3b63cb5d283   region: us-west-2   transport: SSM AWS-RunShellScript
+# ssm command: 5f6388fd-c76e-4a7f-942b-529bf79b7abb (agent status: Success)
+# start: 20261102T152310Z   end: 20261102T152333Z   rc: 0
+# script sha256: 34b31b764c63136ab6bcd3c25862d623888f18536ef557723ab4f1040d6cbcaa
+# ---- script ----
+# | set +e
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo "== open and close /dev/urandom and /dev/random 20 times each"
+# | ok=0
+# | for i in $(seq 1 20); do
+# | 	for dev in /dev/urandom /dev/random; do
+# | 		b=$(head -c 16 $dev | od -An -tx1 | tr -d ' \n')
+# | 		[ ${#b} = 32 ] && ok=$((ok + 1))
+# | 	done
+# | 	[ $i = 1 ] && echo "first read: $b"
+# | 	sleep 1
+# | done
+# | echo "reads returning 16 bytes: $ok of 40"
+# | echo "== random add-on images loaded in the kernel team, after the reads"
+# | listimage 1 | grep -E "bus_managers/random" | sed 's/  */ /g'
+# | ls -l /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+# | date -u +%Y-%m-%dT%H:%M:%SZ
+# | echo TRIGGER_DONE
+# ---- raw stdout (SSM truncates at 24000 chars) ----
+2026-11-02T15:23:10Z
+== open and close /dev/urandom and /dev/random 20 times each
+first read: e257396f9a2b8183312ed3495707c292
+reads returning 16 bytes: 40 of 40
+== random add-on images loaded in the kernel team, after the reads
+ 217 0xffff0000021f7000 0xffff0000021f9000 0 0 /boot/system/add-ons/kernel/bus_managers/random
+-rwxr-xr-x 1 baron root 17739 Nov  2 15:22 /boot/home/config/non-packaged/add-ons/kernel/bus_managers/random
+2026-11-02T15:23:30Z
+TRIGGER_DONE
+# ---- raw stderr ----
+
