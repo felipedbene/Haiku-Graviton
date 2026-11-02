@@ -112,7 +112,9 @@ random_control(void *cookie, uint32 op, void *arg, size_t length)
 			return B_OK;
 	}
 
-	return B_ERROR;
+	// The driver implements no other requests. B_DEV_INVALID_IOCTL is the
+	// driver convention for that, and fd_ioctl() reports it as ENOTTY.
+	return B_DEV_INVALID_IOCTL;
 }
 
 
