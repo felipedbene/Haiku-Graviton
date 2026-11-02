@@ -1,0 +1,418 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2
+# instance: i-0960b55473e74243d   region: us-west-2
+# ssm command: c2d49dbd-f365-474c-bb39-aa87f54e15b9 (agent status: Success)
+# start: 20261101T174220Z   end: 20261101T174430Z   rc: 0   log bytes: 19518
+# script sha256: cebe7541175f50ecf4a414713fe749fcd43450c7ffb908d823806e81374d585a
+# ---- script ----
+# | # Second pass: every arm from a clean system/ object tree, revisioned targets
+# | # (what the haiku package ships), revision and __DATE__/__TIME__ pinned to
+# | # canonical's, so trunk's build can be compared with canonical byte for byte.
+# | set -x
+# | OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib
+# | cd /opt/t && rm -rf out2 canonical && mkdir -p out2 canonical
+# | aws s3 cp --quiet --recursive $OUT/canonical/ canonical/ && sha256sum canonical/*
+# | cd hg/generated
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | ${X}objcopy -O binary --only-section=_haiku_revision ../../canonical/libroot.so /tmp/rev.bin && REV=$(tr -d '\0' < /tmp/rev.bin)
+# | echo "canonical revision section: '$REV'"
+# | ${X}objcopy -O binary --only-section=_haiku_revision ../../canonical/kernel_arm64 /tmp/krev.bin && echo "kernel revision: '$(tr -d '\0' < /tmp/krev.bin)'"
+# | export SOURCE_DATE_EPOCH=$(date -u -d '2026-10-19 21:09:42' +%s); echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+# | rm -f haiku-revision
+# | R=objects/haiku/arm64/release/system
+# | build() {	# build <label> <git-ref>
+# | 	git -C .. checkout -q -f "$2" || { echo "CHECKOUT FAILED $2"; return 1; }
+# | 	git -C .. log -1 --format="$1 %H %s"
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION="$REV" "<revisioned>kernel_arm64" "<revisioned>libroot.so" > ../../out2/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' ../../out2/jam-$1.log) updated=$(grep -o 'updated [0-9]* target' ../../out2/jam-$1.log)"
+# | 	[ $rc = 0 ] || { tail -30 ../../out2/jam-$1.log; return 1; }
+# | 	cp $R/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.$1
+# | 	cp $R/libroot/revisioned/libroot.so ../../out2/libroot.so.$1
+# | 	sha256sum ../../out2/kernel_arm64.$1 ../../out2/libroot.so.$1
+# | }
+# | build canon a9d5585b19b336ab6365349431f73513a8835ecd
+# | cat haiku-revision 2>/dev/null; echo
+# | cd ../../out2
+# | for f in kernel_arm64 libroot.so; do
+# | 	echo "== $f: canonical vs canon build"
+# | 	ls -l ../canonical/$f $f.canon | awk '{print $5, $9}'
+# | 	n=$(cmp -l ../canonical/$f $f.canon | wc -l); echo "differing bytes: $n"
+# | 	cmp -l ../canonical/$f $f.canon | head -40
+# | 	if [ "$n" -gt 0 ]; then
+# | 		# show the strings around the first differing offsets
+# | 		for off in $(cmp -l ../canonical/$f $f.canon | awk 'NR==1||$1>p+64{print $1; p=$1}' | head -5); do
+# | 			echo "-- at offset $off:"; dd if=../canonical/$f bs=1 skip=$((off-24)) count=48 2>/dev/null | od -c | head -3
+# | 			dd if=$f.canon bs=1 skip=$((off-24)) count=48 2>/dev/null | od -c | head -3
+# | 		done
+# | 	fi
+# | done
+# | cd ../hg/generated
+# | build trunk origin/graviton
+# | for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init; do
+# | 	git -C .. fetch -q origin fix/$b
+# | 	build ${b%%-*} FETCH_HEAD
+# | done
+# | git -C .. checkout -q -f origin/graviton
+# | cd ../../out2 && sha256sum kernel_arm64.* libroot.so.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive . $OUT/out2/ && aws s3 ls $OUT/out2/ | grep -v jam- | tail -30
+# ---- raw output ----
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib
++ cd /opt/t
++ rm -rf out2 canonical
++ mkdir -p out2 canonical
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/canonical/ canonical/
++ sha256sum canonical/haiku.hpkg canonical/kernel_arm64 canonical/libroot.so canonical/runtime_loader
+422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  canonical/haiku.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  canonical/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  canonical/libroot.so
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  canonical/runtime_loader
++ cd hg/generated
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision ../../canonical/libroot.so /tmp/rev.bin
+++ tr -d '\0'
++ REV=hrev59996
++ echo 'canonical revision section: '\''hrev59996'\'''
+canonical revision section: 'hrev59996'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision ../../canonical/kernel_arm64 /tmp/krev.bin
+++ tr -d '\0'
++ echo 'kernel revision: '\''hrev59996'\'''
+kernel revision: 'hrev59996'
+++ date -u -d '2026-10-19 21:09:42' +%s
++ export SOURCE_DATE_EPOCH=1792444182
++ SOURCE_DATE_EPOCH=1792444182
++ echo SOURCE_DATE_EPOCH=1792444182
+SOURCE_DATE_EPOCH=1792444182
++ rm -f haiku-revision
++ R=objects/haiku/arm64/release/system
++ build canon a9d5585b19b336ab6365349431f73513a8835ecd
++ git -C .. checkout -q -f a9d5585b19b336ab6365349431f73513a8835ecd
++ git -C .. log -1 '--format=canon %H %s'
+canon a9d5585b19b336ab6365349431f73513a8835ecd ports: add kubectl 1.37.1, the first Kubernetes tool for haiku/arm64 (#844)
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793554942
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-canon.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-canon.log
++ echo 'JAM canon rc=0 wall=11s failed=0 updated=updated 332 target
+updated 952 target'
+JAM canon rc=0 wall=11s failed=0 updated=updated 332 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.canon
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.canon
++ sha256sum ../../out2/kernel_arm64.canon ../../out2/libroot.so.canon
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  ../../out2/kernel_arm64.canon
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  ../../out2/libroot.so.canon
++ cat haiku-revision
++ echo
+
++ cd ../../out2
++ for f in kernel_arm64 libroot.so
++ echo '== kernel_arm64: canonical vs canon build'
+== kernel_arm64: canonical vs canon build
++ ls -l ../canonical/kernel_arm64 kernel_arm64.canon
++ awk '{print $5, $9}'
+2539425 ../canonical/kernel_arm64
+2539425 kernel_arm64.canon
+++ cmp -l ../canonical/kernel_arm64 kernel_arm64.canon
+++ wc -l
++ n=0
++ echo 'differing bytes: 0'
+differing bytes: 0
++ cmp -l ../canonical/kernel_arm64 kernel_arm64.canon
++ head -40
++ '[' 0 -gt 0 ']'
++ for f in kernel_arm64 libroot.so
++ echo '== libroot.so: canonical vs canon build'
+== libroot.so: canonical vs canon build
++ ls -l ../canonical/libroot.so libroot.so.canon
++ awk '{print $5, $9}'
+1366587 ../canonical/libroot.so
+1366587 libroot.so.canon
+++ cmp -l ../canonical/libroot.so libroot.so.canon
+++ wc -l
++ n=0
++ echo 'differing bytes: 0'
+differing bytes: 0
++ cmp -l ../canonical/libroot.so libroot.so.canon
++ head -40
++ '[' 0 -gt 0 ']'
++ cd ../hg/generated
++ build trunk origin/graviton
++ git -C .. checkout -q -f origin/graviton
++ git -C .. log -1 '--format=trunk %H %s'
+trunk e7979ac2a7aab37fcd30f99a6d813fb9cbd83664 provision: pin haikuporter to the commit its patchers were verified against (#866)
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793554953
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-trunk.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-trunk.log
++ echo 'JAM trunk rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target'
+JAM trunk rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.trunk
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.trunk
++ sha256sum ../../out2/kernel_arm64.trunk ../../out2/libroot.so.trunk
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  ../../out2/kernel_arm64.trunk
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  ../../out2/libroot.so.trunk
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/876-crash-wait-status
++ build 876 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=876 %H %s'
+876 7d836c7cc4ac2d5ba0c49c2ea524094fcc5f858b libroot: make abort() end the process with SIGABRT
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793554965
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-876.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-876.log
++ echo 'JAM 876 rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target'
+JAM 876 rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.876
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.876
++ sha256sum ../../out2/kernel_arm64.876 ../../out2/libroot.so.876
+0bfebbe75d762ed01ff5cc95c53a872469c39856ccc9490520b3b7bba478ad4e  ../../out2/kernel_arm64.876
+b82f81f5cb4d6eafdec7dcf0e88a39f28f0286516900661e8596fe1262a5307a  ../../out2/libroot.so.876
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/877-rlimit-nofile-hard-limit
++ build 877 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=877 %H %s'
+877 f2325177d16015ca2d149c2c2117deea3c3816fb kernel: let a process lower its RLIMIT_NOFILE and RLIMIT_NOVMON hard limit
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793554977
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-877.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-877.log
++ echo 'JAM 877 rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target'
+JAM 877 rc=0 wall=12s failed=0 updated=updated 327 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.877
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.877
++ sha256sum ../../out2/kernel_arm64.877 ../../out2/libroot.so.877
+dc2f4569062e1e28a6076919d0e91dc4ac0097edc6879742cafea586f9632297  ../../out2/kernel_arm64.877
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  ../../out2/libroot.so.877
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/878-rlimit-fsize
++ build 878 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=878 %H %s'
+878 8ee3ec80dd27366d0640fe8cfe51271bb3d33c85 kernel: implement RLIMIT_FSIZE
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793554989
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-878.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-878.log
++ echo 'JAM 878 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target'
+JAM 878 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.878
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.878
++ sha256sum ../../out2/kernel_arm64.878 ../../out2/libroot.so.878
+6c920cc8a73b32de43e7e903003c40fc46e6bcb2c464511d92227ae2a049a803  ../../out2/kernel_arm64.878
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  ../../out2/libroot.so.878
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/893-close-fds-before-sigchld
++ build 893 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=893 %H %s'
+893 50335724ec0312ab4a5f28e6aabd150d21547508 kernel: close a dying team's file descriptors before reporting its death
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793555002
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-893.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-893.log
++ echo 'JAM 893 rc=0 wall=11s failed=0 updated=updated 326 target
+updated 952 target'
+JAM 893 rc=0 wall=11s failed=0 updated=updated 326 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.893
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.893
++ sha256sum ../../out2/kernel_arm64.893 ../../out2/libroot.so.893
+38a24aaa084152f98ddf3660cf1aed49a0196c8fd775e8197f5a4aaf7ea38d8c  ../../out2/kernel_arm64.893
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  ../../out2/libroot.so.893
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/880-umask-permission-bits
++ build 880 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=880 %H %s'
+880 95bf571bbc95d2420163d780ed369ffc60df63e3 libroot: keep only the permission bits of the umask
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793555013
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-880.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-880.log
++ echo 'JAM 880 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target'
+JAM 880 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.880
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.880
++ sha256sum ../../out2/kernel_arm64.880 ../../out2/libroot.so.880
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  ../../out2/kernel_arm64.880
+7afadf1c9be3c9bf3199765ff44c32911982e62a8f41bc51862ddcdef391e1c9  ../../out2/libroot.so.880
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/881-getpriority-round-trip
++ build 881 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=881 %H %s'
+881 82537cbfe2bb2d24346eebbf738a86fda0243287 libroot: getpriority() returns the nice value setpriority() set
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793555025
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-881.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-881.log
++ echo 'JAM 881 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target'
+JAM 881 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.881
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.881
++ sha256sum ../../out2/kernel_arm64.881 ../../out2/libroot.so.881
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  ../../out2/kernel_arm64.881
+182e30f5cc55be7b391d771cf17568fa55db14ade868933c7b7680b191348a6c  ../../out2/libroot.so.881
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/872-exec-missing-interpreter
++ build 872 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=872 %H %s'
+872 278335f8d3949b764b0e5d27ec77f13fb7a8509f libroot: fail exec and spawn of a script whose interpreter is missing
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793555037
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-872.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-872.log
++ echo 'JAM 872 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target'
+JAM 872 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.872
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.872
++ sha256sum ../../out2/kernel_arm64.872 ../../out2/libroot.so.872
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  ../../out2/kernel_arm64.872
+38783a255c93db7961f130b5ccbd62b92238da0946fc0f7f49ba4296a308aaf4  ../../out2/libroot.so.872
++ for b in 876-crash-wait-status 877-rlimit-nofile-hard-limit 878-rlimit-fsize 893-close-fds-before-sigchld 880-umask-permission-bits 881-getpriority-round-trip 872-exec-missing-interpreter 874-fork-during-threaded-malloc-init
++ git -C .. fetch -q origin fix/874-fork-during-threaded-malloc-init
++ build 874 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=874 %H %s'
+874 ed8b22416256b363645dfb20ac4f5f6447cedf8d libroot: let a fork() child start threads after a racing malloc init
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793555049
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' '<revisioned>libroot.so'
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out2/jam-874.log
+++ grep -o 'updated [0-9]* target' ../../out2/jam-874.log
++ echo 'JAM 874 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target'
+JAM 874 rc=0 wall=12s failed=0 updated=updated 326 target
+updated 952 target
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out2/kernel_arm64.874
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out2/libroot.so.874
++ sha256sum ../../out2/kernel_arm64.874 ../../out2/libroot.so.874
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  ../../out2/kernel_arm64.874
+a331ffab25be4a790ab3958b10f6d13ce98d878e6818de007ca81018bd7f993a  ../../out2/libroot.so.874
++ git -C .. checkout -q -f origin/graviton
++ cd ../../out2
++ sha256sum kernel_arm64.872 kernel_arm64.874 kernel_arm64.876 kernel_arm64.877 kernel_arm64.878 kernel_arm64.880 kernel_arm64.881 kernel_arm64.893 kernel_arm64.canon kernel_arm64.trunk libroot.so.872 libroot.so.874 libroot.so.876 libroot.so.877 libroot.so.878 libroot.so.880 libroot.so.881 libroot.so.893 libroot.so.canon libroot.so.trunk
++ tee SHA256SUMS
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  kernel_arm64.872
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  kernel_arm64.874
+0bfebbe75d762ed01ff5cc95c53a872469c39856ccc9490520b3b7bba478ad4e  kernel_arm64.876
+dc2f4569062e1e28a6076919d0e91dc4ac0097edc6879742cafea586f9632297  kernel_arm64.877
+6c920cc8a73b32de43e7e903003c40fc46e6bcb2c464511d92227ae2a049a803  kernel_arm64.878
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  kernel_arm64.880
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  kernel_arm64.881
+38a24aaa084152f98ddf3660cf1aed49a0196c8fd775e8197f5a4aaf7ea38d8c  kernel_arm64.893
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  kernel_arm64.canon
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  kernel_arm64.trunk
+38783a255c93db7961f130b5ccbd62b92238da0946fc0f7f49ba4296a308aaf4  libroot.so.872
+a331ffab25be4a790ab3958b10f6d13ce98d878e6818de007ca81018bd7f993a  libroot.so.874
+b82f81f5cb4d6eafdec7dcf0e88a39f28f0286516900661e8596fe1262a5307a  libroot.so.876
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  libroot.so.877
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  libroot.so.878
+7afadf1c9be3c9bf3199765ff44c32911982e62a8f41bc51862ddcdef391e1c9  libroot.so.880
+182e30f5cc55be7b391d771cf17568fa55db14ade868933c7b7680b191348a6c  libroot.so.881
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  libroot.so.893
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  libroot.so.canon
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  libroot.so.trunk
++ aws s3 cp --quiet --recursive . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/out2/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeflib/out2/
++ grep -v jam-
++ tail -30
+2026-11-01 17:44:22       1648 SHA256SUMS
+2026-11-01 17:44:22    2539473 kernel_arm64.872
+2026-11-01 17:44:22    2539473 kernel_arm64.874
+2026-11-01 17:44:22    2539641 kernel_arm64.876
+2026-11-01 17:44:22    2539473 kernel_arm64.877
+2026-11-01 17:44:22    2539473 kernel_arm64.878
+2026-11-01 17:44:22    2539473 kernel_arm64.880
+2026-11-01 17:44:22    2539473 kernel_arm64.881
+2026-11-01 17:44:22    2539537 kernel_arm64.893
+2026-11-01 17:44:23    2539425 kernel_arm64.canon
+2026-11-01 17:44:23    2539473 kernel_arm64.trunk
+2026-11-01 17:44:23    1366587 libroot.so.872
+2026-11-01 17:44:23    1366651 libroot.so.874
+2026-11-01 17:44:23    1366587 libroot.so.876
+2026-11-01 17:44:23    1366587 libroot.so.877
+2026-11-01 17:44:23    1366587 libroot.so.878
+2026-11-01 17:44:23    1366587 libroot.so.880
+2026-11-01 17:44:23    1366707 libroot.so.881
+2026-11-01 17:44:23    1366587 libroot.so.893
+2026-11-01 17:44:23    1366587 libroot.so.canon
+2026-11-01 17:44:23    1366587 libroot.so.trunk
