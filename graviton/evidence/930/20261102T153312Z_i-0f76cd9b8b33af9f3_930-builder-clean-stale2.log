@@ -1,0 +1,18 @@
+# evidence: 930-builder-clean-stale2
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T153312Z   end: 20261102T153333Z   rc: 0
+# script sha256: ce6889703f242895cf981b952a8b23bcc5e4a581358c1df7fb5b05f310686129
+# ---- script ----
+# | W=/boot/home/haikuports/dev-libs/openssl/work-3.5.9
+# | unmount $W/dev && echo unmounted-dev
+# | rm -rf $W && echo removed-work
+# | ls /boot/home/haikuports/dev-libs/openssl/
+# ---- raw output ----
+unmounted-dev
+removed-work
+download
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+work-1.1.1w

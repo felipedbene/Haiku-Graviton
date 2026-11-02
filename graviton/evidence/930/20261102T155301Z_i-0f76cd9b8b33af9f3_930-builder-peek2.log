@@ -1,0 +1,28 @@
+# evidence: 930-builder-peek2
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T155301Z   end: 20261102T155323Z   rc: 0
+# script sha256: 84c946c56e851cbf8f1295c8dc34acf0aab31de32b8a1ba6286165e2655448fc
+# ---- script ----
+# | ls -l /boot/home/o3b.log; grep -nE "Configuring OpenSSL|^Running |Test Summary|^Files=|^Result" /boot/home/o3b.log | tail -5; grep -cE "^[0-9]{2}-test_.*\.\. ok|\.\.\. ok$| ok$" /boot/home/o3b.log; tail -c 400 /boot/home/o3b.log
+# ---- raw output ----
+-rw-r--r-- 1 baron root 2551867 Nov  2 15:51 /boot/home/o3b.log
+17:Running patch function ...
+82:Configuring OpenSSL version 3.5.9 for target haiku-aarch64
+85:Running configdata.pm
+12026:Files=1, Tests=0,  1 wallclock secs ( 0.01 usr  0.00 sys +  0.18 cusr  0.03 csys =  0.23 CPU)
+12027:Result: NOTESTS
+10
+t .............. ok
+
+    ok 1 - test_builtin_provider
+    ok 2 - test_loaded_provider
+    ok 3 - test_configured_provider
+    ok 4 - test_cache_flushes
+ok 1 - running provider_internal_test02-test_internal_provider.t ............. ok
+
+    ok 1 - test_int_lhash
+    ok 2 - test_stress
+    ok 3 - test_int_hashtable
+        ok 1 - iteration 1
+        ok 2 - iteration 2
+    ok 4 - test_hashtable_stress

@@ -1,0 +1,29 @@
+# evidence: 930-builder-stop-stale-build3
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T153140Z   end: 20261102T153215Z   rc: 0
+# script sha256: f558330294cced7c778f6018e07a38a307071eebe2260f22a310f28eb5de9440
+# ---- script ----
+# | kill -TERM 34974; sleep 10
+# | ps | grep -c '[h]aikuporter' | sed 's/^/after TERM: /'
+# | ps | grep -q '[h]aikuporter' && { kill -KILL 34974; sleep 3; }
+# | ps | grep -c '[h]aikuporter' | sed 's/^/after KILL: /'
+# | tail -4 /boot/home/o3.log
+# | echo "== mounts under work dir:"; df 2>/dev/null | grep -iE "work-|chroot|openssl" ; mount 2>/dev/null | grep -iE "work-|openssl"
+# | ls /boot/home/haikuports/dev-libs/openssl/
+# ---- raw output ----
+after TERM: 1
+/tmp/ccrun/cc-20261102T153140Z-11801.sh: line 3: kill: (34974) - No such process
+after KILL: 1
+cc  -I. -Iinclude -Iapps/include  -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wa,--noexecstack -Wall -O2 -g -DOPENSSL_PIC -DOPENSSLDIR="\"/packages/openssl3-3.5.9-3/.self/data/ssl\"" -DENGINESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/engines-3\"" -DMODULESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/ossl-modules\"" -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG  -MMD -MF apps/lib/libapps-lib-s_cb.d.tmp -c -o apps/lib/libapps-lib-s_cb.o apps/lib/s_cb.c
+cc  -I. -Iinclude -Iapps/include  -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wa,--noexecstack -Wall -O2 -g -DOPENSSL_PIC -DOPENSSLDIR="\"/packages/openssl3-3.5.9-3/.self/data/ssl\"" -DENGINESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/engines-3\"" -DMODULESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/ossl-modules\"" -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG  -MMD -MF apps/lib/libapps-lib-s_socket.d.tmp -c -o apps/lib/libapps-lib-s_socket.o apps/lib/s_socket.c
+cc  -I. -Iinclude -Iapps/include  -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wa,--noexecstack -Wall -O2 -g -DOPENSSL_PIC -DOPENSSLDIR="\"/packages/openssl3-3.5.9-3/.self/data/ssl\"" -DENGINESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/engines-3\"" -DMODULESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/ossl-modules\"" -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG  -MMD -MF apps/lib/libapps-lib-tlssrp_depr.d.tmp -c -o apps/lib/libapps-lib-tlssrp_depr.o apps/lib/tlssrp_depr.c
+cc  -I. -Iinclude -Iproviders/common/include -Iproviders/implementations/include  -DBSAES_ASM -DECP_NISTZ256_ASM -DECP_SM2P256_ASM -DKECCAK1600_ASM -DMD5_ASM -DOPENSSL_BN_ASM_MONT -DOPENSSL_CPUID_OBJ -DOPENSSL_SM3_ASM -DPOLY1305_ASM -DSHA1_ASM -DSHA256_ASM -DSHA512_ASM -DSM4_ASM -DVPAES_ASM -DVPSM4_ASM -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wa,--noexecstack -Wall -O2 -g -DOPENSSL_PIC -DOPENSSLDIR="\"/packages/openssl3-3.5.9-3/.self/data/ssl\"" -DENGINESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/engines-3\"" -DMODULESDIR="\"/packages/openssl3-3.5.9-3/.self/lib/ossl-modules\"" -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG  -MMD -MF crypto/aes/libcrypto-lib-aes_cbc.d.tmp -c -o crypto/aes/libcrypto-lib-aes_cbc.o crypto/aes/aes_cbc.c
+== mounts under work dir:
+[1m/boot/home/haikuports/dev-libs/openssl/work-3.5.9/boot/system 
+download
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+work-1.1.1w
+work-3.5.9

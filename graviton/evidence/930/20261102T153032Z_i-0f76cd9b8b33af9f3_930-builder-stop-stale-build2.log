@@ -1,0 +1,56 @@
+# evidence: 930-builder-stop-stale-build2
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T153032Z   end: 20261102T153106Z   rc: 0
+# script sha256: 979a8a9890d90e94db86a9b3af2c38b837bd71e90764fd19ca2efa794b728304
+# ---- script ----
+# | ls -l --time-style=+%H:%M:%S /boot/home/o3.log; date +%H:%M:%S
+# | kill -INT 34974; sleep 15; ps | grep -E "haikuporter|cc-20261102T152807Z" | grep -v grep
+# | kill 34918 34917 2>&1; sleep 2
+# | ps | grep -E "haikuporter|cc-20261102T152807Z" | grep -v grep; echo "left=$(ps | grep -c '[h]aikuporter')"
+# | tail -3 /boot/home/o3.log
+# | ls /boot/home/haikuports/repository 2>/dev/null | wc -l
+# | grep -c "updating dependency infos" /boot/home/o3.log
+# | ls /boot/home/haikuports/ | head -30
+# ---- raw output ----
+-rw-r--r-- 1 baron root 123326 15:29:54 /boot/home/o3.log
+15:30:39
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261102T152807Z-6846 34917        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261102T152807Z-6846.sh 34918        1    0    0 
+/boot/system/bin/python3.14 /boot/home/haikuporter/haikuporter  34974        1    0    0 
+/boot/system/bin/python3.14 /boot/home/haikuporter/haikuporter  34974        1    0    0 
+left=1
+[srccache] MISS https://www.openssl.org/source/openssl-3.5.9.tar.gz (53279637 bytes)
+Validating checksum of openssl-3.5.9.tar.gz
+Unpacking source of openssl-3.5.9.tar.gz
+10541
+2375
+CONTRIBUTING.md
+FormatVersions
+LICENSE.md
+README.md
+app-accessibility
+app-admin
+app-antivirus
+app-arch
+app-backup
+app-benchmarks
+app-cdr
+app-crypt
+app-dicts
+app-doc
+app-editors
+app-emulation
+app-forensics
+app-i18n
+app-misc
+app-mobilephone
+app-office
+app-pda
+app-shells
+app-text
+app-vim
+dev-build
+dev-cpp
+dev-db
+dev-debug
+dev-dotnet

@@ -1,0 +1,63 @@
+# evidence: 930-builder-peek9
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T172105Z   end: 20261102T172127Z   rc: 0
+# script sha256: 176ca16489432ae2a63070dc9de644e20625850dc54a5aaf7a3e05e54b817b33
+# ---- script ----
+# | date; tail -c 2500 /boot/home/o3b.log; echo; grep -c "cmp_http" /boot/home/o3b.log
+# ---- raw output ----
+Mon Nov  2 17:21:13 GMT 2026
+cacertsout arg
+    ok 62 - genm caCerts extra cacertsout arg
+    ok 63 - genm rootCaCert with oldwithold
+    ok 64 - genm rootCaCert without oldwithold
+    ok 65 - genm rootCaCert oldwithold missing arg
+    ok 66 - genm rootCaCert oldwithold empty file
+    ok 67 - genm rootCaCert oldwithold random file
+    ok 68 - genm rootCaCert oldwithold nonexistent
+    ok 69 - genm rootCaCert oldwithold different
+    ok 70 - genm rootCaCert missing newwithnew
+    ok 71 - genm rootCaCert newwithnew missing arg
+    ok 72 - genm rootCaCert with oldwithnew
+    ok 73 - genm rootCaCert oldwithnew missing arg
+    ok 74 - genm rootCaCert newwithnew oldwithnew newwithold
+    ok 75 - genm rootCaCert newwithold missig arg
+    ok 76 - genm rootCaCert newwithnew newwithold
+    ok 77 - genm crlStatusList with crlcert
+    ok 78 - genm crlStatusList with old crl
+    ok 79 - genm crlStatusList with crlcert and old crl
+    ok 80 - genm crlStatusList with latest crl
+    ok 81 - genm crlStatusList with -oldcrl referring to nonexisting file due to empty CRL response message in previous test case
+    ok 82 - genm crlStatusList with -crlcert nonexistent
+    ok 83 - genm crlStatusList with wrong issuer
+    ok 84 - genm crlStatusList missing -crlcert & -oldcrl
+    ok 85 - genm crlStatusList with wrong cert and correct crl
+    ok 86 - genm certReqTemplate
+    ok 87 - genm certReqTemplate missing template option
+    ok 88 - genm certReqTemplate without optional keyspec option
+    ok 89 - genm certReqTemplate missing template arg
+    ok 90 - genm certReqTemplate template extra arg
+    ok 91 - genm certReqTemplate template arg non-ex dir
+    ok 92 - genm certReqTemplate keyspec arg non-ex dir
+    ok 93 - profile
+    ok 94 - profile wrong value
+    ok 95 - profile missing argument
+    ok 96 - profile extra argument
+    ok 97 - geninfo int
+    ok 98 - geninfo str
+    ok 99 - geninfo empty str
+    ok 100 - geninfo str and int
+    ok 101 - geninfo missing argument
+    ok 102 - geninfo bad OID num: leading '.'
+    ok 103 - geninfo invalid OID number string
+    ok 104 - geninfo unknown OID number string
+    ok 105 - geninfo bad OID name: trailing '_'
+    ok 106 - geninfo bad syntax: missing ':int'
+    ok 107 - geninfo bad type tag
+    ok 108 - geninfo bad syntax: missing ':'
+    ok 109 - geninfo bad int syntax: double ':'
+    ok 110 - geninfo bad int syntax: extra char
+    ok 111 - reqout ir+certConf rspout ip+pkiConf
+    ok 112 - reqout cr rspout cp
+    ok 113 - reqin old tid
+    ok 114 - reqin new tid
+6

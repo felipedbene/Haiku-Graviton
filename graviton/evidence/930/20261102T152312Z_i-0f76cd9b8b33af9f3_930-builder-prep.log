@@ -1,0 +1,49 @@
+# evidence: 930-builder-prep
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2
+# ssm command: 0a7be624-a4a1-4453-936e-319e66ff3656 (agent status: Success)
+# start: 20261102T152312Z   end: 20261102T152321Z   rc: 0   log bytes: 1689
+# script sha256: ff83cf8eb328391f1c9900d17d397ac1f60c84d3f790ec91a7ebaa4a89d613bb
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports
+# | tail -5 /boot/home/prov.log
+# | cd /boot/home/haikuporter && git log --oneline -1; cd $HP && git log --oneline -1
+# | haikuporter --help 2>&1 | grep -i -A1 -- '--test\|-t,'
+# | ls $HP/dev-libs/openssl3/ $HP/dev-libs/openssl3/patches/
+# | echo "== overlay copy vs trunk (rev 2):"; grep '^REVISION' $HP/dev-libs/openssl3/openssl3-3.5.9.recipe
+# | cp /boot/home/stage/o/openssl3-3.5.9.recipe $HP/dev-libs/openssl3/ && cp /boot/home/stage/o/openssl3-3.5.9.patchset $HP/dev-libs/openssl3/patches/
+# | sha256sum $HP/dev-libs/openssl3/openssl3-3.5.9.recipe $HP/dev-libs/openssl3/patches/openssl3-3.5.9.patchset
+# | grep '^REVISION' $HP/dev-libs/openssl3/openssl3-3.5.9.recipe
+# | rm -rf $HP/dev-libs/openssl3/work-*
+# | echo "== getauxval in libroot / header in haiku_devel:"
+# | nm -D /boot/system/lib/libroot.so 2>/dev/null | grep -w getauxval || objdump -T /boot/system/lib/libroot.so | grep -w getauxval
+# | ls -l /boot/system/develop/headers/posix/sys/auxv.h
+# | pkgman search -i -D openssl3 2>&1 | head
+# ---- raw output ----
+  cd /boot/home/haikuporter && python3.14 ./haikuporter --config=/boot/home/haikuports.conf -y --all-dependencies <port>
+
+Publish the resulting .hpkg to the DeBeOS repo from a Haiku host:
+  graviton/scripts/haiku-repo-add   (see its header for HG_* env)
+exit 0
+faa3076 Don't do policy checks for source packages.
+1d23c3a kirigami_addons_kf6, bump to version 1.16.0 (#15027)
+    -t, --tree          print out the location of the haikuports source tree
+    --lint              scan the ports tree for problems
+--
+    --test              run tests on resulting binaries
+    -C, --nochroot      build without a chroot()-environment - meant for
+ls: cannot access '/boot/home/haikuports/dev-libs/openssl3/': No such file or directory
+ls: cannot access '/boot/home/haikuports/dev-libs/openssl3/patches/': No such file or directory
+== overlay copy vs trunk (rev 2):
+grep: /boot/home/haikuports/dev-libs/openssl3/openssl3-3.5.9.recipe: No such file or directory
+cp: cannot create regular file '/boot/home/haikuports/dev-libs/openssl3/': No such file or directory
+sha256sum: /boot/home/haikuports/dev-libs/openssl3/openssl3-3.5.9.recipe: No such file or directory
+sha256sum: /boot/home/haikuports/dev-libs/openssl3/patches/openssl3-3.5.9.patchset: No such file or directory
+grep: /boot/home/haikuports/dev-libs/openssl3/openssl3-3.5.9.recipe: No such file or directory
+== getauxval in libroot / header in haiku_devel:
+000000000004e840 T getauxval
+-r--r--r-- 1 baron root 3339 Sep 15 14:11 /boot/system/develop/headers/posix/sys/auxv.h
+Repository  Name          Version  Arch 
+----------------------------------------
+<system>    openssl3      3.5.9-2  arm64
+<system>    openssl3_man  3.5.9-2  any  

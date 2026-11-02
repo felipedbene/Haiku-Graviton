@@ -1,0 +1,26 @@
+# evidence: 930-builder-stop-stale-build
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T152928Z   end: 20261102T153002Z   rc: 0
+# script sha256: 9b2ed078bf890eb732d7507ca7a9db44b20f6defca2f2cdb71979bcd58457f65
+# ---- script ----
+# | ps | grep -iE "haikuporter|python3|ccrun|make|perl" | grep -v grep
+# | for p in $(ps | grep -iE "python3" | grep -v grep | awk '{print $2}'); do echo "SIGINT $p"; kill -INT $p; done
+# | sleep 20
+# | ps | grep -iE "haikuporter|python3|make|perl" | grep -v grep; echo "remaining: $(ps | grep -iE 'python3|make' | grep -v grep | wc -l)"
+# | mount 2>/dev/null | grep -i chroot; df 2>/dev/null | grep -i work-; tail -5 /boot/home/o3.log
+# ---- raw output ----
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261102T152807Z-6846 34917        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261102T152807Z-6846.sh 34918        1    0    0 
+/boot/system/bin/python3.14 /boot/home/haikuporter/haikuporter  34974        1    0    0 
+/boot/system/bin/sh -c bash /tmp/ccrun/cc-20261102T152928Z-8129 57194        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261102T152928Z-8129.sh 57196        1    0    0 
+/boot/system/bin/bash /tmp/ccrun/cc-20261102T152928Z-8129.sh 57212        1    0    0 
+SIGINT /boot/home/haikuporter/haikuporter
+/tmp/ccrun/cc-20261102T152928Z-8129.sh: line 2: kill: `/boot/home/haikuporter/haikuporter': not a pid or valid job spec
+/boot/system/bin/python3.14 /boot/home/haikuporter/haikuporter  34974        1    0    0 
+remaining: 1
+	updating dependency infos of multidict-4.5.2
+	updating dependency infos of multimarkdown-6.7.0
+	updating dependency infos of multitalk-1.4
+	updating dependency infos of mumble-1.5.634
+	updating dependency infos of muon-0.4.0

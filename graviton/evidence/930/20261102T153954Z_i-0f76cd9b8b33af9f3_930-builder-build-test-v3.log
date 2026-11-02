@@ -1,0 +1,67 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-build-test-v3
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T153954Z   end: 20261102T154016Z   rc: 1
+# script sha256: 553adcd6657e75a032b5d9f2fa5a8258a32ecb1ccd3edf8583cb845cbe500c8a
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports; D=$HP/dev-libs/openssl
+# | cd /boot/home/stage && curl -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-c.tgz?<PRESIGNED> -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED>'X-Amz-Credential=<PRESIGNED> -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED>'X-Amz-Date=<PRESIGNED> -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED>'X-Amz-Expires=<PRESIGNED> -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED>'X-Amz-SignedHeaders=<PRESIGNED> -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED>'X-Amz-Security-Token=<PRESIGNED> -sSfo stage-b.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED>'X-Amz-Signature=<PRESIGNED>' || exit 1
+# | echo 'e2742450e39f7331e8887423bb9eb96e076a0ce21780a791e42781d5dca7b656  stage-b.tgz' | sha256sum -c - || exit 1
+# | rm -rf o && tar xzf stage-b.tgz 2>/dev/null || exit 1
+# | cp o/openssl3-3.5.9.recipe $D/ && cp o/openssl3-3.5.9.patchset $D/patches/ || exit 1
+# | grep '^REVISION' $D/openssl3-3.5.9.recipe; sha256sum $D/openssl3-3.5.9.recipe $D/patches/openssl3-3.5.9.patchset
+# | ls $D; W=$D/work-3.5.9
+# | if [ -d $W ]; then for m in $W/dev $W/boot/system; do df $m 2>/dev/null | grep -q "$m" && unmount $m && echo "unmounted $m"; done; rm -rf $W || exit 1; fi
+# | rm -rf $HP/packages/openssl3*
+# | cd $HP && s=$(date +%s); : | haikuporter -y -j16 --test openssl3 > /boot/home/o3b.log 2>&1; rc=$?
+# | echo "haikuporter exit $rc wall=$(( $(date +%s) - s ))s"
+# | echo "== configure:"; grep -nE "Configuring OpenSSL|for OS/compiler|^Configured for|Configure haiku|./config " /boot/home/o3b.log | head
+# | echo "== asm defines on a libcrypto compile line:"; grep -m1 -oE -- "-D[A-Z0-9_]*_ASM( -D[A-Z0-9_]*(_ASM|CPUID_OBJ|BN_ASM_MONT))*" /boot/home/o3b.log
+# | echo "== warnings in armcap.c:"; grep -n "armcap" /boot/home/o3b.log | grep -iE "warn|error" | head
+# | echo "== test summary:"; grep -nE "^Files=|^Result:|Failed test|Wstat|^All tests successful|Test Summary Report|^Running test" /boot/home/o3b.log | head -80
+# | ls -l $HP/packages/ 2>&1
+# | F=$HP/packages/openssl3-3.5.9-3-arm64.hpkg
+# | [ -f $F ] || { tail -60 /boot/home/o3b.log; exit 1; }
+# | sha256sum $HP/packages/*.hpkg
+# | echo "== hpkg metadata:"; package list -i $F | grep -iE "requires|provides|haiku|lib:" | head -30
+# | curl -sSf -X PUT --upload-file $F 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/openssl3-3.5.9-3-arm64.hpkg?<PRESIGNED>' && echo upload-ok
+# | exit $rc
+# ---- raw output ----
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Signature=<PRESIGNED> -sSfo stage-b.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Signature=<PRESIGNED> -sSfo stage-b.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Signature=<PRESIGNED> -sSfo stage-b.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Signature=<PRESIGNED> -sSfo stage-b.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+curl: (3) URL rejected: Malformed input to / URL function
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Signature=<PRESIGNED> -sSfo stage-b.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Signature=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Expires=<PRESIGNED>: command not found
+[srccache] FAIL https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-c.tgz?<PRESIGNED> -sSfo stage-b.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/agent-930/stage-b.tgz?<PRESIGNED> (upstream fetch failed or truncated; cached nothing)
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261102T153954Z-20235.sh: line 3: X-Amz-Security-Token=<PRESIGNED>: command not found

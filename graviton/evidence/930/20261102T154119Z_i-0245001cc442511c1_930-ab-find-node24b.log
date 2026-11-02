@@ -1,0 +1,26 @@
+# evidence: 930-ab-find-node24b
+# instance: i-0245001cc442511c1   region: us-west-2
+# ssm command: 4be864c1-6b01-4eee-a823-e030c84887d2 (agent status: Success)
+# start: 20261102T154119Z   end: 20261102T154123Z   rc: 0   log bytes: 971
+# script sha256: e9801de421bc923759f3d58a27c307b46b24bcb445e34c509ad11c25b9175ba3
+# ---- script ----
+# | ls -la /boot/system/bin/node; find /boot/system/apps /boot/system/bin /boot/system/lib -maxdepth 3 -iname '*node*' 2>/dev/null | head; package list /boot/system/packages/nodejs24-24.21.0-2-arm64.hpkg 2>&1 | head -15
+# ---- raw output ----
+-r-xr-xr-x 1 baron root 53933048 Nov  1 09:33 /boot/system/bin/node
+/boot/system/bin/node
+/boot/system/lib/node_modules
+package-attributes:
+	name: nodejs24
+	summary: A JavaScript runtime built on Chrome's V8 Engine
+	description: Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine. As an asynchronous event driven JavaScript runtime, Node is designed to build scalable network applications. In the following "hello world" example, many connections can be handled concurrently. Upon each connection the callback is fired, but if there is no work to be done, Node will sleep.
+	vendor: DeBeOS
+	packager: DeBeOS <packages@debene.dev>
+	architecture: arm64
+	version: 24.21.0-2
+	copyright: 2006-2019 The Node.js Foundation
+	license: BSD (2-clause)
+	URL: https://nodejs.org/
+	source URL: https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+	provides: nodejs24 = 24.21.0
+	provides: cmd:node = 24.21.0 (compatible >= 24)
+	requires: haiku>=r1~beta6_hrev59996-1

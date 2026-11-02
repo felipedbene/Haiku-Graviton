@@ -1,0 +1,63 @@
+# evidence: 930-builder-rid2
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2
+# ssm command: b36e2258-85cf-4747-b13b-fb4ca43943f1 (agent status: Success)
+# start: 20261102T152655Z   end: 20261102T152657Z   rc: 0   log bytes: 2030
+# script sha256: 900edaa1e2b0b00ca836bb605aea21cb585ec29167d56c9b584b01a563512dda
+# ---- script ----
+# | cat /tmp/ccrun/cc-20261102T152408Z-1738.log; echo ----; ls -l /boot/home/o3.log; tail -c 400 /boot/home/o3.log; echo; ps -a 2>/dev/null | grep -iE "haikuporter|python|make" | head; ps | grep -ciE "python"
+# ---- raw output ----
+/boot/home/haikuports/dev-libs/openssl:
+licenses
+openssl-1.1.1w.recipe
+openssl3-3.5.9.recipe
+patches
+
+/boot/home/haikuports/dev-libs/openssl/patches:
+openssl-1.1.1w.patchset
+openssl3-3.5.9.patchset
+== tree copy before staging (overlay from trunk):
+REVISION="2"
+aba95265b184ce25172528c93492f58ae5887eb7593b259eb3b02d041ff99e07  /boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+83b6579a3040dbe35a1d1ade92c9c9f6eb78b93ffa66a9ca7d92e500d2500243  /boot/home/haikuports/dev-libs/openssl/patches/openssl3-3.5.9.patchset
+== staged:
+REVISION="3"
+1aa22a43d32de60366839ba712b78c3e640a11c85e1c0c09d0ebe07f5cdb606f  /boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+7cbf4e923b8924025034557bba3db0183ca381ac9935779a9b98df686925e0e8  /boot/home/haikuports/dev-libs/openssl/patches/openssl3-3.5.9.patchset
+== haiku_devel
+haiku_devel-r1~beta6_hrev59996-1 from repository system is already installed.
+Nothing to do.
+== cmd:awk
+gawk-3.1.8_bootstrap-2 from repository system is already installed.
+Nothing to do.
+== cmd:gcc
+gcc-13.3.0_2026_03_29_bootstrap-1 from repository system is already installed.
+Nothing to do.
+== cmd:ld
+binutils-2.41_2026_03_10_bootstrap-2 from repository system is already installed.
+Nothing to do.
+== cmd:make
+make-4.4.1_bootstrap-1 from repository system is already installed.
+Nothing to do.
+== cmd:perl
+perl-5.42.2-1 from repository system is already installed.
+Nothing to do.
+== cmd:sed
+sed-4.9_bootstrap-1 from repository system is already installed.
+Nothing to do.
+== devel:libz
+[system] Done.
+== devel:libzstd
+[system] Done.
+----
+-rw-r--r-- 1 baron root 123326 Nov  2 15:25 /boot/home/o3.log
+0.43
+	updating dependency infos of mtr-0.73
+	updating dependency infos of mtxclient-0.10.1
+	updating dependency infos of mudlet-4.0.3
+	updating dependency infos of mujs-1.3.5
+	updating dependency infos of multidict-4.5.2
+	updating dependency infos of multimarkdown-6.7.0
+	updating dependency infos of multitalk-1.4
+	updating dependency infos of mumble-1.5.634
+	updating dependency infos of muon-0.4.0
+1

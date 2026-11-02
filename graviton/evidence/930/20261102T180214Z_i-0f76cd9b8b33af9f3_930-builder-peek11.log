@@ -1,0 +1,20 @@
+# evidence: 930-builder-peek11
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T180214Z   end: 20261102T180236Z   rc: 0
+# script sha256: 5f1c7558c0f7ac3956682c09dd991b7830be98c13c8a29888877093de8466f3d
+# ---- script ----
+# | date; ls -l /boot/home/o3b.log; tail -c 300 /boot/home/o3b.log; echo; ps | grep -E "test/recipes" | grep -v grep
+# ---- raw output ----
+Mon Nov  2 18:02:21 GMT 2026
+-rw-r--r-- 1 baron root 3528170 Nov  2 17:46 /boot/home/o3b.log
+nown CLI option
+ok 4 - bad int syntax: non-digit
+ok 5 - bad int syntax: float
+ok 6 - bad int syntax: trailing garbage
+ok 7 - bad int: out of range
+ok 8 - with polling
+ok 9 - with loader_attic engine81-test_cmp_cli.t ....................... ok
+
+ok 1 - ocsp server port check
+ok 2 - s_server port check
+/boot/system/bin/perl -w test/recipes/82-test_ocsp_cert_chain.t 180279        1    0    0 

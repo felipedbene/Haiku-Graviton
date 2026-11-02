@@ -1,0 +1,13 @@
+# evidence: 930-builder-peek4
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T161407Z   end: 20261102T161431Z   rc: 0
+# script sha256: 5f99762acb948acf02e8977757c5f5e6a3f58ae6510c9a77827f21c3cdbae48e
+# ---- script ----
+# | grep -oE "^[0-9]{2}-test_[a-z0-9_]+\.t \.+ ?[a-z ]*" /boot/home/o3b.log | tail -5; grep -cE "^[0-9]{2}-test_[a-z0-9_]+\.t " /boot/home/o3b.log; grep -E "^[0-9]{2}-test_[a-z0-9_]+\.t .*(not ok|Failed|Dubious)" /boot/home/o3b.log | head
+# ---- raw output ----
+20-test_cli_fips.t ...................... skipped
+30-test_acvp.t .......................... skipped
+30-test_afalg.t ......................... skipped
+30-test_pairwise_fail.t ................. skipped
+70-test_sslkeylogfile.t ................. skipped
+10

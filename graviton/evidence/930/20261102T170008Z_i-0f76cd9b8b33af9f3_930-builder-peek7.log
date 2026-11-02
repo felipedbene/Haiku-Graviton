@@ -1,0 +1,62 @@
+# evidence: 930-builder-peek7
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T170008Z   end: 20261102T170031Z   rc: 0
+# script sha256: e67bedbcc0c985724596689fd0111a6a598ecafc4def72f4afa1bbf8a9e963ca
+# ---- script ----
+# | ls -l /boot/home/o3b.log; date; tail -c 1500 /boot/home/o3b.log; echo; ps | grep -E "perl|test" | grep -v grep | head
+# ---- raw output ----
+-rw-r--r-- 1 baron root 3284902 Nov  2 16:59 /boot/home/o3b.log
+Mon Nov  2 17:00:17 GMT 2026
+
+    ok 23 - correct extraCerts
+    ok 24 - extracerts big file
+    ok 25 - extracerts missing arg
+    ok 26 - extracerts empty file
+    ok 27 - extracerts random content
+    ok 28 - extracerts file does not exist
+    ok 29 - default sha256
+    ok 30 - digest sha256
+    ok 31 - digest sha512
+    ok 32 - digest missing arg
+    ok 33 - digest non-existing
+    ok 34 - digest obsolete
+    ok 35 - multiple digests
+    ok 36 - unprotected request
+ok 3 - CMP app CLI Mock credentials
+    ok 1 - minimum options
+    ok 2 - no cmd
+    ok 3 - cmd missing arg
+    ok 4 - cmd undefined
+    ok 5 - cmd incomplete
+    ok 6 - no cacertsout
+    ok 7 - cacertsout given
+    ok 8 - use cacerts
+    ok 9 - cacertsout missing arg
+    ok 10 - --- get certificate for revocation ----
+    ok 11 - revreason unspecified
+    ok 12 - --- get certificate for revocation ----
+    ok 13 - revreason keyCompromise
+    ok 14 - --- get certificate for revocation ----
+    ok 15 - revreason CACompromise
+    ok 16 - --- get certificate for revocation ----
+    ok 17 - revreason affiliationChanged
+    ok 18 - --- get certificate for revocation ----
+    ok 19 - revreason superseded
+    ok 20 - --- get certificate for revocation ----
+    ok 21 - revreason cessationOfOperation
+    ok 22 - --- get certificate for revocation ----
+    ok 23 - revreason certificateHold
+    ok 24 - revreason removeFromCRL
+    ok 25 - revreason 7 (invalid)
+    ok 26 - --- get certificate for revocation ----
+    ok 27 - revreason priviligeWithdrawn
+/boot/system/bin/make VFP=1 test                   126925        1    0    0 
+/boot/system/bin/make _tests                       126926        1    0    0 
+/boot/system/bin/make run_tests                    126933        1    0    0 
+  PERL="perl" \
+/boot/system/bin/perl ./test/run_tests.pl          126936        1    0    0 
+/boot/system/bin/perl -w test/recipes/80-test_cmp_http.t 167587        1    0    0 
+/boot/system/bin/perl ../../../../util/wrap.pl ../../../../apps 167589        1    0    0 
+/sources/openssl-3.5.9/test/recipes/80-test_cmp_http_data/Mock/ 167590        1    0    0 
+/boot/system/bin/perl ../../../../util/wrap.pl ../../../../apps 170038        1    0    0 
+/sources/openssl-3.5.9/test/recipes/80-test_cmp_http_data/Mock/ 170039        1    0    0 

@@ -1,0 +1,18 @@
+# evidence: 930-builder-peek10
+# instance: i-0f76cd9b8b33af9f3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T174140Z   end: 20261102T174202Z   rc: 0
+# script sha256: 5f1c7558c0f7ac3956682c09dd991b7830be98c13c8a29888877093de8466f3d
+# ---- script ----
+# | date; ls -l /boot/home/o3b.log; tail -c 300 /boot/home/o3b.log; echo; ps | grep -E "test/recipes" | grep -v grep
+# ---- raw output ----
+Mon Nov  2 17:41:48 GMT 2026
+-rw-r--r-- 1 baron root 3292510 Nov  2 17:41 /boot/home/o3b.log
+t_trusted is non-existing file
+    ok 66 - out_trusted too many parameters
+    ok 67 - out_trusted empty certificate file
+    ok 68 - out_trusted accept issuing ca cert even with CRL check enabled by default
+    ok 69 - out_trusted expired issuing ca cert
+    ok 70 - out_trusted expired root ca cert
+/boot/system/bin/perl -w test/recipes/80-test_cmp_http.t 167587        1    0    0 
+/sources/openssl-3.5.9/test/recipes/80-test_cmp_http_data/Mock/ 167590        1    0    0 
+/sources/openssl-3.5.9/test/recipes/80-test_cmp_http_data/Mock/ 173291        1    0    0 
