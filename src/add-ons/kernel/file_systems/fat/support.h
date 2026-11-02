@@ -233,6 +233,10 @@ status_t sync_clusters(vnode* bsdNode);
 
 status_t check_access_permissions_internal(int accessMode, mode_t mode, gid_t nodeGroupID,
 	uid_t nodeUserID);
+#ifdef USER
+status_t check_write_stat_permissions_internal(gid_t nodeGroupID, uid_t nodeUserID,
+	mode_t nodeMode, uint32 mask, const struct stat* stat);
+#endif
 void mode_bits(const vnode* bsdNode, mode_t* mode);
 
 //**************************************

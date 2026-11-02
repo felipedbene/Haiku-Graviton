@@ -1181,6 +1181,56 @@ check_access_permissions_internal(int accessMode, mode_t mode, gid_t nodeGroupID
 }
 
 
+#ifdef USER
+/*! For use in the FAT userlandfs module, which has no check_write_stat_permissions() either.
+	Applies the same rules (see vfs.cpp), with the limitation of
+	check_access_permissions_internal(): the caller's supplementary groups are not known, so a
+	group change is allowed only to the caller's effective group.
+*/
+status_t
+check_write_stat_permissions_internal(gid_t nodeGroupID, uid_t nodeUserID, mode_t nodeMode,
+	uint32 mask, const struct stat* stat)
+{
+	uid_t uid = geteuid();
+
+	// root has all permissions
+	if (uid == 0)
+		return B_OK;
+
+	const bool hasWriteAccess
+		= check_access_permissions_internal(W_OK, nodeMode, nodeGroupID, nodeUserID) == B_OK;
+
+	if ((mask & B_STAT_SIZE) != 0 && !hasWriteAccess)
+		return B_NOT_ALLOWED;
+
+	if ((mask & B_STAT_UID) != 0 && (nodeUserID != uid || stat->st_uid != uid))
+		return B_NOT_ALLOWED;
+
+	if ((mask & B_STAT_GID) != 0 && (nodeUserID != uid || stat->st_gid != getegid()))
+		return B_NOT_ALLOWED;
+
+	if ((mask & B_STAT_MODE) != 0 && nodeUserID != uid)
+		return B_NOT_ALLOWED;
+
+	// Only the owner may set a time; write access only allows setting both the access and the
+	// modification time to the current time.
+	const uint32 timeMask
+		= B_STAT_ACCESS_TIME | B_STAT_MODIFICATION_TIME | B_STAT_CREATION_TIME | B_STAT_CHANGE_TIME;
+	const uint32 nowMask = B_STAT_ACCESS_TIME | B_STAT_MODIFICATION_TIME;
+	if ((mask & timeMask) != 0 && nodeUserID != uid) {
+		uint32 explicitTimes = mask & timeMask;
+		if ((mask & B_STAT_TIMES_NOW) != 0 && (mask & nowMask) == nowMask)
+			explicitTimes &= ~nowMask;
+
+		if (explicitTimes != 0 || !hasWriteAccess)
+			return B_NOT_ALLOWED;
+	}
+
+	return B_OK;
+}
+#endif // USER
+
+
 /*! Populates file mode bits only (not file type bits).
 
 */
