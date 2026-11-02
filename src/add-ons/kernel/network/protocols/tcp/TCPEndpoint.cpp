@@ -1158,6 +1158,9 @@ TCPEndpoint::SendData(net_buffer *buffer)
 	if ((flags & MSG_EOF) != 0)
 		_Disconnect(false);
 
+	// The data is queued and this send() is complete whatever happens to the
+	// segments now: a refused one is retried from the retransmit timer
+	// (_SendRefused()), as a lost one would be.
 	_SendQueued(force);
 
 	return B_OK;
@@ -4140,21 +4143,21 @@ TCPEndpoint::_SendQueued(bool force)
 
 		net_buffer *buffer = gBufferModule->create(256);
 		if (buffer == NULL)
-			return B_NO_MEMORY;
+			return _SendRefused(B_NO_MEMORY);
 
 		status_t status = B_OK;
 		if (segmentLength > 0)
 			status = fSendQueue.Get(buffer, fSendNext, segmentLength);
 		if (status < B_OK) {
 			gBufferModule->free(buffer);
-			return status;
+			return _SendRefused(status);
 		}
 
 		sendWindow -= buffer->size;
 
 		status = _PrepareAndSend(segment, buffer, retransmit);
 		if (status != B_OK)
-			return status;
+			return _SendRefused(status);
 
 		if (shouldStartRetransmitTimer) {
 			TRACE("starting initial retransmit timer of: %" B_PRIdBIGTIME,
@@ -4174,6 +4177,47 @@ TCPEndpoint::_SendQueued(bool force)
 	} while (length > 0);
 
 	return B_OK;
+}
+
+
+/*!	Called when a segment _SendQueued() decided to send never left: it could
+	not be built, or the IP layer refused it. Nothing of it is in flight, so
+	no acknowledgement will ever come back for it, and when nothing else was
+	in flight either, no timer was pending: the data stayed queued with
+	nothing left to send it -- send() had long returned success -- and the
+	connection stalled for good, without an error on either end. Treat the
+	segment as lost instead, and make sure the retransmit timer is running to
+	send it again, backing off as for any loss.
+
+	EMSGSIZE means the segment was sized for a path that has since shrunk --
+	the route's MTU was lowered under the connection. Size the next segments
+	from the route as it is now, the way an ICMP "fragmentation needed"
+	report does it (see ErrorReceived()), and resend them at once.
+
+	Returns \a status, which the callers pass on.
+*/
+status_t
+TCPEndpoint::_SendRefused(status_t status)
+{
+	T(Error(this, "segment refused", __LINE__));
+
+	if (status == EMSGSIZE) {
+		int maxSegmentSize = _MaxSegmentSize(*PeerAddress());
+		if (maxSegmentSize > 0
+			&& (uint32)maxSegmentSize < fSendMaxSegmentSize) {
+			fSendMaxSegmentSize = maxSegmentSize;
+			gStackModule->set_timer(&fRetransmitTimer, 0);
+			T(TimerSet(this, "retransmit", 0));
+			return status;
+		}
+	}
+
+	if (!gStackModule->is_timer_active(&fRetransmitTimer)) {
+		gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
+		T(TimerSet(this, "retransmit", fRetransmitTimeout));
+	}
+
+	return status;
 }
 
 
