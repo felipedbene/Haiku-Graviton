@@ -1,0 +1,58 @@
+# evidence: linux-c8g-cpus
+# instance: i-039d667a6e6dcffcc   region: us-west-2
+# ssm command: 99b9ae81-4676-4f42-9761-6edc8495ee69 (agent status: Success)
+# start: 20261102T022129Z   end: 20261102T022131Z   rc: 0
+# ---- script ----
+# | N=/tmp/node-v24.21.0-linux-arm64/bin/node
+# | curl -s -H "X-aws-ec2-metadata-token: $(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')" http://169.254.169.254/latest/meta-data/instance-type; echo
+# | $N --version
+# | $N -p 'require("os").cpus()'
+# | $N -p 'require("os").cpus().length'
+# ---- raw output ----
+c8g.2xlarge
+v24.21.0
+[
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 810, nice: 0, sys: 400, idle: 127180, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 430, nice: 0, sys: 340, idle: 128260, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 1910, nice: 0, sys: 740, idle: 126460, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 2340, nice: 0, sys: 1430, idle: 125310, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 690, nice: 0, sys: 680, idle: 127510, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 520, nice: 0, sys: 310, idle: 128440, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 2340, nice: 0, sys: 680, idle: 126130, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 0,
+    times: { user: 630, nice: 0, sys: 690, idle: 127610, irq: 0 }
+  }
+]
+8
+
+

@@ -1,0 +1,36 @@
+# evidence: trunk-after-libuv5
+# instance: i-0fc761b6f00846c2d   region: us-west-2
+# ssm command: 001804cf-4e59-4abf-a199-dafd420c0110 (agent status: Success)
+# start: 20261102T034044Z   end: 20261102T034051Z   rc: 0
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo y; }
+# | echo "== stage B: + libuv rev 5"
+# | feed | pkgman install /boot/home/rev/libuv-1.52.1-5-arm64.hpkg 2>&1 | tail -2
+# | pkgman search -i -D nodejs24 2>&1 | tail -1; pkgman search -i -D libuv 2>&1 | tail -2
+# | sysinfo -cpu
+# | node -p 'JSON.stringify(require("os").cpus())'
+# | node -p 'require("os").cpus().length'
+# | cd /boot/home/node-v24.21.0 && : | python3 tools/test.py --shell=/boot/system/bin/node -p tap 'parallel/test-os*' 2>&1 | grep -E "^(ok|not ok)|^1\.\.|passed|Failed"
+# ---- raw output ----
+== stage B: + libuv rev 5
+[system] Cleaning up ...
+[system] Done.
+<system>    nodejs24  24.21.0-3  arm64
+----------------------------------
+<system>    libuv  1.52.1-5  arm64
+8 ARM Neoverse-V1, revision 411fd401 running at 2598MHz
+
+[{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2598,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}}]
+8
+1..8
+ok 1 parallel/test-os
+ok 2 parallel/test-os-checked-function
+ok 3 parallel/test-os-constants-signals
+ok 4 parallel/test-os-eol
+ok 5 parallel/test-os-process-priority
+ok 6 parallel/test-os-userinfo-handles-getter-errors
+ok 7 parallel/test-os-homedir-no-envvar
+ok 8 parallel/test-os-fast
+All tests passed.
+
+

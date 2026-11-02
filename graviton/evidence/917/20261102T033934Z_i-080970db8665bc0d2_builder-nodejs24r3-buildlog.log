@@ -1,0 +1,68 @@
+# evidence: builder-nodejs24r3-buildlog
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: 859e5ff8-ceee-46a5-bb91-4b584cb0f39b (agent status: Success)
+# start: 20261102T033934Z   end: 20261102T033936Z   rc: 0
+# ---- script ----
+# | echo "== nodejs24 rev 3 build log (head)"; head -25 /boot/home/n24r3.log | cut -c1-300
+# | echo "== (tail)"; tail -25 /boot/home/n24r3.log | cut -c1-300
+# | echo "== upload"
+# | ls /boot/system/bin/haiku-mgmt-agent /boot/system/non-packaged/bin/haiku-mgmt-agent 2>&1; haiku-mgmt-agent help 2>&1 | head -15
+# ---- raw output ----
+== nodejs24 rev 3 build log (head)
+
+Downloading: https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz ...
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0 10 111.5M  10 11.95M   0      0  9.53M      0   00:11   00:01   00:10  9.77M 51 111.5M  51 57.31M   0      0 25.42M      0   00:04   00:02   00:02 25.77M 95 111.5M  95 106.5M   0      0 32.48M      0   00:03   00:03   
+[srccache] MISS https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz (116929256 bytes)
+[srccache] STORE cd370020a127f92d2c2de83f8e635978d70771d85f1d0fc518a9d4c8ec807418-node-v24.21.0.tar.gz
+Validating checksum of node-v24.21.0.tar.gz
+Unpacking source of node-v24.21.0.tar.gz
+Initialized empty Git repository in /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/.git/
+Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0.patchset" ...
+Applying: Initial support for Node.js
+Applying: Haiku v8 patches
+Applying: v8 gyp build for Haiku
+Applying: ares compat
+Applying: abseil-cpp: sysinfo haiku
+Applying: Haiku: patch for 24
+Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0-debeos.patchset" ...
+Applying: v8: libsampler: fill the register state on Haiku arm64
+chroot has these packages active:
+	/boot/system/packages/bash-5.3_bootstrap-1-arm64.hpkg
+	/boot/system/packages/binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg
+	/boot/system/packages/brotli-1.2.0-1-arm64.hpkg
+	/boot/system/packages/brotli_devel-1.2.0-1-arm64.hpkg
+	/boot/system/packages/bzip2-1.0.8-3-arm64.hpkg
+== (tail)
+}
+mimesetting files for package nodejs24_devel-24.21.0-3-arm64.hpkg ...
+mimeset: warning: application init failed (General system error); continuing without it.
+creating package nodejs24_devel-24.21.0-3-arm64.hpkg ...
+----- Package Info ----------------
+header size:                     80
+heap size:                   264293
+TOC size:                      6792
+package attributes size:        753
+total size:                  264373
+-----------------------------------
+waiting for build package nodejs24-24.21.0-3 to be deactivated
+waiting for build package nodejs24_devel-24.21.0-3 to be deactivated
+cleaning chroot folder
+grabbing nodejs24-24.21.0-3-arm64.hpkg and moving it to /boot/home/haikuports/packages/nodejs24-24.21.0-3-arm64.hpkg
+grabbing nodejs24_devel-24.21.0-3-arm64.hpkg and moving it to /boot/home/haikuports/packages/nodejs24_devel-24.21.0-3-arm64.hpkg
+Checking if any dependency-infos need to be updated ...
+	updating dependency infos of nodejs24-24.21.0
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+net-libs::nodejs24-24.21.0
+	/boot/home/haikuports/net-libs/nodejs/nodejs24-24.21.0.recipe
+----------------------------------------------------------------------
+exit 0
+== upload
+ls: cannot access '/boot/system/bin/haiku-mgmt-agent': No such file or directory
+ls: cannot access '/boot/system/non-packaged/bin/haiku-mgmt-agent': No such file or directory
+sh: line 4: haiku-mgmt-agent: command not found
+
+

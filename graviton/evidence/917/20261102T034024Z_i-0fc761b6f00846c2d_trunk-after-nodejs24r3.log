@@ -1,0 +1,80 @@
+# evidence: trunk-after-nodejs24r3
+# instance: i-0fc761b6f00846c2d   region: us-west-2
+# ssm command: fa7af455-c4bd-431e-af11-c808dd22ee4d (agent status: Success)
+# start: 20261102T034024Z   end: 20261102T034033Z   rc: 0
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo y; }
+# | mkdir -p /boot/home/rev && cd /boot/home/rev
+# | curl -sSf -o nodejs24-24.21.0-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/nodejs24-24.21.0-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSf -o libuv-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/libuv-1.52.1-5-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSf -o libuv_devel-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/libuv_devel-1.52.1-5-arm64.hpkg?<PRESIGNED>' || exit 1
+# | printf '%s  %s\n' fbb27b574e64e07798a963157e738a90c0d30807e0b1193a815f0c79c2b85b0b nodejs24-24.21.0-3-arm64.hpkg 39537c23b12189c684cad21dc8d87a74d4fee1a62b0b2fde21e91ccc63518878 libuv-1.52.1-5-arm64.hpkg a168f678a664939492a9b096b0b719570cacf423f74e7e2e2a393325b58ff5c3 libuv_devel-1.52.1-5-arm64.hpkg | sha256sum -c - || exit 1
+# | echo "== stage A: nodejs24 rev 3, libuv rev 4 unchanged"
+# | feed | pkgman install /boot/home/rev/nodejs24-24.21.0-3-arm64.hpkg 2>&1 | tail -2
+# | pkgman search -i -D nodejs24 2>&1 | tail -1; pkgman search -i -D libuv 2>&1 | tail -2
+# | node -p 'require("os").cpus()'
+# | node -p 'require("os").cpus().length'
+# | if [ -d /boot/home/node-v24.21.0 ]; then cd /boot/home/node-v24.21.0 && : | python3 tools/test.py --shell=/boot/system/bin/node -p tap -v parallel/test-os 2>&1 | tail -8; fi
+# ---- raw output ----
+nodejs24-24.21.0-3-arm64.hpkg: OK
+libuv-1.52.1-5-arm64.hpkg: OK
+libuv_devel-1.52.1-5-arm64.hpkg: OK
+== stage A: nodejs24 rev 3, libuv rev 4 unchanged
+[system] Cleaning up ...
+[system] Done.
+<system>    nodejs24  24.21.0-3  arm64
+----------------------------------
+<system>    libuv  1.52.1-4  arm64
+[
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'unknown',
+    speed: 2598,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  }
+]
+8
+1..1
+# /boot/system/bin/node /boot/home/node-v24.21.0/test/parallel/test-os.js
+ok 1 parallel/test-os
+  ---
+  duration_ms: 172.24600
+  ...
+
+All tests passed.
+
+

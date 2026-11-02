@@ -1,0 +1,47 @@
+# evidence: builder-patched-node_os
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: bb49533b-ed1f-49c3-9c68-296849cf7af0 (agent status: Failed)
+# start: 20261102T021742Z   end: 20261102T021744Z   rc: 1
+# ---- script ----
+# | F=$(ls -d /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/src/node_os.cc)
+# | echo $F; sed -n 109,143p $F; grep -c "std::cout" $F
+# ---- raw output ----
+/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/src/node_os.cc
+static void GetCPUInfo(const FunctionCallbackInfo<Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+
+  uv_cpu_info_t* cpu_infos;
+  int count;
+
+  int err = uv_cpu_info(&cpu_infos, &count);
+  if (err)
+    return;
+
+  // It's faster to create an array packed with all the data and
+  // assemble them into objects in JS than to call Object::Set() repeatedly
+  // The array is in the format
+  // [model, speed, (5 entries of cpu_times), model2, speed2, ...]
+  LocalVector<Value> result(isolate);
+  result.reserve(count * 7);
+  for (int i = 0; i < count; i++) {
+    uv_cpu_info_t* ci = cpu_infos + i;
+    result.emplace_back(OneByteString(isolate, ci->model));
+    result.emplace_back(Number::New(isolate, ci->speed));
+    result.emplace_back(
+        Number::New(isolate, static_cast<double>(ci->cpu_times.user)));
+    result.emplace_back(
+        Number::New(isolate, static_cast<double>(ci->cpu_times.nice)));
+    result.emplace_back(
+        Number::New(isolate, static_cast<double>(ci->cpu_times.sys)));
+    result.emplace_back(
+        Number::New(isolate, static_cast<double>(ci->cpu_times.idle)));
+    result.emplace_back(
+        Number::New(isolate, static_cast<double>(ci->cpu_times.irq)));
+  }
+
+  uv_free_cpu_info(cpu_infos, count);
+  args.GetReturnValue().Set(Array::New(isolate, result.data(), result.size()));
+}
+0
+
+

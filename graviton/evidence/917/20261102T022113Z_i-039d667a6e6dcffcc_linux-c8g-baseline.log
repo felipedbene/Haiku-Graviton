@@ -1,0 +1,86 @@
+# evidence: linux-c8g-baseline
+# instance: i-039d667a6e6dcffcc   region: us-west-2
+# ssm command: f6665a86-e209-4044-9ed6-01cda329d64d (agent status: Failed)
+# start: 20261102T022113Z   end: 20261102T022121Z   rc: 2
+# ---- script ----
+# | set -e
+# | uname -a; nproc
+# | curl -s -H "X-aws-ec2-metadata-token: $(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')" http://169.254.169.254/latest/meta-data/instance-type; echo
+# | echo "== /proc/cpuinfo (cpu 0)"; awk 'BEGIN{RS=""} NR==1' /proc/cpuinfo
+# | echo "== lscpu"; lscpu
+# | echo "== cpufreq"; ls /sys/devices/system/cpu/cpu0/cpufreq 2>&1 || true
+# | cd /tmp
+# | curl -sLO https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz
+# | curl -sL https://nodejs.org/dist/v24.21.0/SHASUMS256.txt | grep linux-arm64.tar.xz | sha256sum -c -
+# | tar xf node-v24.21.0-linux-arm64.tar.xz
+# | N=/tmp/node-v24.21.0-linux-arm64/bin/node
+# | $N --version; $N -p 'process.versions.uv'
+# | $N -p 'JSON.stringify(require("os").cpus().slice(0,2))'
+# | $N -p 'JSON.stringify(require("os").cpus().slice(0,2))'length'
+# | $N -p 'require("os").availableParallelism()'
+# ---- raw output ----
+Linux ip-10-128-12-128 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+8
+c8g.2xlarge
+== /proc/cpuinfo (cpu 0)
+processor	: 0
+BogoMIPS	: 2000.00
+Features	: fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 flagm2 frint svei8mm svebf16 i8mm bf16 dgh rng bti
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x0
+CPU part	: 0xd4f
+CPU revision	: 1
+== lscpu
+Architecture:                            aarch64
+CPU op-mode(s):                          64-bit
+Byte Order:                              Little Endian
+CPU(s):                                  8
+On-line CPU(s) list:                     0-7
+Vendor ID:                               ARM
+BIOS Vendor ID:                          AWS
+Model name:                              Neoverse-V2
+BIOS Model name:                         AWS Graviton4 AWS Graviton4 CPU @ 2.8GHz
+BIOS CPU family:                         258
+Model:                                   1
+Thread(s) per core:                      1
+Core(s) per socket:                      8
+Socket(s):                               1
+Stepping:                                r0p1
+BogoMIPS:                                2000.00
+Flags:                                   fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop sha3 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm sb paca pacg dcpodp sve2 sveaes svepmull svebitperm svesha3 flagm2 frint svei8mm svebf16 i8mm bf16 dgh rng bti
+L1d cache:                               512 KiB (8 instances)
+L1i cache:                               512 KiB (8 instances)
+L2 cache:                                16 MiB (8 instances)
+L3 cache:                                36 MiB (1 instance)
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0-7
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Old microcode:             Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; CSV2, BHB
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Not affected
+== cpufreq
+ls: cannot access '/sys/devices/system/cpu/cpu0/cpufreq': No such file or directory
+node-v24.21.0-linux-arm64.tar.xz: OK
+v24.21.0
+1.52.1
+[{"model":"Neoverse-V2","speed":0,"times":{"user":810,"nice":0,"sys":400,"idle":112610,"irq":0}},{"model":"Neoverse-V2","speed":0,"times":{"user":420,"nice":0,"sys":330,"idle":113700,"irq":0}}]
+
+---- stderr ----
+/var/lib/amazon/ssm/i-039d667a6e6dcffcc/document/orchestration/f6665a86-e209-4044-9ed6-01cda329d64d/awsrunShellScript/0.awsrunShellScript/_script.sh: 15: Syntax error: "(" unexpected
+failed to run commands: exit status 2
