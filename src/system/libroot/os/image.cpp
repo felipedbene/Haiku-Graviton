@@ -443,6 +443,20 @@ __parse_invoke_line(char *invoker, char ***_newArgs,
 
 	newArgs[i + count] = NULL;
 
+	// The interpreter is what will actually be loaded, so it has to pass the
+	// same test as the script did. The kernel does not look at the program it
+	// is handed, so a missing interpreter would otherwise only be noticed by
+	// the runtime loader in the new image: the exec or spawn would succeed and
+	// the program would then exit with an error, instead of the call failing
+	// with ENOENT the way callers (shells, posix_spawn() users) expect.
+	if (count > 0) {
+		status_t status = __test_executable(newArgs[0], NULL);
+		if (status != B_OK) {
+			free(newArgs);
+			return status;
+		}
+	}
+
 	*_newArgs = newArgs;
 	*_oldArgs = (char * const *)newArgs;
 	*_argCount += count;
