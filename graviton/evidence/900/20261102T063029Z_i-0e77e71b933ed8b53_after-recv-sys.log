@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-recv-sys
+# instance: i-0e77e71b933ed8b53   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T063029Z   end: 20261102T063040Z   rc: 0
+# script sha256: 1a2567c2ea50e9c8031ad81a372d79fa2e7c52758591b846641816043ce086a8
+# ---- script ----
+# | uptime
+# | echo "--- syslog lines naming a panic, KDL entry or page fault (boot banners excluded)"
+# | grep -iE 'kdl|panic|vm_page_fault|kernel debugger|PANIC' /var/log/syslog | grep -vE 'debugger extension "|Welcome to kernel debugger output' | tail -20
+# | echo "count=$(grep -iE 'kdl|panic|vm_page_fault|kernel debugger' /var/log/syslog | grep -vcE 'debugger extension "|Welcome to kernel debugger output')"
+# | echo "--- sshd still listening, pkgman reachable"
+# | netstat -an 2>/dev/null | grep -E '[:.]22 ' | head -3
+# | pkgman refresh 2>&1 | tail -1
+# ---- raw output ----
+--- syslog lines naming a panic, KDL entry or page fault (boot banners excluded)
+count=0
+--- sshd still listening, pkgman reachable
+Validating checksum for DeBeOS ...
+/tmp/run-59706-cb3f4b.sh: line 1: uptime: command not found

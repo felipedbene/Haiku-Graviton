@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-sys
+# instance: i-0130d814a43ff4eec   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T070408Z   end: 20261102T070418Z   rc: 0
+# script sha256: b0e685e31b6fdf7e07582a2655b25cf8ccdf515ac69e9a2c40cdfd5ea78e5194
+# ---- script ----
+# | echo "--- syslog lines naming a panic, KDL entry or page fault (boot banners excluded)"
+# | grep -iE 'kdl|panic|vm_page_fault|kernel debugger|PANIC' /var/log/syslog | grep -vE 'debugger extension "|Welcome to kernel debugger output' | tail -20
+# | echo "count=$(grep -iE 'kdl|panic|vm_page_fault|kernel debugger' /var/log/syslog | grep -vcE 'debugger extension "|Welcome to kernel debugger output')"
+# ---- raw output ----
+--- syslog lines naming a panic, KDL entry or page fault (boot banners excluded)
+count=0

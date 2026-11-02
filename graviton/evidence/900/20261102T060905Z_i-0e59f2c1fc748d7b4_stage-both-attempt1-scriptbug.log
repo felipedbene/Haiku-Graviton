@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-both
+# instance: i-0e59f2c1fc748d7b4   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T060905Z   end: 20261102T060915Z   rc: 2
+# script sha256: 5a80ffd2751a01ce7bce2b7740914ff489a192ae0cf5bb578e2ba911d1fae939
+# ---- script ----
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | echo "--- overrides before"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | cd /boot/home && mkdir -p t900 && cd t900
+# | python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/both/ipv6?<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED>' ipv6.mod || exit 4
+# | echo 'c03adcd315ee9d3a718cb33e48f24500b472f5a220f8f73929c6476b9fe3247d  ipv6.mod' | sha256sum -c || exit 5
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+--- overrides before
+d4d8408918a23f5df380d66390920387be39925244a6d2cd87630b663f29e370  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+7638a65d658f4a56e974987da15edf07480d086c39891d2d9e24486a17b3aeb1  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+14f077dd6dbccc2c7b02e70ab8fcea11a64ac084d1c70b35f398c51042246e9f  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+7a8e657953df1809d985fd93d0d259acf8833bfe8cf077e155ab5ec539806cce  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+/tmp/run-49323-7946da.sh: line 6: syntax error near unexpected token `sys.argv[1],'
+/tmp/run-49323-7946da.sh: line 6: `python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/both/ipv6?<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED> -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/t900/mod/fix/ipv6?<PRESIGNED>' ipv6.mod || exit 4<PRESIGNED>' ipv6.mod || exit 4'
+failed to run commands: exit status 2

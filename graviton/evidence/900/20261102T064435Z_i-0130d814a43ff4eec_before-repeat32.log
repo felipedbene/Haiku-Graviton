@@ -1,0 +1,67 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-repeat32
+# instance: i-0130d814a43ff4eec   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T064435Z   end: 20261102T065044Z   rc: 0
+# script sha256: 080570a8d4c1897b9ee092c6ec8939f4cf795213a6fddc9e86c5cf088e15e14d
+# ---- script ----
+# | cd /boot/home/t900/node-v24.21.0 || exit 2
+# | for t in parallel/test-http2-many-writes-and-destroy parallel/test-http-writable-true-after-close; do
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 8 -t 120 -p tap --repeat 32 $t > /tmp/rep.tap 2>&1
+# | 	echo "=== $t x32: rc=$? ok=$(grep -c '^ok ' /tmp/rep.tap) notok=$(grep -c '^not ok ' /tmp/rep.tap)"
+# | 	awk '/^not ok/{p=1} p&&n<40{print; n++} /^ok/{p=0}' /tmp/rep.tap | head -40
+# | done
+# ---- raw output ----
+=== parallel/test-http2-many-writes-and-destroy x32: rc=1 ok=31 notok=1
+not ok 32 parallel/test-http2-many-writes-and-destroy
+  ---
+  duration_ms: 360031.50100
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (req onclose)
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t900/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+=== parallel/test-http-writable-true-after-close x32: rc=1 ok=0 notok=32
+not ok 1 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 257.06500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/t900/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/t900/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/t900/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...
+not ok 2 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 252.65700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/t900/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/t900/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/t900/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)
+        at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+  ...
+not ok 3 parallel/test-http-writable-true-after-close
+  ---
+  duration_ms: 271.57900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Mismatched <anonymous> function calls. Expected exactly 1, actual 2.
+        at Proxy.mustCall (/boot/home/t900/node-v24.21.0/test/common/index.js:439:10)
+        at Server.<anonymous> (/boot/home/t900/node-v24.21.0/test/parallel/test-http-writable-true-after-close.js:15:27)
+        at Server.<anonymous> (/boot/home/t900/node-v24.21.0/test/common/index.js:481:15)
+        at Server.emit (node:events:514:28)
+        at parserOnIncoming (node:_http_server:1293:12)

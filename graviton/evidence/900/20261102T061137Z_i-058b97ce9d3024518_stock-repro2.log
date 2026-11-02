@@ -1,0 +1,199 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-repro2
+# instance: i-058b97ce9d3024518   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T061137Z   end: 20261102T061652Z   rc: 0
+# script sha256: 53550227bd95a910b1dea531ce307ab6f321b056b1de58a3630a2e44e35cc4f6
+# ---- script ----
+# | cd /boot/home/t900 || exit 2
+# | echo "--- loaded network images (kernel team)"
+# | listimage 2>&1 | grep -E 'add-ons/kernel/network/(stack|protocols/)' | awk '{print $NF}' | sort -u
+# | echo "--- effective modules"
+# | for m in stack protocols/ipv4 protocols/ipv6 protocols/tcp protocols/udp; do
+# | 	o=/boot/home/config/non-packaged/add-ons/kernel/network/$m
+# | 	[ -f $o ] && sha256sum $o || sha256sum /boot/system/add-ons/kernel/network/$m
+# | done
+# | echo "--- localhost resolution"
+# | grep -v '^#' /etc/hosts | grep -v '^$'
+# | ADDR=$(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\),.*/\1/p')
+# | V6=$(ifconfig /dev/net/ena/0 | sed -n 's/.*inet6 addr: \([0-9a-fA-F:]*\),.*/\1/p' | grep -vi '^fe80' | head -1)
+# | echo "own IPv4=$ADDR own IPv6=${V6:-none configured}"
+# | ifconfig loop | grep -E 'MTU|Receive|Transmit'
+# | for i in 1 2 3; do
+# | 	echo "=== tcp900 run $i"
+# | 	timeout 900 ./tcp900 $ADDR $V6
+# | 	echo "=== tcp900 run $i rc=$?"
+# | done
+# | ifconfig loop | grep -E 'Receive|Transmit'
+# | echo "--- syslog KDL/panic lines"
+# | grep -ciE 'kdl|panic|vm_page_fault|kernel debugger' /var/log/syslog
+# ---- raw output ----
+--- loaded network images (kernel team)
+/boot/system/add-ons/kernel/network/protocols/ipv4
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+/boot/system/add-ons/kernel/network/stack
+--- effective modules
+41d989d30a9389d1f54ea14aa7d2b860b6f63ac5bd49746e45813dd7fa68d392  /boot/system/add-ons/kernel/network/stack
+d5254cb92f6501b263ac0dc161da62a800be820d371f0fab4b5f052198e3b119  /boot/system/add-ons/kernel/network/protocols/ipv4
+cd4b81a95f6c984d1d84eed4d03fc875b040f64b0ddc37565db212fe2a84ec28  /boot/system/add-ons/kernel/network/protocols/ipv6
+5d1fdabccc1ad4159f2145b0299e785bef94a22ece12687e4933b4490488d80c  /boot/system/add-ons/kernel/network/protocols/tcp
+96088019c6bf6d386bc720472ced137de1b81a1a7f89c568f28b0cea1d327995  /boot/system/add-ons/kernel/network/protocols/udp
+--- localhost resolution
+own IPv4=10.128.15.224 own IPv6=none configured
+	MTU: 65536, Metric: 0, up loopback link
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 25390 packets, 0 errors, 814312337 bytes, 0 mcasts, 0 dropped
+=== tcp900 run 1
+tcp ::1               TCP_MAXSEG 65476
+tcp ::1               s2c    65463 in   65463 writes       PASS  delivered 65463/65463 in 0.000s, 242.0 MiB/s, eof
+tcp ::1               s2c    65464 in   65464 writes       FAIL  delivered 0/65464 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    65476 in   65476 writes       FAIL  delivered 0/65476 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 15.0 MiB/s, eof
+tcp ::1               c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 30.5 MiB/s, eof
+tcp ::1               s2c    64KiB in   64KiB writes       FAIL  delivered 0/65536 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64KiB in   64KiB writes       FAIL  delivered 0/65536 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c     1MiB in    1MiB writes       FAIL  delivered 0/1048576 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s     1MiB in    1MiB writes       FAIL  delivered 0/1048576 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    64MiB in    1MiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64MiB in    1MiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    64MiB in   64KiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64MiB in   64KiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::ffff:127.0.0.1  FAIL  setup: setsockopt(IPV6_V6ONLY, 0): Invalid Argument
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 283.9 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 304.6 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 307.7 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 25.7 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 25.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 312.5 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 312.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 303.6 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 312.2 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.4 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.8 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.8 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.0 MiB/s, eof
+tcp 10.128.15.224     TCP_MAXSEG 8961
+tcp 10.128.15.224     s2c     8948 in    8948 writes       PASS  delivered 8948/8948 in 0.000s, 135.5 MiB/s, eof
+tcp 10.128.15.224     s2c     8949 in    8949 writes       PASS  delivered 8949/8949 in 0.000s, 149.7 MiB/s, eof
+tcp 10.128.15.224     s2c     8961 in    8961 writes       PASS  delivered 8961/8961 in 0.000s, 144.8 MiB/s, eof
+tcp 10.128.15.224     s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp 10.128.15.224     c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp 10.128.15.224     s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.100s, 0.6 MiB/s, eof
+tcp 10.128.15.224     c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.100s, 0.6 MiB/s, eof
+tcp 10.128.15.224     s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.104s, 9.7 MiB/s, eof
+tcp 10.128.15.224     c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.104s, 9.7 MiB/s, eof
+tcp 10.128.15.224     s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.326s, 196.5 MiB/s, eof
+tcp 10.128.15.224     c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.326s, 196.6 MiB/s, eof
+tcp 10.128.15.224     s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.284s, 225.6 MiB/s, eof
+tcp 10.128.15.224     c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.284s, 225.5 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) refused by sendto: Message too long
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 102.4s, 11 FAIL
+=== tcp900 run 1 rc=11
+=== tcp900 run 2
+tcp ::1               TCP_MAXSEG 65476
+tcp ::1               s2c    65463 in   65463 writes       PASS  delivered 65463/65463 in 0.000s, 247.7 MiB/s, eof
+tcp ::1               s2c    65464 in   65464 writes       FAIL  delivered 0/65464 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    65476 in   65476 writes       FAIL  delivered 0/65476 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 10.6 MiB/s, eof
+tcp ::1               c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 24.4 MiB/s, eof
+tcp ::1               s2c    64KiB in   64KiB writes       FAIL  delivered 0/65536 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64KiB in   64KiB writes       FAIL  delivered 0/65536 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c     1MiB in    1MiB writes       FAIL  delivered 0/1048576 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s     1MiB in    1MiB writes       FAIL  delivered 0/1048576 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    64MiB in    1MiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64MiB in    1MiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    64MiB in   64KiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64MiB in   64KiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::ffff:127.0.0.1  FAIL  setup: setsockopt(IPV6_V6ONLY, 0): Invalid Argument
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 289.1 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 304.6 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 306.2 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 16.3 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 25.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 309.4 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 315.7 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 304.7 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 311.1 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.202s, 316.8 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.202s, 317.4 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 389.2 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.9 MiB/s, eof
+tcp 10.128.15.224     TCP_MAXSEG 8961
+tcp 10.128.15.224     s2c     8948 in    8948 writes       PASS  delivered 8948/8948 in 0.000s, 137.6 MiB/s, eof
+tcp 10.128.15.224     s2c     8949 in    8949 writes       PASS  delivered 8949/8949 in 0.000s, 147.1 MiB/s, eof
+tcp 10.128.15.224     s2c     8961 in    8961 writes       PASS  delivered 8961/8961 in 0.000s, 142.4 MiB/s, eof
+tcp 10.128.15.224     s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp 10.128.15.224     c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 10.128.15.224     s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.100s, 0.6 MiB/s, eof
+tcp 10.128.15.224     c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.100s, 0.6 MiB/s, eof
+tcp 10.128.15.224     s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.104s, 9.6 MiB/s, eof
+tcp 10.128.15.224     c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.104s, 9.7 MiB/s, eof
+tcp 10.128.15.224     s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.326s, 196.2 MiB/s, eof
+tcp 10.128.15.224     c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.327s, 195.6 MiB/s, eof
+tcp 10.128.15.224     s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.284s, 225.6 MiB/s, eof
+tcp 10.128.15.224     c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.284s, 225.7 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) refused by sendto: Message too long
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 102.4s, 11 FAIL
+=== tcp900 run 2 rc=11
+=== tcp900 run 3
+tcp ::1               TCP_MAXSEG 65476
+tcp ::1               s2c    65463 in   65463 writes       PASS  delivered 65463/65463 in 0.000s, 254.8 MiB/s, eof
+tcp ::1               s2c    65464 in   65464 writes       FAIL  delivered 0/65464 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    65476 in   65476 writes       FAIL  delivered 0/65476 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 19.9 MiB/s, eof
+tcp ::1               c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 25.0 MiB/s, eof
+tcp ::1               s2c    64KiB in   64KiB writes       FAIL  delivered 0/65536 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64KiB in   64KiB writes       FAIL  delivered 0/65536 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c     1MiB in    1MiB writes       FAIL  delivered 0/1048576 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s     1MiB in    1MiB writes       FAIL  delivered 0/1048576 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    64MiB in    1MiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64MiB in    1MiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               s2c    64MiB in   64KiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::1               c2s    64MiB in   64KiB writes       FAIL  delivered 0/67108864 in 10.000s, 0.0 MiB/s, no eof, DEADLINE
+tcp ::ffff:127.0.0.1  FAIL  setup: setsockopt(IPV6_V6ONLY, 0): Invalid Argument
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 293.2 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 307.6 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 301.7 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 23.8 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 26.4 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 317.3 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 322.2 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 300.8 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 314.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.7 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 319.0 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.163s, 392.0 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 391.1 MiB/s, eof
+tcp 10.128.15.224     TCP_MAXSEG 8961
+tcp 10.128.15.224     s2c     8948 in    8948 writes       PASS  delivered 8948/8948 in 0.000s, 135.5 MiB/s, eof
+tcp 10.128.15.224     s2c     8949 in    8949 writes       PASS  delivered 8949/8949 in 0.000s, 152.4 MiB/s, eof
+tcp 10.128.15.224     s2c     8961 in    8961 writes       PASS  delivered 8961/8961 in 0.000s, 147.3 MiB/s, eof
+tcp 10.128.15.224     s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 10.128.15.224     c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 28.7 MiB/s, eof
+tcp 10.128.15.224     s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.100s, 0.6 MiB/s, eof
+tcp 10.128.15.224     c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.100s, 0.6 MiB/s, eof
+tcp 10.128.15.224     s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.104s, 9.7 MiB/s, eof
+tcp 10.128.15.224     c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.104s, 9.6 MiB/s, eof
+tcp 10.128.15.224     s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.327s, 195.9 MiB/s, eof
+tcp 10.128.15.224     c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.326s, 196.4 MiB/s, eof
+tcp 10.128.15.224     s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.283s, 225.8 MiB/s, eof
+tcp 10.128.15.224     c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.283s, 225.8 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) refused by sendto: Message too long
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 102.4s, 11 FAIL
+=== tcp900 run 3 rc=11
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 50779 packets, 0 errors, 1628821004 bytes, 0 mcasts, 0 dropped
+--- syslog KDL/panic lines
+5
+grep: /etc/hosts: No such file or directory

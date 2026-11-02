@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules-send-both
+# instance: i-0ef29f46300cd419b   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T060810Z   end: 20261102T060849Z   rc: 0
+# script sha256: dbe9fbac5754c49595029b82df5a7e94b1583f8f8ab34a83c39b27e13d0776c8
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/t900
+# | cd /opt/t900/hg/generated || exit 1
+# | P=objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f --detach origin/fix/873-ipv6-dual-stack || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	aws s3 cp --quiet $OUT/$patch /opt/t900/$patch && sha256sum /opt/t900/$patch
+# | 	git -C .. apply --whitespace=nowarn /opt/t900/$patch || { echo "apply failed"; return 1; }
+# | 	git -C .. diff --stat
+# | 	sleep 3
+# | 	rm -rf $P
+# | 	jam -q -j32 ipv6 > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; return 1; }
+# | 	grep 'warning:' jam-$label.log | grep 'ipv6/ipv6.cpp' | head
+# | 	mkdir -p /opt/t900/out/$label && cp $P/ipv6 /opt/t900/out/$label/ipv6
+# | 	sha256sum /opt/t900/out/$label/ipv6 | sed "s|/opt/t900/out/||"
+# | 	aws s3 cp --quiet /opt/t900/out/$label/ipv6 $OUT/mod/$label/ipv6
+# | }
+# | build send send.patch
+# | build both fix2.patch
+# | # the receive-only module once more, to show the rebuild is reproducible
+# | build recv fix.patch
+# ---- raw output ----
+91e8619800039e3373bc1dc62a73fc62d66361d51448ed7d2d776d616c134bf3  /opt/t900/send.patch
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+JAM send head=eaf7d9a1 patch=send.patch rc=0 failed=0 warnings=2
+d6d39d8b8bd049f0b45952de9f9736f55a9b29c234336e3067de2e454a631e38  send/ipv6
+ed7d30c4d5ff238eadac1d455d66a9f4788d87a03dbe35262cb8eefabf613f40  /opt/t900/fix2.patch
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+JAM both head=eaf7d9a1 patch=fix2.patch rc=0 failed=0 warnings=2
+c03adcd315ee9d3a718cb33e48f24500b472f5a220f8f73929c6476b9fe3247d  both/ipv6
+7c6310bf91c28a4ce49a0b69edaf005b8237bf80ff1deaedfcb18da2cbbb069f  /opt/t900/fix.patch
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+JAM recv head=eaf7d9a1 patch=fix.patch rc=0 failed=0 warnings=2
+4add36d2d293ced62cb536251e4acb0112fa4563255e3b8bd295370238558d57  recv/ipv6

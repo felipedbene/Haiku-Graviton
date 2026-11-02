@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-repeat32b
+# instance: i-0130d814a43ff4eec   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261102T065115Z   end: 20261102T070325Z   rc: 0
+# script sha256: 1b4e3ce1d58906669ddb5b8a4f2fc304f1caec6ceb4b2f7b09140aa1430f9acc
+# ---- script ----
+# | cd /boot/home/t900/node-v24.21.0 || exit 2
+# | for m in protocols/ipv6; do sha256sum /boot/home/config/non-packaged/add-ons/kernel/network/$m; done
+# | for t in parallel/test-net-connect-abort-controller parallel/test-http2-many-writes-and-destroy; do
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 8 -t 120 -p tap --repeat 32 $t > /tmp/rep.tap 2>&1
+# | 	echo "=== $t x32: rc=$? ok=$(grep -c '^ok ' /tmp/rep.tap) notok=$(grep -c '^not ok ' /tmp/rep.tap)"
+# | 	awk '/^not ok/{p=1} p&&n<12{print; n++} /^ok/{p=0}' /tmp/rep.tap
+# | done
+# ---- raw output ----
+d4d8408918a23f5df380d66390920387be39925244a6d2cd87630b663f29e370  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+=== parallel/test-net-connect-abort-controller x32: rc=1 ok=31 notok=1
+not ok 32 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 360110.08900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t900/node-v24.21.0/test/parallel/test-net-connect-abort-controller.js
+=== parallel/test-http2-many-writes-and-destroy x32: rc=1 ok=31 notok=1
+not ok 32 parallel/test-http2-many-writes-and-destroy
+  ---
+  duration_ms: 360087.99300
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+    (req onclose)
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/t900/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
