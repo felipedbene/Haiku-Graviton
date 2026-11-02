@@ -1,0 +1,40 @@
+# evidence: before-install-node
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: a1131798-4a1f-4ca7-8d55-c720acd137f3 (agent status: Success)
+# start: 20261102T010830Z   end: 20261102T010950Z   rc: 0
+# ---- script ----
+# | pkgman install -y nodejs24 gcc haiku_devel libuv_devel binutils 2>&1 | tail -5
+# | pkgman search -i -D libuv 2>&1 | tail -5
+# | ls -l /boot/system/lib/libuv* /boot/system/develop/headers/uv* 2>&1 | head
+# | node --version
+# | node -p 'require("os").cpus()'
+# | node -p 'require("os").cpus().length'
+# | node -p 'require("os").availableParallelism()'
+# | node -p 'process.versions.uv'
+# ---- raw output ----
+Validating checksum for http://packages.debene.dev/arm64/packages/nodejs24-24.21.0-2-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_01:08:45"
+[system] Cleaning up ...
+[system] Done.
+Repository  Name         Version   Arch 
+----------------------------------------
+<system>    libuv        1.52.1-4  arm64
+<system>    libuv_devel  1.52.1-4  arm64
+-r--r--r-- 1 baron root  73038 Nov  1 07:40 /boot/system/develop/headers/uv.h
+lr-xr-xr-x 1 baron root     14 Nov  1 07:40 /boot/system/lib/libuv.so.1 -> libuv.so.1.0.0
+-r-xr-xr-x 1 baron root 249888 Nov  1 07:40 /boot/system/lib/libuv.so.1.0.0
+
+/boot/system/develop/headers/uv:
+total 36
+-r--r--r-- 1 baron root 11216 Nov  1 07:40 errno.h
+-r--r--r-- 1 baron root  1606 Nov  1 07:40 posix.h
+-r--r--r-- 1 baron root  1505 Nov  1 07:40 threadpool.h
+-r--r--r-- 1 baron root 19915 Nov  1 07:40 unix.h
+v24.21.0
+[]
+0
+8
+1.52.1
+
+

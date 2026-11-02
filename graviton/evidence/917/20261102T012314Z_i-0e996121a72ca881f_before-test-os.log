@@ -1,0 +1,16 @@
+# evidence: before-test-os
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: fbc34639-8c4b-42d8-867a-11c3920f12b2 (agent status: Cancelled)
+# start: 20261102T012314Z   end: 20261102T015924Z   rc: -1
+# ---- script ----
+# | pkgman install -y python3.14 2>&1 | tail -1
+# | cd /boot/home
+# | curl -sLO https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+# | curl -sL https://nodejs.org/dist/v24.21.0/SHASUMS256.txt | grep ' node-v24.21.0.tar.gz$' | sha256sum -c - || exit 1
+# | tar xzf node-v24.21.0.tar.gz
+# | cd node-v24.21.0
+# | pkgman search -i nodejs24 2>&1 | tail -1
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap -v parallel/test-os 2>&1 | tail -30
+# ---- raw output ----
+
+

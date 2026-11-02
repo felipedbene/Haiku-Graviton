@@ -1,0 +1,30 @@
+# evidence: before-node-trace
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: 7f486fcc-5d39-46a5-940b-4125f823dcfe (agent status: Success)
+# start: 20261102T011147Z   end: 20261102T011256Z   rc: 0
+# ---- script ----
+# | node --expose-internals -p 'const {internalBinding}=require("internal/test/binding"); JSON.stringify(internalBinding("os").getCPUs())' 2>&1 | head -5
+# | echo "== strace"
+# | strace -o /tmp/st917.txt node -p 'require("os").cpus().length' 2>&1 | tail -3
+# | grep -n -i "topology\|system_info\|cpu_info" /tmp/st917.txt | head -20
+# | echo "== listimage"
+# | node -e 'setTimeout(()=>{},3000)' & NP=$!; sleep 1; listimage $NP 2>&1 | grep -i -E "uv|node" ; kill $NP
+# ---- raw output ----
+(node:516) internal/test/binding: These APIs are for internal testing only. Do not use them.
+(Use `node --trace-warnings ...` to show where the warning was created)
+undefined
+== strace
+0
+49:[   526] get_system_info(0xe4d5144cd0) = 0x0 No error (3 us)
+259:[   526] get_system_info(0xe4d5144b80) = 0x0 No error (1 us)
+418:[   526] get_system_info(0xe4d51428c0) = 0x0 No error (3 us)
+419:[   526] get_cpu_topology_info(0xe4d51428a0, [0x1]) = 0x0 No error (2 us)
+423:[   526] get_cpu_topology_info((nil), [0x91]) = 0x0 No error (0 us)
+424:[   526] get_cpu_topology_info(0x91af90f780, [0x12]) = 0x0 No error (2 us)
+425:[   526] get_system_info(0xe4d51433e0) = 0x0 No error (1 us)
+== listimage
+TEAM  536 (/boot/system/bin/node -e setTimeout(()=>{},3000)):
+ 4691 0x0000002a322d1000 0x0000002a35593000     0          0 /boot/system/bin/node
+ 4697 0x0000005147401000 0x0000005147443000     0          0 /boot/system/lib/libuv.so.1.0.0
+
+

@@ -1,0 +1,35 @@
+# evidence: before-node-interpose
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: 78c445a0-ca98-4c8d-898e-adaa9bf54a5c (agent status: Success)
+# start: 20261102T011620Z   end: 20261102T011728Z   rc: 0
+# ---- script ----
+# | cd /tmp/p917
+# | echo 'Lyogd3JhcDkxNzogaW50ZXJwb3NlIHV2X2NwdV9pbmZvIGFuZCB0aGUgbGlicm9vdCBjYWxscyB1bmRlciBpdCwgdG8gc2VlIHdoaWNoCiAqIHN0ZXAgZmFpbHMgaW5zaWRlIHRoZSBub2RlIHByb2Nlc3MuICovCiNkZWZpbmUgX0dOVV9TT1VSQ0UKI2luY2x1ZGUgPGRsZmNuLmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RyaW5nLmg+CiNpbmNsdWRlIDxPUy5oPgojaW5jbHVkZSA8dXYuaD4KCmludAp1dl9jcHVfaW5mbyh1dl9jcHVfaW5mb190KiogaW5mb3MsIGludCogY291bnQpCnsKCWludCAoKnJlYWwpKHV2X2NwdV9pbmZvX3QqKiwgaW50KikKCQk9IChpbnQgKCopKHV2X2NwdV9pbmZvX3QqKiwgaW50KikpZGxzeW0oUlRMRF9ORVhULCAidXZfY3B1X2luZm8iKTsKCWZwcmludGYoc3RkZXJyLCAid3JhcDkxNzogcmVhbCB1dl9jcHVfaW5mbyAlcFxuIiwgKHZvaWQqKXJlYWwpOwoJaW50IHIgPSByZWFsKGluZm9zLCBjb3VudCk7CglmcHJpbnRmKHN0ZGVyciwgIndyYXA5MTc6IHV2X2NwdV9pbmZvIC0+ICVkICglcykgY291bnQgJWRcbiIsIHIsCgkJciA/IHV2X3N0cmVycm9yKHIpIDogIm9rIiwgciA/IC0xIDogKmNvdW50KTsKCXJldHVybiByOwp9CgpzdGF0dXNfdApnZXRfc3lzdGVtX2luZm8oc3lzdGVtX2luZm8qIGluZm8pCnsKCXN0YXR1c190ICgqcmVhbCkoc3lzdGVtX2luZm8qKQoJCT0gKHN0YXR1c190ICgqKShzeXN0ZW1faW5mbyopKWRsc3ltKFJUTERfTkVYVCwgImdldF9zeXN0ZW1faW5mbyIpOwoJc3RhdHVzX3QgcyA9IHJlYWwoaW5mbyk7CglmcHJpbnRmKHN0ZGVyciwgIndyYXA5MTc6IGdldF9zeXN0ZW1faW5mbyAtPiAlZCBjcHVfY291bnQgJXVcbiIsCgkJKGludClzLCBpbmZvLT5jcHVfY291bnQpOwoJcmV0dXJuIHM7Cn0KCnN0YXR1c190CmdldF9jcHVfdG9wb2xvZ3lfaW5mbyhjcHVfdG9wb2xvZ3lfbm9kZV9pbmZvKiB0LCB1aW50MzIqIGMpCnsKCXN0YXR1c190ICgqcmVhbCkoY3B1X3RvcG9sb2d5X25vZGVfaW5mbyosIHVpbnQzMiopCgkJPSAoc3RhdHVzX3QgKCopKGNwdV90b3BvbG9neV9ub2RlX2luZm8qLCB1aW50MzIqKSlkbHN5bShSVExEX05FWFQsCgkJCSJnZXRfY3B1X3RvcG9sb2d5X2luZm8iKTsKCXVpbnQzMiBpbiA9ICpjOwoJc3RhdHVzX3QgcyA9IHJlYWwodCwgYyk7CglmcHJpbnRmKHN0ZGVyciwgIndyYXA5MTc6IGdldF9jcHVfdG9wb2xvZ3lfaW5mbyglcCwgaW4gJXUpIC0+ICVkIG91dCAldVxuIiwKCQkodm9pZCopdCwgaW4sIChpbnQpcywgKmMpOwoJcmV0dXJuIHM7Cn0K' | base64 -d > wrap917.c
+# | gcc -Wall -shared -fPIC -o libwrap917.so wrap917.c -luv 2>&1
+# | LD_PRELOAD=/tmp/p917/libwrap917.so ./probe917 2>&1 | grep -E "wrap917|uv_cpu_info"
+# | echo "== node"
+# | LD_PRELOAD=/tmp/p917/libwrap917.so node -p 'require("os").cpus().length' 2>&1
+# ---- raw output ----
+wrap917: get_system_info -> 0 cpu_count 8
+wrap917: get_cpu_topology_info((nil), in 0) -> 0 out 18
+wrap917: get_cpu_topology_info(0x192696c7f88, in 18) -> 0 out 18
+wrap917: get_system_info -> 0 cpu_count 8
+wrap917: real uv_cpu_info 0x508c183120
+wrap917: get_cpu_topology_info((nil), in 0) -> 0 out 18
+wrap917: get_cpu_topology_info(0xa22f0b7000, in 18) -> 0 out 18
+wrap917: get_system_info -> 0 cpu_count 8
+wrap917: uv_cpu_info -> 0 (ok) count 8
+uv_cpu_info: r 0 (ok) count 8
+== node
+wrap917: get_system_info -> 0 cpu_count 8
+wrap917: get_system_info -> 0 cpu_count 8
+wrap917: get_system_info -> 0 cpu_count 8
+wrap917: get_cpu_topology_info(0x109edb018a0, in 1) -> 0 out 1
+wrap917: real uv_cpu_info 0x1091f799120
+wrap917: get_cpu_topology_info((nil), in 83) -> 0 out 18
+wrap917: get_cpu_topology_info(0x61b3a5b780, in 18) -> 0 out 18
+wrap917: get_system_info -> 0 cpu_count 8
+wrap917: uv_cpu_info -> 0 (ok) count 8
+0
+
+

@@ -1,0 +1,48 @@
+# evidence: builder-probe
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: 0fcbbbc9-555f-443c-886d-697ed0c49189 (agent status: Success)
+# start: 20261102T013335Z   end: 20261102T013343Z   rc: 0
+# ---- script ----
+# | uname -a; df -k /boot | tail -3; sysinfo -cpu | head -2
+# | ls /boot/home/ | head -30
+# | ls /boot/home/haikuports/net-libs/nodejs/ /boot/home/haikuports/net-libs/nodejs/patches 2>&1
+# | cd /boot/home/haikuports 2>/dev/null && git log --oneline -1
+# | ls -l /boot/home/haiku-nativebuild /boot/home/config/settings/haikuports.conf 2>&1
+# | pkgman search -i -D libuv 2>&1 | tail -3
+# ---- raw output ----
+Haiku ip-10-128-10-114.us-west-2.comp R1~beta6+development hrev59996 Sep 18 2026 15:24:51 arm64 other Haiku
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288
+32 ARM Neoverse-V1, revision 411fd401 running at 2598MHz
+
+Desktop
+config
+depclosure.py
+haiku-nativebuild
+haiku-package-closure
+haiku-ports-overlay-apply
+haiku-provision-native-builder
+haiku-repo-publish
+haikuporter
+haikuports
+haikuports-patches
+haikuports-patches.tar
+haikuports.conf
+mail
+seed
+warm.log
+/boot/home/haikuports/net-libs/nodejs/:
+nodejs20-20.15.1.recipe
+patches
+work-20.15.1
+
+/boot/home/haikuports/net-libs/nodejs/patches:
+nodejs-20.15.1.patchset
+nodejs_x86-20.15.1.patchset
+943a070 golang: copy go.env to provide default variables
+ls: cannot access '/boot/home/config/settings/haikuports.conf': No such file or directory
+-rwxr-xr-x 1 baron root 10921 Sep 19 02:47 /boot/home/haiku-nativebuild
+No matching packages found.
+
+

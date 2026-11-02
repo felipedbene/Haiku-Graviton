@@ -1,0 +1,12 @@
+# evidence: builder-poll
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: 87bf5bd5-35c3-4bca-a664-efac2841ecde (agent status: Success)
+# start: 20261102T033811Z   end: 20261102T033813Z   rc: 0
+# ---- script ----
+# | grep -a "^exit " /boot/home/n24r3.log; tail -c 300 /boot/home/n24r3.log | tr '\r' '\n' | tail -2
+# ---- raw output ----
+exit 0
+----------------------------------------------------------------------
+exit 0
+
+

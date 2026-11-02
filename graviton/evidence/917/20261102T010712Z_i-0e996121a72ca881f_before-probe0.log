@@ -1,0 +1,37 @@
+# evidence: before-probe0
+# instance: i-0e996121a72ca881f   region: us-west-2
+# ssm command: 13b2ca7a-d4cc-49ab-ad61-b9f60a78eb0a (agent status: Success)
+# start: 20261102T010712Z   end: 20261102T010820Z   rc: 0
+# ---- script ----
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | echo "== sysinfo -cpu"; sysinfo -cpu; echo "rc=$?"
+# | echo "== grep -c 'CPU #'"; sysinfo -cpu | grep -c 'CPU #'
+# | echo "== sysinfo -platform"; sysinfo -platform
+# | echo "== gcc?"; ls /boot/system/bin/gcc /boot/system/develop/tools/bin/gcc 2>&1; gcc --version 2>&1 | head -1
+# | echo "== node?"; ls /boot/system/bin/node 2>&1
+# | pkgman list-repos 2>&1 | head
+# ---- raw output ----
+Haiku ip-10-128-13-149.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
+638140af0fb2f8e9e059ffd6d0b18536a877d88ab012547f4dc23f43ff5925f6  /boot/system/lib/libroot.so
+== sysinfo -cpu
+8 ARM Neoverse-V1, revision 411fd401 running at 2598MHz
+
+rc=0
+== grep -c 'CPU #'
+0
+== sysinfo -platform
+unknown
+== gcc?
+ls: cannot access '/boot/system/bin/gcc': No such file or directory
+ls: cannot access '/boot/system/develop/tools/bin/gcc': No such file or directory
+/var/lib/amazon/ssm/i-0e996121a72ca881f/document/orchestration/13b2ca7a-d4cc-49ab-ad61-b9f60a78eb0a/awsrunShellScript/0.awsrunShellScript/_script.sh: line 6: gcc: command not found
+== node?
+ls: cannot access '/boot/system/bin/node': No such file or directory
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+
+

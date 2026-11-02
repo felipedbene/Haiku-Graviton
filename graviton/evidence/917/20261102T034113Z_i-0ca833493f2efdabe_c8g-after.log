@@ -1,0 +1,59 @@
+# evidence: c8g-after
+# instance: i-0ca833493f2efdabe   region: us-west-2
+# ssm command: cac1c4ce-2ba2-48e2-8279-645f39ae6795 (agent status: Success)
+# start: 20261102T034113Z   end: 20261102T034122Z   rc: 0
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo y; }
+# | feed | pkgman install cmd:curl 2>&1 | tail -1; mkdir -p /boot/home/rev && cd /boot/home/rev
+# | curl -sSf -o nodejs24-24.21.0-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/nodejs24-24.21.0-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSf -o libuv-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/libuv-1.52.1-5-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSf -o libuv_devel-1.52.1-5-arm64.hpkg 'https://haiku-graviton-<ACCOUNT>-us-west-2.s3.amazonaws.com/agent-917/libuv_devel-1.52.1-5-arm64.hpkg?<PRESIGNED>' || exit 1
+# | printf '%s  %s\n' fbb27b574e64e07798a963157e738a90c0d30807e0b1193a815f0c79c2b85b0b nodejs24-24.21.0-3-arm64.hpkg 39537c23b12189c684cad21dc8d87a74d4fee1a62b0b2fde21e91ccc63518878 libuv-1.52.1-5-arm64.hpkg a168f678a664939492a9b096b0b719570cacf423f74e7e2e2a393325b58ff5c3 libuv_devel-1.52.1-5-arm64.hpkg | sha256sum -c - || exit 1
+# | echo "== stage A: nodejs24 rev 3"
+# | feed | pkgman install /boot/home/rev/nodejs24-24.21.0-3-arm64.hpkg 2>&1 | tail -1
+# | pkgman search -i -D nodejs24 2>&1 | tail -1; pkgman search -i -D libuv 2>&1 | tail -2
+# | node -p 'JSON.stringify(require("os").cpus().slice(0,2))'; node -p 'require("os").cpus().length'
+# | echo "== stage B: + libuv rev 5 (and devel, for the probe)"
+# | feed | pkgman install /boot/home/rev/libuv-1.52.1-5-arm64.hpkg /boot/home/rev/libuv_devel-1.52.1-5-arm64.hpkg 2>&1 | tail -1
+# | pkgman search -i -D libuv 2>&1 | tail -2
+# | sysinfo -cpu
+# | node -p 'require("os").cpus()' | head -12
+# | node -p 'require("os").cpus().length'
+# | cd /tmp/p917 && gcc -Wall -o probe917 probe917.c -luv && ./probe917 | grep -E "node 2 |uv_cpu_info|\[0\]|\[7\]"
+# ---- raw output ----
+[system] Done.
+nodejs24-24.21.0-3-arm64.hpkg: OK
+libuv-1.52.1-5-arm64.hpkg: OK
+libuv_devel-1.52.1-5-arm64.hpkg: OK
+== stage A: nodejs24 rev 3
+[system] Done.
+<system>    nodejs24  24.21.0-3  arm64
+<system>    libuv        1.52.1-4  arm64
+<system>    libuv_devel  1.52.1-4  arm64
+[{"model":"unknown","speed":2798,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}},{"model":"unknown","speed":2798,"times":{"user":0,"nice":0,"sys":0,"idle":0,"irq":0}}]
+8
+== stage B: + libuv rev 5 (and devel, for the probe)
+[system] Done.
+<system>    libuv        1.52.1-5  arm64
+<system>    libuv_devel  1.52.1-5  arm64
+8 ARM Neoverse-V2, revision 410fd4f1 running at 2798MHz
+
+[
+  {
+    model: 'Neoverse-V2',
+    speed: 2798,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+    model: 'Neoverse-V2',
+    speed: 2798,
+    times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 }
+  },
+  {
+8
+  node 2 type 3 level 1 id 0 model 0x410fd4f1 freq 2798051413
+uv_cpu_info: r 0 (ok) count 8
+  [0] model "Neoverse-V2" speed 2798 user 0 sys 0 idle 0
+  [7] model "Neoverse-V2" speed 2798 user 0 sys 0 idle 0
+
+

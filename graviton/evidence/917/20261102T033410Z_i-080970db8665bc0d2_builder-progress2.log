@@ -1,0 +1,11 @@
+# evidence: builder-progress2
+# instance: i-080970db8665bc0d2   region: us-west-2
+# ssm command: fddceb17-008c-4dbf-88f0-66ee84954f39 (agent status: Success)
+# start: 20261102T033410Z   end: 20261102T033412Z   rc: 0
+# ---- script ----
+# | grep -a "^exit " /boot/home/n24r3.log; tail -c 300 /boot/home/n24r3.log | tr '\r' '\n' | tail -2
+# ---- raw output ----
+[1954/2019] CXX obj/tools/v8_gypfiles/gen/torque-generated/third_party/v8/builtins/v8_initializers.array-sort-tq-csa.o
+[1955/2019] CXX obj/tools/v8_gypfiles/gen/torque-generated/test/torque/v8_initializers.test-torque-tq-csa.o
+
+

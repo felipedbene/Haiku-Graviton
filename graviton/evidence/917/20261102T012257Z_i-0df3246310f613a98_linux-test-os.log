@@ -1,0 +1,24 @@
+# evidence: linux-test-os
+# instance: i-0df3246310f613a98   region: us-west-2
+# ssm command: 05353b0d-4a6a-470c-99d4-00faf1a744b2 (agent status: Success)
+# start: 20261102T012257Z   end: 20261102T012304Z   rc: 0
+# ---- script ----
+# | set -e
+# | cd /tmp
+# | curl -sLO https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+# | curl -sL https://nodejs.org/dist/v24.21.0/SHASUMS256.txt | grep ' node-v24.21.0.tar.gz$' | sha256sum -c -
+# | tar xzf node-v24.21.0.tar.gz node-v24.21.0/test node-v24.21.0/tools node-v24.21.0/deps/v8/tools 2>/dev/null || tar xzf node-v24.21.0.tar.gz
+# | cd node-v24.21.0
+# | : | python3 tools/test.py --shell=/tmp/node-v24.21.0-linux-arm64/bin/node -p tap parallel/test-os 2>&1 | tail -8
+# ---- raw output ----
+node-v24.21.0.tar.gz: OK
+TAP version 13
+1..1
+ok 1 parallel/test-os
+  ---
+  duration_ms: 70.01300
+  ...
+
+All tests passed.
+
+
