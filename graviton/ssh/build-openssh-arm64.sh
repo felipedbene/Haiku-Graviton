@@ -201,7 +201,7 @@ libnetwork and libbsd, all part of the base haiku package."
 packager		"haiku-graviton port <felipe@localhost>"
 # vendor "DeBeOS": this DeBeOS-built package is baked straight into
 # system/packages, so it must report the same vendor as the DeBeOS repo -- else
-# a later `pkgman install`/refresh that supersedes it would force an "allow
+# a later "pkgman install"/refresh that supersedes it would force an "allow
 # vendor change" (the gcc/cc1 breakage of issue #39). Set at build time (no
 # metadata repack needed for a package we build ourselves).
 vendor			"DeBeOS"
@@ -226,8 +226,8 @@ requires {
 	haiku
 }
 # Both packages ship the same paths (bin/sshd, bin/ssh, lib/openssh/...), so they
-# can never be active together. Naming the conflict turns `pkgman install
-# openssh` into a question that names this package, instead of packagefs
+# can never be active together. Naming the conflict turns "pkgman install
+# openssh" into a question that names this package, instead of packagefs
 # refusing the second activation ("Name in use") after the fact.
 conflicts {
 	openssh
