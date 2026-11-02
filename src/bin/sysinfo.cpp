@@ -511,10 +511,17 @@ dump_platform(system_info *info)
 {
 	cpu_topology_node_info root;
 	uint32 count = 1;
-	get_cpu_topology_info(&root, &count);
+	status_t status = get_cpu_topology_info(&root, &count);
 
-	const char* platform;
-	switch (root.data.root.platform) {
+	// The root node comes first; any other node's union is not a platform.
+	enum cpu_platform cpuPlatform = B_CPU_UNKNOWN;
+	if (status == B_OK && count >= 1 && root.type == B_TOPOLOGY_ROOT)
+		cpuPlatform = root.data.root.platform;
+
+	// No default case, so that -Wswitch flags a cpu_platform value added
+	// without a name here.
+	const char* platform = "unknown";
+	switch (cpuPlatform) {
 		case B_CPU_x86:
 			platform = "IntelArchitecture";
 			break;
@@ -523,8 +530,47 @@ dump_platform(system_info *info)
 			platform = "IntelArchitecture (64 bit)";
 			break;
 
-		default:
-			platform = "unknown";
+		case B_CPU_PPC:
+			platform = "PowerPC";
+			break;
+
+		case B_CPU_PPC_64:
+			platform = "PowerPC (64 bit)";
+			break;
+
+		case B_CPU_M68K:
+			platform = "Motorola 68000";
+			break;
+
+		case B_CPU_ARM:
+			platform = "ARM";
+			break;
+
+		case B_CPU_ARM_64:
+			platform = "ARM (64 bit)";
+			break;
+
+		case B_CPU_ALPHA:
+			platform = "Alpha";
+			break;
+
+		case B_CPU_MIPS:
+			platform = "MIPS";
+			break;
+
+		case B_CPU_SH:
+			platform = "SuperH";
+			break;
+
+		case B_CPU_SPARC:
+			platform = "SPARC";
+			break;
+
+		case B_CPU_RISC_V:
+			platform = "RISC-V";
+			break;
+
+		case B_CPU_UNKNOWN:
 			break;
 	}
 
@@ -758,6 +804,9 @@ dump_cpus(system_info *info)
 		cpuModel,
 		frequency / 1000000);
 
+	// x86 only: get_cpuid() runs on the CPU it names. On arm64 every core
+	// node carries the boot CPU's MIDR_EL1, so a per-CPU section would only
+	// repeat the line above.
 #if defined(__i386__) || defined(__x86_64__)
 	for (uint32 cpu = 0; cpu < info->cpu_count; cpu++)
 		dump_cpu(cpuVendor, cpuModel, cpu);
