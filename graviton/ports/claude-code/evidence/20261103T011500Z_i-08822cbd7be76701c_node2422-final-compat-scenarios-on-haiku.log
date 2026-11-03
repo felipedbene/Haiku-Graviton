@@ -1,0 +1,56 @@
+# evidence: node2422-final-compat-scenarios-on-haiku
+# instance: i-08822cbd7be76701c   region: us-west-2
+# ssm command: 1c51f181-ec92-45e6-a9c2-0ef391229677 (agent status: Success)
+# start: 20261103T011500Z   end: 20261103T011522Z   rc: 0   log bytes: 1342
+# script sha256: c9d316659b45dae1c431f8284e84ff35fe6e49585b16de5f1262251b175afb77
+# ---- script ----
+# | set -u
+# | C=/boot/system/bin/curl; N=/boot/system/bin/node; P=/boot/home/cc-accept/port; T=/boot/system/lib/claude-code
+# | # bun-recordings.tgz was fetched and sha256-checked in trunk-claude-accept and extracted to /boot/home/cc-accept/rec
+# | cd /boot/home/cc-accept && ls rec && sha256sum rec/*
+# | echo "== worker (vs Bun recording)"
+# | cd $P/compat/test/worker && timeout 300 $N --zero-fill-buffers --import $T/bun-compat.mjs run.js /tmp/wk-haiku.json && $N check.mjs /boot/home/cc-accept/rec/worker-bun.json /tmp/wk-haiku.json; echo "worker rc=$?"
+# | echo "== spawn (vs Bun recording)"
+# | cd $P/compat/test && rm -rf /tmp/spawn-work && CC_SPAWN_PRESET=orig CC_SPAWN_PRESET2=orig2 timeout 600 $N --import ./spawn-preload.mjs spawn-scenarios.mjs /tmp/spawn-haiku.json /tmp/spawn-work > /tmp/spawn.out 2>&1; echo "scenarios rc=$?"; tail -3 /tmp/spawn.out
+# | $N check-spawn.mjs /boot/home/cc-accept/rec/spawn-bun.json /tmp/spawn-haiku.json 2>&1 | grep -v '^  ' | tail -40; echo "spawn check rc=${PIPESTATUS[0]}"
+# | echo "== net (vs Bun recording)"
+# | TL=/tmp/net-tls; rm -rf $TL; mkdir -p $TL; openssl req -x509 -newkey rsa:2048 -nodes -keyout $TL/key.pem -out $TL/cert.pem -days 2 -subj /CN=localhost 2>/dev/null && echo tls-ok
+# | cd $P/compat/test && NET_TLS_DIR=$TL timeout 900 $N check-net.mjs /boot/home/cc-accept/rec 2>/tmp/net.err | grep -v '^  ' | tail -30; echo "net check rc=${PIPESTATUS[0]}"
+# ---- raw output ----
+net.cases.json
+spawn-bun.json
+worker-bun.json
+2e986f6758d8c29e689ab9bfb89b4cba3af4b3f88ed6a840b16cf54567baaae6  rec/net.cases.json
+e5556dd4a1442a5e56bb6fa24f8607420c1d9aedcf12ae404c47c0a5812f12f2  rec/spawn-bun.json
+e6fa950c374290e3712f958122c475c565a4d88dda8472604202f88fc48e0fb3  rec/worker-bun.json
+== worker (vs Bun recording)
+scenarios: 13
+SAME globals
+SAME blob CommonJS script with require and onmessage assignment
+SAME file ESM worker, workerData, self.onmessage
+SAME string path to ESM file
+SAME MessagePort transfer and port.onmessage
+SAME SharedArrayBuffer + Atomics across threads
+SAME Uint8Array slice clones by value
+SAME addEventListener('message')
+SAME uncaught throw in worker -> error event
+SAME syntax error in blob -> error event
+SAME self.close() stops the worker
+SAME terminate stops delivery
+SAME constructor errors
+worker: 13 match / 0 mismatch (13 scenarios)
+worker rc=0
+== spawn (vs Bun recording)
+scenarios rc=0
+node: 218 scenarios -> /tmp/spawn-haiku.json
+file:///boot/home/cc-accept/port/compat/test/platform-diff.mjs:34
+	if (!meta) throw new Error(`recording has no ${META_KEY} entry (re-record it with the current harness)`);
+	                 ^
+
+Error: recording has no __platform entry (re-record it with the current harness)
+
+Node.js v24.22.2
+spawn check rc=1
+== net (vs Bun recording)
+tls-ok
+net check rc=1

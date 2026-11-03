@@ -1,0 +1,44 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-builder-start2
+# instance: i-066dc28d2cbad4d38   region: us-west-2
+# ssm command: 6f8fcd0d-de68-4cd2-b905-98de3297ccee (agent status: Success)
+# start: 20261102T202541Z   end: 20261102T202739Z   rc: 0   log bytes: 1442
+# script sha256: 3dc6f0cc4b24e04e1b0a24cbd3be2c6afc8ef7346fc74a75274300c66f533897
+# ---- script ----
+# | set -u
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports; P=$HP/packages
+# | /boot/system/bin/curl -sSfo $HP/net-libs/nodejs/nodejs24-24.22.2.recipe 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/nodejs24-24.22.2.recipe?<PRESIGNED>' || exit 1
+# | echo 'fa4aca41920cecf71bc08c776ef81cac64944f5c313d6220bd04d5b14a6f425b  '$HP/net-libs/nodejs/nodejs24-24.22.2.recipe | sha256sum -c - || exit 1
+# | grep -n brotli $HP/net-libs/nodejs/nodejs24-24.22.2.recipe
+# | sha256sum $P/brotli*-1.2.1-2-arm64.hpkg
+# | feed() { for i in $(seq 60); do echo 1; done; echo yes; }
+# | feed | pkgman install $P/brotli-1.2.1-2-arm64.hpkg $P/brotli_devel-1.2.1-2-arm64.hpkg 2>&1 | grep -E '^ +(install|upgrade) package|\[system\] Done|problem'
+# | pkgman search -i -D brotli 2>&1 | grep brotli
+# | grep -n BLOCK_SWITCH /boot/system/develop/headers/brotli/decode.h
+# | mv /boot/home/n2422.log /boot/home/n2422-attempt1.log
+# | rm -rf $HP/net-libs/nodejs/work-*
+# | nohup sh -c 'cd /boot/home/haikuports && : | haikuporter -y -j32 nodejs24-24.22.2 > /boot/home/n2422.log 2>&1; echo "exit $?" >> /boot/home/n2422.log' > /dev/null 2>&1 &
+# | sleep 60; grep -a -E "Validating|Applying patch|brotli" /boot/home/n2422.log | head; tail -2 /boot/home/n2422.log | cut -c1-150
+# ---- raw output ----
+/boot/home/haikuports/net-libs/nodejs/nodejs24-24.22.2.recipe: OK
+16:# brotli >= 1.2.1: 24.22.0 exposes BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH, which first ships
+17:# in brotli 1.2.1 with the fix for CVE-2026-111497; 1.2.0 fails to compile src/node_zlib.cc.
+36:	lib:libbrotlidec$secondaryArchSuffix >= 1.2.1
+37:	lib:libbrotlienc$secondaryArchSuffix >= 1.2.1
+59:	devel:libbrotlidec$secondaryArchSuffix >= 1.2.1
+60:	devel:libbrotlienc$secondaryArchSuffix >= 1.2.1
+86:		--shared-brotli \
+ece9441f9d9b2121a5fa2865a8610bb126eeb5bcadae473e2a4dc2ce118f7163  /boot/home/haikuports/packages/brotli-1.2.1-2-arm64.hpkg
+35d22c7cb14614ee4f1a3e3994db2118a17a67890c87efbd11928d0a1cdc8274  /boot/home/haikuports/packages/brotli_devel-1.2.1-2-arm64.hpkg
+a0a8d085fdb07e1f4e444274960564ed9e355bc331fa55125726f2806c638e43  /boot/home/haikuports/packages/brotli_python3.14-1.2.1-2-arm64.hpkg
+8c7392a90f09156fdee30faa4e9e8d02aef0c0668b76b12d84b13399115c89f7  /boot/home/haikuports/packages/brotli_python310-1.2.1-2-arm64.hpkg
+    upgrade package brotli-1.2.0-1 to 1.2.1-2 from local file
+    upgrade package brotli_devel-1.2.0-1 to 1.2.1-2 from local file
+[system] Done.
+<system>    brotli        1.2.1-2  arm64
+<system>    brotli_devel  1.2.1-2  arm64
+88:  BROTLI_ERROR_CODE(_ERROR_FORMAT_, BLOCK_SWITCH, -17) SEPARATOR           \
+Validating checksum of node-v24.22.2.tar.gz
+Validating checksum of node-v24.22.2.tar.gz
+Unpacking source of node-v24.22.2.tar.gz

@@ -1,0 +1,69 @@
+# evidence: node2422-linux-shared-nghttp2-ab
+# instance: i-02fbec148c76653db   region: us-west-2
+# ssm command: 7f504218-a61a-400a-94f0-8d5eccd57f46 (agent status: Success)
+# start: 20261102T225046Z   end: 20261102T230100Z   rc: 1   log bytes: 1637
+# script sha256: bdf237e24a6928f2dc04de6704a5e8063494ee3b8df075f3eecfe37d5f63857f
+# ---- script ----
+# | set -u
+# | uname -a; nproc
+# | export DEBIAN_FRONTEND=noninteractive
+# | apt-get update -qq && apt-get install -y -qq build-essential python3 xz-utils curl > /tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
+# | gcc --version | head -1
+# | mkdir -p /opt/b && cd /opt/b || exit 1
+# | curl -sSLf -o nghttp2-1.63.0.tar.xz https://github.com/nghttp2/nghttp2/releases/download/v1.63.0/nghttp2-1.63.0.tar.xz || exit 1
+# | echo '4879c75dd32a74421b9857924449460b8341796c0613ba114ab2188e4622354b  nghttp2-1.63.0.tar.xz' | sha256sum -c - || exit 1
+# | curl -sSLf -o node-v24.22.2.tar.gz https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz || exit 1
+# | echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz' | sha256sum -c - || exit 1
+# | tar xJf nghttp2-1.63.0.tar.xz && tar xzf node-v24.22.2.tar.gz || exit 1
+# | echo "== nghttp2 1.63.0 (library only)"
+# | (cd nghttp2-1.63.0 && ./configure -q --prefix=/opt/ng163 --enable-lib-only > /tmp/ng.log 2>&1 && make -s -j64 > /tmp/ngm.log 2>&1 && make -s install > /dev/null 2>&1) || { tail -20 /tmp/ng.log /tmp/ngm.log; exit 1; }
+# | ls -l /opt/ng163/lib/libnghttp2.so*
+# | echo "== nghttp2 1.70.0 from node's own deps/nghttp2, as a shared library with the same soname"
+# | mkdir -p /opt/ng170/lib && (cd node-v24.22.2/deps/nghttp2 && gcc -shared -fPIC -O2 '-D_U_=' -DHAVE_CONFIG_H -DBUILDING_NGHTTP2 -Ilib/includes lib/*.c -o /opt/ng170/lib/libnghttp2.so.14 -Wl,-soname,libnghttp2.so.14) || exit 1
+# | grep -h 'define NGHTTP2_VERSION ' node-v24.22.2/deps/nghttp2/lib/includes/nghttp2/nghttp2ver.h /opt/ng163/include/nghttp2/nghttp2ver.h
+# | echo "== node 24.22.2 --shared-nghttp2 (against the 1.63.0 headers)"
+# | cd node-v24.22.2 || exit 1
+# | ./configure --shared-nghttp2 --shared-nghttp2-includes=/opt/ng163/include --shared-nghttp2-libpath=/opt/ng163/lib > /tmp/cfg.log 2>&1 || { tail -20 /tmp/cfg.log; exit 1; }
+# | start=$(date +%s); make -j64 > /tmp/make.log 2>&1; rc=$?; echo "make rc=$rc $(( $(date +%s) - start ))s"; [ $rc -eq 0 ] || { grep -E 'error' /tmp/make.log | head; tail -20 /tmp/make.log; exit 1; }
+# | N=$PWD/out/Release/node
+# | for lib in /opt/ng163/lib /opt/ng170/lib; do
+# |   echo "######## LD_LIBRARY_PATH=$lib"
+# |   LD_LIBRARY_PATH=$lib $N -p "process.version+' nghttp2 '+process.versions.nghttp2"
+# |   LD_LIBRARY_PATH=$lib ldd $N | grep nghttp2
+# |   for t in parallel/test-http2-sensitive-headers; do ok=0; for i in $(seq 10); do LD_LIBRARY_PATH=$lib $N test/$t.js > /tmp/o 2>&1 && ok=$((ok+1)); done; echo "$t: $ok/10 pass"; [ $ok -lt 10 ] && head -12 /tmp/o; done
+# | done
+# ---- raw output ----
+Linux ip-10-128-12-116 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+64
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+nghttp2-1.63.0.tar.xz: OK
+node-v24.22.2.tar.gz: OK
+== nghttp2 1.63.0 (library only)
+lrwxrwxrwx 1 root root     21 Nov  2 22:51 /opt/ng163/lib/libnghttp2.so -> libnghttp2.so.14.28.2
+lrwxrwxrwx 1 root root     21 Nov  2 22:51 /opt/ng163/lib/libnghttp2.so.14 -> libnghttp2.so.14.28.2
+-rwxr-xr-x 1 root root 774856 Nov  2 22:51 /opt/ng163/lib/libnghttp2.so.14.28.2
+== nghttp2 1.70.0 from node's own deps/nghttp2, as a shared library with the same soname
+#define NGHTTP2_VERSION "1.70.0"
+#define NGHTTP2_VERSION "1.63.0"
+== node 24.22.2 --shared-nghttp2 (against the 1.63.0 headers)
+make rc=0 568s
+######## LD_LIBRARY_PATH=/opt/ng163/lib
+v24.22.2 nghttp2 1.63.0
+	libnghttp2.so.14 => /opt/ng163/lib/libnghttp2.so.14 (0x0000fe42d0370000)
+parallel/test-http2-sensitive-headers: 0/10 pass
+node:internal/assert:11
+    throw new ERR_INTERNAL_ASSERTION(message);
+    ^
+
+Error [ERR_INTERNAL_ASSERTION]: This is caused by either a bug in Node.js or incorrect usage of Node.js internals.
+Please open an issue with this stack trace at https://github.com/nodejs/node/issues
+
+    at assert (node:internal/assert:11:11)
+    at JSStreamSocket.doWrite (node:internal/js_stream_socket:176:5)
+    at JSStream.onwrite (node:internal/js_stream_socket:35:57) {
+  code: 'ERR_INTERNAL_ASSERTION'
+}
+######## LD_LIBRARY_PATH=/opt/ng170/lib
+v24.22.2 nghttp2 1.63.0
+	libnghttp2.so.14 => /opt/ng170/lib/libnghttp2.so.14 (0x0000eff934f20000)
+parallel/test-http2-sensitive-headers: 10/10 pass

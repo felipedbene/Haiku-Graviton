@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-node21-src-prepare
+# instance: i-026c80afb9d541163   region: us-west-2
+# ssm command: 7c86a14b-eef2-4195-9ca9-dacf61297e19 (agent status: Success)
+# start: 20261102T183634Z   end: 20261102T183832Z   rc: 0   log bytes: 178
+# script sha256: 71ccbd231dcf3a470da126804ab1e3bce1ecadfe909b1334319d207522d474ab
+# ---- script ----
+# | set -u
+# | # Control: the 24.21.0 tree (tarball fetched and sha256-checked in node2422-before-tools) with
+# | # the rev-3 recipe's two patchsets, so 24.21.0-3 can be run on this same box.
+# | cd /boot/home/src21 || exit 1
+# | curl -sSfo nodejs-24.21.0.patchset https://raw.githubusercontent.com/haikuports/haikuports/master/net-libs/nodejs/patches/nodejs-24.21.0.patchset || exit 1
+# | echo '4960b7bed0db2e6f68ebf5b490b08fcecd6e86a21d45e8af73793856f5f8cefd  nodejs-24.21.0.patchset' | sha256sum -c - || exit 1
+# | curl -sSfo nodejs-24.21.0-debeos.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/nodejs-24.21.0-debeos.patchset?<PRESIGNED>' || exit 1
+# | echo 'c3fcfe0a5bf46a5f1d3bfb97f1f3f30122f5756bd1513b7906897a825f6ff2f9  nodejs-24.21.0-debeos.patchset' | sha256sum -c - || exit 1
+# | rm -rf node-v24.21.0 && tar xzf node-v24.21.0.tar.gz && cd node-v24.21.0 || exit 1
+# | for p in nodejs-24.21.0.patchset nodejs-24.21.0-debeos.patchset; do echo "== applying $p"; patch -p1 --batch --forward < ../$p > ../$p.out 2>&1; rc=$?; grep -E -c '^patching file' ../$p.out; grep -E -i 'fail|reject|hunk.*(offset|fuzz)' ../$p.out; echo "patch rc=$rc"; [ $rc -eq 0 ] || exit 1; done
+# | ls test/parallel | grep -c '^test-'; ls test/sequential | grep -c '^test-'
+# ---- raw output ----
+nodejs-24.21.0.patchset: OK
+nodejs-24.21.0-debeos.patchset: OK
+== applying nodejs-24.21.0.patchset
+30
+patch rc=0
+== applying nodejs-24.21.0-debeos.patchset
+4
+patch rc=0
+4513
+120

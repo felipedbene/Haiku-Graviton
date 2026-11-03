@@ -1,0 +1,125 @@
+# evidence: node2422-build1-failure
+# instance: i-066dc28d2cbad4d38   region: us-west-2
+# ssm command: 7927958c-05d7-40c7-aa47-f3943729cf5f (agent status: Success)
+# start: 20261102T202117Z   end: 20261102T202120Z   rc: 0   log bytes: 11921
+# script sha256: 9f778c1b6b402dfb8deb79762d036afae8f8702f6df4bf62c2856e5443006f38
+# ---- script ----
+# | L=/boot/home/n2422.log
+# | wc -l $L
+# | grep -a -n -E "error|Error:|FAILED|failed|^exit|Validating checksum|Applying patch" $L | grep -v -E "cannot be built for architecture|license|Valid license|\(in /boot/home/haikuports" | head -40
+# | echo "==== tail -80"
+# | tail -80 $L | cut -c1-400
+# ---- raw output ----
+6643 /boot/home/n2422.log
+13:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+111:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+325:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+1963:	updating dependency infos of libgpg_error-1.61
+2443:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+2556:Validating checksum of node-v24.22.2.tar.gz
+2559:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.22.2.patchset" ...
+2566:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.22.2-debeos.patchset" ...
+2678:[38/2018] CXX obj/deps/v8/third_party/abseil-cpp/absl/base/internal/abseil.strerror.o
+2885:[229/2018] CC obj/deps/zstd/lib/common/zstd.error_private.o
+2920:[264/2018] CXX obj/deps/inspector_protocol/crdtp/crdtp.error_support.o
+3179:[407/2018] CXX obj/deps/v8/src/builtins/v8_base_without_compiler.builtins-error.o
+3630:[722/2018] CXX obj/deps/v8/src/regexp/v8_base_without_compiler.regexp-error.o
+3638:[730/2018] CXX obj/deps/v8/src/parsing/v8_base_without_compiler.pending-compilation-error-handler.o
+3779:[859/2018] CXX obj/deps/v8/third_party/inspector_protocol/crdtp/v8_base_without_compiler.error_support.o
+3882:[962/2018] CXX obj/tools/v8_gypfiles/gen/torque-generated/src/builtins/v8_base_without_compiler.aggregate-error-tq.o
+4004:[1084/2018] CXX obj/tools/v8_gypfiles/gen/torque-generated/src/builtins/v8_base_without_compiler.suppressed-error-tq.o
+4558:[1533/2018] CXX obj/tools/v8_gypfiles/gen/torque-generated/src/builtins/v8_initializers.aggregate-error-tq-csa.o
+4689:[1664/2018] CXX obj/tools/v8_gypfiles/gen/torque-generated/src/builtins/v8_initializers.suppressed-error-tq-csa.o
+4818:[1793/2018] CXX obj/src/node_base.node_errors.o
+4883:FAILED: [code=1] obj/src/node_base.node_zlib.o 
+4884:c++ -MMD -MF obj/src/node_base.node_zlib.o.d -D_GLIBCXX_USE_CXX11_ABI=1 -D_FILE_OFFSET_BITS=64 -DNODE_OPENSSL_CONF_NAME=nodejs_conf -DICU_NO_USER_DATA_OVERRIDE -DV8_ENABLE_WEBASSEMBLY -D__STDC_FORMAT_MACROS '-DNODE_ARCH="arm64"' '-DNODE_PLATFORM="haiku"' -DNODE_WANT_INTERNALS=1 -DNAPI_EXPERIMENTAL=1 -DNODE_API_EXPERIMENTAL_NO_WARNING=1 -DV8_DEPRECATION_WARNINGS=1 '-DNODE_OPENSSL_SYSTEM_CERT_PATH=""' -DSQLITE_ENABLE_SESSION -DHAVE_INSPECTOR=1 -D__POSIX__ -DNODE_USE_V8_PLATFORM=1 -DNODE_HAVE_I18N_SUPPORT=1 -DNODE_BUNDLED_ZSTD -DHAVE_OPENSSL=1 -DHAVE_AMARO=1 -DHAVE_SQLITE=1 -DHAVE_QUIC=0 -DXXH_NAMESPACE=ZSTD_ -DZSTD_MULTITHREAD -DZSTD_DISABLE_ASM -DNCRYPTO_BSSL_LIBDECREPIT_MISSING=1 -DOPENSSL_API_COMPAT=30000 -DOPENSSL_NO_DEPRECATED -I/packages/zlib-1.3.2-1/.self/develop/headers -I/packages/libuv-1.52.1-5/.self/develop/headers -I/boot/system/develop/headers -I/packages/c_ares-1.34.8-1/.self/develop/headers -I/packages/nghttp2-1.63.0-1/.self/develop/headers -I/packages/openssl3-3.5.9-2/.self/develop/headers -I/packages/icu78-78.3-1/.self/develop/headers -I../../src -I../../deps/postject -Igen -Igen/include -Igen/src -I../../deps/v8/third_party/abseil-cpp -I../../deps/googletest/include -I../../deps/histogram/src -I../../deps/histogram/include -I../../deps/nbytes/include -I../../deps/inspector_protocol -Igen/inspector-generated-output-root/include -I../../deps/ncrypto -I../../deps/v8/include -I../../deps/llhttp/include -I../../deps/uvwasi/include -I../../deps/ada -I../../deps/merve -I../../deps/simdjson -I../../deps/v8/third_party/simdutf -I../../deps/sqlite -I../../deps/zstd/lib -Wall -Wextra -Wno-unused-parameter -Wno-restrict -Wall -Wextra -Wno-unused-parameter -Werror=unused-result -mbranch-protection=standard -fPIC -O3 -fno-omit-frame-pointer -fno-rtti -fno-exceptions -fno-strict-aliasing -std=gnu++20  -c ../../src/node_zlib.cc -o obj/src/node_base.node_zlib.o
+4890:../../src/node_zlib.cc:2153:32: error: 'BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH' was not declared in this scope; did you mean 'BROTLI_DECODER_ERROR_FORMAT_BLOCK_LENGTH_2'?
+4927:ninja: build stopped: subcommand failed.
+4965:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+5526:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+5612:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+5645:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+6357:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+6642:Error: Build has failed - stopping.
+6643:exit 1
+==== tail -80
+	removing pycryptodome-3.17-arm64
+	removing pycryptodomex-3.17-arm64
+	removing pygments-2.20.0-arm64
+	removing pygobject-3.58.0-arm64
+	removing pyproject_metadata-0.12.1-arm64
+	removing pyside6-6.10.3-arm64
+	removing pytest-9.1.1-arm64
+	removing pytest_mock-3.15.1-arm64
+	removing q-1.1-arm64
+	removing qscope-2.0-arm64
+	removing qtquickcontrols2-5.15.2-arm64
+	removing qtwebengine-5.15.18-arm64
+	removing qtwebengine_bin-5.15.17-arm64
+	removing qtwebengine_bin-5.15.18-arm64
+	removing quake3-0.6.1-arm64
+	removing quickres-20011026-arm64
+	removing quicktour-0.2-arm64
+	removing r-4.5.2-arm64
+	removing rebar-2.5.1-arm64
+	removing rebol3_bin-3.22.1-arm64
+	removing replicat-1.06-arm64
+	removing requests-2.34.2-arm64
+	removing rezerwar-0.4.2-arm64
+	removing rgbds-0.9.4-arm64
+	removing roboto-3.016-arm64
+	removing rssguard-4.2.1-arm64
+	removing rust-1.79.0-arm64
+	removing rust_bin-1.94.1-arm64
+	removing rust_cpclib-0.11.1-arm64
+	removing rust_wasm_bin-1.94.1-arm64
+	removing rustup-1.28.2-arm64
+	removing s25rttr-0.9.5-arm64
+	removing sagebrush-0~git-arm64
+	removing sbcl-2.6.9-arm64
+	removing scooby-0.9.9-arm64
+	removing serviceswatcher-1.0-arm64
+	removing serviceswatcher-1.0.1-arm64
+	removing shockolate-0.7.7-arm64
+	removing sidplayer-4.4-arm64
+	removing signify-23-arm64
+	removing simplebackup-2.0.1-arm64
+	removing simplyvorbis-0.1-arm64
+	removing sinus-0.1.3-arm64
+	removing sip-6.15.3-arm64
+	removing snapshot-1.0-arm64
+	removing source_highlight-3.1.9-arm64
+	removing speg-0.3-arm64
+	removing spiff-1-arm64
+	removing stm32flash-0.3-arm64
+	removing sync_modular-2.2.1b-arm64
+	removing synergy-1.5.0-arm64
+	removing tinygl-0.4-arm64
+	removing transformers-0.5.6.2-arm64
+	removing trove_classifiers-2026.6.1.19-arm64
+	removing tuxracer-0.61-arm64
+	removing uade-2.13-arm64
+	removing unlzx-1.1-arm64
+	removing uqm-0.7.0-arm64
+	removing urllib3-2.8.0-arm64
+	removing vcdgear-1.1-arm64
+	removing virtualbelive-20140718-arm64
+	removing virtualbox_guest_additions-6.1.26-arm64
+	removing vmware_addons-1.2.2-arm64
+	removing vncviewer-3.3.1r6-arm64
+	removing waterfox-6.7.6-arm64
+	removing waveview-1.0-arm64
+	removing wings-1.5.3-arm64
+	removing wonderbrush3-3.0.0~git-arm64
+	removing xamos-0.29-arm64
+	removing xpmtranslator-1.1.1~git-arm64
+	removing yab-1.8.2-arm64
+	removing yt_dlp_ejs-0.8.0-arm64
+	removing z26-2.16.00s-arm64
+	removing zaz-1.0.0-arm64
+----------------------------------------------------------------------
+net-libs::nodejs24-24.22.2
+	/boot/home/haikuports/net-libs/nodejs/nodejs24-24.22.2.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.
+exit 1

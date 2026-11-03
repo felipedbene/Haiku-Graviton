@@ -1,0 +1,22 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-upload-brotli121
+# instance: i-066dc28d2cbad4d38   region: us-west-2
+# ssm command: f1d4f318-b498-4da0-b3ae-e378bdf8bfb2 (agent status: Success)
+# start: 20261102T223323Z   end: 20261102T223333Z   rc: 0   log bytes: 538
+# script sha256: 83521e797baa1c73e790d526c8dc5ed7a2cfa02d7ec0a5b5f98e977512f68652
+# ---- script ----
+# | cd /boot/home/haikuports/packages || exit 1
+# | sha256sum brotli*.hpkg
+# | /boot/system/bin/curl -sSf -T brotli-1.2.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/brotli121/brotli-1.2.1-2-arm64.hpkg?<PRESIGNED>' && echo up brotli-1.2.1-2-arm64.hpkg
+# | /boot/system/bin/curl -sSf -T brotli_devel-1.2.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/brotli121/brotli_devel-1.2.1-2-arm64.hpkg?<PRESIGNED>' && echo up brotli_devel-1.2.1-2-arm64.hpkg
+# | /boot/system/bin/curl -sSf -T brotli_python310-1.2.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/brotli121/brotli_python310-1.2.1-2-arm64.hpkg?<PRESIGNED>' && echo up brotli_python310-1.2.1-2-arm64.hpkg
+# | /boot/system/bin/curl -sSf -T brotli_python3.14-1.2.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/brotli121/brotli_python3.14-1.2.1-2-arm64.hpkg?<PRESIGNED>' && echo up brotli_python3.14-1.2.1-2-arm64.hpkg
+# ---- raw output ----
+ece9441f9d9b2121a5fa2865a8610bb126eeb5bcadae473e2a4dc2ce118f7163  brotli-1.2.1-2-arm64.hpkg
+35d22c7cb14614ee4f1a3e3994db2118a17a67890c87efbd11928d0a1cdc8274  brotli_devel-1.2.1-2-arm64.hpkg
+a0a8d085fdb07e1f4e444274960564ed9e355bc331fa55125726f2806c638e43  brotli_python3.14-1.2.1-2-arm64.hpkg
+8c7392a90f09156fdee30faa4e9e8d02aef0c0668b76b12d84b13399115c89f7  brotli_python310-1.2.1-2-arm64.hpkg
+up brotli-1.2.1-2-arm64.hpkg
+up brotli_devel-1.2.1-2-arm64.hpkg
+up brotli_python310-1.2.1-2-arm64.hpkg
+up brotli_python3.14-1.2.1-2-arm64.hpkg

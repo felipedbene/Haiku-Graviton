@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-final-tui-capture-B-haiku
+# instance: i-08822cbd7be76701c   region: us-west-2
+# ssm command: 4d94e718-f1f3-4cc8-ba37-3db906df8c2d (agent status: Success)
+# start: 20261103T011634Z   end: 20261103T012205Z   rc: 0   log bytes: 981
+# script sha256: b6dffbc802186551b17b9361c5bbb2033dbc814e1617cac0ab95da05b129f7ea
+# ---- script ----
+# | set -u
+# | cd /boot/home/cc-accept/port || exit 1
+# | tmux -V; uname -a; ls /boot/system/packages | grep -E '^(claude_code|libuv-|nodejs24-)'
+# | TUI_ONLY=B OUT=/tmp/tui-B bash tools/tui-diff.sh /nonexistent /boot/system/bin/node /boot/system/lib/claude-code 2>&1 | tail -30
+# | ls /tmp/tui-B | wc -l
+# | for f in /tmp/tui-B/*.B.err; do [ -s "$f" ] && { echo "--- stderr $f"; head -5 "$f"; }; done
+# | tar -czf /tmp/tui-B.tgz -C /tmp tui-B && sha256sum /tmp/tui-B.tgz && /boot/system/bin/curl -sSf -X PUT --upload-file /tmp/tui-B.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/tui-B-haiku-node2422.tgz?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+tmux 3.7c
+Haiku ip-10-128-7-64.us-west-2.comput R1~beta6+development hrev59996 Nov  2 2026 14:49:36 arm64 other Haiku
+claude_code-2.1.314-2-arm64.hpkg
+libuv-1.52.1-5-arm64.hpkg
+nodejs24-24.22.2-1-arm64.hpkg
+captured theme-100x30 (1 snaps, side B)
+captured theme-80x24 (1 snaps, side B)
+captured theme-40x20 (1 snaps, side B)
+captured theme-200x50 (1 snaps, side B)
+captured theme-120x40 (1 snaps, side B)
+captured theme-60x16 (1 snaps, side B)
+captured theme-arrows (11 snaps, side B)
+captured theme-resize (5 snaps, side B)
+captured theme-arrow-resize (4 snaps, side B)
+captured login-flow (3 snaps, side B)
+captured text-100x30 (8 snaps, side B)
+captured text-40x20 (8 snaps, side B)
+captured text-resize (6 snaps, side B)
+captured text-rtl (5 snaps, side B)
+captured text-rtl-vscode (6 snaps, side B)
+captured theme-vscode (2 snaps, side B)
+tui-diff: captured side B into /tmp/tui-B
+136
+74955056c400b74e97e1ee2cc53d1ff08d67851e1904037d2beb2900ff732eb5  /tmp/tui-B.tgz
+upload-ok

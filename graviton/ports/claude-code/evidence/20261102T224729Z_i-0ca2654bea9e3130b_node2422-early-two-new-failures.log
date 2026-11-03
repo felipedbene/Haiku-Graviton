@@ -1,0 +1,207 @@
+# evidence: node2422-early-two-new-failures
+# instance: i-0ca2654bea9e3130b   region: us-west-2
+# ssm command: 97e4bfe0-8bc2-4144-a19d-57416d7ba588 (agent status: Success)
+# start: 20261102T224729Z   end: 20261102T224738Z   rc: 0   log bytes: 5766
+# script sha256: 35ecf84f38a85c65e6aa48def74cab8e5e016d75b0d55ce828cdeca2c4366594
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.22.2 || exit 1
+# | for t in parallel/test-http2-sensitive-headers parallel/test-fs-rmSync-special-char-additional-error; do
+# |   echo "######## $t: alone x5"; for i in 1 2 3 4 5; do : | node test/$t.js > /tmp/o.txt 2>&1; echo "run $i rc=$?"; done
+# |   echo "--- output of last run"; head -50 /tmp/o.txt
+# | done
+# | echo "######## sources"
+# | cat test/parallel/test-fs-rmSync-special-char-additional-error.js | head -60
+# | echo "-----"; sed -n 1,80p test/parallel/test-http2-sensitive-headers.js
+# ---- raw output ----
+######## parallel/test-http2-sensitive-headers: alone x5
+run 1 rc=1
+run 2 rc=1
+run 3 rc=1
+run 4 rc=1
+run 5 rc=1
+--- output of last run
+node:internal/assert:11
+    throw new ERR_INTERNAL_ASSERTION(message);
+    ^
+
+Error [ERR_INTERNAL_ASSERTION]: This is caused by either a bug in Node.js or incorrect usage of Node.js internals.
+Please open an issue with this stack trace at https://github.com/nodejs/node/issues
+
+    at assert (node:internal/assert:11:11)
+    at JSStreamSocket.doWrite (node:internal/js_stream_socket:176:5)
+    at JSStream.onwrite (node:internal/js_stream_socket:35:57) {
+  code: 'ERR_INTERNAL_ASSERTION'
+}
+
+Node.js v24.22.2
+######## parallel/test-fs-rmSync-special-char-additional-error: alone x5
+run 1 rc=1
+run 2 rc=1
+run 3 rc=1
+run 4 rc=1
+run 5 rc=1
+--- output of last run
+node:fs:2110
+  binding.chmod(path, mode);
+          ^
+
+Error: ENOENT: no such file or directory, chmod '/boot/home/node-src/node-v24.22.2/test/.tmp.0/速_dir'
+    at Object.chmodSync (node:fs:2110:11)
+    at Object.<anonymous> (/boot/home/node-src/node-v24.22.2/test/parallel/test-fs-rmSync-special-char-additional-error.js:64:8)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  errno: -2147459069,
+  code: 'ENOENT',
+  syscall: 'chmod',
+  path: '/boot/home/node-src/node-v24.22.2/test/.tmp.0/速_dir'
+}
+
+Node.js v24.22.2
+######## sources
+'use strict';
+const common = require('../common');
+const tmpdir = require('../common/tmpdir');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execSync } = require('child_process');
+
+tmpdir.refresh(); // Prepare a clean temporary directory
+
+function countOccurrences(haystack, needle) {
+  let count = 0;
+  let offset = 0;
+
+  while ((offset = haystack.indexOf(needle, offset)) !== -1) {
+    count++;
+    offset += needle.length;
+  }
+
+  return count;
+}
+
+const dirPath = path.join(tmpdir.path, '速_dir');
+const filePath = path.join(dirPath, 'test_file.txt');
+
+// Create a directory and a file within it
+fs.mkdirSync(dirPath, { recursive: true });
+fs.writeFileSync(filePath, 'This is a test file.');
+
+// Set permissions to simulate a permission denied scenario
+if (process.platform === 'win32') {
+  // Windows: Deny delete permissions
+  execSync(`icacls "${filePath}" /deny Everyone:(D)`);
+} else {
+  // Unix/Linux: Remove write permissions from the directory
+  fs.chmodSync(dirPath, 0o555); // Read and execute permissions only
+}
+
+try {
+  // Attempt to delete the directory which should now fail
+  assert.throws(() => {
+    fs.rmSync(dirPath, { recursive: true });
+  }, (err) => {
+    // Verify that the error is due to permission restrictions
+    let expectedCode = 'EACCES';
+    if (common.isMacOS) {
+      expectedCode = 'ENOTEMPTY';
+    } else if (common.isWindows) {
+      expectedCode = 'EPERM';
+    }
+    assert.strictEqual(err.code, expectedCode);
+    assert.strictEqual(err.syscall, 'rm');
+    assert.strictEqual(err.path, dirPath);
+    assert.strictEqual(countOccurrences(err.message, dirPath), 1);
+    return true;
+  });
+} finally {
+  // Cleanup - resetting permissions and removing the directory safely
+  if (process.platform === 'win32') {
+    // Remove the explicit permissions before attempting to delete
+-----
+'use strict';
+const common = require('../common');
+if (!common.hasCrypto)
+  common.skip('missing crypto');
+const assert = require('assert');
+const http2 = require('http2');
+const { duplexPair } = require('stream');
+
+{
+  const testData = '<h1>Hello World</h1>';
+  const server = http2.createServer();
+  server.on('stream', common.mustCall((stream, headers) => {
+    stream.respond({
+      'content-type': 'text/html',
+      ':status': 200,
+      'cookie': 'donotindex',
+      'not-sensitive': 'foo',
+      'sensitive': 'bar',
+      // sensitiveHeaders entries are case-insensitive
+      [http2.sensitiveHeaders]: ['Sensitive']
+    });
+    stream.end(testData);
+  }));
+
+  const [ clientSide, serverSide ] = duplexPair();
+  server.emit('connection', serverSide);
+
+  const client = http2.connect('http://localhost:80', {
+    createConnection: common.mustCall(() => clientSide)
+  });
+
+  const req = client.request({ ':path': '/' });
+
+  req.on('response', common.mustCall((headers) => {
+    assert.strictEqual(headers[':status'], 200);
+    assert.strictEqual(headers.cookie, 'donotindex');
+    assert.deepStrictEqual(headers[http2.sensitiveHeaders],
+                           ['cookie', 'sensitive']);
+  }));
+
+  req.on('end', common.mustCall(() => {
+    clientSide.destroy();
+    clientSide.end();
+  }));
+  req.resume();
+  req.end();
+}
+
+{
+  const server = http2.createServer();
+  server.on('stream', common.mustCall((stream, headers) => {
+    assert.deepStrictEqual(
+      headers[http2.sensitiveHeaders],
+      ['secret']
+    );
+    stream.respond({ ':status': 200 });
+    stream.end();
+  }));
+
+  const [ clientSide, serverSide ] = duplexPair();
+  server.emit('connection', serverSide);
+
+  const client = http2.connect('http://localhost:80', {
+    createConnection: common.mustCall(() => clientSide)
+  });
+
+  const rawHeaders = [
+    ':path', '/',
+    'secret', 'secret-value',
+  ];
+  rawHeaders[http2.sensitiveHeaders] = ['secret'];
+
+  const req = client.request(rawHeaders);
+
+  assert.deepStrictEqual(req.sentHeaders, {
+    '__proto__': null,
+    ':method': 'GET',
+    ':authority': 'localhost:80',
+    ':scheme': 'http',
+    ':path': '/',

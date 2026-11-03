@@ -1,0 +1,20 @@
+# evidence: node2422-before-tools
+# instance: i-026c80afb9d541163   region: us-west-2
+# ssm command: 81108062-1d47-418d-a86e-d6f49f5ae01a (agent status: Success)
+# start: 20261102T182232Z   end: 20261102T182336Z   rc: 0   log bytes: 265
+# script sha256: e35abeafeb0ea7807139d8225396280e8e7468a4b70504e5004d928e191009e8
+# ---- script ----
+# | set -u
+# | cd /boot/home/w954 || exit 1
+# | gcc -O1 -o bt918 bt918.c -ldebug || exit 1; sha256sum bt918
+# | echo "== node 24.21.0 source tree (tests)"
+# | mkdir -p /boot/home/src21 && cd /boot/home/src21 || exit 1
+# | curl -sSfo node-v24.21.0.tar.gz https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz || exit 1
+# | echo '622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  node-v24.21.0.tar.gz' | sha256sum -c - || exit 1
+# | tar xzf node-v24.21.0.tar.gz || exit 1
+# | sha256sum node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+# ---- raw output ----
+ce8f158b5b9f9177eda89c074adae0aa77db7ee2ce8fbbae4f65adfc6fdc27c7  bt918
+== node 24.21.0 source tree (tests)
+node-v24.21.0.tar.gz: OK
+f066bc8385d74d06429025cd686494ab42fd01a21c04adda4e6696de12ce3a46  node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
