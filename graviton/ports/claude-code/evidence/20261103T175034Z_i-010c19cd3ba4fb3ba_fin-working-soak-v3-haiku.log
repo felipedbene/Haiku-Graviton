@@ -1,0 +1,97 @@
+# evidence: fin-working-soak-v3-haiku
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T175034Z   end: 20261103T182315Z   rc: 0
+# script sha256: d024a3e8fc555eabe24e0ff7808b82e80f74f96fb06a6adf5f86c324126ea9ea
+# ---- script ----
+# | set -u
+# | tmux -L ws-haiku kill-server 2>/dev/null
+# | mkdir -p /tmp/wst && printf '%s' 'IyEvYmluL2Jhc2gKIyB3b3JraW5nLXNvYWsuc2ggPGxhYmVsPiA8bWludXRlcz4gPGNsYXVkZSBjb21tYW5kLi4uPjogYSB3b3JraW5nIHNvYWsuIFJlcGVhdGVkbHkgdHlwZXMgYQojIHNtYWxsIHRvb2wtdXNpbmcgdGFzayBpbnRvIHRoZSBpbnRlcmFjdGl2ZSBUVUkgKG1vZGVsIHZpYSBBbWF6b24gQmVkcm9jaywgaW5zdGFuY2UtcHJvZmlsZQojIGNyZWRlbnRpYWxzKSwgd2FpdHMgZm9yIGl0cyBvdXRwdXQgZmlsZSwgYW5kIHJlY29yZHMgcGVyLXRhc2sgbGF0ZW5jeSBwbHVzIHRoZSBwcm9jZXNzJ3MKIyBSU1MuIEEgdGFzayB0aGF0IGRvZXMgbm90IGNvbXBsZXRlIHdpdGhpbiAxNTAgcyBpcyByZXBvcnRlZCBhcyBmYWlsZWQuIExpbnV4IGFuZCBIYWlrdS4Kc2V0IC11CmxhYmVsPSQxIE1JTj0kMjsgc2hpZnQgMjsgQ01EPSIkKiIKIyBESVNBQkxFX0FVVE9VUERBVEVSOiB0aGUgcmVhbCBiaW5hcnkgb3RoZXJ3aXNlIHVwZGF0ZXMgaXRzZWxmIG1pZC1ydW4sIHNvIHRoZSB0d28gc2lkZXMKIyB3b3VsZCBubyBsb25nZXIgYmUgdGhlIHNhbWUgdmVyc2lvbi4KZXhwb3J0IERJU0FCTEVfQVVUT1VQREFURVI9MSBDTEFVREVfQ09ERV9VU0VfQkVEUk9DSz0xIEFXU19SRUdJT049dXMtd2VzdC0yIEFOVEhST1BJQ19NT0RFTD0ke0FOVEhST1BJQ19NT0RFTDotdXMuYW50aHJvcGljLmNsYXVkZS1oYWlrdS00LTUtMjAyNTEwMDEtdjE6MH0KSD0vdG1wL3dzLWhvbWUtJGxhYmVsOyBybSAtcmYgJEg7IG1rZGlyIC1wICRILy5jbGF1ZGUKVz0kKGNkIC90bXAgJiYgcHdkIC1QKS93cy0kbGFiZWw7IHJtIC1yZiAkVzsgbWtkaXIgLXAgJFcKZWNobyAneyJwcmVmZXJzUmVkdWNlZE1vdGlvbiI6dHJ1ZSwidGhlbWUiOiJkYXJrIiwicGVybWlzc2lvbnMiOnsiYWxsb3ciOlsiQmFzaChlY2hvOiopIiwiQmFzaChkYXRlOiopIiwiUmVhZCIsIldyaXRlIl19fScgPiAkSC8uY2xhdWRlL3NldHRpbmdzLmpzb24KZWNobyAie1wiaGFzQ29tcGxldGVkT25ib2FyZGluZ1wiOnRydWUsXCJ0aGVtZVwiOlwiZGFya1wiLFwicHJvamVjdHNcIjp7XCIkV1wiOntcImhhc1RydXN0RGlhbG9nQWNjZXB0ZWRcIjp0cnVlfX19IiA+ICRILy5jbGF1ZGUuanNvbgpTPXdzLSRsYWJlbDsgdG11eCAtTCAkUyBraWxsLXNlcnZlciAyPi9kZXYvbnVsbDsgdHJhcCAndG11eCAtTCAkUyBraWxsLXNlcnZlciAyPi9kZXYvbnVsbCcgRVhJVAp0bXV4IC1MICRTIG5ldy1zZXNzaW9uIC1kIC1zICRTIC14IDEyMCAteSA0MCAiY2QgJFcgJiYgZW52IERJU0FCTEVfQVVUT1VQREFURVI9MSBDTEFVREVfQ09ERV9VU0VfQkVEUk9DSz0xIEFXU19SRUdJT049JEFXU19SRUdJT04gQU5USFJPUElDX01PREVMPSRBTlRIUk9QSUNfTU9ERUwgSE9NRT0kSCBURVJNPXh0ZXJtLTI1NmNvbG9yICRDTUQiCnNsZWVwIDE1CnBpZF9vZigpIHsJIyB0aGUgY2xhdWRlIHByb2Nlc3M6IG5ld2VzdCBub2RlL2NsYXVkZSBkZXNjZW5kYW50IG9mIHRoZSB0bXV4IHBhbmUKCWlmIFsgIiQodW5hbWUgLXMpIiA9IEhhaWt1IF07IHRoZW4gcHMgfCBhd2sgJy9iaW5cL25vZGUgLS16ZXJvLWZpbGwtYnVmZmVycyBcL2Jvb3RcL3N5c3RlbVwvbGliXC9jbGF1LyB7IHByaW50ICQoTkYtMykgfScgfCBzb3J0IC1uIHwgdGFpbCAtMQoJZWxzZSBwZ3JlcCAtbyAtZiAtLSAiJChlY2hvICIkQ01EIiB8IGF3ayAne3ByaW50ICRORn0nKSI7IGZpOyB9CnJzcygpIHsKCWlmIFsgIiQodW5hbWUgLXMpIiA9IEhhaWt1IF07IHRoZW4gbGlzdGFyZWEgIiQxIiB8IGF3ayAnTkYgPj0gMTAgJiYgJChORi01KSB+IC9eWzAtOWEtZl0rJC8geyBzICs9IHN0cnRvbnVtKCIweCIgJChORi01KSkgfSBFTkQgeyBwcmludGYgIiVkIiwgcyAvIDEwMjQgfScKCWVsc2UgYXdrICcvVm1SU1MvIHsgcHJpbnQgJDIgfScgL3Byb2MvJDEvc3RhdHVzOyBmaTsgfQpwPSQocGlkX29mKTsgZWNobyAiWyRsYWJlbF0gcGlkL3RlYW0gJHAsIHJzcyAkKHJzcyAkcClLQiIKZW5kPSQoKCAkKGRhdGUgKyVzKSArIE1JTiAqIDYwICkpOyBrPTAgb2s9MCBmYWlsPTAKd2hpbGUgWyAiJChkYXRlICslcykiIC1sdCAiJGVuZCIgXTsgZG8KCWs9JCgoayArIDEpKTsgdDA9JChkYXRlICslcykKCXRtdXggLUwgJFMgc2VuZC1rZXlzIC10ICRTIC1sICJSdW4gdGhlIGJhc2ggY29tbWFuZDogZWNobyBzb2FrLSRrLW9rICAgdGhlbiB3cml0ZSB0aGF0IGNvbW1hbmQncyBvdXRwdXQgdG8gdGhlIGZpbGUgc29hay0kay50eHQsIHRoZW4gcmVwbHkgd2l0aCBvbmx5IHRoZSB3b3JkIGRvbmUtJGsiOyBzbGVlcCAxOyB0bXV4IC1MICRTIHNlbmQta2V5cyAtdCAkUyBFbnRlcgoJcj0iRkFJTCI7IGZvciBpIGluICQoc2VxIDEgMTUwKTsgZG8gWyAtcyAkVy9zb2FrLSRrLnR4dCBdICYmIHsgcj0ib2sgJCgoICQoZGF0ZSArJXMpIC0gdDAgKSlzIjsgYnJlYWs7IH07IHNsZWVwIDE7IGRvbmUKCVsgIiRyIiA9IEZBSUwgXSAmJiBmYWlsPSQoKGZhaWwgKyAxKSkgfHwgb2s9JCgob2sgKyAxKSkKCXA9JChwaWRfb2YpOyBlY2hvICJbJGxhYmVsXSB0YXNrICRrOiAkciByc3M9JChyc3MgJHApS0IgKHBpZCAkcCkiCglbICIkciIgPSBGQUlMIF0gJiYgdG11eCAtTCAkUyBjYXB0dXJlLXBhbmUgLXQgJFMgLXAgfCBncmVwIC12ICdeICokJyB8IHRhaWwgLTYgfCBzZWQgInMvXi9bJGxhYmVsXSAgIC8iCglzbGVlcCAxMApkb25lCmVjaG8gIlskbGFiZWxdIHdvcmtpbmcgc29hazogJG9rIG9rIC8gJGZhaWwgZmFpbGVkIG92ZXIgJHtNSU59bWluOyBmaW5hbCByc3MgJChyc3MgJHApS0IiClsgJGZhaWwgLWVxIDAgXQo=' | base64 -d > /tmp/wst/working-soak.sh
+# | bash /tmp/wst/working-soak.sh haiku 30 claude; echo "rc=$?"
+# ---- raw output ----
+[haiku] pid/team 81226, rss 427228KB
+[haiku] task 1: FAIL rss=276300KB (pid 81226)
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. Yes, and always allow access to /boot/system/cache/tmp/ws-haiku from this project
+[haiku]      3. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 2: FAIL rss=279616KB (pid 81226)
+[haiku]   ● done-1
+[haiku]   ✻ Worked for 4s · done 5:53 PM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 3: FAIL rss=301252KB (pid 81226)
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. Yes, and always allow access to /boot/system/cache/tmp/ws-haiku from this project
+[haiku]      3. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 4: FAIL rss=307812KB (pid 81226)
+[haiku]   ● done-3
+[haiku]   ✻ Churned for 2s · done 5:59 PM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 5: FAIL rss=310824KB (pid 81226)
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. Yes, and always allow access to /boot/system/cache/tmp/ws-haiku from this project
+[haiku]      3. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 6: FAIL rss=315932KB (pid 81226)
+[haiku]   ● done-5
+[haiku]   ✻ Brewed for 2s · done 6:04 PM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 7: FAIL rss=287456KB (pid 81226)
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. Yes, and always allow access to /boot/system/cache/tmp/ws-haiku from this project
+[haiku]      3. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 8: FAIL rss=290976KB (pid 81226)
+[haiku]   ● done-7
+[haiku]   ✻ Brewed for 2s · done 6:09 PM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 9: FAIL rss=306848KB (pid 81226)
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. Yes, and always allow access to /boot/system/cache/tmp/ws-haiku from this project
+[haiku]      3. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 10: FAIL rss=312596KB (pid 81226)
+[haiku]   ● done-9
+[haiku]   ✻ Worked for 7s · done 6:15 PM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] task 11: FAIL rss=322636KB (pid 81226)
+[haiku]   ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+[haiku]    Do you want to proceed?
+[haiku]    ❯ 1. Yes
+[haiku]      2. Yes, and always allow access to /boot/system/cache/tmp/ws-haiku from this project
+[haiku]      3. No
+[haiku]    Esc to cancel · Tab to amend
+[haiku] task 12: FAIL rss=330188KB (pid 81226)
+[haiku]   ● done-11
+[haiku]   ✻ Worked for 2s · done 6:20 PM
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]   ❯ 
+[haiku]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[haiku]     ⏸ manual mode on · ? for shortcuts
+[haiku] working soak: 0 ok / 12 failed over 30min; final rss 330188KB
+rc=1

@@ -1,0 +1,19 @@
+# evidence: fin-mkfifo-probe
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T174951Z   end: 20261103T175013Z   rc: 0
+# script sha256: cc1441a6a5cce5e2f3c2cd4d84b699c2f0e6bee423ddcf9992ee7c6b2fa6f5ce
+# ---- script ----
+# | set -u
+# | command -v mkfifo; ls -l $(command -v mkfifo) 2>&1
+# | for p in $(ls /boot/system/packages); do :; done
+# | pkg=$(cd /boot/system/packages && for h in *.hpkg; do package list -p "$h" 2>/dev/null | grep -q 'bin/mkfifo$' && echo "$h"; done); echo "mkfifo provided by: ${pkg:-not found in /boot/system/packages}"
+# | grep -n "mkfifo" /boot/home/node-src/node-v24.22.2/test/parallel/test-fs-read-stream.js | head -5
+# | grep -E '^ok .*test-fs-read-stream$' /boot/home/node-parallel-fin.tap
+# ---- raw output ----
+/boot/system/bin/mkfifo
+-r-xr-xr-x 1 baron root 151128 Apr 21  2026 /boot/system/bin/mkfifo
+mkfifo provided by: coreutils-9.9_bootstrap-1-arm64.hpkg
+199:  const mkfifoResult = child_process.spawnSync('mkfifo', [filename]);
+200:  if (!mkfifoResult.error) {
+214:    common.printSkipMessage('mkfifo not available');
+ok 1239 parallel/test-fs-read-stream

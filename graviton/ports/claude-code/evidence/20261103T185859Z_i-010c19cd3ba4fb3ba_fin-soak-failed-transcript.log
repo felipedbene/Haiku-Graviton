@@ -1,0 +1,36 @@
+# evidence: fin-soak-failed-transcript
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T185859Z   end: 20261103T185921Z   rc: 0
+# script sha256: 19ecfd30d55d9db6190b7be35a5d2a1576aa02061ef85aa734054a8b430270dd
+# ---- script ----
+# | set -u
+# | H=/tmp/ws-home-haiku; ls $H/.claude/projects/ 2>&1
+# | for f in $(ls -t $H/.claude/projects/*/*.jsonl 2>/dev/null); do echo "== $f"; node -e 'for (const l of require("fs").readFileSync(process.argv[1],"utf8").trim().split("\n")) { let m; try{m=JSON.parse(l)}catch{continue}; if (m.type==="assistant") for (const c of m.message.content||[]) { if (c.type==="tool_use") console.log("TOOL_USE", c.name, JSON.stringify(c.input).slice(0,220)); if (c.type==="text") console.log("TEXT", c.text.slice(0,120).replace(/\n/g," ")); } if (m.type==="user") for (const c of (Array.isArray(m.message.content)?m.message.content:[])) if (c.type==="tool_result") console.log("RESULT", c.is_error?"ERROR":"ok", String(typeof c.content==="string"?c.content:JSON.stringify(c.content)).slice(0,160).replace(/\n/g," ")); }' "$f" | head -60; done
+# | ls /boot/system/cache/tmp/ws-haiku/ 2>&1 | head
+# ---- raw output ----
+-boot-system-cache-tmp-ws-haiku
+== /tmp/ws-home-haiku/.claude/projects/-boot-system-cache-tmp-ws-haiku/fcd1bf40-08c8-4501-bcf7-510f439076df.jsonl
+TOOL_USE Bash {"command":"echo soak-1-ok > /boot/system/cache/tmp/ws-haiku/soak-1.txt && cat /boot/system/cache/tmp/ws-haiku/soak-1.txt","description":"Run echo command and write output to file"}
+RESULT ok soak-1-ok
+TEXT done-1
+TOOL_USE Bash {"command":"echo soak-3-ok > /boot/system/cache/tmp/ws-haiku/soak-3.txt && cat /boot/system/cache/tmp/ws-haiku/soak-3.txt","description":"Run echo command and write output to file"}
+RESULT ok soak-3-ok
+TEXT done-3
+TOOL_USE Bash {"command":"echo soak-5-ok > /boot/system/cache/tmp/ws-haiku/soak-5.txt && cat /boot/system/cache/tmp/ws-haiku/soak-5.txt","description":"Run echo command and write output to file"}
+RESULT ok soak-5-ok
+TEXT done-5
+TOOL_USE Bash {"command":"echo soak-7-ok > /boot/system/cache/tmp/ws-haiku/soak-7.txt && cat /boot/system/cache/tmp/ws-haiku/soak-7.txt","description":"Run echo command and write output to file"}
+RESULT ok soak-7-ok
+TEXT done-7
+TOOL_USE Bash {"command":"echo soak-9-ok > /boot/system/cache/tmp/ws-haiku/soak-9.txt && cat /boot/system/cache/tmp/ws-haiku/soak-9.txt","description":"Run echo command and write output to file"}
+RESULT ok soak-9-ok
+TEXT done-9
+TOOL_USE Bash {"command":"echo soak-11-ok > /boot/system/cache/tmp/ws-haiku/soak-11.txt && cat /boot/system/cache/tmp/ws-haiku/soak-11.txt","description":"Run echo command and write output to file"}
+RESULT ok soak-11-ok
+TEXT done-11
+soak-1.txt
+soak-11.txt
+soak-3.txt
+soak-5.txt
+soak-7.txt
+soak-9.txt

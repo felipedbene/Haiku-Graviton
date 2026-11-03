@@ -1,0 +1,21 @@
+# evidence: fin-bedrock-headless-smoke
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T171825Z   end: 20261103T171847Z   rc: 0
+# script sha256: 36db1c5dd79cc0ce90d355f53f60449f44d240623b2e925829d3876f733693c8
+# ---- script ----
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | H=/tmp/bed-home; rm -rf $H; mkdir -p $H
+# | echo "== IMDSv2 reachable"; T=$(curl -sS -m 5 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60'); curl -sS -m 5 -H "X-aws-ec2-metadata-token: $T" http://169.254.169.254/latest/meta-data/iam/security-credentials/; echo
+# | echo "== claude -p via Bedrock"
+# | cd /tmp && start=$(date +%s); HOME=$H timeout 180 claude -p "Reply with exactly the word: pong" < /dev/null 2>&1 | grep -v 'Cannot open directory /boot/system/non-packaged'; echo "rc=$? ($(( $(date +%s) - start ))s)"
+# | echo "== json"
+# | HOME=$H timeout 180 claude -p --output-format json "Reply with exactly the word: pong" < /dev/null 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(JSON.stringify({is_error:j.is_error,result:j.result,subtype:j.subtype,num_turns:j.num_turns,model:Object.keys(j.modelUsage||{}),in:j.usage?.input_tokens,out:j.usage?.output_tokens}))})'
+# ---- raw output ----
+== IMDSv2 reachable
+ssm-instance-profile
+== claude -p via Bedrock
+pong
+rc=0 (8s)
+== json
+{"is_error":false,"result":"pong","subtype":"success","num_turns":1,"model":["us.anthropic.claude-haiku-4-5-20251001-v1:0"],"in":10,"out":42}

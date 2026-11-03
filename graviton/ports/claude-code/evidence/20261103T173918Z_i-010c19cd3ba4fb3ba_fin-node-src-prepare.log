@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fin-node-src-prepare
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T173918Z   end: 20261103T174037Z   rc: 0
+# script sha256: 3abd587f3da5effcbe96fea7cf8262959a6cdcf69036097402fd16993a713829
+# ---- script ----
+# | set -u
+# | # Node 24.22.2 source tree for the test suites, prepared the way haikuporter prepares its work
+# | # tree: recipe SOURCE_URI + CHECKSUM_SHA256, then PATCHES in recipe order.
+# | S=/boot/home/node-src; rm -rf $S; mkdir -p $S; cd $S || exit 1
+# | curl -sSfo node-v24.22.2.tar.gz https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz || exit 1
+# | echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz' | sha256sum -c - || exit 1
+# | curl -sSfo nodejs-24.22.2.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/nodejs-24.22.2.patchset?<PRESIGNED>' || exit 1
+# | curl -sSfo nodejs-24.22.2-debeos.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/nodejs-24.22.2-debeos.patchset?<PRESIGNED>' || exit 1
+# | echo 'fa8a7c08310955a945407b9516650998ddb25b3e4de51e3a6f48cd32cedf1968  nodejs-24.22.2.patchset' | sha256sum -c - || exit 1
+# | echo '3cadf3994deaad92aac8011074c0eb4a90bc918a4a4620ac34afe7181257a995  nodejs-24.22.2-debeos.patchset' | sha256sum -c - || exit 1
+# | tar xzf node-v24.22.2.tar.gz || exit 1
+# | cd node-v24.22.2 || exit 1
+# | for p in nodejs-24.22.2.patchset nodejs-24.22.2-debeos.patchset; do echo "== applying $p"; patch -p1 --batch --forward < ../$p > ../$p.out 2>&1; rc=$?; grep -E -c '^patching file' ../$p.out; grep -E -i 'fail|reject|hunk.*(offset|fuzz)' ../$p.out; echo "patch rc=$rc"; [ $rc -eq 0 ] || exit 1; done
+# | ls -d test/parallel test/sequential; ls test/parallel | grep -c '^test-'; ls test/sequential | grep -c '^test-'
+# | grep -n -i haiku tools/utils.py | head -5
+# | sha256sum test/parallel/test-http2-many-writes-and-destroy.js
+# ---- raw output ----
+node-v24.22.2.tar.gz: OK
+nodejs-24.22.2.patchset: OK
+nodejs-24.22.2-debeos.patchset: OK
+== applying nodejs-24.22.2.patchset
+30
+patch rc=0
+== applying nodejs-24.22.2-debeos.patchset
+4
+patch rc=0
+test/parallel
+test/sequential
+4611
+121
+62:  elif id == 'Haiku':
+63:    return 'haiku'
+f066bc8385d74d06429025cd686494ab42fd01a21c04adda4e6696de12ce3a46  test/parallel/test-http2-many-writes-and-destroy.js

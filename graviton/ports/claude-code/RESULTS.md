@@ -298,6 +298,80 @@ workstation (`003704Z_workstation…staged-set-check`). It needs openssl3 3.5.9-
 `openssl359r3/` in the same publish: the package only requires `lib:libcrypto >= 3`, so pkgman
 cannot stop it from being paired with 3.5.9-2.
 
+## 2026-11-03 — final canonical 010361cf (all fixes published)
+
+This is the full verification on one fresh launch of canonical `ami-010361cfdaa9d22e1`
+(`haiku-oven-1793718976`, `debeos-r70778-g9b0cf53355`, `canonical=true`; the image has openssl3 3.5.9-3
+and `openssh_debeos` 10.4p1-1). Everything came from the live repo, with no local files. The baseline
+is the node2422 run in the section above.
+
+Instance `i-010c19cd3ba4fb3ba`: c8g.4xlarge, 60 GiB, `subnet-02f8f7929c0cd9607`,
+`sg-0efc97cc673949063`, key `haiku-rdclient`, `ssm-instance-profile`, tags `Project=haiku-graviton`,
+`auto-stop=no`, Name `cc-verify-final-010361cf`. It has been terminated
+(`20261103T175100Z_workstation_fin-repo-origin-and-ami.log`; the repo is `packages.debene.dev` ->
+`debeos-repo-green`). Evidence names below drop the `_i-010c19cd3ba4fb3ba_` part.
+
+**Installed** (`20261103T171411Z…fin-install`).
+- **`pkgman install claude_code`**, answers fed on stdin, pulled in:
+  - claude_code 2.1.314-2, nodejs24 24.22.2-1, libuv 1.52.1-6, brotli 1.2.1-2, nghttp2 1.63.0-1, icu78 78.3-1, c_ares 1.34.8-1, ripgrep 15.2.0-1, git 2.54.0-1, curl 8.21.0-1.
+  - Their own dependencies (expat, libiconv, mandoc, libexecinfo, libssh2, bzip2, libedit, libunistring, gettext_libintl, libpcre2, libpsl, nano).
+- **Then, for the tests and node-gyp:**
+  - haiku_devel r1~beta6_hrev59996-1, binutils 2.41_2026_03_10_bootstrap-2, gcc 13.3.0_2026_03_29_bootstrap-1, make 4.4.1_bootstrap-1, nodejs24_devel 24.22.2-1.
+  - tmux 3.7c-1, python3.14 3.14.7-1, tar 1.35-2, gzip 1.14-1, patch 2.7.6-2.
+- **Already on the image:** haiku r1~beta6_hrev59996-1, openssl3 3.5.9-3, openssh_debeos 10.4p1-1.
+- **`process.versions`:** node v24.22.2, openssl 3.5.9, brotli 1.2.1, nghttp2 1.63.0, uv 1.52.1, ICU 78.3, undici 7.30.1. 0 `.node` files.
+
+**Bedrock env.** Every model-backed check ran with `CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2
+ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0`, using instance-profile credentials.
+- Three node2422 scripts had used `claude-sonnet-5`: headless tools, grep timing and the TUI session. They ran with Haiku 4.5 here. That model change is the only edit, and it is visible in each log's script header.
+- With Haiku 4.5 the TUI starts in **manual** permission mode; the node2422 Sonnet session was in auto mode.
+
+| Check | node2422 (4ef344f5fa, staged) | **010361cf (green)** | Evidence (`20261103T…`) |
+|---|---|---|---|
+| Node acceptance | 23/23 | **23/23 ALL PASS** (undici 7.30.1, ICU 78.3, fs.watch delivers) | `171521Z…fin-node24-accept` |
+| node-gyp addon (`haiku_devel` + `binutils`) | 42 | `add(2,40) = 42` | `171550Z…fin-node24-gyp-addon-cxx` |
+| `--version`, `doctor`, `cc-teaminfo`, vectors | pass | pass (`haiku-arm64`, `Search: OK`, `check-vectors: ALL PASS`) | `171632Z…fin-claude-accept` |
+| `claude -p` via Bedrock | `pong`, 9 s | `pong`, rc 0, 8 s, `is_error:false` | `171825Z…fin-bedrock-headless-smoke` |
+| Headless Read/Grep/Bash | correct | correct: `aurora-7\|src/a.js, src/deep/b.js\|Haiku` (Haiku 4.5 puts a space after the comma) | `171856Z…fin-bedrock-headless-tools` |
+| Grep tool vs rg | 0.445 s / 0.148 s | 0.386 s / rg median 0.151 s, same 3 files, hooks fire | `171926Z…fin-bedrock-grep-timing` |
+| Interactive TUI: edit, bash, resize, /compact | pass | **pass**: edit on disk, `bash-ok-Haiku` (after the manual-mode prompt for `$(uname -s)`), reflow at 70 and 130 columns, and `/compact` completes with correct recall (`"edited on Haiku"`) | `171957Z…fin-bedrock-tui-session` |
+| `/compact` + recall ×5 | 5/5 | 5/5 (11–14 s) | `172346Z…fin-compact-haiku-x5` |
+| End-user reinstall + FileChanged through `libuv_fs_event` | fired 2×, `delivers` | uninstall, then `pkgman install claude_code`: fired 2×, `delivers`; vectors pass | `172729Z…fin-uninstall-claude`, `172759Z…fin-enduser-fresh-install-3` |
+| Ctrl-C, `-p` with no credentials | identical | identical | `173013Z…fin-tui-ctrlc-and-headless` |
+| Worker scenarios | 13/13 | 13/13 | `173111Z…fin-compat-scenarios-on-haiku` |
+| Bun.spawn / Bun.net vs Bun (SSH) | 188/24/2/0/4; 35/6/1 | identical | `173156Z…fin-scen-haiku-node-v2-ssh` |
+| TUI snapshots vs Linux | 60/64, 33/33 | 60/64 (same 4 keycap snapshots), 33/33; all 64 byte-identical to the node2422 capture | `173305Z…fin-tui-capture-B-haiku`, `173903Z_workstation_fin-tui-compare-{linuxA-haikuB,tmux37c}`, `173917Z_workstation_fin-tui-B-vs-node2422-B` |
+| 30-min working soak | 123/123 | **run 1: 0/12 FAIL; run 2: 122/122**, 4–7 s, one process, RSS 427 → 548 MB | `175034Z…fin-working-soak-v3-haiku`, `185943Z…fin-working-soak-v3-haiku-run2` |
+| 30-min idle soak | 314 → 187 MB | alive, 12 threads, 322 → 186 MB | `182323Z…fin-tui-soak-30min` |
+
+**Working soak run 1 failed, and the cause was the model's tool choice.**
+- **What happened.** Every task stopped at a permission prompt, and each prompt took more than the script's 150 s limit to clear. The session transcript (`185859Z…fin-soak-failed-transcript`) shows the model sent each task as one compound Bash command: `echo soak-k-ok > /boot/system/cache/tmp/ws-haiku/soak-k.txt && cat …`.
+  - The settings allowlist `Bash(echo:*)` does not cover that, so manual mode asked for confirmation.
+  - Each prompt was then answered by the next task's keystrokes. All 6 such commands ran with `RESULT ok` and their files exist.
+- **Why it isn't the port.** With the same settings and model, the process, cwd and realpath behave correctly: `process.cwd()`, `realpathSync` and `$PWD` all give `/boot/system/cache/tmp/…` (`185531Z…fin-cwd-permission-probe`). The same task loop, 6 tasks with a debug log, passes 6/6 using `Bash(echo)` + `Write` (`185735Z…fin-soak-prompt-probe`).
+- **Run 2,** the unchanged script, passed 122/122. Both runs are kept and reported. The soak harness depends on the model choosing a tool the allowlist covers.
+
+**Node 24 suites** (24.22.2 tree, built from the same recipe tarball and both patchsets as node2422; the patchsets' sha256 matches the copies on this branch: `173918Z…fin-node-src-prepare`, 30 + 4 files, rc 0). Same command, stdin a pipe, full plans (`174044Z…fin-full-suites`):
+
+| Suite | node2422 (staged 24.22.2-1, libuv-5, 4ef344f5fa) | **010361cf (green 24.22.2-1, libuv-6)** |
+|---|---|---|
+| parallel | plan 1..4605: 4582 ok (333 skip) / 23 not ok (1 timeout) | **4584 ok (332 skip) / 21 not ok (0 timeout)**, 251 s |
+| sequential | 1..121: 119 / 2 | 119 / 2, 115 s |
+
+Per-test diff, including skip lists: `20261103T175100Z_workstation_fin-node-suites-vs-node2422.log`.
+- **2 went from fail to pass:**
+  - `net-connect-abort-controller` (TIMEOUT -> ok): caused by PR 974, merged after the 4ef344f5fa bake, which fixes #946 (a closing listener now resets un-accepted connections). Under `--repeat 48` at 16-way it gives 48/48, against 4/48 hung on 4ef, and 40/40 alone (`174803Z…fin-residual-changed-tests`).
+  - `perf-hooks-sliding-window-histogram` (FAIL -> ok): **not a fix.** It is still intermittent here: 3/48 fail under 16-way load and 36/40 pass alone. #997 stays as it is.
+- **0 went from pass to fail. No state changes among the rest.**
+- **1 fewer skip:** `parallel/test-fs-read-stream` skipped on node2422 with "mkfifo not available" and runs and passes here. `mkfifo` is `/boot/system/bin/mkfifo` from `coreutils-9.9_bootstrap-1` (`174951Z…fin-mkfifo-probe`). Why `spawnSync('mkfifo')` failed on the node2422 box was not recorded, so this is not attributed.
+- **23 still fail, unchanged:**
+  - class (c) ×9.
+  - #882 (no hard links; closed as an accepted, documented BFS limit) ×5.
+  - #991 (system nghttp2 1.63.0: `http2-misbehaving-flow-control{,-paused}`, `http2-sensitive-headers`) ×3.
+  - uid 0 ×2 (`process-euid-egid`, `fs-rmSync-special-char-additional-error`).
+  - one each: #929 (`fs-stat-date`; closed as an accepted BFS timestamp-resolution limit), #871 (`http-writable-true-after-close`), `setproctitle`, `worker-memory`.
+- Nothing new was filed: every failure is already tracked or classified, and run 1 of the working soak is not a port defect.
+
 ## 2026-11-02 — fresh trunk image 4ef344f5fa
 
 This is the same verification on one fresh launch of the trunk bake `ami-0714f26bbe99a9bfb`
