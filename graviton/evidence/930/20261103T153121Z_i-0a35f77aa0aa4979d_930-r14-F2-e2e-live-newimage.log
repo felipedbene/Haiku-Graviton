@@ -1,0 +1,62 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-F2-e2e-live-newimage
+# instance: i-0a35f77aa0aa4979d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T153121Z   end: 20261103T153145Z   rc: 0
+# script sha256: 52bd2e4473463d42c4599261e2b3bc01d44dd5c7cf4d568ff620fb57f21c6b3e
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 80 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | echo "== image"; uname -v; ls /boot/system/packages | grep -E "^(openssh|openssl3)"; openssl version -a | grep -E "^OpenSSL|platform|options"
+# | echo "== plain install from the live repo"; feed | pkgman install claude_code 2>&1 | grep -E "install package|upgrade package|problem|Done"
+# | ls /boot/system/packages | grep -E "^(claude_code|nodejs24|openssl3|libuv|brotli)-" | sort
+# | echo "== run"; node --version; node -p 'process.versions.openssl+" "+require("os").cpus().length+" "+(require("os").cpus()[0].times.user>0)'
+# | node -e 'require("https").get("https://example.com",r=>{console.log("https",r.statusCode,r.socket.authorized);r.resume()})'
+# | claude --version
+# | cd /tmp && CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 timeout 180 claude -p "Reply with exactly: pong" < /dev/null; echo "claude -p rc=$?"
+# | echo "== sshd"; catattr SYS:PACKAGE_FILE /boot/system/bin/sshd
+# ---- raw output ----
+== image
+hrev59996 Nov  3 2026 15:08:39
+openssh_debeos-10.4p1-1-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-3-any.hpkg
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+platform: haiku-aarch64
+options:  bn(64,64)
+== plain install from the live repo
+    install package libuv-1.52.1-6 from repository DeBeOS
+    install package ripgrep-15.2.0-1 from repository DeBeOS
+    install package expat-2.8.2-1 from repository DeBeOS
+    install package libiconv-1.18-1 from repository DeBeOS
+    install package mandoc-1.14.6-1 from repository DeBeOS
+    install package nghttp2-1.63.0-1 from repository DeBeOS
+    install package brotli-1.2.1-2 from repository DeBeOS
+    install package c_ares-1.34.8-1 from repository DeBeOS
+    install package icu78-78.3-1 from repository DeBeOS
+    install package libexecinfo-1.1-6 from repository DeBeOS
+    install package libssh2-1.11.1-2 from repository DeBeOS
+    install package bzip2-1.0.8-3 from repository DeBeOS
+    install package libedit-20230828_3.1-1 from repository DeBeOS
+    install package libunistring-1.3-1 from repository DeBeOS
+    install package gettext_libintl-1.0-1 from repository DeBeOS
+    install package nodejs24-24.22.2-1 from repository DeBeOS
+    install package libpcre2-10.45-1 from repository DeBeOS
+    install package libpsl-0.21.5-2 from repository DeBeOS
+    install package nano-9.1-1 from repository DeBeOS
+    install package curl-8.21.0-1 from repository DeBeOS
+    install package git-2.54.0-1 from repository DeBeOS
+    install package claude_code-2.1.314-2 from repository DeBeOS
+[system] Done.
+brotli-1.2.1-2-arm64.hpkg
+claude_code-2.1.314-2-arm64.hpkg
+libuv-1.52.1-6-arm64.hpkg
+nodejs24-24.22.2-1-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg
+== run
+v24.22.2
+3.5.9 8 true
+https 200 true
+2.1.314 (Claude Code)
+pong
+claude -p rc=0
+== sshd
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
