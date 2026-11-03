@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-soak-startup-probe
+# instance: i-0aec824ba5e4e8b49   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T214126Z   end: 20261103T214152Z   rc: 0
+# script sha256: 2f560879944b98a37a0097d3706c5739d3bb8b0c8d436ec7b5008810971329eb
+# ---- script ----
+# | H=/tmp/ws-home-probe; rm -rf $H; mkdir -p $H/.claude; Wd=$(cd /tmp && pwd -P)/ws-probe; rm -rf $Wd; mkdir -p $Wd
+# | echo '{"prefersReducedMotion":true,"theme":"dark"}' > $H/.claude/settings.json
+# | echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$Wd\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | S=probe; tmux -L $S kill-server 2>/dev/null
+# | tmux -L $S new-session -d -s $S -x 120 -y 40 "cd $Wd && env DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 HOME=$H TERM=xterm-256color claude"
+# | for t in 3 8 15 25; do sleep_to=$t; sleep 5; echo "----- pane at ~${t}s"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | head -30; done
+# | tmux -L $S kill-server
+# ---- raw output ----
+----- pane at ~3s
+----- pane at ~8s
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/ws-probe
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable
+  without the sticky bit (owner 0:0, mode 0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass
+  --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+                     tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux.conf for wheel scroll
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← for agents
+----- pane at ~15s
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/ws-probe
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable
+  without the sticky bit (owner 0:0, mode 0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass
+  --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+                     tmux detected · scroll with PgUp/PgDn · or add 'set -g mouse on' to ~/.tmux.conf for wheel scroll
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← for agents
+----- pane at ~25s
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/ws-probe
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable
+  without the sticky bit (owner 0:0, mode 0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass
+  --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts

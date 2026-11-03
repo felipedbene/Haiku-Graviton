@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-soak-pinned-verify
+# instance: i-0aec824ba5e4e8b49   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T213209Z   end: 20261103T214036Z   rc: 0
+# script sha256: cb17177b8e72a32a5e6e4d76c4e8438bb6483a19f63154fc8d1e2462246eb855
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 80 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install claude_code tmux 2>&1 | grep -E "package (claude_code|tmux|nodejs24)|Done"
+# | grep -n "Use the Bash tool" /boot/home/working-soak.sh | cut -c1-120
+# | cd /tmp && bash /boot/home/working-soak.sh pin 8 claude 2>&1 | tail -40
+# | echo "soak rc=$?"
+# ---- raw output ----
+    install package tmux-3.7c-1 from repository DeBeOS
+    install package nodejs24-24.22.2-1 from repository DeBeOS
+    install package claude_code-2.1.314-2 from repository DeBeOS
+[system] Done.
+33:	tmux -L $S send-keys -t $S -l "Use the Bash tool to run exactly this command, with no redirection and nothing else: 
+[pin] pid/team 415, rss 326628KB
+[pin] task 1: FAIL rss=253880KB (pid 415)
+[pin]     --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+[pin]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[pin]   ❯ Use the Bash tool to run exactly this command, with no redirection and nothing else: echo soak-1-ok   Then use the
+[pin]     Write tool, not Bash, to write that command's output to the file soak-1.txt. Then reply with only the word done-1
+[pin]   ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[pin]     ⏸ manual mode on
+[pin] task 2: ok 11s rss=315288KB (pid 415)
+[pin] task 3: ok 4s rss=349588KB (pid 415)
+[pin] task 4: ok 4s rss=361612KB (pid 415)
+[pin] task 5: ok 4s rss=369764KB (pid 415)
+[pin] task 6: ok 4s rss=376336KB (pid 415)
+[pin] task 7: ok 4s rss=413864KB (pid 415)
+[pin] task 8: ok 4s rss=430080KB (pid 415)
+[pin] task 9: ok 4s rss=441952KB (pid 415)
+[pin] task 10: ok 4s rss=333776KB (pid 415)
+[pin] task 11: ok 4s rss=356808KB (pid 415)
+[pin] task 12: ok 4s rss=383840KB (pid 415)
+[pin] task 13: ok 4s rss=391328KB (pid 415)
+[pin] task 14: ok 4s rss=429124KB (pid 415)
+[pin] task 15: ok 4s rss=437876KB (pid 415)
+[pin] task 16: ok 4s rss=440448KB (pid 415)
+[pin] task 17: ok 4s rss=446704KB (pid 415)
+[pin] task 18: ok 4s rss=466224KB (pid 415)
+[pin] task 19: ok 5s rss=474688KB (pid 415)
+[pin] task 20: ok 4s rss=481768KB (pid 415)
+[pin] task 21: ok 5s rss=483120KB (pid 415)
+[pin] task 22: ok 4s rss=486108KB (pid 415)
+[pin] task 23: ok 4s rss=487600KB (pid 415)
+[pin] working soak: 22 ok / 1 failed over 8min; final rss 487616KB
+soak rc=0

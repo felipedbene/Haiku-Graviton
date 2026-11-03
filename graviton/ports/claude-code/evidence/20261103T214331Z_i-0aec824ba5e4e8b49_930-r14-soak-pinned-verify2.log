@@ -1,0 +1,38 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-soak-pinned-verify2
+# instance: i-0aec824ba5e4e8b49   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T214331Z   end: 20261103T215153Z   rc: 0
+# script sha256: c5a36088347609b41c31e2e635b48878117d748b205ae8a13831e04cc98a76db
+# ---- script ----
+# | cd /tmp && bash /boot/home/working-soak.sh pin2 8 claude 2>&1 | tail -30
+# ---- raw output ----
+[pin2] task 6: ok 5s rss=450196KB (pid 1378)
+[pin2] task 7: ok 4s rss=455332KB (pid 1378)
+[pin2] task 8: ok 4s rss=460488KB (pid 1378)
+[pin2] task 9: ok 5s rss=360244KB (pid 1378)
+[pin2] task 10: ok 4s rss=375996KB (pid 1378)
+[pin2] task 11: ok 4s rss=398584KB (pid 1378)
+[pin2] task 12: ok 4s rss=402604KB (pid 1378)
+[pin2] task 13: ok 4s rss=428508KB (pid 1378)
+[pin2] task 14: ok 5s rss=465824KB (pid 1378)
+[pin2] task 15: ok 4s rss=466124KB (pid 1378)
+[pin2] task 16: ok 4s rss=493332KB (pid 1378)
+[pin2] task 17: ok 4s rss=492204KB (pid 1378)
+[pin2] task 18: ok 4s rss=493544KB (pid 1378)
+[pin2] task 19: ok 4s rss=495056KB (pid 1378)
+[pin2] task 20: ok 4s rss=496464KB (pid 1378)
+[pin2] task 21: ok 4s rss=497616KB (pid 1378)
+[pin2] task 22: ok 5s rss=498956KB (pid 1378)
+[pin2] task 23: ok 4s rss=505680KB (pid 1378)
+[pin2] task 24: ok 4s rss=381832KB (pid 1378)
+[pin2] task 25: ok 4s rss=397884KB (pid 1378)
+[pin2] task 26: ok 5s rss=424168KB (pid 1378)
+[pin2] task 27: ok 4s rss=435604KB (pid 1378)
+[pin2] task 28: ok 4s rss=436368KB (pid 1378)
+[pin2] task 29: ok 4s rss=486412KB (pid 1378)
+[pin2] task 30: ok 4s rss=491432KB (pid 1378)
+[pin2] task 31: ok 4s rss=492744KB (pid 1378)
+[pin2] task 32: ok 4s rss=501508KB (pid 1378)
+[pin2] task 33: ok 4s rss=512056KB (pid 1378)
+[pin2] task 34: ok 4s rss=514528KB (pid 1378)
+[pin2] working soak: 34 ok / 0 failed over 8min; final rss 514584KB
