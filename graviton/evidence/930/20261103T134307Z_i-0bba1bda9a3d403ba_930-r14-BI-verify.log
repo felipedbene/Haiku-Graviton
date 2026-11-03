@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-BI-verify
+# instance: i-0bba1bda9a3d403ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T134307Z   end: 20261103T134314Z   rc: 0
+# script sha256: 528d9913a9efa8027efc5245950fa06f2ed6864c0c6f003eec9a598ffda33003
+# ---- script ----
+# | cd /tmp && rm -rf nb && mkdir nb && package extract -C nb /boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg
+# | readelf -h nb/bin/bison | grep -E "Machine|OS/ABI|Type"; readelf -l nb/bin/bison | grep -E "interpreter|GNU_PROPERTY"
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install /boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg 2>&1 | grep -E "package bison|Done"
+# | bison --version | head -1
+# | printf '%%%%\ns: %%empty | s "a";\n%%%%\n' > /tmp/g.y && bison -o /tmp/g.c /tmp/g.y && grep -c yyparse /tmp/g.c
+# | package list -i /boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg | grep -E "provides|requires"
+# ---- raw output ----
+  OS/ABI:                            UNIX - System V
+  Type:                              DYN (Shared object file)
+  Machine:                           AArch64
+    upgrade package bison-3.8.2_bootstrap-1 to 3.8.2-1 from local file
+[system] Done.
+bison (GNU Bison) 3.8.2
+4
+	provides: bison = 3.8.2 (compatible >= 2)
+	provides: cmd:bison = 3.8.2 (compatible >= 2)
+	provides: cmd:yacc
+	provides: devel:liby = 3.8.2 (compatible >= 2)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: cmd:m4>=1.4.19
