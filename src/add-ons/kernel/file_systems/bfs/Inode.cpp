@@ -2607,11 +2607,29 @@ Inode::Remove(Transaction& transaction, const char* name, ino_t* _id,
 	status_t status = vnode.Get(&inode);
 	if (status < B_OK) {
 		REPORT_ERROR(status);
+		// The owner of an unreadable entry is unknown; in a sticky directory
+		// only the directory owner and root may still drop it.
+		if (!force) {
+			status = check_sticky_permissions(Mode(), (uid_t)fNode.UserID(),
+				(uid_t)-1);
+			if (status != B_OK)
+				return status;
+		}
 		return fTree->Remove(transaction, name, id);
 	}
 
 	T(Remove(inode, name));
 	inode->WriteLockInTransaction(transaction);
+
+	// Both this directory and the entry are write locked now, so the owner
+	// checked here is the one of the entry that is actually removed. Like
+	// Linux' may_delete(), this comes before the type and emptiness checks.
+	if (!force) {
+		status = check_sticky_permissions(Mode(), (uid_t)fNode.UserID(),
+			(uid_t)inode->Node().UserID());
+		if (status != B_OK)
+			return status;
+	}
 
 	// Inode::IsContainer() is true also for indices (furthermore, the S_IFDIR
 	// bit is set for indices in BFS, not for attribute directories) - but you
