@@ -1,0 +1,68 @@
+# evidence: fin-enduser-fresh-install-3
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T172759Z   end: 20261103T173006Z   rc: 0
+# script sha256: ba099fffbdaf04f46515cd10e2a24f32a53dc7e79ce693a52eff0a066a8b5715
+# ---- script ----
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | echo "== before: $(ls /boot/system/packages | grep -E '^(libuv|claude_code)' | tr '\n' ' ')"
+# | pkgman refresh 2>&1 | tail -1
+# | echo "== (claude_code already uninstalled)"
+# | echo "== install claude_code from the DeBeOS repo"; { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; } | pkgman install claude_code 2>&1 | grep -v "^ *$" | tail -15
+# | echo "== after: $(ls /boot/system/packages | grep -E '^(libuv|claude_code)' | tr '\n' ' ')"
+# | echo "== provides check"; pkgman search -a -D libuv_fs_event 2>&1 | grep -c libuv
+# | claude --version
+# | HOME=/tmp/doc-home timeout 120 claude doctor < /dev/null 2>&1 | grep -E "Platform|Search|issues"
+# | echo ".node files installed: $(ls /boot/system/lib/claude-code/*.node 2>/dev/null | wc -l)"
+# | fc_test() {	# fc_test <label>: does a FileChanged hook fire when a watched file changes externally?
+# | 	local L=$1 H=/tmp/fc-home-$1 W=$(cd /tmp && pwd -P)/fc-$1 M=/tmp/fc-$1.log
+# | 	rm -rf $H $W $M /tmp/fc-$1.debug; mkdir -p $H/.claude $W; echo v1 > $W/watched.txt
+# | 	cat > $H/.claude/settings.json <<J
+# | {"prefersReducedMotion":true,"theme":"dark","hooks":{"FileChanged":[{"matcher":"watched.txt","hooks":[{"type":"command","command":"echo fired-\$(date +%s) >> $M"}]}]}}
+# | J
+# | 	echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$W\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | 	tmux -L fc kill-server 2>/dev/null
+# | 	tmux -L fc new-session -d -s fc -x 120 -y 30 "cd $W && env CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude --debug-file /tmp/fc-$L.debug"
+# | 	sleep 20; echo v2 >> $W/watched.txt; sleep 5; echo v3 >> $W/watched.txt; sleep 10
+# | 	echo "[$L] hook log: $(cat $M 2>/dev/null | tr '\n' ' ')"; echo "[$L] fired $(wc -l < $M 2>/dev/null || echo 0) time(s)"
+# | 	grep -i -E "ENOSYS|watch" /tmp/fc-$L.debug | grep -i -E "FileChanged|watch(er)?[: ]" | head -4 | cut -c1-200 | sed "s/^/[$L] debug: /"
+# | 	tmux -L fc kill-server
+# | }
+# | fc_test repo
+# | cd /boot/home/cc-accept && bash port/tools/check-vectors.sh vec-all /boot/system/bin/node | tail -1
+# ---- raw output ----
+== before: libuv-1.52.1-6-arm64.hpkg 
+Validating checksum for DeBeOS ...
+== (claude_code already uninstalled)
+== install claude_code from the DeBeOS repo
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+Validating checksum for DeBeOS...done.
+The following changes will be made:
+  in system:
+    install package claude_code-2.1.314-2 from repository DeBeOS
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Re-using download '/boot/system/packages/administrative/state_2026-11-03_17:14:33/claude_code-2.1.314-2-arm64.hpkg' from previous transaction
+Validating checksum for http://packages.debene.dev/arm64/packages/claude_code-2.1.314-2-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-03_17:27:37"
+[system] Cleaning up ...
+[system] Done.
+== after: claude_code-2.1.314-2-arm64.hpkg libuv-1.52.1-6-arm64.hpkg 
+== provides check
+4
+2.1.314 (Claude Code)
+Platform: haiku-arm64
+Search: OK (/boot/system/bin/rg)
+No installation issues found.
+For a full setup checkup that can also fix issues, run /doctor in a Claude Code session.
+.node files installed: 0
+[repo] hook log: fired-1793726913 fired-1793726918 
+[repo] fired 2 time(s)
+[repo] debug: 2026-11-03T17:28:16.017Z [DEBUG] FileChanged: watching 1 paths
+[repo] debug: 2026-11-03T17:28:19.900Z [DEBUG] [jobStateNameSync] watch skipped: Error: ENOENT: no such file or directory, watch '/tmp/fc-home-repo/.claude/jobs/06373b91'
+[repo] debug: 2026-11-03T17:28:20.814Z [DEBUG] [fs.watch probe] verdict: delivers
+[repo] debug: 2026-11-03T17:28:33.846Z [DEBUG] FileChanged: change /boot/system/cache/tmp/fc-repo/watched.txt
+check-vectors: ALL PASS

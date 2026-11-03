@@ -1,0 +1,37 @@
+# evidence: fin-node-suites-vs-node2422
+# workstation 20261103T175100Z. A = 20261103T004249Z_i-08822cbd7be76701c_node2422-final-full-suites.log (24.22.2 tree, staged nodejs24 24.22.2-1 + openssl 3.5.9-3, libuv-5, image 4ef344f5fa), B = 20261103T174044Z_i-010c19cd3ba4fb3ba_fin-full-suites.log (24.22.2 tree, green nodejs24 24.22.2-1, libuv 1.52.1-6, canonical 010361cf). Lists = every FAIL/TIMEOUT line; skip lists from 20261103T005406Z_..._node2422-final-residual-changed-tests.log and 20261103T174803Z_..._fin-residual-changed-tests.log
+# ---- raw output ----
+A not ok: 25  B not ok: 23
+-- fail -> pass (2):
+parallel/test-net-connect-abort-controller TIMEOUT
+parallel/test-perf-hooks-sliding-window-histogram FAIL
+-- pass -> fail (0):
+-- FAIL <-> TIMEOUT among tests failing in both:
+-- failing in both (23):
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-rmSync-special-char-additional-error FAIL FAIL
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-http2-sensitive-headers FAIL FAIL
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL
+-- skips: A 333, B 332
+-- skipped in A, not in B:
+parallel/test-fs-read-stream # skip mkfifo not available
+-- skipped in B, not in A:

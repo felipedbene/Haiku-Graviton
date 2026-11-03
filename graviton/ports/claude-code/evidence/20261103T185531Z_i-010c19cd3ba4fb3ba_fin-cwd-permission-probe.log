@@ -1,0 +1,92 @@
+# evidence: fin-cwd-permission-probe
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T185531Z   end: 20261103T185646Z   rc: 0
+# script sha256: 71416666c70b7a49f17ef427ad7056af8a9450ef5e9c1c505f5874897ebf20b3
+# ---- script ----
+# | set -u
+# | W=$(cd /tmp && pwd -P)/cwdprobe; rm -rf $W; mkdir -p $W; cd $W
+# | echo "pwd=$(pwd) pwd -P=$(pwd -P) /tmp -> $(cd /tmp && pwd -P)"; ls -ld /tmp
+# | node -e 'const fs=require("fs"),path=require("path");console.log(JSON.stringify({cwd:process.cwd(),realpathDot:fs.realpathSync("."),realpathNative:fs.realpathSync.native("."),envPWD:process.env.PWD,realTmp:fs.realpathSync("/tmp"),realFile:(fs.writeFileSync("f.txt","x"),fs.realpathSync("f.txt"))}))'
+# | echo "== one soak-style task with --debug-file"
+# | export DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | H=/tmp/cwd-home; rm -rf $H; mkdir -p $H/.claude
+# | echo '{"prefersReducedMotion":true,"theme":"dark","permissions":{"allow":["Bash(echo:*)","Bash(date:*)","Read","Write"]}}' > $H/.claude/settings.json
+# | echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$W\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | tmux -L cw kill-server 2>/dev/null
+# | tmux -L cw new-session -d -s cw -x 120 -y 40 "cd $W && env DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=$AWS_REGION ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude --debug-file /tmp/cw.debug"
+# | sleep 15
+# | tmux -L cw send-keys -t cw -l "Run the bash command: echo soak-1-ok   then write that command's output to the file soak-1.txt, then reply with only the word done-1"; sleep 1; tmux -L cw send-keys -t cw Enter
+# | sleep 40
+# | echo "--- screen"; tmux -L cw capture-pane -t cw -p | grep -v '^ *$' | tail -25
+# | echo "--- file: $(cat $W/soak-1.txt 2>&1)"
+# | tmux -L cw kill-server
+# | echo "--- debug: permission / cwd / working directory lines"
+# | grep -i -E 'permission|working dir|cwd|additionalDirector|outside|allowed|mode' /tmp/cw.debug | cut -c1-260 | head -40
+# ---- raw output ----
+pwd=/boot/system/cache/tmp/cwdprobe pwd -P=/boot/system/cache/tmp/cwdprobe /tmp -> /boot/system/cache/tmp
+lrwxrwxrwx 1 baron root 22 Nov  3 17:13 /tmp -> /boot/system/cache/tmp
+{"cwd":"/boot/system/cache/tmp/cwdprobe","realpathDot":"/boot/system/cache/tmp/cwdprobe","realpathNative":"/boot/system/cache/tmp/cwdprobe","envPWD":"/boot/system/cache/tmp/cwdprobe","realTmp":"/boot/system/cache/tmp","realFile":"/boot/system/cache/tmp/cwdprobe/f.txt"}
+== one soak-style task with --debug-file
+--- screen
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/cwdprobe
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable
+  without the sticky bit (owner 0:0, mode 0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass
+  --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+▎ Debug mode enabled · logging to /tmp/cw.debug
+❯ Run the bash command: echo soak-1-ok   then write that command's output to the file soak-1.txt, then reply with only
+  the word done-1
+  Thought for 1s, ran 1 shell command
+● Now I'll write the output to the file:
+● Write(soak-1.txt)
+  ⎿  Wrote 1 line to soak-1.txt
+      1 soak-1-ok
+● done-1
+✻ Sautéed for 5s · done 6:56 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+--- file: soak-1-ok
+--- debug: permission / cwd / working directory lines
+2026-11-03T18:55:41.246Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /boot/system/cache/tmp/cwdprobe/.claude/settings.json
+2026-11-03T18:55:41.248Z [DEBUG] Broken symlink or missing file encountered for settings.json at path: /boot/system/cache/tmp/cwdprobe/.claude/settings.local.json
+2026-11-03T18:55:41.422Z [DEBUG] Preserving file permissions: 100644
+2026-11-03T18:55:41.422Z [DEBUG] Writing to temp file: /tmp/cwd-home/.claude.json.tmp.86556.8df9886616b0
+2026-11-03T18:55:41.423Z [DEBUG] Applied original permissions to temp file
+2026-11-03T18:55:41.424Z [DEBUG] Renaming /tmp/cwd-home/.claude.json.tmp.86556.8df9886616b0 to /tmp/cwd-home/.claude.json
+2026-11-03T18:55:41.424Z [DEBUG] File /tmp/cwd-home/.claude.json written atomically
+2026-11-03T18:55:41.426Z [DEBUG] Preserving file permissions: 100644
+2026-11-03T18:55:41.426Z [DEBUG] Writing to temp file: /tmp/cwd-home/.claude.json.tmp.86556.43ed43bdd9c4
+2026-11-03T18:55:41.427Z [DEBUG] Applied original permissions to temp file
+2026-11-03T18:55:41.428Z [DEBUG] Renaming /tmp/cwd-home/.claude.json.tmp.86556.43ed43bdd9c4 to /tmp/cwd-home/.claude.json
+2026-11-03T18:55:41.428Z [DEBUG] File /tmp/cwd-home/.claude.json written atomically
+2026-11-03T18:55:41.429Z [DEBUG] Preserving file permissions: 100644
+2026-11-03T18:55:41.429Z [DEBUG] Writing to temp file: /tmp/cwd-home/.claude.json.tmp.86556.2095ec43f71c
+2026-11-03T18:55:41.430Z [DEBUG] Applied original permissions to temp file
+2026-11-03T18:55:41.431Z [DEBUG] Renaming /tmp/cwd-home/.claude.json.tmp.86556.2095ec43f71c to /tmp/cwd-home/.claude.json
+2026-11-03T18:55:41.431Z [DEBUG] File /tmp/cwd-home/.claude.json written atomically
+2026-11-03T18:55:41.432Z [DEBUG] Preserving file permissions: 100644
+2026-11-03T18:55:41.432Z [DEBUG] Writing to temp file: /tmp/cwd-home/.claude.json.tmp.86556.4206132600ba
+2026-11-03T18:55:41.433Z [DEBUG] Applied original permissions to temp file
+2026-11-03T18:55:41.434Z [DEBUG] Renaming /tmp/cwd-home/.claude.json.tmp.86556.4206132600ba to /tmp/cwd-home/.claude.json
+2026-11-03T18:55:41.434Z [DEBUG] File /tmp/cwd-home/.claude.json written atomically
+2026-11-03T18:55:41.436Z [DEBUG] Preserving file permissions: 100644
+2026-11-03T18:55:41.436Z [DEBUG] Writing to temp file: /tmp/cwd-home/.claude.json.tmp.86556.725d774e5d74
+2026-11-03T18:55:41.436Z [DEBUG] Applied original permissions to temp file
+2026-11-03T18:55:41.437Z [DEBUG] Renaming /tmp/cwd-home/.claude.json.tmp.86556.725d774e5d74 to /tmp/cwd-home/.claude.json
+2026-11-03T18:55:41.438Z [DEBUG] File /tmp/cwd-home/.claude.json written atomically
+2026-11-03T18:55:41.439Z [DEBUG] Preserving file permissions: 100644
+2026-11-03T18:55:41.439Z [DEBUG] Writing to temp file: /tmp/cwd-home/.claude.json.tmp.86556.75aeff6cada6
+2026-11-03T18:55:41.439Z [DEBUG] Applied original permissions to temp file
+2026-11-03T18:55:41.440Z [DEBUG] Renaming /tmp/cwd-home/.claude.json.tmp.86556.75aeff6cada6 to /tmp/cwd-home/.claude.json
+2026-11-03T18:55:41.440Z [DEBUG] File /tmp/cwd-home/.claude.json written atomically
+2026-11-03T18:55:41.442Z [DEBUG] Preserving file permissions: 100644
+2026-11-03T18:55:41.442Z [DEBUG] Writing to temp file: /tmp/cwd-home/.claude.json.tmp.86556.77cc06c18a93
+2026-11-03T18:55:41.442Z [DEBUG] Applied original permissions to temp file
+2026-11-03T18:55:41.443Z [DEBUG] Renaming /tmp/cwd-home/.claude.json.tmp.86556.77cc06c18a93 to /tmp/cwd-home/.claude.json
+2026-11-03T18:55:41.443Z [DEBUG] File /tmp/cwd-home/.claude.json written atomically
+2026-11-03T18:55:41.739Z [DEBUG] Applying permission update: Adding 4 allow rule(s) to destination 'userSettings': ["Bash(echo:*)","Bash(date:*)","Read","Write"]
+2026-11-03T18:55:41.809Z [DEBUG] [ToolSearch:optimistic] mode=tst, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-11-03T18:55:42.211Z [DEBUG] Loading skills from: managed=/etc/claude-code/.claude/skills, user=/tmp/cwd-home/.claude/skills, project=[]

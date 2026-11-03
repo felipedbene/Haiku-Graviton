@@ -1,0 +1,48 @@
+# evidence: fin-soak-prompt-probe
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T185735Z   end: 20261103T185838Z   rc: 0
+# script sha256: ebb1f2b191aa95b7652e3891cd52f0771faee30ea486c572cfcbafc612eafef3
+# ---- script ----
+# | set -u
+# | export DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | label=probe; H=/tmp/ws-home-$label; rm -rf $H; mkdir -p $H/.claude
+# | W=$(cd /tmp && pwd -P)/ws-$label; rm -rf $W; mkdir -p $W
+# | echo '{"prefersReducedMotion":true,"theme":"dark","permissions":{"allow":["Bash(echo:*)","Bash(date:*)","Read","Write"]}}' > $H/.claude/settings.json
+# | echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$W\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | S=ws-$label; tmux -L $S kill-server 2>/dev/null
+# | tmux -L $S new-session -d -s $S -x 120 -y 40 "cd $W && env DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=$AWS_REGION ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude --debug-file /tmp/wsp.debug"
+# | sleep 15
+# | for k in 1 2 3 4 5 6; do
+# | 	tmux -L $S send-keys -t $S -l "Run the bash command: echo soak-$k-ok   then write that command's output to the file soak-$k.txt, then reply with only the word done-$k"; sleep 1; tmux -L $S send-keys -t $S Enter
+# | 	r=FAIL; for i in $(seq 1 60); do [ -s $W/soak-$k.txt ] && { r="ok ${i}s"; break; }; sleep 1; done
+# | 	echo "===== task $k: $r"
+# | 	if [ "$r" = FAIL ]; then tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | tail -30; tmux -L $S send-keys -t $S Escape; sleep 3; fi
+# | done
+# | tmux -L $S kill-server
+# | echo "===== debug lines about permission decisions"
+# | grep -i -E 'permission (ask|deny|prompt|check|decision|result)|requires permission|ask:|behavior|outside|working director|additional' /tmp/wsp.debug | cut -c1-300 | head -40
+# | echo "===== tool uses (from the transcript)"
+# | f=$(ls -t $H/.claude/projects/*/*.jsonl 2>/dev/null | head -1); [ -n "$f" ] && node -e 'for (const l of require("fs").readFileSync(process.argv[1],"utf8").trim().split("\n")) { const m=JSON.parse(l); if (m.type==="assistant") for (const c of m.message.content||[]) if (c.type==="tool_use") console.log("TOOL_USE", c.name, JSON.stringify(c.input).slice(0,200)); }' "$f"
+# ---- raw output ----
+===== task 1: ok 6s
+===== task 2: ok 4s
+===== task 3: ok 4s
+===== task 4: ok 4s
+===== task 5: ok 4s
+===== task 6: ok 4s
+===== debug lines about permission decisions
+2026-11-03T18:57:47.627Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-11-03T18:57:56.848Z [DEBUG] Terminal capabilities: extendedKeys=yes (env: terminal=tmux); synchronizedOutput=yes (probe: DECRPM 2026 status=2); kittyKeyboard=no (probe: no reply to CSI ? u); kittyGraphics=no (probe: tmux does not know which terminal is outside it, so Claude Code draws no images
+===== tool uses (from the transcript)
+TOOL_USE Bash {"command":"echo soak-1-ok","description":"Run echo command"}
+TOOL_USE Write {"file_path":"/boot/system/cache/tmp/ws-probe/soak-1.txt","content":"soak-1-ok"}
+TOOL_USE Bash {"command":"echo soak-2-ok","description":"Run echo command"}
+TOOL_USE Write {"file_path":"/boot/system/cache/tmp/ws-probe/soak-2.txt","content":"soak-2-ok"}
+TOOL_USE Bash {"command":"echo soak-3-ok","description":"Run echo command"}
+TOOL_USE Write {"file_path":"/boot/system/cache/tmp/ws-probe/soak-3.txt","content":"soak-3-ok"}
+TOOL_USE Bash {"command":"echo soak-4-ok","description":"Run echo command"}
+TOOL_USE Write {"file_path":"/boot/system/cache/tmp/ws-probe/soak-4.txt","content":"soak-4-ok"}
+TOOL_USE Bash {"command":"echo soak-5-ok","description":"Run echo command"}
+TOOL_USE Write {"file_path":"/boot/system/cache/tmp/ws-probe/soak-5.txt","content":"soak-5-ok"}
+TOOL_USE Bash {"command":"echo soak-6-ok","description":"Run echo command"}
+TOOL_USE Write {"file_path":"/boot/system/cache/tmp/ws-probe/soak-6.txt","content":"soak-6-ok"}

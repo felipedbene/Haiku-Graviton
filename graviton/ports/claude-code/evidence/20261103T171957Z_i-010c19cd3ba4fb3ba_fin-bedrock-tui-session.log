@@ -1,0 +1,141 @@
+# evidence: fin-bedrock-tui-session
+# instance: i-010c19cd3ba4fb3ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T171957Z   end: 20261103T172338Z   rc: 0
+# script sha256: 6e7d5f07a87a479febed980921f63e66bacd173a1d5427c18cd3d37d4c6b698c
+# ---- script ----
+# | set -u
+# | export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | H=/tmp/tui-home; rm -rf $H; mkdir -p $H/.claude
+# | W=/boot/system/cache/tmp/cc-tui; rm -rf $W; mkdir -p $W; printf 'line one\nline two\n' > $W/notes.txt
+# | cat > $H/.claude/settings.json <<J
+# | {"prefersReducedMotion":true,"theme":"dark","permissions":{"allow":["Edit","Write","Bash(echo:*)","Bash(sleep:*)","Bash(uname:*)"]}}
+# | J
+# | cat > $H/.claude.json <<J
+# | {"hasCompletedOnboarding":true,"theme":"dark","projects":{"$W":{"hasTrustDialogAccepted":true}}}
+# | J
+# | S=t; tmux -L $S kill-server 2>/dev/null
+# | tmux -L $S new-session -d -s $S -x 110 -y 34 "cd $W && env CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude 2>/tmp/tui.err; echo CLAUDE-EXITED rc=\$?; sleep 60"
+# | snap() { sleep "$1"; echo "----- [$2]"; tmux -L $S capture-pane -t $S -p | sed 's/[[:space:]]*$//' | grep -v '^$' | tail -${3:-14}; }
+# | waitfor() { for i in $(seq 1 $2); do tmux -L $S capture-pane -t $S -p | grep -q -- "$1" && return 0; sleep 2; done; echo "(timeout waiting for: $1)"; return 1; }
+# | snap 15 "startup"
+# | tmux -L $S send-keys -t $S -l 'Edit notes.txt: replace "line two" with "line two (edited on Haiku)". Then run: echo bash-ok-$(uname -s)'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "bash-ok-Haiku" 60; snap 4 "after edit + bash" 18
+# | echo "----- notes.txt on disk:"; cat $W/notes.txt
+# | tmux -L $S send-keys -t $S -l 'Run the bash command: sleep 120'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | sleep 15; snap 0 "during sleep 120" 8
+# | tmux -L $S send-keys -t $S Escape; snap 5 "after Esc (interrupt)" 8
+# | echo "----- sleep processes left: $(ps | grep -c '[/]bin/sleep 120')"
+# | tmux -L $S resize-window -t $S -x 70 -y 24; snap 3 "resized to 70x24" 10
+# | tmux -L $S resize-window -t $S -x 130 -y 40; snap 3 "resized to 130x40" 6
+# | tmux -L $S send-keys -t $S -l '/compact'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "ompact" 90; sleep 20; snap 0 "after /compact" 12
+# | tmux -L $S send-keys -t $S -l 'What word did I put in parentheses in notes.txt? Answer in one line.'; sleep 1; tmux -L $S send-keys -t $S Enter
+# | waitfor "Haiku)" 60; snap 5 "post-compact recall" 8
+# | tmux -L $S send-keys -t $S C-c; sleep 1; tmux -L $S send-keys -t $S C-c; sleep 4; snap 0 "after Ctrl-C Ctrl-C" 6
+# | echo "----- node teams left: $(ps | grep -c '[b]in/node --zero-fill-buffers /boot/system/lib/clau')"
+# | echo "----- stderr (filtered):"; grep -v "Cannot open directory /boot/system/non-packaged" /tmp/tui.err | head -5
+# | tmux -L $S kill-server
+# ---- raw output ----
+----- [startup]
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/cc-tui
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is
+  world-writable without the sticky bit (owner 0:0, mode 0777) — chmod o-w /boot/system/cache/tmp (or chmod
+  +t), or pass --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+        tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← for agents
+(timeout waiting for: bash-ok-Haiku)
+----- [after edit + bash]
+● Update(notes.txt)
+  ⎿  Added 1 line, removed 1 line
+      1  line one
+      2 -line two
+      2 +line two (edited on Haiku)
+● Running 1 shell command…
+  ⎿  $ echo bash-ok-$(uname -s)
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Run shell command
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ echo bash-ok-$(uname -s)
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ A nested command in this command can't be checked before it runs
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. No
+ Esc to cancel · Tab to amend
+----- notes.txt on disk:
+line one
+line two (edited on Haiku)
+----- [during sleep 120]
+      2 +line two (edited on Haiku)
+  Ran 1 shell command
+● Done. File edited and command executed: bash-ok-Haiku
+✻ Brewed for 4s · done 5:22 PM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+----- [after Esc (interrupt)]
+      2 +line two (edited on Haiku)
+  Ran 1 shell command
+● Done. File edited and command executed: bash-ok-Haiku
+✻ Brewed for 4s · done 5:22 PM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+----- sleep processes left: 0
+----- [resized to 70x24]
+      1  line one
+      2 -line two
+      2 +line two (edited on Haiku)
+  Ran 1 shell command
+● Done. File edited and command executed: bash-ok-Haiku
+✻ Brewed for 4s · done 5:22 PM
+──────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+----- [resized to 130x40]
+● Done. File edited and command executed: bash-ok-Haiku
+✻ Brewed for 4s · done 5:22 PM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+----- [after /compact]
+      2 -line two
+      2 +line two (edited on Haiku)
+  Ran 1 shell command
+● Done. File edited and command executed: bash-ok-Haiku
+✻ Brewed for 4s · done 5:22 PM
+❯ /compact
+  ⎿  Compacted (ctrl+o to see full summary)
+  ⎿  Read notes.txt (3 lines)
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+----- [post-compact recall]
+❯ What word did I put in parentheses in notes.txt? Answer in one line.
+  Thought for 1s
+● "edited on Haiku"
+✻ Crunched for 1s · done 5:23 PM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+----- [after Ctrl-C Ctrl-C]
+● "edited on Haiku"
+✻ Crunched for 1s · done 5:23 PM
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+----- node teams left: 1
+----- stderr (filtered):
