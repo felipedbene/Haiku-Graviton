@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 894-build-hpkg
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T185920Z   end: 20261101T185941Z   rc: 127
+# script sha256: 7f7f54f70f6159f8b976b84387f30cc0e9d5c3c2854411d8067d8bb3377c28bc
+# ---- script ----
+# | set -e
+# | for c in tar gzip; do printf '%s: ' $c; command -v $c || echo none; done
+# | W=/boot/home/w894; rm -rf $W; mkdir -p $W/tree; cd $W
+# | /boot/system/bin/curl -fsS "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-894-work/src-63c2b1c415.tar.gz?<PRESIGNED>" -o src.tgz
+# | /boot/system/bin/curl -fsS "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-894-work/bin-63c2b1c415.tar.gz?<PRESIGNED>" -o bin.tgz
+# | sha256sum src.tgz bin.tgz
+# | tar -C tree -xzf src.tgz
+# | tar -xzf bin.tgz
+# | ls -la bin
+# | cd tree/graviton/go-arm64/ssm-agent/package
+# | grep ^version amazon_ssm_agent.PackageInfo
+# | BINDIR=$W/bin OUTDIR=$W STAGING=$W/stage sh build-hpkg.sh 2>&1 | grep -v -E '^\s+(bin|data)/' 
+# | cd $W
+# | H=amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+# | package info $H 2>/dev/null | head -20 || true
+# | package extract -C $W/x $H data/amazon_ssm_agent/source-manifest 2>/dev/null; sha256sum $W/x/data/amazon_ssm_agent/source-manifest || true
+# | /boot/system/bin/curl -fsS -X PUT -T $H "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-staging/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg?<PRESIGNED>" && echo PUT-HPKG-OK
+# ---- raw output ----
+tar: none
+gzip: none
+18cba35bb575db84c1e5f5bff08ba4ad4967e4bfef3021bc5a686b46561a23eb  src.tgz
+68bc65518d5ea1373da91808b91c0eb75f4094e1f3ad320c40be3fa5a2f8d3ec  bin.tgz
+/tmp/ccrun/cc-20261101T185920Z-47793.sh: line 7: tar: command not found

@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 894-probe
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T185409Z   end: 20261101T185431Z   rc: 127
+# script sha256: fbe08867245624da201cac8e4097b8dd4ec0ebe58b64a7bb554a509cc3a60270
+# ---- script ----
+# | uname -a; df -k /boot | tail -1; ls -la /boot/system/bin/amazon-ssm-agent /boot/system/bin/ssm-session-worker; ls /boot/system/packages | grep -i ssm; which package sha256sum
+# | /boot/system/bin/curl -fsS -X PUT -T /boot/system/bin/amazon-ssm-agent "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-894-work/ref-2/amazon-ssm-agent?<PRESIGNED>" && echo put1-ok
+# | /boot/system/bin/curl -fsS -X PUT -T /boot/system/bin/ssm-session-worker "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-894-work/ref-2/ssm-session-worker?<PRESIGNED>" && echo put2-ok
+# ---- raw output ----
+Haiku ip-10-128-6-57.us-west-2.comput R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+   Root Inode: 524288
+-r-xr-xr-x 1 baron root 13435148 Oct 19 20:36 /boot/system/bin/amazon-ssm-agent
+-r-xr-xr-x 1 baron root 16580876 Oct 19 20:36 /boot/system/bin/ssm-session-worker
+amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg
+/tmp/ccrun/cc-20261101T185409Z-44915.sh: line 1: which: command not found
+/tmp/ccrun/cc-20261101T185409Z-44915.sh: line 2: /boot/system/bin/curl: No such file or directory
+/tmp/ccrun/cc-20261101T185409Z-44915.sh: line 3: /boot/system/bin/curl: No such file or directory

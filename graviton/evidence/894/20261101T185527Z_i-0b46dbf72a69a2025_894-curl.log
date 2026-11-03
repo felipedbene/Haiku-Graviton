@@ -1,0 +1,30 @@
+# evidence: 894-curl
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T185527Z   end: 20261101T185549Z   rc: 0
+# script sha256: 204d2c688320973519d19c6c862fbb41be6145d3055aae70f9c4266e9ea71caf
+# ---- script ----
+# | pkgman list-repos 2>&1 | head
+# | pkgman install -y curl 2>&1 | tail -15
+# | command -v curl; ls -la /boot/system/bin/curl
+# ---- raw output ----
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+Validating checksum for http://packages.debene.dev/arm64/packages/nghttp2-1.63.0-1-arm64.hpkg...done.
+       libiconv-1.18-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libiconv-1.18-1-arm64.hpkg...done.
+       libunistring-1.3-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libunistring-1.3-1-arm64.hpkg...done.
+       gettext_libintl-1.0-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/gettext_libintl-1.0-1-arm64.hpkg...done.
+       libpsl-0.21.5-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libpsl-0.21.5-2-arm64.hpkg...done.
+       curl-8.21.0-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/curl-8.21.0-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-01_18:55:37"
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/curl
+-r-xr-xr-x 1 baron root 378951 Aug 29 07:07 /boot/system/bin/curl

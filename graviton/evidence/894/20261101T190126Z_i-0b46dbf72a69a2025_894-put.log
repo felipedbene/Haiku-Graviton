@@ -1,0 +1,13 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 894-put
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T190126Z   end: 20261101T190147Z   rc: 0
+# script sha256: e7387e63fe75fbf218313bccebe6979b16e12d2940cd0ea2e1865a2753aa73fb
+# ---- script ----
+# | set -e
+# | cd /boot/home/w894
+# | sha256sum amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+# | /boot/system/bin/curl -fsS -X PUT -T amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-staging/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg?<PRESIGNED>" && echo PUT-HPKG-OK
+# ---- raw output ----
+4f4182753b817f311dfff89b085b3796ba59d288d6d4953d38abfb54d180246c  amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+PUT-HPKG-OK
