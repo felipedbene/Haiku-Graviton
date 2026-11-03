@@ -1,0 +1,41 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-F-e2e-live
+# instance: i-0972528e1bd023b47   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T140723Z   end: 20261103T140749Z   rc: 0
+# script sha256: b40623ef74eefac3179cf9d4ab9b4342e597e2f0b26a1c38950ad17e4ddd0ef2
+# ---- script ----
+# | set -u
+# | feed() { i=0; while [ $i -lt 80 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | echo "== image"; uname -v; ls /boot/system/packages | grep -E "^(openssh|openssl3)" ; pkgman list-repos 2>&1 | grep -iE "url|name|debene" | head -4
+# | echo "== what the live repo offers (prod, packages.debene.dev)"; pkgman refresh >/dev/null 2>&1; for p in claude_code nodejs24 openssl3 libuv bison; do pkgman search -a -D "$p" 2>/dev/null | grep -E "^\s*(S|  )?\s*$p\b" | head -2; done
+# | echo "== plain install from the live repo"; feed | pkgman install claude_code 2>&1 | grep -E "install package|upgrade package|problem|Done" | grep -E "claude_code|nodejs24|openssl3|libuv|brotli|problem|Done"
+# | ls /boot/system/packages | grep -E "^(claude_code|nodejs24|openssl3|libuv|brotli)-" | sort
+# | echo "== run"; node --version; node -p 'process.versions.openssl+" "+require("os").cpus().length+" "+(require("os").cpus()[0].times.user>0)'
+# | claude --version
+# | cd /tmp && CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 timeout 180 claude -p "Reply with exactly: pong" < /dev/null; echo "claude -p rc=$?"
+# ---- raw output ----
+== image
+hrev59996 Nov  3 2026 00:41:16
+openssh_debeos-10.4p1-1-arm64.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+== what the live repo offers (prod, packages.debene.dev)
+== plain install from the live repo
+    install package libuv-1.52.1-6 from repository DeBeOS
+    install package brotli-1.2.1-2 from repository DeBeOS
+    install package nodejs24-24.22.2-1 from repository DeBeOS
+    install package claude_code-2.1.314-2 from repository DeBeOS
+[system] Done.
+brotli-1.2.1-2-arm64.hpkg
+claude_code-2.1.314-2-arm64.hpkg
+libuv-1.52.1-6-arm64.hpkg
+nodejs24-24.22.2-1-arm64.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+== run
+v24.22.2
+3.5.9 8 true
+2.1.314 (Claude Code)
+pong
+claude -p rc=0
