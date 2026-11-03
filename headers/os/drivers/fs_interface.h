@@ -340,6 +340,8 @@ extern fs_volume* volume_for_vnode(fs_vnode* vnode);
 
 extern status_t check_access_permissions(int accessMode, mode_t mode,
 					gid_t nodeGroupID, uid_t nodeUserID);
+extern status_t check_sticky_permissions(mode_t directoryMode,
+					uid_t directoryUserID, uid_t nodeUserID);
 extern status_t check_write_stat_permissions(gid_t nodeGroupID, uid_t nodeUserID,
 					mode_t nodeMode, uint32 mask, const struct stat* stat);
 
