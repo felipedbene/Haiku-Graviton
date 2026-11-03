@@ -14,8 +14,13 @@ LICENSE="GNU LGPL v2.1
 # under the same soname (lib:libcrypto = 3). This package librtmp imports BN_set_word, BN_sub_word,
 # so a build against the older headers passes its BN_ULONG argument as 32-bit.
 REVISION="9"
-SOURCE_URI="https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz"
-CHECKSUM_SHA256="d6da3b683f1045f02d94a81b0c583318dba021f69bdab970c5d5d73e8c38860f"
+# Source: upstream git at fa8646d, the last commit before the 2016-12-10 snapshot this
+# port is named for. The original tarball (sources.voidlinux.org/rtmpdump-2.4.20161210/
+# rtmpdump-2.4_p20161210.tar.gz, sha256 d6da3b683f1045f0...) is gone upstream (404) and
+# was never mirrored to sources.debene.dev (403). Owner-approved repoint (issue 930):
+# rtmp.h, amf.h, log.h and http.h at fa8646d are byte-identical to the headers in the
+# published rtmpdump_devel-2.4_20161210-8, so it is the same code.
+SOURCE_URI="git://git.ffmpeg.org/rtmpdump#fa8646daeb19dfd12c181f7d19de708d623704c0"
 SOURCE_DIR=""
 PATCHES="rtmpdump-2.4_git.patch
 	rtmpdump-openssl-1.1-v2.patch"
