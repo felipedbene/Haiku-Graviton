@@ -1,0 +1,2450 @@
+# evidence: crossbuild-b1-ubuntu-arm64
+# instance: i-0d071d39017b2fbd9 (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193)   region: us-west-2   transport: SSM send-command
+# what: hand-run oven cross-build of fix/986-openssh-identity at 8337c15cea (install/pre_build/build phases of graviton/pipeline/buildspecs/cross-build.yml, verbatim, env of CodeBuild project haiku-oven-cross-build). Result: jam pass 0 FAILED on issue 992 (attributes dir race).
+# driver crossbuild.sh sha256 57a3657bcc91d9372d7de458658701b928cba7bd0de37cdd45fc4d7c55c45dba, runphase.py sha256 a5eb3c3c4528af6a34290e7957e2e14505f4e6560e93bc7fc71486cc4644d5c2
+# log: \r progress lines of 'aws s3' turned into newlines, and 'Completed ... remaining' progress lines dropped
+# ---- script ----
+# | #!/bin/bash
+# | # Reproduces the oven CodeBuild cross-build (install, pre_build, build phases of
+# | # graviton/pipeline/buildspecs/cross-build.yml, verbatim) on an Ubuntu 24.04 arm64
+# | # EC2 instance (each command run the CodeBuild way, see runphase.py), for branch
+# | # fix/986-openssh-identity. post_build is skipped: it only writes caches back to S3.
+# | # Env values are the haiku-oven-cross-build project's.
+# | set -euo pipefail
+# | export DEBIAN_FRONTEND=noninteractive
+# | export AWS_DEFAULT_REGION=us-west-2 HAIKU_REVISION=hrev59996 HG_SSH_DIR=/opt/haiku/ssh
+# | export WORK_BUCKET=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | export IMPORT_PREFIX=import CACHE_PREFIX=cache
+# | export BUILDTOOLS_REPO=https://github.com/felipedbene/buildtools.git BUILDTOOLS_BRANCH=master
+# | export HAIKU_ON_EC2_REPO=https://github.com/felipedbene/haiku-on-ec2.git HAIKU_ON_EC2_BRANCH=main
+# | export ROOT_VOLUME_BYTES=21474836480 AMI_NAME_PREFIX=haiku-oven HG_BAKE_LANE=oven
+# | export GEN_SUBDIR=generated.arm64
+# | export CODEBUILD_SRC_DIR=/opt/src/haiku
+# | date -u +"start %Y%m%dT%H%M%SZ"
+# | apt-get update -qq && apt-get install -y -qq git python3-yaml > /dev/null
+# | rm -rf /usr/local/aws-cli /usr/local/bin/aws /usr/local/bin/aws_completer /tmp/aws /tmp/awscliv2.zip /opt/haiku /opt/src /opt/cb-state.sh /tmp/ct.env /tmp/ct.tar.zst
+# | mkdir -p /opt/src
+# | git clone -q --branch fix/986-openssh-identity https://github.com/felipedbene/Haiku-Graviton.git "$CODEBUILD_SRC_DIR"
+# | git -C "$CODEBUILD_SRC_DIR" log --oneline -3
+# | grep -n "^PKG_NAME=\|^HG_SSH_PACKAGE" "$CODEBUILD_SRC_DIR/graviton/ssh/build-openssh-arm64.sh" "$CODEBUILD_SRC_DIR/graviton/ssh/UserBuildConfig"
+# | python3 -I /opt/runphase.py "$CODEBUILD_SRC_DIR/graviton/pipeline/buildspecs/cross-build.yml" install pre_build build
+# | ls -la "$CODEBUILD_SRC_DIR/haiku-ec2.raw" /opt/haiku/ssh/*.hpkg
+# | sha256sum "$CODEBUILD_SRC_DIR/haiku-ec2.raw" /opt/haiku/ssh/*.hpkg
+# | date -u +"end %Y%m%dT%H%M%SZ"
+# | 
+# | # ---- runphase.py ----
+# | # runphase.py <buildspec> <phase>...: run buildspec commands the way CodeBuild does --
+# | # each command in its own bash, with exported variables and the working directory
+# | # carried to the next command, shell options (set -e etc.) NOT carried. Stops at the
+# | # first command that exits non-zero, and exits with its status.
+# | import os, subprocess, sys, yaml
+# | spec = yaml.safe_load(open(sys.argv[1]))
+# | state = "/opt/cb-state.sh"
+# | if not os.path.exists(state):
+# |     open(state, "w").write("cd \"$CODEBUILD_SRC_DIR\"\n")
+# | for ph in sys.argv[2:]:
+# |     for i, cmd in enumerate(spec["phases"][ph]["commands"]):
+# |         print(f"######## {ph}[{i}]: {cmd.splitlines()[0][:100]}", flush=True)
+# |         script = (f". {state} 2>/dev/null\n" + cmd + "\n__rc=$?\n"
+# |                   f"{{ declare -p | grep -vE '^declare -[a-zA-Z]*r' | grep -vE '^declare -[-a-zA-Z]* (BASH[A-Z_]*|FUNCNAME|GROUPS|DIRSTACK|PIPESTATUS|_|__rc)='; printf 'cd %q\\n' \"$PWD\"; }} > {state}.new\nexit $__rc\n")
+# |         rc = subprocess.call(["bash", "-c", script])
+# |         if os.path.exists(state + ".new"):
+# |             os.replace(state + ".new", state)
+# |         if rc != 0:
+# |             print(f"######## {ph}[{i}] FAILED rc={rc}", flush=True)
+# |             sys.exit(rc)
+# |     print(f"######## phase {ph} rc=0", flush=True)
+# ---- raw output ----
+start 20261102T233539Z
+292453d322 evidence: #986 baseline collision on canonical, and the #987 keymaker test
+8337c15cea ssh: keep command substitution out of the .PackageInfo heredoc
+78203abc90 ssh: give the image's cross-built openssh its own package identity
+/opt/src/haiku/graviton/ssh/build-openssh-arm64.sh:44:PKG_NAME=openssh_debeos
+/opt/src/haiku/graviton/ssh/UserBuildConfig:24:HG_SSH_PACKAGE = openssh_debeos-10.4p1-1-arm64.hpkg ;
+######## install[0]: export DEBIAN_FRONTEND=noninteractive
+######## install[1]: apt-get update -qq
+######## install[2]: apt-get install -y --no-install-recommends git build-essential g++ make bison flex gawk nasm wget cu
+Reading package lists...
+Building dependency tree...
+Reading state information...
+git is already the newest version (1:2.43.0-1ubuntu7.4).
+gawk is already the newest version (1:5.2.1-2ubuntu0.1).
+gawk set to manually installed.
+wget is already the newest version (1.21.4-1ubuntu4.5).
+wget set to manually installed.
+curl is already the newest version (8.5.0-2ubuntu10.16).
+curl set to manually installed.
+xz-utils is already the newest version (5.6.1+really5.4.5-1ubuntu0.4).
+xz-utils set to manually installed.
+zstd is already the newest version (1.5.5+dfsg2-2build1.1).
+zstd set to manually installed.
+python3 is already the newest version (3.12.3-0ubuntu2.1).
+python3 set to manually installed.
+gdisk is already the newest version (1.0.10-1build1).
+gdisk set to manually installed.
+rsync is already the newest version (3.2.7-1ubuntu1.5).
+rsync set to manually installed.
+sudo is already the newest version (1.9.15p5-3ubuntu5.24.04.4).
+sudo set to manually installed.
+ca-certificates is already the newest version (20260816ubuntu0.24.04.1).
+ca-certificates set to manually installed.
+file is already the newest version (1:5.45-3build1).
+file set to manually installed.
+The following additional packages will be installed:
+  autotools-dev binutils binutils-aarch64-linux-gnu binutils-common bzip2 cpp
+  cpp-13 cpp-13-aarch64-linux-gnu cpp-aarch64-linux-gnu dpkg-dev g++-13
+  g++-13-aarch64-linux-gnu g++-aarch64-linux-gnu gcc gcc-13
+  gcc-13-aarch64-linux-gnu gcc-13-base gcc-aarch64-linux-gnu libasan8
+  libatomic1 libbinutils libc-dev-bin libc6-dev libcc1-0 libcrypt-dev
+  libctf-nobfd0 libctf0 libdpkg-perl libgcc-13-dev libgomp1 libgprofng0
+  libhwasan0 libisl23 libitm1 liblsan0 libmpc3 libsframe1 libstdc++-13-dev
+  libtext-unidecode-perl libtsan2 libubsan1 libxml-libxml-perl
+  libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl
+  linux-libc-dev lto-disabled-list m4 rpcsvc-proto tex-common texinfo-lib
+Suggested packages:
+  autoconf-archive gnu-standards autoconf-doc binutils-doc gprofng-gui
+  bison-doc bzip2-doc cpp-doc gcc-13-locales cpp-13-doc debian-keyring
+  flex-doc gcc-13-doc gcc-multilib manpages-dev gdb gcc-doc
+  gdb-aarch64-linux-gnu autopoint gettext-doc libasprintf-dev libgettextpo-dev
+  glibc-doc bzr libstdc++-13-doc libtool-doc gfortran | fortran95-compiler
+  gcj-jdk m4-doc make-doc debhelper texlive-base texlive-latex-base
+  texlive-plain-generic texlive-fonts-recommended zip
+Recommended packages:
+  fakeroot libalgorithm-merge-perl libfl-dev manpages-dev libc-devtools
+  libfile-fcntllock-perl libltdl-dev libwww-perl libxml-sax-expat-perl
+The following NEW packages will be installed:
+  attr autoconf automake autotools-dev binutils binutils-aarch64-linux-gnu
+  binutils-common bison build-essential bzip2 cpp cpp-13
+  cpp-13-aarch64-linux-gnu cpp-aarch64-linux-gnu dpkg-dev flex g++ g++-13
+  g++-13-aarch64-linux-gnu g++-aarch64-linux-gnu gcc gcc-13
+  gcc-13-aarch64-linux-gnu gcc-13-base gcc-aarch64-linux-gnu gettext libasan8
+  libatomic1 libbinutils libc-dev-bin libc6-dev libcc1-0 libcrypt-dev
+  libctf-nobfd0 libctf0 libdpkg-perl libgcc-13-dev libgomp1 libgprofng0
+  libhwasan0 libisl23 libitm1 liblsan0 libmpc3 libsframe1 libstdc++-13-dev
+  libtext-unidecode-perl libtool libtsan2 libubsan1 libxml-libxml-perl
+  libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl
+  libzstd-dev linux-libc-dev lto-disabled-list m4 make nasm python-is-python3
+  rpcsvc-proto tex-common texinfo texinfo-lib unzip zlib1g-dev
+0 upgraded, 67 newly installed, 0 to remove and 1 not upgraded.
+Need to get 72.5 MB of archives.
+After this operation, 265 MB of additional disk space will be used.
+Get:1 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 m4 arm64 1.4.19-4build1 [240 kB]
+Get:2 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 flex arm64 2.6.4-8.2build1 [291 kB]
+Get:3 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 attr arm64 1:2.5.2-1ubuntu0.1 [24.8 kB]
+Get:4 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 autoconf all 2.71-3 [339 kB]
+Get:5 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 autotools-dev all 20220109.1 [44.9 kB]
+Get:6 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 automake all 1:1.16.5-1.3ubuntu1 [558 kB]
+Get:7 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 binutils-common arm64 2.42-4ubuntu2.10 [240 kB]
+Get:8 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libsframe1 arm64 2.42-4ubuntu2.10 [15.4 kB]
+Get:9 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libbinutils arm64 2.42-4ubuntu2.10 [766 kB]
+Get:10 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libctf-nobfd0 arm64 2.42-4ubuntu2.10 [101 kB]
+Get:11 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libctf0 arm64 2.42-4ubuntu2.10 [95.7 kB]
+Get:12 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libgprofng0 arm64 2.42-4ubuntu2.10 [776 kB]
+Get:13 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 binutils-aarch64-linux-gnu arm64 2.42-4ubuntu2.10 [3304 kB]
+Get:14 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 binutils arm64 2.42-4ubuntu2.10 [18.1 kB]
+Get:15 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 bison arm64 2:3.8.2+dfsg-1ubuntu0.24.04.1 [740 kB]
+Get:16 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libc-dev-bin arm64 2.39-0ubuntu8.9 [19.7 kB]
+Get:17 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 linux-libc-dev arm64 6.8.0-147.147 [1569 kB]
+Get:18 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libcrypt-dev arm64 1:4.4.36-4build1 [118 kB]
+Get:19 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 rpcsvc-proto arm64 1.4.2-0ubuntu7 [64.8 kB]
+Get:20 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libc6-dev arm64 2.39-0ubuntu8.9 [1596 kB]
+Get:21 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 gcc-13-base arm64 13.3.0-6ubuntu2~24.04.1 [51.6 kB]
+Get:22 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libisl23 arm64 0.26-3build1.1 [669 kB]
+Get:23 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libmpc3 arm64 1.3.1-1build1.1 [56.4 kB]
+Get:24 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 cpp-13-aarch64-linux-gnu arm64 13.3.0-6ubuntu2~24.04.1 [9560 kB]
+Get:25 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 cpp-13 arm64 13.3.0-6ubuntu2~24.04.1 [1038 B]
+Get:26 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 cpp-aarch64-linux-gnu arm64 4:13.2.0-7ubuntu1 [5316 B]
+Get:27 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 cpp arm64 4:13.2.0-7ubuntu1 [22.4 kB]
+Get:28 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libcc1-0 arm64 14.2.0-4ubuntu2~24.04.1 [49.7 kB]
+Get:29 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libgomp1 arm64 14.2.0-4ubuntu2~24.04.1 [145 kB]
+Get:30 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libitm1 arm64 14.2.0-4ubuntu2~24.04.1 [28.2 kB]
+Get:31 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libatomic1 arm64 14.2.0-4ubuntu2~24.04.1 [11.6 kB]
+Get:32 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libasan8 arm64 14.2.0-4ubuntu2~24.04.1 [2928 kB]
+Get:33 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 liblsan0 arm64 14.2.0-4ubuntu2~24.04.1 [1289 kB]
+Get:34 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libtsan2 arm64 14.2.0-4ubuntu2~24.04.1 [2697 kB]
+Get:35 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libubsan1 arm64 14.2.0-4ubuntu2~24.04.1 [1157 kB]
+Get:36 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libhwasan0 arm64 14.2.0-4ubuntu2~24.04.1 [1605 kB]
+Get:37 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libgcc-13-dev arm64 13.3.0-6ubuntu2~24.04.1 [2473 kB]
+Get:38 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 gcc-13-aarch64-linux-gnu arm64 13.3.0-6ubuntu2~24.04.1 [18.7 MB]
+Get:39 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 gcc-13 arm64 13.3.0-6ubuntu2~24.04.1 [484 kB]
+Get:40 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 gcc-aarch64-linux-gnu arm64 4:13.2.0-7ubuntu1 [1198 B]
+Get:41 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 gcc arm64 4:13.2.0-7ubuntu1 [5018 B]
+Get:42 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libstdc++-13-dev arm64 13.3.0-6ubuntu2~24.04.1 [2397 kB]
+Get:43 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 g++-13-aarch64-linux-gnu arm64 13.3.0-6ubuntu2~24.04.1 [10.9 MB]
+Get:44 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 g++-13 arm64 13.3.0-6ubuntu2~24.04.1 [16.0 kB]
+Get:45 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 g++-aarch64-linux-gnu arm64 4:13.2.0-7ubuntu1 [962 B]
+Get:46 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 g++ arm64 4:13.2.0-7ubuntu1 [1082 B]
+Get:47 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 make arm64 4.3-4.1build2 [178 kB]
+Get:48 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libdpkg-perl all 1.22.6ubuntu6.6 [268 kB]
+Get:49 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 bzip2 arm64 1.0.8-5.1ubuntu0.1 [34.0 kB]
+Get:50 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 lto-disabled-list all 47 [12.4 kB]
+Get:51 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 dpkg-dev all 1.22.6ubuntu6.6 [1074 kB]
+Get:52 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 build-essential arm64 12.10ubuntu1 [4932 B]
+Get:53 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 gettext arm64 0.21-14ubuntu2 [845 kB]
+Get:54 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 libtext-unidecode-perl all 1.30-3 [105 kB]
+Get:55 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libtool all 2.4.7-7build1 [166 kB]
+Get:56 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-namespacesupport-perl all 1.12-2 [13.5 kB]
+Get:57 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-sax-base-perl all 1.09-3 [18.9 kB]
+Get:58 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-sax-perl all 1.02+dfsg-3 [57.0 kB]
+Get:59 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-libxml-perl arm64 2.0207+dfsg+really+2.0134-1build4 [296 kB]
+Get:60 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libzstd-dev arm64 1.5.5+dfsg2-2build1.1 [344 kB]
+Get:61 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 nasm arm64 2.16.01-1build1 [438 kB]
+Get:62 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 python-is-python3 all 3.11.4-1 [2684 B]
+Get:63 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 tex-common all 6.18 [32.8 kB]
+Get:64 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 texinfo-lib arm64 7.1-3build2 [130 kB]
+Get:65 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 texinfo all 7.1-3build2 [1273 kB]
+Get:66 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 unzip arm64 6.0-28ubuntu4.1 [171 kB]
+Get:67 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 zlib1g-dev arm64 1:1.3.dfsg-3.1ubuntu2.3 [894 kB]
+Fetched 72.5 MB in 1s (98.9 MB/s)
+Selecting previously unselected package m4.
+
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 82663 files and directories currently installed.)
+
+Preparing to unpack .../00-m4_1.4.19-4build1_arm64.deb ...
+
+Unpacking m4 (1.4.19-4build1) ...
+
+Selecting previously unselected package flex.
+
+Preparing to unpack .../01-flex_2.6.4-8.2build1_arm64.deb ...
+
+Unpacking flex (2.6.4-8.2build1) ...
+
+Selecting previously unselected package attr.
+
+Preparing to unpack .../02-attr_1%3a2.5.2-1ubuntu0.1_arm64.deb ...
+
+Unpacking attr (1:2.5.2-1ubuntu0.1) ...
+
+Selecting previously unselected package autoconf.
+
+Preparing to unpack .../03-autoconf_2.71-3_all.deb ...
+
+Unpacking autoconf (2.71-3) ...
+
+Selecting previously unselected package autotools-dev.
+
+Preparing to unpack .../04-autotools-dev_20220109.1_all.deb ...
+
+Unpacking autotools-dev (20220109.1) ...
+
+Selecting previously unselected package automake.
+
+Preparing to unpack .../05-automake_1%3a1.16.5-1.3ubuntu1_all.deb ...
+
+Unpacking automake (1:1.16.5-1.3ubuntu1) ...
+
+Selecting previously unselected package binutils-common:arm64.
+
+Preparing to unpack .../06-binutils-common_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking binutils-common:arm64 (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package libsframe1:arm64.
+
+Preparing to unpack .../07-libsframe1_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking libsframe1:arm64 (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package libbinutils:arm64.
+
+Preparing to unpack .../08-libbinutils_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking libbinutils:arm64 (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package libctf-nobfd0:arm64.
+
+Preparing to unpack .../09-libctf-nobfd0_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking libctf-nobfd0:arm64 (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package libctf0:arm64.
+
+Preparing to unpack .../10-libctf0_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking libctf0:arm64 (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package libgprofng0:arm64.
+
+Preparing to unpack .../11-libgprofng0_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking libgprofng0:arm64 (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package binutils-aarch64-linux-gnu.
+
+Preparing to unpack .../12-binutils-aarch64-linux-gnu_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking binutils-aarch64-linux-gnu (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package binutils.
+
+Preparing to unpack .../13-binutils_2.42-4ubuntu2.10_arm64.deb ...
+
+Unpacking binutils (2.42-4ubuntu2.10) ...
+
+Selecting previously unselected package bison.
+
+Preparing to unpack .../14-bison_2%3a3.8.2+dfsg-1ubuntu0.24.04.1_arm64.deb ...
+
+Unpacking bison (2:3.8.2+dfsg-1ubuntu0.24.04.1) ...
+
+Selecting previously unselected package libc-dev-bin.
+
+Preparing to unpack .../15-libc-dev-bin_2.39-0ubuntu8.9_arm64.deb ...
+
+Unpacking libc-dev-bin (2.39-0ubuntu8.9) ...
+
+Selecting previously unselected package linux-libc-dev:arm64.
+
+Preparing to unpack .../16-linux-libc-dev_6.8.0-147.147_arm64.deb ...
+
+Unpacking linux-libc-dev:arm64 (6.8.0-147.147) ...
+
+Selecting previously unselected package libcrypt-dev:arm64.
+
+Preparing to unpack .../17-libcrypt-dev_1%3a4.4.36-4build1_arm64.deb ...
+
+Unpacking libcrypt-dev:arm64 (1:4.4.36-4build1) ...
+
+Selecting previously unselected package rpcsvc-proto.
+
+Preparing to unpack .../18-rpcsvc-proto_1.4.2-0ubuntu7_arm64.deb ...
+
+Unpacking rpcsvc-proto (1.4.2-0ubuntu7) ...
+
+Selecting previously unselected package libc6-dev:arm64.
+
+Preparing to unpack .../19-libc6-dev_2.39-0ubuntu8.9_arm64.deb ...
+
+Unpacking libc6-dev:arm64 (2.39-0ubuntu8.9) ...
+
+Selecting previously unselected package gcc-13-base:arm64.
+
+Preparing to unpack .../20-gcc-13-base_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking gcc-13-base:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libisl23:arm64.
+
+Preparing to unpack .../21-libisl23_0.26-3build1.1_arm64.deb ...
+
+Unpacking libisl23:arm64 (0.26-3build1.1) ...
+
+Selecting previously unselected package libmpc3:arm64.
+
+Preparing to unpack .../22-libmpc3_1.3.1-1build1.1_arm64.deb ...
+
+Unpacking libmpc3:arm64 (1.3.1-1build1.1) ...
+
+Selecting previously unselected package cpp-13-aarch64-linux-gnu.
+
+Preparing to unpack .../23-cpp-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking cpp-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package cpp-13.
+
+Preparing to unpack .../24-cpp-13_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking cpp-13 (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package cpp-aarch64-linux-gnu.
+
+Preparing to unpack .../25-cpp-aarch64-linux-gnu_4%3a13.2.0-7ubuntu1_arm64.deb ...
+
+Unpacking cpp-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+
+Selecting previously unselected package cpp.
+
+Preparing to unpack .../26-cpp_4%3a13.2.0-7ubuntu1_arm64.deb ...
+
+Unpacking cpp (4:13.2.0-7ubuntu1) ...
+
+Selecting previously unselected package libcc1-0:arm64.
+
+Preparing to unpack .../27-libcc1-0_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libcc1-0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libgomp1:arm64.
+
+Preparing to unpack .../28-libgomp1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libgomp1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libitm1:arm64.
+
+Preparing to unpack .../29-libitm1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libitm1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libatomic1:arm64.
+
+Preparing to unpack .../30-libatomic1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libatomic1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libasan8:arm64.
+
+Preparing to unpack .../31-libasan8_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libasan8:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package liblsan0:arm64.
+
+Preparing to unpack .../32-liblsan0_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking liblsan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libtsan2:arm64.
+
+Preparing to unpack .../33-libtsan2_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libtsan2:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libubsan1:arm64.
+
+Preparing to unpack .../34-libubsan1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libubsan1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libhwasan0:arm64.
+
+Preparing to unpack .../35-libhwasan0_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libhwasan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Selecting previously unselected package libgcc-13-dev:arm64.
+
+Preparing to unpack .../36-libgcc-13-dev_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libgcc-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package gcc-13-aarch64-linux-gnu.
+
+Preparing to unpack .../37-gcc-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking gcc-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package gcc-13.
+
+Preparing to unpack .../38-gcc-13_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking gcc-13 (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package gcc-aarch64-linux-gnu.
+
+Preparing to unpack .../39-gcc-aarch64-linux-gnu_4%3a13.2.0-7ubuntu1_arm64.deb ...
+
+Unpacking gcc-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+
+Selecting previously unselected package gcc.
+
+Preparing to unpack .../40-gcc_4%3a13.2.0-7ubuntu1_arm64.deb ...
+
+Unpacking gcc (4:13.2.0-7ubuntu1) ...
+
+Selecting previously unselected package libstdc++-13-dev:arm64.
+
+Preparing to unpack .../41-libstdc++-13-dev_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking libstdc++-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package g++-13-aarch64-linux-gnu.
+
+Preparing to unpack .../42-g++-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking g++-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package g++-13.
+
+Preparing to unpack .../43-g++-13_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+
+Unpacking g++-13 (13.3.0-6ubuntu2~24.04.1) ...
+
+Selecting previously unselected package g++-aarch64-linux-gnu.
+
+Preparing to unpack .../44-g++-aarch64-linux-gnu_4%3a13.2.0-7ubuntu1_arm64.deb ...
+
+Unpacking g++-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+
+Selecting previously unselected package g++.
+
+Preparing to unpack .../45-g++_4%3a13.2.0-7ubuntu1_arm64.deb ...
+
+Unpacking g++ (4:13.2.0-7ubuntu1) ...
+
+Selecting previously unselected package make.
+
+Preparing to unpack .../46-make_4.3-4.1build2_arm64.deb ...
+
+Unpacking make (4.3-4.1build2) ...
+
+Selecting previously unselected package libdpkg-perl.
+
+Preparing to unpack .../47-libdpkg-perl_1.22.6ubuntu6.6_all.deb ...
+
+Unpacking libdpkg-perl (1.22.6ubuntu6.6) ...
+
+Selecting previously unselected package bzip2.
+
+Preparing to unpack .../48-bzip2_1.0.8-5.1ubuntu0.1_arm64.deb ...
+
+Unpacking bzip2 (1.0.8-5.1ubuntu0.1) ...
+
+Selecting previously unselected package lto-disabled-list.
+
+Preparing to unpack .../49-lto-disabled-list_47_all.deb ...
+
+Unpacking lto-disabled-list (47) ...
+
+Selecting previously unselected package dpkg-dev.
+
+Preparing to unpack .../50-dpkg-dev_1.22.6ubuntu6.6_all.deb ...
+
+Unpacking dpkg-dev (1.22.6ubuntu6.6) ...
+
+Selecting previously unselected package build-essential.
+
+Preparing to unpack .../51-build-essential_12.10ubuntu1_arm64.deb ...
+
+Unpacking build-essential (12.10ubuntu1) ...
+
+Selecting previously unselected package gettext.
+
+Preparing to unpack .../52-gettext_0.21-14ubuntu2_arm64.deb ...
+
+Unpacking gettext (0.21-14ubuntu2) ...
+
+Selecting previously unselected package libtext-unidecode-perl.
+
+Preparing to unpack .../53-libtext-unidecode-perl_1.30-3_all.deb ...
+
+Unpacking libtext-unidecode-perl (1.30-3) ...
+
+Selecting previously unselected package libtool.
+
+Preparing to unpack .../54-libtool_2.4.7-7build1_all.deb ...
+
+Unpacking libtool (2.4.7-7build1) ...
+
+Selecting previously unselected package libxml-namespacesupport-perl.
+
+Preparing to unpack .../55-libxml-namespacesupport-perl_1.12-2_all.deb ...
+
+Unpacking libxml-namespacesupport-perl (1.12-2) ...
+
+Selecting previously unselected package libxml-sax-base-perl.
+
+Preparing to unpack .../56-libxml-sax-base-perl_1.09-3_all.deb ...
+
+Unpacking libxml-sax-base-perl (1.09-3) ...
+
+Selecting previously unselected package libxml-sax-perl.
+
+Preparing to unpack .../57-libxml-sax-perl_1.02+dfsg-3_all.deb ...
+
+Unpacking libxml-sax-perl (1.02+dfsg-3) ...
+
+Selecting previously unselected package libxml-libxml-perl.
+
+Preparing to unpack .../58-libxml-libxml-perl_2.0207+dfsg+really+2.0134-1build4_arm64.deb ...
+
+Unpacking libxml-libxml-perl (2.0207+dfsg+really+2.0134-1build4) ...
+
+Selecting previously unselected package libzstd-dev:arm64.
+
+Preparing to unpack .../59-libzstd-dev_1.5.5+dfsg2-2build1.1_arm64.deb ...
+
+Unpacking libzstd-dev:arm64 (1.5.5+dfsg2-2build1.1) ...
+
+Selecting previously unselected package nasm.
+
+Preparing to unpack .../60-nasm_2.16.01-1build1_arm64.deb ...
+
+Unpacking nasm (2.16.01-1build1) ...
+
+Selecting previously unselected package python-is-python3.
+
+Preparing to unpack .../61-python-is-python3_3.11.4-1_all.deb ...
+
+Unpacking python-is-python3 (3.11.4-1) ...
+
+Selecting previously unselected package tex-common.
+
+Preparing to unpack .../62-tex-common_6.18_all.deb ...
+
+Unpacking tex-common (6.18) ...
+
+Selecting previously unselected package texinfo-lib.
+
+Preparing to unpack .../63-texinfo-lib_7.1-3build2_arm64.deb ...
+
+Unpacking texinfo-lib (7.1-3build2) ...
+
+Selecting previously unselected package texinfo.
+
+Preparing to unpack .../64-texinfo_7.1-3build2_all.deb ...
+
+Unpacking texinfo (7.1-3build2) ...
+
+Selecting previously unselected package unzip.
+
+Preparing to unpack .../65-unzip_6.0-28ubuntu4.1_arm64.deb ...
+
+Unpacking unzip (6.0-28ubuntu4.1) ...
+
+Selecting previously unselected package zlib1g-dev:arm64.
+
+Preparing to unpack .../66-zlib1g-dev_1%3a1.3.dfsg-3.1ubuntu2.3_arm64.deb ...
+
+Unpacking zlib1g-dev:arm64 (1:1.3.dfsg-3.1ubuntu2.3) ...
+
+Setting up lto-disabled-list (47) ...
+
+Setting up libzstd-dev:arm64 (1.5.5+dfsg2-2build1.1) ...
+
+Setting up attr (1:2.5.2-1ubuntu0.1) ...
+
+Setting up unzip (6.0-28ubuntu4.1) ...
+
+Setting up binutils-common:arm64 (2.42-4ubuntu2.10) ...
+
+Setting up linux-libc-dev:arm64 (6.8.0-147.147) ...
+
+Setting up libxml-namespacesupport-perl (1.12-2) ...
+
+Setting up libctf-nobfd0:arm64 (2.42-4ubuntu2.10) ...
+
+Setting up m4 (1.4.19-4build1) ...
+
+Setting up texinfo-lib (7.1-3build2) ...
+
+Setting up libgomp1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up bzip2 (1.0.8-5.1ubuntu0.1) ...
+
+Setting up libsframe1:arm64 (2.42-4ubuntu2.10) ...
+
+Setting up tex-common (6.18) ...
+
+update-language: texlive-base not installed and configured, doing nothing!
+
+Setting up libxml-sax-base-perl (1.09-3) ...
+
+Setting up autotools-dev (20220109.1) ...
+
+Setting up rpcsvc-proto (1.4.2-0ubuntu7) ...
+
+Setting up gcc-13-base:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up make (4.3-4.1build2) ...
+
+Setting up libmpc3:arm64 (1.3.1-1build1.1) ...
+
+Setting up libatomic1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up nasm (2.16.01-1build1) ...
+
+Setting up libdpkg-perl (1.22.6ubuntu6.6) ...
+
+Setting up autoconf (2.71-3) ...
+
+Setting up libubsan1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up libhwasan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up libcrypt-dev:arm64 (1:4.4.36-4build1) ...
+
+Setting up libasan8:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up bison (2:3.8.2+dfsg-1ubuntu0.24.04.1) ...
+
+update-alternatives: using /usr/bin/bison.yacc to provide /usr/bin/yacc (yacc) in auto mode
+
+Setting up libtsan2:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up libbinutils:arm64 (2.42-4ubuntu2.10) ...
+
+Setting up libisl23:arm64 (0.26-3build1.1) ...
+
+Setting up libtext-unidecode-perl (1.30-3) ...
+
+Setting up libc-dev-bin (2.39-0ubuntu8.9) ...
+
+Setting up python-is-python3 (3.11.4-1) ...
+
+Setting up libcc1-0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up liblsan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up libitm1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+
+Setting up libctf0:arm64 (2.42-4ubuntu2.10) ...
+
+Setting up automake (1:1.16.5-1.3ubuntu1) ...
+
+update-alternatives: using /usr/bin/automake-1.16 to provide /usr/bin/automake (automake) in auto mode
+
+Setting up flex (2.6.4-8.2build1) ...
+
+Setting up gettext (0.21-14ubuntu2) ...
+
+Setting up cpp-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up libxml-sax-perl (1.02+dfsg-3) ...
+
+update-perl-sax-parsers: Registering Perl SAX parser XML::SAX::PurePerl with priority 10...
+
+update-perl-sax-parsers: Updating overall Perl SAX parser modules info file...
+
+
+
+Creating config file /etc/perl/XML/SAX/ParserDetails.ini with new version
+
+Setting up cpp-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+
+Setting up libgprofng0:arm64 (2.42-4ubuntu2.10) ...
+
+Setting up libxml-libxml-perl (2.0207+dfsg+really+2.0134-1build4) ...
+
+update-perl-sax-parsers: Registering Perl SAX parser XML::LibXML::SAX::Parser with priority 50...
+
+update-perl-sax-parsers: Registering Perl SAX parser XML::LibXML::SAX with priority 50...
+
+update-perl-sax-parsers: Updating overall Perl SAX parser modules info file...
+
+Replacing config file /etc/perl/XML/SAX/ParserDetails.ini with new version
+
+Setting up libgcc-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up libc6-dev:arm64 (2.39-0ubuntu8.9) ...
+
+Setting up libstdc++-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up cpp-13 (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up binutils-aarch64-linux-gnu (2.42-4ubuntu2.10) ...
+
+Setting up binutils (2.42-4ubuntu2.10) ...
+
+Setting up gcc-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up dpkg-dev (1.22.6ubuntu6.6) ...
+
+Setting up gcc-13 (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up texinfo (7.1-3build2) ...
+
+Setting up zlib1g-dev:arm64 (1:1.3.dfsg-3.1ubuntu2.3) ...
+
+Setting up cpp (4:13.2.0-7ubuntu1) ...
+
+Setting up g++-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up gcc-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+
+Setting up g++-13 (13.3.0-6ubuntu2~24.04.1) ...
+
+Setting up libtool (2.4.7-7build1) ...
+
+Setting up gcc (4:13.2.0-7ubuntu1) ...
+
+Setting up g++-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+
+Setting up g++ (4:13.2.0-7ubuntu1) ...
+
+update-alternatives: using /usr/bin/g++ to provide /usr/bin/c++ (c++) in auto mode
+
+Setting up build-essential (12.10ubuntu1) ...
+
+Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
+
+Processing triggers for man-db (2.12.0-4build2) ...
+
+Processing triggers for install-info (7.1-3build2) ...
+
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+######## install[3]: curl -sSLf "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
+######## install[4]: (cd /tmp && unzip -q awscliv2.zip && ./aws/install)
+You can now run: /usr/local/bin/aws --version
+Tip: run 'aws configure agent-toolkit' to set up AWS skills and the AWS MCP server for your AI coding agent(s).
+######## phase install rc=0
+######## pre_build[0]: set -euo pipefail
+######## pre_build[1]: export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+######## pre_build[2]: export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+######## pre_build[3]: echo "HAIKU_TOP=$HAIKU_TOP  GEN=$GEN"
+HAIKU_TOP=/opt/src/haiku  GEN=/opt/src/haiku/generated.arm64
+######## pre_build[4]: git clone --depth 1 --branch "$BUILDTOOLS_BRANCH" "$BUILDTOOLS_REPO" "$HAIKU_TOP/../buildtools"
+Cloning into '/opt/src/haiku/../buildtools'...
+Updating files:  10% (17125/169489)
+Updating files:  11% (18644/169489)
+Updating files:  12% (20339/169489)
+Updating files:  13% (22034/169489)
+Updating files:  14% (23729/169489)
+Updating files:  15% (25424/169489)
+Updating files:  16% (27119/169489)
+Updating files:  17% (28814/169489)
+Updating files:  18% (30509/169489)
+Updating files:  19% (32203/169489)
+Updating files:  19% (32989/169489)
+Updating files:  20% (33898/169489)
+Updating files:  21% (35593/169489)
+Updating files:  22% (37288/169489)
+Updating files:  23% (38983/169489)
+Updating files:  24% (40678/169489)
+Updating files:  25% (42373/169489)
+Updating files:  25% (43719/169489)
+Updating files:  26% (44068/169489)
+Updating files:  27% (45763/169489)
+Updating files:  28% (47457/169489)
+Updating files:  29% (49152/169489)
+Updating files:  30% (50847/169489)
+Updating files:  31% (52542/169489)
+Updating files:  32% (54237/169489)
+Updating files:  33% (55932/169489)
+Updating files:  34% (57627/169489)
+Updating files:  35% (59322/169489)
+Updating files:  36% (61017/169489)
+Updating files:  37% (62711/169489)
+Updating files:  38% (64406/169489)
+Updating files:  39% (66101/169489)
+Updating files:  40% (67796/169489)
+Updating files:  41% (69491/169489)
+Updating files:  42% (71186/169489)
+Updating files:  43% (72881/169489)
+Updating files:  44% (74576/169489)
+Updating files:  45% (76271/169489)
+Updating files:  46% (77965/169489)
+Updating files:  47% (79660/169489)
+Updating files:  48% (81355/169489)
+Updating files:  48% (82021/169489)
+Updating files:  49% (83050/169489)
+Updating files:  50% (84745/169489)
+Updating files:  51% (86440/169489)
+Updating files:  52% (88135/169489)
+Updating files:  53% (89830/169489)
+Updating files:  54% (91525/169489)
+Updating files:  55% (93219/169489)
+Updating files:  56% (94914/169489)
+Updating files:  57% (96609/169489)
+Updating files:  58% (98304/169489)
+Updating files:  59% (99999/169489)
+Updating files:  60% (101694/169489)
+Updating files:  61% (103389/169489)
+Updating files:  62% (105084/169489)
+Updating files:  63% (106779/169489)
+Updating files:  64% (108473/169489)
+Updating files:  65% (110168/169489)
+Updating files:  66% (111863/169489)
+Updating files:  67% (113558/169489)
+Updating files:  68% (115253/169489)
+Updating files:  69% (116948/169489)
+Updating files:  70% (118643/169489)
+Updating files:  71% (120338/169489)
+Updating files:  71% (120350/169489)
+Updating files:  72% (122033/169489)
+Updating files:  73% (123727/169489)
+Updating files:  74% (125422/169489)
+Updating files:  75% (127117/169489)
+Updating files:  76% (128812/169489)
+Updating files:  77% (130507/169489)
+Updating files:  78% (132202/169489)
+Updating files:  79% (133897/169489)
+Updating files:  80% (135592/169489)
+Updating files:  81% (137287/169489)
+Updating files:  82% (138981/169489)
+Updating files:  83% (140676/169489)
+Updating files:  84% (142371/169489)
+Updating files:  84% (143708/169489)
+Updating files:  85% (144066/169489)
+Updating files:  86% (145761/169489)
+Updating files:  87% (147456/169489)
+Updating files:  88% (149151/169489)
+Updating files:  89% (150846/169489)
+Updating files:  90% (152541/169489)
+Updating files:  91% (154235/169489)
+Updating files:  92% (155930/169489)
+Updating files:  93% (157625/169489)
+Updating files:  94% (159320/169489)
+Updating files:  94% (160162/169489)
+Updating files:  95% (161015/169489)
+Updating files:  96% (162710/169489)
+Updating files:  97% (164405/169489)
+Updating files:  98% (166100/169489)
+Updating files:  99% (167795/169489)
+Updating files: 100% (169489/169489)
+Updating files: 100% (169489/169489), done.
+######## pre_build[5]: export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+######## pre_build[6]: if ! command -v jam >/dev/null 2>&1; then
+== build + install jam from buildtools ==
+cc -o ./jam0 -O -DOPT_HEADER_CACHE_EXT -DOPT_JAMFILE_CACHE_EXT -DOPT_JAM_TARGETS_VARIABLE_EXT builtins.c command.c compile.c execunix.c execvms.c expand.c filent.c fileos2.c fileunix.c filevms.c glob.c hash.c headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c newstr.c option.c parse.c pathunix.c pathvms.c regexp.c rules.c scan.c search.c timestamp.c variable.c jcache.c hcache.c 
+LINKLIBS= ./jam0
+...patience...
+...found 216 target(s)...
+...updating 33 target(s)...
+MkDir1 bin.linuxarm 
+Cc bin.linuxarm/builtins.o 
+Cc bin.linuxarm/command.o 
+Cc bin.linuxarm/compile.o 
+Cc bin.linuxarm/execunix.o 
+Cc bin.linuxarm/fileunix.o 
+Cc bin.linuxarm/pathunix.o 
+Cc bin.linuxarm/jamgram.o 
+Cc bin.linuxarm/jcache.o 
+Cc bin.linuxarm/hcache.o 
+Cc bin.linuxarm/expand.o 
+Cc bin.linuxarm/glob.o 
+Cc bin.linuxarm/hash.o 
+Cc bin.linuxarm/headers.o 
+Cc bin.linuxarm/lists.o 
+Cc bin.linuxarm/make.o 
+Cc bin.linuxarm/make1.o 
+Cc bin.linuxarm/newstr.o 
+Cc bin.linuxarm/option.o 
+Cc bin.linuxarm/parse.o 
+Cc bin.linuxarm/regexp.o 
+Cc bin.linuxarm/rules.o 
+Cc bin.linuxarm/scan.o 
+Cc bin.linuxarm/search.o 
+Cc bin.linuxarm/timestamp.o 
+Cc bin.linuxarm/variable.o 
+Archive bin.linuxarm/libjam.a 
+ar: creating bin.linuxarm/libjam.a
+Ranlib bin.linuxarm/libjam.a 
+Cc bin.linuxarm/mkjambase.o 
+Link bin.linuxarm/mkjambase 
+Chmod1 bin.linuxarm/mkjambase 
+Cc bin.linuxarm/jam.o 
+GenFile1 jambase.c 
+Cc bin.linuxarm/jambase.o 
+Link bin.linuxarm/jam 
+Chmod1 bin.linuxarm/jam 
+...updated 33 target(s)...
+...patience...
+...found 215 target(s)...
+...updating 1 target(s)...
+Install /usr/local/bin/jam 
+Chmod1 /usr/local/bin/jam 
+...updated 1 target(s)...
+/usr/local/bin/jam
+######## pre_build[7]: BT_SHA="$(git -C "$HAIKU_TOP/../buildtools" rev-parse --short HEAD)"
+######## pre_build[8]: echo "buildtools HEAD=$BT_SHA"
+buildtools HEAD=d2e0a41eb
+######## pre_build[9]: CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64-${BT_SHA}.tar.zst"
+######## pre_build[10]: mkdir -p "$GEN"
+######## pre_build[11]: if aws s3 cp "$CT_CACHE" /tmp/ct.tar.zst --region "$AWS_DEFAULT_REGION" 2>/dev/null; then
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst to ../../../tmp/ct.tar.zst
+== restoring cross-tools cache (s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst) ==
+######## pre_build[12]: printf 'HAVE_CROSS_TOOLS=%s\nCT_CACHE=%s\n' "$HAVE_CROSS_TOOLS" "$CT_CACHE" > /tmp/ct.env
+######## phase pre_build rc=0
+######## build[0]: set -euo pipefail
+######## build[1]: export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+######## build[2]: export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+######## build[3]: export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+######## build[4]: . /tmp/ct.env
+######## build[5]: NPROC="$(nproc)"
+######## build[6]: cd "$GEN"
+######## build[7]: if [ "$HAVE_CROSS_TOOLS" = "1" ] && [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; t
+== configure (reuse cached cross-tools) ==
+Configured successfully!
+######## build[8]: export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
+######## build[9]: mkdir -p "$HG_POOL_DIR"
+######## build[10]: aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude 
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg to ../hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg to ../hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/jasper-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper-2.0.33-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libpng16-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16-1.6.53-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/ncurses6-6.6-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3-3.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3-3.5.9-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_man-3.5.9-2-any.hpkg to ../hpkg-pool/openssl3_man-3.5.9-2-any.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_man-3.5.7-1-any.hpkg to ../hpkg-pool/openssl3_man-3.5.7-1-any.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/tiff-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff-4.7.0-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zlib-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib-1.3.2-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg to ../hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd-1.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd-1.5.6-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg
+######## build[11]: # Must-have packages: the image is WRONG without these, so their
+ok: amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg was built from this tree's source (sha256:c2516c23c3bfe7948937642c3b4628619b7e7306ae9eb022ff70d6141eb514e2)
+total 57396
+drwxr-xr-x  2 root root     4096 Nov  2 23:37 .
+drwxr-xr-x 13 root root     4096 Nov  2 23:37 ..
+-rw-r--r--  1 root root 36856490 Nov  1 20:15 amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+-rw-r--r--  1 root root   109432 Sep 22 14:22 ca_root_certificates-2026_07_16-1-any.hpkg
+-rw-r--r--  1 root root   427396 Sep 22 14:22 debeos_cloudwatch-0.1.0-1-arm64.hpkg
+-rw-r--r--  1 root root    63254 Sep 22 14:22 fluidlite-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root    81370 Sep 22 14:22 fluidlite_devel-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root   184608 Sep 22 14:22 jasper-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root    30188 Sep 22 14:22 jasper_devel-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root   600692 Sep 22 14:22 libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root    57443 Sep 22 14:22 libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root   349435 Sep 22 14:22 libpng16-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   194287 Sep 22 14:22 libpng16_devel-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   225097 Sep 22 14:22 libvorbis-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   153942 Sep 22 14:22 libvorbis_devel-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   795387 Oct 17 18:35 ncurses6-6.6-1-arm64.hpkg
+-rw-r--r--  1 root root   958992 Sep 22 14:22 ncurses6-6.6_bootstrap-1-arm64.hpkg
+-rw-r--r--  1 root root  3717163 Sep 22 14:22 openssl3-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  3400263 Oct 17 18:37 openssl3-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root  2278528 Sep 22 14:22 openssl3_devel-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2179701 Oct 17 18:37 openssl3_devel-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root   555837 Sep 22 14:22 openssl3_man-3.5.7-1-any.hpkg
+-rw-r--r--  1 root root   520649 Oct 17 18:37 openssl3_man-3.5.9-2-any.hpkg
+-rw-r--r--  1 root root   193823 Sep 22 14:22 tiff-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root  1154788 Sep 22 14:22 tiff_devel-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root   120495 Oct 17 18:34 zlib-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root    34849 Oct 17 18:34 zlib_devel-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root   408182 Sep 22 14:22 zstd-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root   364566 Oct 17 18:37 zstd-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root    88366 Sep 22 14:22 zstd_devel-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root    87602 Oct 17 18:37 zstd_devel-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2501000 Sep 22 14:22 zstd_source-1.5.6-2-arm64.hpkg
+warning: no host 'package' tool under /opt/src/haiku/generated.arm64/objects, so the
+  vendor of the staged files is UNVERIFIED. A file not vendored
+  'Haiku Project' will instead fail much later, in jam, as "has
+  unexpected vendor" from RepositoryCache1 .../HaikuPorts-local.
+  Run a jam pass first, then re-run this script, to check it here.
+staged: ca_root_certificates-2026_07_16-1-any.hpkg
+staged: openssl3_man-3.5.9-2-any.hpkg
+staged: jasper-2.0.33-2-arm64.hpkg
+staged: jasper_devel-2.0.33-2-arm64.hpkg
+staged: libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+staged: libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+staged: libpng16-1.6.53-1-arm64.hpkg
+staged: libpng16_devel-1.6.53-1-arm64.hpkg
+staged: tiff-4.7.0-1-arm64.hpkg
+staged: tiff_devel-4.7.0-1-arm64.hpkg
+staged: openssl3-3.5.9-2-arm64.hpkg
+staged: openssl3_devel-3.5.9-2-arm64.hpkg
+staged: zstd-1.5.7-1-arm64.hpkg
+staged: zstd_devel-1.5.7-1-arm64.hpkg
+staged: zstd_source-1.5.6-2-arm64.hpkg
+staged: zlib-1.3.2-1-arm64.hpkg
+staged: zlib_devel-1.3.2-1-arm64.hpkg
+MISSING in pool: haikuwebkit-1.10.0-2-arm64.hpkg
+MISSING in pool: haikuwebkit_devel-1.10.0-2-arm64.hpkg
+MISSING in pool: which-2.21-6-arm64.hpkg
+staged: fluidlite-1.0.9-3-arm64.hpkg
+staged: fluidlite_devel-1.0.9-3-arm64.hpkg
+staged: libvorbis-1.3.7-1-arm64.hpkg
+staged: libvorbis_devel-1.3.7-1-arm64.hpkg
+21 staged into /opt/src/haiku/generated.arm64/download, 3 missing from /opt/src/haiku/hpkg-pool, 0 rejected, 0 already staged with the wrong vendor
+stage-local-packages reported missing packages (features for any un-staged pkg stay off)
+######## build[12]: echo "== jam pass 0 (pre-extract all build-feature archives) =="
+== jam pass 0 (pre-extract all build-feature archives) ==
+######## build[13]: HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" haiku-extract-build-features
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type regular ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+AddHaikuImagePackages: package bzip2 not available! 
+AddHaikuImagePackages: package ffmpeg6 not available! 
+AddHaikuImagePackages: package glu not available! 
+AddHaikuImagePackages: package gutenprint9 not available! 
+AddHaikuImagePackages: package lame not available! 
+AddHaikuImagePackages: package mesa not available! 
+AddHaikuImagePackages: package mesa_devel not available! 
+AddHaikuImagePackages: package mesa_swpipe not available! 
+AddHaikuImagePackages: package netcat not available! 
+AddHaikuImagePackages: package sharutils not available! 
+AddHaikuImagePackages: package unzip not available! 
+AddHaikuImagePackages: package which not available! 
+AddHaikuImagePackages: package zip not available! 
+AddHaikuImagePackages: package diffutils not available! 
+AddHaikuImagePackages: package gzip not available! 
+AddHaikuImagePackages: package tar not available! 
+AddHaikuImagePackages: package tcpdump not available! 
+...patience...
+...found 2614 target(s)...
+...updating 327 target(s)...
+MkDir1 build_packages 
+MkDir1 objects 
+MkDir1 /opt/src/haiku/generated.arm64/objects 
+MkDir1 objects/haiku 
+MkDir1 objects/linux 
+MkDir1 /opt/src/haiku/generated.arm64/objects/linux 
+MkDir1 objects/haiku/arm64 
+MkDir1 objects/linux/arm64 
+MkDir1 /opt/src/haiku/generated.arm64/objects/linux/lib 
+MkDir1 objects/haiku/arm64/packaging 
+MkDir1 objects/linux/arm64/release 
+MkDir1 objects/haiku/arm64/packaging/repositories 
+MkDir1 objects/linux/arm64/release/build 
+MkDir1 objects/linux/arm64/release/tools 
+ChecksumFileSHA256 objects/haiku/arm64/packaging/repositories/HaikuPorts-checksum 
+MkDir1 objects/linux/arm64/release/build/libroot 
+MkDir1 objects/linux/arm64/release/build/libpackage 
+MkDir1 objects/linux/arm64/release/build/libshared 
+MkDir1 objects/linux/arm64/release/build/libbe 
+MkDir1 objects/linux/arm64/release/tools/package 
+C++ objects/linux/arm64/release/build/libroot/function_remapper.o 
+C++ objects/linux/arm64/release/build/libroot/atomic.o 
+C++ objects/linux/arm64/release/build/libroot/byteorder.o 
+C++ objects/linux/arm64/release/build/libroot/errors.o 
+C++ objects/linux/arm64/release/build/libroot/find_directory.o 
+C++ objects/linux/arm64/release/build/libroot/fs.o 
+C++ objects/linux/arm64/release/build/libroot/fs_attr.o 
+C++ objects/linux/arm64/release/build/libroot/fs_descriptors.o 
+C++ objects/linux/arm64/release/build/libroot/misc.o 
+C++ objects/linux/arm64/release/build/libroot/sem.o 
+C++ objects/linux/arm64/release/build/libroot/thread.o 
+C++ objects/linux/arm64/release/build/libroot/SHA256.o 
+C++ objects/linux/arm64/release/build/libroot/driver_settings.o 
+Cc objects/linux/arm64/release/build/libroot/strlcpy.o 
+Cc objects/linux/arm64/release/build/libroot/strlcat.o 
+Cc objects/linux/arm64/release/build/libroot/strnlen.o 
+C++ objects/linux/arm64/release/build/libroot/KMessage.o 
+DownloadLocatedFile1 download/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/icu74-74.1_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/icu74_devel-74.1_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/freetype-2.6.3_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/zlib_source-1.2.13_bootstrap-1-source.hpkg 
+DownloadLocatedFile1 download/ncurses6-6.6_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/expat-2.5.0_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/expat_devel-2.5.0_bootstrap-1-arm64.hpkg 
+C++ objects/linux/arm64/release/build/libpackage/ActivationTransaction.o 
+C++ objects/linux/arm64/release/build/libpackage/Attributes.o 
+C++ objects/linux/arm64/release/build/libpackage/ChecksumAccessors.o 
+C++ objects/linux/arm64/release/build/libpackage/CommitTransactionResult.o 
+C++ objects/linux/arm64/release/build/libpackage/Context.o 
+C++ objects/linux/arm64/release/build/libpackage/DownloadFileRequest.o 
+C++ objects/linux/arm64/release/build/libpackage/FetchFileJob.o 
+C++ objects/linux/arm64/release/build/libpackage/Job.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfo.o 
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoContentHandler.o 
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/icu74-74.1_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoParser.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoSet.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageResolvable.o 
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/freetype-2.6.3_bootstrap-1-arm64.hpkg
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageResolvableExpression.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageRoster.o 
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/ncurses6-6.6_bootstrap-1-arm64.hpkg
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/zlib_source-1.2.13_bootstrap-1-source.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageVersion.o 
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/RepositoryCache.o 
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/expat-2.5.0_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/RepositoryConfig.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryInfo.o 
+--2026-11-02 23:37:15--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/expat_devel-2.5.0_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/Request.o 
+C++ objects/linux/arm64/release/build/libpackage/TempfileManager.o 
+C++ objects/linux/arm64/release/build/libpackage/User.o 
+C++ objects/linux/arm64/release/build/libpackage/ValidateChecksumJob.o 
+C++ objects/linux/arm64/release/build/libpackage/AttributeDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPool.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPoolImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPoolNoLock.o 
+C++ objects/linux/arm64/release/build/libpackage/BufferPool.o 
+C++ objects/linux/arm64/release/build/libpackage/PoolBuffer.o 
+C++ objects/linux/arm64/release/build/libpackage/DataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/ErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/FDDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/FetchUtils.o 
+C++ objects/linux/arm64/release/build/libshared/Keymap.o 
+MkDir1 objects/linux/arm64/release/build/libbe/app 
+C++ objects/linux/arm64/release/tools/package/command_add.o 
+C++ objects/linux/arm64/release/build/libbe/app/Application.o 
+Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/app/AppMisc.o 
+C++ objects/linux/arm64/release/build/libbe/app/Looper.o 
+C++ objects/linux/arm64/release/build/libbe/app/Message.o 
+C++ objects/linux/arm64/release/build/libbe/app/MessageAdapter.o 
+C++ objects/linux/arm64/release/build/libbe/app/Messenger.o 
+C++ objects/linux/arm64/release/build/libbe/app/MessageUtils.o 
+C++ objects/linux/arm64/release/build/libbe/app/TypeConstants.o 
+C++ objects/linux/arm64/release/tools/package/command_checksum.o 
+C++ objects/linux/arm64/release/tools/package/command_create.o 
+C++ objects/linux/arm64/release/tools/package/command_dump.o 
+C++ objects/linux/arm64/release/tools/package/command_extract.o 
+C++ objects/linux/arm64/release/tools/package/command_info.o 
+C++ objects/linux/arm64/release/tools/package/command_list.o 
+C++ objects/linux/arm64/release/tools/package/command_recompress.o 
+...on 100th target...
+C++ objects/linux/arm64/release/tools/package/package.o 
+C++ objects/linux/arm64/release/tools/package/PackageWriterListener.o 
+Archive objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a 
+C++ objects/linux/arm64/release/tools/package/PackageWritingUtils.o 
+MkDir1 objects/linux/arm64/release/build/libbe/icon 
+MkDir1 objects/linux/arm64/release/build/libbe/interface 
+ar: creating objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a
+MkDir1 objects/linux/arm64/release/build/libbe/storage 
+MkDir1 objects/linux/arm64/release/build/libbe/support 
+Ranlib objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a 
+C++ objects/linux/arm64/release/build/libbe/icon/FlatIconFormat.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Bitmap.o 
+C++ objects/linux/arm64/release/build/libbe/storage/AppFileInfo.o 
+C++ objects/linux/arm64/release/build/libbe/support/Archivable.o 
+C++ objects/linux/arm64/release/build/libbe/support/BlockCache.o 
+C++ objects/linux/arm64/release/build/libbe/support/BufferIO.o 
+C++ objects/linux/arm64/release/build/libbe/support/ByteOrder.o 
+C++ objects/linux/arm64/release/build/libbe/support/CompressionAlgorithm.o 
+C++ objects/linux/arm64/release/build/libbe/support/DataIO.o 
+C++ objects/linux/arm64/release/build/libbe/support/DataPositionIOWrapper.o 
+C++ objects/linux/arm64/release/build/libbe/support/Flattenable.o 
+C++ objects/linux/arm64/release/build/libbe/support/Job.o 
+C++ objects/linux/arm64/release/build/libbe/support/JobQueue.o 
+206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+206.189.242.242Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... C++ objects/linux/arm64/release/build/libbe/support/List.o 
+C++ objects/linux/arm64/release/build/libbe/support/Locker.o 
+C++ objects/linux/arm64/release/build/libbe/support/PointerList.o 
+C++ objects/linux/arm64/release/build/libbe/support/Referenceable.o 
+C++ objects/linux/arm64/release/build/libbe/support/String.o 
+C++ objects/linux/arm64/release/build/libbe/support/StringList.o 
+C++ objects/linux/arm64/release/build/libbe/support/Url.o 
+C++ objects/linux/arm64/release/build/libbe/support/ZlibCompressionAlgorithm.o 
+C++ objects/linux/arm64/release/build/libbe/support/ZstdCompressionAlgorithm.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Directory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DriverSettings.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Entry.o 
+C++ objects/linux/arm64/release/build/libbe/storage/EntryList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/FdIO.o 
+C++ objects/linux/arm64/release/build/libbe/storage/File.o 
+C++ objects/linux/arm64/release/build/libbe/storage/FileIO.o 
+C++ objects/linux/arm64/release/build/libbe/storage/FindDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MergedDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Mime.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeType.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Node.o 
+C++ objects/linux/arm64/release/build/libbe/storage/NodeInfo.o 
+C++ objects/linux/arm64/release/build/libbe/storage/OffsetFile.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Path.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceFile.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceItem.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Resources.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourcesContainer.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceStrings.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Statable.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SymLink.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Volume.o 
+connected.
+connected.
+C++ objects/linux/arm64/release/build/libbe/storage/storage_support.o 
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+C++ objects/linux/arm64/release/build/libbe/storage/AppMetaMimeCreator.o 
+C++ objects/linux/arm64/release/build/libbe/storage/AssociatedTypes.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Database.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DatabaseDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DatabaseLocation.o 
+../src/kits/app/MessageAdapter.cpp: In static member function ‘static status_t BPrivate::MessageAdapter::_UnflattenR5Message(uint32, BMessage*, BDataIO*)’:
+../src/kits/app/MessageAdapter.cpp:567:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  567 |                 reader(&header->target, sizeof(header->target));
+      |                        ^~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:571:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  571 |                 reader(&header->reply_port, sizeof(header->reply_port));
+      |                        ^~~~~~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:572:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  572 |                 reader(&header->reply_target, sizeof(header->reply_target));
+      |                        ^~~~~~~~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:573:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  573 |                 reader(&header->reply_team, sizeof(header->reply_team));
+      |                        ^~~~~~~~~~~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/database_support.o 
+C++ objects/linux/arm64/release/build/libbe/storage/InstalledTypes.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::Rename(const char*, const char*)’:
+../src/build/libbe/app/Message.cpp:652:28: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  652 |         int32 *nextField = &fHeader->hash_table[hash];
+      |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:665:37: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  665 |                         nextField = &fHeader->hash_table[hash];
+      |                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:667:45: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  667 |                                 nextField = &fFields[*nextField].next_field;
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:681:29: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  681 |                 nextField = &field->next_field;
+      |                             ^~~~~~~~~~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/MimeEntryProcessor.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::_AddField(const char*, type_code, bool, field_header**)’:
+../src/build/libbe/app/Message.cpp:1292:28: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1292 |         int32 *nextField = &fHeader->hash_table[hash];
+      |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1294:29: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1294 |                 nextField = &fFields[*nextField].next_field;
+      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::_RemoveField(field_header*)’:
+../src/build/libbe/app/Message.cpp:1333:33: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1333 |         int32 *value = fHeader->hash_table;
+      |                        ~~~~~~~~~^~~~~~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindPoint(const char*, BPoint*) const’:
+../src/build/libbe/app/Message.cpp:1644:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BPoint’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1644 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1683:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1683 | DEFINE_FUNCTIONS(BPoint, Point, B_POINT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+In file included from ../headers/build/os/interface/Point.h:1,
+                 from ../headers/build/../os/interface/Rect.h:11,
+                 from ../headers/build/os/interface/Rect.h:1,
+                 from ../headers/build/os/app/Message.h:16,
+                 from ../src/build/libbe/app/Message.cpp:10:
+../headers/build/../os/interface/Point.h:15:7: note: ‘class BPoint’ declared here
+   15 | class BPoint {
+      |       ^~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindPoint(const char*, int32, BPoint*) const’:
+../src/build/libbe/app/Message.cpp:1660:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BPoint’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1660 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1683:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1683 | DEFINE_FUNCTIONS(BPoint, Point, B_POINT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Point.h:15:7: note: ‘class BPoint’ declared here
+   15 | class BPoint {
+      |       ^~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindRect(const char*, BRect*) const’:
+../src/build/libbe/app/Message.cpp:1644:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BRect’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1644 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1684:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1684 | DEFINE_FUNCTIONS(BRect, Rect, B_RECT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Rect.h:15:7: note: ‘class BRect’ declared here
+   15 | class BRect {
+      |       ^~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindRect(const char*, int32, BRect*) const’:
+../src/build/libbe/app/Message.cpp:1660:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BRect’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1660 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1684:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1684 | DEFINE_FUNCTIONS(BRect, Rect, B_RECT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Rect.h:15:7: note: ‘class BRect’ declared here
+   15 | class BRect {
+      |       ^~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/MimeInfoUpdater.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindMessenger(const char*, int32, BMessenger*) const’:
+../src/build/libbe/app/Message.cpp:1970:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BMessenger’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1970 |                 memcpy(messenger, data, sizeof(BMessenger));
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../headers/build/private/app/MessagePrivate.h:13,
+                 from ../src/build/libbe/app/Message.cpp:12:
+../headers/build/os/app/Messenger.h:20:7: note: ‘class BMessenger’ declared here
+   20 | class BMessenger {
+      |       ^~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSniffer.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSnifferAddon.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSnifferAddonManager.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SnifferRules.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Supertype.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SupportingApps.o 
+C++ objects/linux/arm64/release/build/libbe/storage/TextSnifferAddon.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Err.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DisjList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Pattern.o 
+C++ objects/linux/arm64/release/build/libbe/storage/PatternList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Parser.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Range.o 
+HTTP request sent, awaiting response... C++ objects/linux/arm64/release/build/libbe/storage/RPattern.o 
+HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... C++ objects/linux/arm64/release/build/libbe/storage/RPatternList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Rule.o 
+C++ objects/linux/arm64/release/build/libbe/interface/ColorConversion.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Gradient.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientLinear.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientRadial.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientRadialFocus.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientDiamond.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientConic.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GraphicsDefs.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Point.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Rect.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Region.o 
+C++ objects/linux/arm64/release/build/libbe/interface/RegionSupport.o 
+C++ objects/linux/arm64/release/build/libbe/interface/SystemPalette.o 
+C++ objects/linux/arm64/release/build/libbe/icon/FlatIconImporter.o 
+C++ objects/linux/arm64/release/build/libbe/icon/LittleEndianBuffer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathCommandQueue.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Defines.o 
+C++ objects/linux/arm64/release/build/libbe/icon/MessageImporter.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathSourceShape.o 
+C++ objects/linux/arm64/release/build/libbe/icon/ReferenceImage.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Shape.o 
+...on 200th target...
+C++ objects/linux/arm64/release/build/libbe/icon/VectorPath.o 
+C++ objects/linux/arm64/release/build/libbe/icon/GradientTransformable.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Style.o 
+../src/build/libbe/interface/SystemPalette.cpp: In function ‘void FillColorMap(const rgb_color*, color_map*)’:
+../src/build/libbe/interface/SystemPalette.cpp:95:15: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘rgb_color’ {aka ‘struct rgb_color’} with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+   95 |         memcpy(map->color_list, palette, sizeof(map->color_list));
+      |         ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../headers/build/os/interface/GraphicsDefs.h:1,
+                 from ../src/build/libbe/interface/SystemPalette.cpp:13:
+../headers/build/../os/interface/GraphicsDefs.h:42:16: note: ‘rgb_color’ {aka ‘struct rgb_color’} declared here
+   42 | typedef struct rgb_color {
+      |                ^~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/icon/Transformable.o 
+C++ objects/linux/arm64/release/build/libbe/icon/AffineTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/CompoundStyleTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/ContourTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathSource.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PerspectiveTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/StrokeTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/StyleTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/TransformerFactory.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Icon.o 
+C++ objects/linux/arm64/release/build/libbe/icon/IconRenderer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/IconUtils.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_arc.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_arrowhead.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_bezier_arc.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_bspline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_curves.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_embedded_raster_fonts.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_gsv_text.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_image_filters.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_line_aa_basics.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_line_profile_aa.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_rounded_rect.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_sqrt_tables.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_affine.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_double_path.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_single_path.o 
+302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/expat_devel-2.5.0_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/expat_devel-2.5.0_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74-74.1_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74-74.1_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6-6.6_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6-6.6_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/zlib_source-1.2.13_bootstrap-1-source.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/zlib_source-1.2.13_bootstrap-1-source.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype-2.6.3_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype-2.6.3_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/expat-2.5.0_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/expat-2.5.0_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:37:16--  https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_warp_magnifier.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_bspline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_contour.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_dash.o 
+95.217.35.232, 2a01:4f9:2b:2e04::2
+95.217.35.232Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... , 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_markers_term.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_smooth_poly1.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_stroke.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_clip_polygon.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_clip_polyline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_segmentator.o 
+C++ objects/linux/arm64/release/build/libshared/NaturalCompare.o 
+C++ objects/linux/arm64/release/build/libshared/RegExp.o 
+../src/libs/agg/src/agg_gsv_text.cpp: In member function ‘void agg::gsv_text::load_font(const char*)’:
+../src/libs/agg/src/agg_gsv_text.cpp:559:22: warning: ignoring return value of ‘size_t fread(void*, size_t, size_t, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  559 |                 fread(&m_loaded_font[0], 1, len, fd);
+      |                 ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Link objects/linux/arm64/release/build/libroot/libroot_build.so 
+C++ objects/linux/arm64/release/build/libshared/StringForSize.o 
+C++ objects/linux/arm64/release/build/libpackage/GlobalWritableFileInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/HPKGDefs.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageContentHandler.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageData.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntry.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryAttribute.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapAccessorBase.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageWriterImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/ReaderImplBase.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryContentHandler.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryReader.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryReaderImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryWriterImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/Strings.o 
+C++ objects/linux/arm64/release/build/libpackage/UserSettingsFileInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/WriterImplBase.o 
+Chmod1 objects/linux/arm64/release/build/libroot/libroot_build.so 
+File /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+C++ objects/linux/arm64/release/build/libpackage/HPKGDefsV1.o 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+C++ objects/linux/arm64/release/build/libpackage/PackageContentHandlerV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataReaderV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryAttributeV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoContentHandlerV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderImplV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderV1.o 
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+C++ objects/linux/arm64/release/build/libpackage/ReaderImplBaseV1.o 
+C++ objects/linux/arm64/release/build/libpackage/NoErrorOutput.o 
+connected.
+connected.
+connected.
+C++ objects/linux/arm64/release/build/libpackage/StandardErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/Exceptions.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/app/app_kit.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryBuilder.o 
+Archive objects/linux/arm64/release/build/libshared/libshared_build.a 
+C++ objects/linux/arm64/release/build/libpackage/Solver.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackage.o 
+ar: creating objects/linux/arm64/release/build/libshared/libshared_build.a
+C++ objects/linux/arm64/release/build/libpackage/SolverPackageSpecifier.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackageSpecifierList.o 
+Ranlib objects/linux/arm64/release/build/libshared/libshared_build.a 
+C++ objects/linux/arm64/release/build/libpackage/SolverProblem.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverProblemSolution.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverRepository.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverResult.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/support/support_kit.o 
+HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/interface/interface_kit.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/storage/storage_kit.o 
+200 OK
+Length: 219730 (215K) [application/octet-stream]
+Saving to: ‘download/expat-2.5.0_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 437219 (427K) [application/octet-stream]
+Saving to: ‘download/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 1580025 (1.5M) [application/octet-stream]
+Saving to: ‘download/zlib_source-1.2.13_bootstrap-1-source.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 1201309 (1.1M) [application/octet-stream]
+Saving to: ‘download/freetype-2.6.3_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 1024031 (1000K) [application/octet-stream]
+Saving to: ‘download/icu74_devel-74.1_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 8812771 (8.4M) [application/octet-stream]
+Saving to: ‘download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 14956236 (14M) [application/octet-stream]
+Saving to: ‘download/icu74-74.1_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 6474896 (6.2M) [application/octet-stream]
+Saving to: ‘download/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+200 OK
+Length: 187189 (183K) [application/octet-stream]
+Saving to: ‘download/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg’
+Length: 
+     0K17087 ... (17K). [application/octet-stream]
+....Saving to: ‘download/expat_devel-2.5.0_bootstrap-1-arm64.hpkg’
+.. .....
+     0K .......... ......                                     100%  287M=0s
+
+2026-11-02 23:37:17 (287 MB/s) - ‘download/expat_devel-2.5.0_bootstrap-1-arm64.hpkg’ saved [17087/17087]
+
+..... .......... .200 OK
+Length: 958992 (937K) [application/octet-stream]
+Saving to: ‘download/ncurses6-6.6_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .......... .......... 23%  289K 1s
+    50K .......... .......... .......... .......... .............. .......... 11%  288K 1s
+    50K .......... .......... .......... .......... .............. ..........  3%  288K 5s
+    50K .......... .......... .......... .......... .............. ..........  4%  288K 4s
+    50K .......... .......... .......... .......... .............. ..........  4%  288K 3s
+    50K .......... .......... .......... .......... .............. ..........  0%  287K 30s
+    50K .......... .......... .................. ..........  0%  287K 51s
+    50K .......... .... .......... ............ .......... .......... .............. ..........  0%  286K 22s
+    50K .......... .......... .......... .......... .....MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/icon/icon_kit.o 
+Link /opt/src/haiku/generated.arm64/objects/linux/lib/libbe_build.so 
+......... ................ .......... 27%  275K 0s
+    50K .......... ......  5%  277K 3s
+    50K .......... .......... ................ .......... .......... ...... .......... .....Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libbe_build.so 
+Link /opt/src/haiku/generated.arm64/objects/linux/lib/libpackage_build.so 
+..... 46%  290K 0s
+   100K .......... .......... .......... .......... .......... 69% 53.6M 0s
+   150K .......... .......... .....Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libpackage_build.so 
+Link objects/linux/arm64/release/tools/package/package 
+..... 23%  289K 1s
+   100K .......... .......... .......... .......... .......... 35% 53.9M 1s
+   150K .......... .......... ..........  6%  289K 5s
+   100K .......... .......... .......... .......... ..........  9% 71.7M 3s
+   150K .......... .......... ..........  8%  289K 4s
+   100K .......... .......... .......... .......... .......... 12% 66.8M 2s
+   150K .......... .......... ..........  9%  288K 3s
+   100K .......... .......... .......... .......... .......... 14% 80.9M 2s
+   150K .......... .......... ..........  1%  288K 30s
+   100K .......... .......... .......... .......... ........  0%  288K 50s
+   100K .......... ........  1% 56.3M 20s
+   150K .................. ........ .......... ........ .......... ..........  1% 55.7M 34s
+   150K .......... .......... ..........  1%  286K 22s
+   100K .......... .......... .......... .......... ..........  2% 64.8M 14s
+   150K .......... .......... .......... .......... ...... .......... ...... .......... ...... .......... ...... .......... ...... .......... ...... .......... ...... .......... .Chmod1 objects/linux/arm64/release/tools/package/package 
+ExtractHPKGArchive1 build_packages/openssl3-3.5.9-2-arm64 
+...on 300th target...
+ExtractHPKGArchive1 build_packages/fluidlite_devel-1.0.9-3-arm64 
+ExtractHPKGArchive1 build_packages/libvorbis-1.3.7-1-arm64 
+ExtractHPKGArchive1 build_packages/libpng16-1.6.53-1-arm64 
+ExtractHPKGArchive1 build_packages/jasper-2.0.33-2-arm64 
+ExtractHPKGArchive1 build_packages/libjpeg_turbo-3.1.4.1-1-arm64 
+ExtractHPKGArchive1 build_packages/zlib-1.3.2-1-arm64 
+ExtractHPKGArchive1 build_packages/tiff-4.7.0-1-arm64 
+ExtractHPKGArchive1 build_packages/zstd-1.5.7-1-arm64 
+ExtractHPKGArchive1 build_packages/zstd_source-1.5.6-2-arm64 
+Error: Failed to create attribute "BEOS:TYPE" of file "develop": Unknown error -1
+Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+..... 10%  278K 3s
+   100K .......... .......... .......... .......... ........ 54%  275K 0s
+   100K .......... ........ 16% 28.2M 2s
+   150K .................. .......... .......... .......... 82% 18.6M 0s
+   150K .........
+mkdir -p "build_packages/openssl3-3.5.9-2-arm64"
+LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/src/haiku/generated.arm64/objects/linux/lib" \
+objects/linux/arm64/release/tools/package/package extract -C "build_packages/openssl3-3.5.9-2-arm64" "download/openssl3-3.5.9-2-arm64.hpkg"
+
+...failed ExtractHPKGArchive1 build_packages/openssl3-3.5.9-2-arm64 ...
+
+mkdir -p "build_packages/fluidlite_devel-1.0.9-3-arm64"
+LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/src/haiku/generated.arm64/objects/linux/lib" \
+objects/linux/arm64/release/tools/package/package extract -C "build_packages/fluidlite_devel-1.0.9-3-arm64" "download/fluidlite_devel-1.0.9-3-arm64.hpkg"
+
+...failed ExtractHPKGArchive1 build_packages/fluidlite_devel-1.0.9-3-arm64 ...
+ExtractHPKGArchive1 build_packages/tiff-4.7.0-1-arm64 
+ExtractHPKGArchive1 build_packages/zlib-1.3.2-1-arm64 
+. .......... .....ExtractHPKGArchive1 build_packages/jasper-2.0.33-2-arm64 
+..... ..                   100% 25.4M=0.4s
+
+2026-11-02 23:37:17 (497 KB/s) - ‘download/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg’ saved [187189/187189]
+
+ExtractHPKGArchive1 build_packages/libvorbis-1.3.7-1-arm64 
+ExtractHPKGArchive1 build_packages/zstd-1.5.7-1-arm64 
+ExtractHPKGArchive1 build_packages/libpng16-1.6.53-1-arm64 
+ExtractHPKGArchive1 build_packages/libjpeg_turbo-3.1.4.1-1-arm64 
+. .......... .......... .......... .......... 93%  291K 0s
+   200K .......... ....                                       100% 71.7M=0.5s
+
+2026-11-02 23:37:17 (414 KB/s) - ‘download/expat-2.5.0_bootstrap-1-arm64.hpkg’ saved [219730/219730]
+
+ExtractHPKGArchive1 build_packages/expat-2.5.0_bootstrap-1-arm64 
+......... 46%  290K 1s
+   200K .......... .......... .......... .......... .......... 58% 57.6M 0s
+   250K .......... .......... .......... .......... .......... 70% 71.1M 0s
+   300K ............ 12%  289K 3s
+   200K .......... .......... .......... .........ExtractHPKGArchive1 build_packages/expat-2.5.0_bootstrap-1-arm64 
+. .......... 16% 71.2M 3s
+   250K .......... .......... .......... .......... .......... 19% 75.9M 2s
+   300K .......... .................. 17%  290K 3s
+   200K .......... .......... .......... .......... .......... 21% 64.4M 2s
+   250K .......... .......... .......... .......... .......... 25% 79.8M 2s
+   300K .......... .......... .......... .............. 19%  288K 2s
+   200K .......... .......... .......... .......... .......... 24% 66.9M 2s
+   250K .......... .......... .......... ................  2%  288K 22s
+   200K ................  1%  288K 38s
+   200K ............ . ................... 29%.  32.9M. 1s.
+   300K. ......... ............. ....... .......... ................... .......... ..........  2% 23.1M 18s
+   250K ...... .......... ...... ..........  1% 21.2M 30s
+   250K .......... .......... ..........  3%  287K 16s
+   200K ............ ........... ... .......... ............ .............. .................. .......... ..........  3% 15.7M 15s
+   300K ...... ..........  2% 16.4M 25s
+   300K .... ..........  3% 17.5M 13s
+   250K ............ .............. .......... ........ .......... .......... ...... .......... .............. .......... ..........  4% 17.9M 11s
+   300K .......... ................ .......... .......... ...... .......... .......... .......... 34% 3.43M 1s
+   350K ...... ..........  4% 4.50M 13s
+   350K ...... ..........  2% 4.55M 22s
+   350K .......... 21%  279K 2s
+   200K .......... .......... .......... .......... .......... 26% 18.9M 1s
+   250K .......... .......... .......... ............ .......... 29%  870K 1s
+   350K .... .......... 32% 18.0M 1s
+   300K .......... .............. ..........  5%  933K 10s
+   350K .. .......... ...... .......... .......... .......... 81%  290K 0s
+   350K .......... .......... .......... .......... .......... 93% 39.9M 0s
+   400K .......... .......... ......                          100% 81.1M=0.7s
+
+2026-11-02 23:37:17 (614 KB/s) - ‘download/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg’ saved [437219/437219]
+
+..... .......... 22%  291K 2s
+   350K .......... .......... .......... .......... .......... 25% 33.3M 2s
+   400K .......... .......... .......... .......... ................ .......... 29% 54.5M 2s
+   450K .......... ...... .......... .......... ................ .......... 34%  433K 1s
+   400K .......... ...... .......... .......... .......... ...... 32% 19.8M 1s
+   500K .......... .......... ................ .......... 38% 18.3M 1s
+   450K .......... ...... .......... .......... ................ 35% 20.2M 1s
+   550K .......... .......... ...... .......... .......... 42% 16.6M 1s
+   500K .......... ...... .......... .......... .......... .......... ............ ................ 38% 17.4M 1s
+   600K .......... .......... .......... .................. ................ ........ 39%  312K 1s
+   400K .......... ........ .......... ...... .......... .......... 46% 15.4M 1s
+   550K ................ ................ .......... .......... .......... .......... ..  4%  311K 14s
+   400K .......... ......  2%  312K 25s
+   400K .......... .............. ............ .......... ...... .......... ...... .......... .... 44% 19.7M 1s
+   450K .......... ............ 51% 20.7M 1s
+   600K ................ ................ ................ .............. ............  3% 21.8M 22s
+   450K .......... ...... .......... ......  5% 20.0M 13s
+   450K .......... ...... .......... .... .......... ............ ................ ................ ................ .............. 49% 18.1M 1s
+   500K .......... .. .......... 55% 19.3M 1s
+   650K ......  6%  422K 10s
+   400K .......... ...... .......... ...... .......... .............. ............ .......... ......  3% 19.1M 20s
+   500K .......... ......  5% 16.7M 11s
+   500K .......... .... .......... ............ ................ ................ .............. 54% 17.8M 1s
+   550K ............  7% 20.0M 9s
+   450K .......... ...... .......... ...... .......... .... .......... ........ .......... ........ .......... ........ ................  6% 20.6M 10s
+   550K ................  3% 16.8M 18s
+   550K .......... .......... ...... .......... .......... .......... .. .......... ..........  7% 20.8M 8s
+   500K .......... .......... 59% 18.3M 0s
+   600K ............ .......... ...... .......... .... .......... ............ ................  6% 23.1M 9s
+   600K ................  4% 21.0M 17s
+   600K .............. ............ .......... ...... .......... ...... .......... .... .......... 64% 23.7M 0s
+   650K ............  8% 20.1M 7s
+   550K ................ .......... .......... .......... .......... ...... .......... ........ ..................  9% 20.9M 7s
+   600K ........ ..........  4% 12.2M 15s
+   650K ........ .......... .......... .......... .......... 10% 24.7M 6s
+   650K .......... .......... .......... ............ .......... 37%  287K 1s
+   350K .......... .......... .......... .......... .......... 42% 26.5M 1s
+   400K .......... .......... .......... .......... .......... 48% 47.7M 1s
+   450K .......... .......... .......... .......... .......... 53% 55.3M 1s
+   500K .......... .......... .......... .......... .......... 58% 56.4M 1s
+   550K .......... .......... .......... .......... .......... 64% 46.3M 0s
+   600K .......... .......... .......... .......... .......... 69% 3.23M 0s
+   650K ............ .......... .......... 42%  306K 1s
+   650K .......... .......... .......... .......... .......... 45% 48.4M 1s
+   700K .......... .......... .......... .............. ............ .......... 48% 61.5M 1s
+   750K .... .......... 59%  315K 1s
+   700K ............ ............. ........ ............ ............. .......... .......... ...... 51% 24.9M 1s
+   800K ........... ........ ........... 63% 26.0M 0s
+   750K .......... ............ .......... .......... .......... .......... ...... 55% 31.1M 1s
+   850K .......... .......... ................ .......... 68% 22.0M 0s
+   800K .......... ...... .......... .......... 58% 37.8M 1s
+   900K .......... ...... .......... .......... ................ .......... .......... .......... 61% 42.1M 1s
+   950K ............ 72% 26.9M 0s
+   850K .......... .... .......... ............ .............. .......... .. .......... .......... 76% 40.3M 0s
+   900K .......... .......... 64% 36.0M 0s
+  1000K .......... .......... ............ ................ .............. ............ .......... ...... .......... 69%  313K 0s
+   700K .......... 80% 34.4M 0s
+   950K .......... .......... ...... .......... 68% 26.3M 0s
+  1050K ...... ..........  7%  309K 11s
+   650K ............ .............. .......... ...... .......... ...... .......... ...... .......... .......... 85% 31.1M 0s
+  1000K ................ ........ .......... .............. ................ .......... ..........  4%  314K 17s
+   700K ...... .......... ........ .......... 74% 16.5M 0s
+   750K .... .......... 71% 21.7M 0s
+  1100K .......... ............ ..........  8% 21.4M 10s
+   700K .......... ................ .......... .......... ............ .......... .......... 89% 22.0M 0s
+  1050K .............. ........ .......... .......... ..........  5% 25.8M 16s
+   750K .. .......... ........ .......... .................  ................. ...... .......... 74% 20.3M 0s
+  1150K ...... ..........  8% 19.9M 9s
+   750K .......... .......... .......... 11%  310K 7s
+   700K .......... ............ .......... ...... .......... 93%. 20.5M. 0s
+  1100K .......... .............. .................. .............. .......... 79% 11.8M 0s
+   800K .......... ............ ............ .......... ...... .......... ....  5% 16.3M 15s
+   800K .......... ...... .......... .............. ........ ...... .................  ................... .......... .......... ...... .......... 98% 23.0M 0s
+  1150K .......... ............ .......... 11% 15.5M 7s
+   750K .......... ........  9% 13.1M 9s
+   800K .......... .............. ...........  77%.. 11.6M. 0s 
+  1200K   . . . . . . . . . .   . . . . .           100% 19.9M=0.9s
+
+2026-11-02 23:37:17 (1.30 MB/s) - ‘download/freetype-2.6.3_bootstrap-1-arm64.hpkg’ saved [1201309/1201309]
+
+..... .......... .... 84% 17.7M 0s
+   850K .......... ............ ..........  5% 17.2M 14s
+   850K .......... .......... .................. ............ .......... .... .......... .... .......... ............ .........ExtractHPKGArchive1 build_packages/freetype-2.6.3_bootstrap-1-arm64 
+...  9% 22.9M 8s
+   850K .......... ........ 89% 27.7M 0s
+   900K .......... ........ .................. ........ .......... ..........  6% 24.8M 13s
+   900K .......... .......... .............. .......... 12% 13.2M 6s
+   800K .......... ........ .......... .... .......... .............. .............. 94% 27.3M 0s
+   950K .............. .......... ...... 10% 23.8M 8s
+   900K .......... .... .......... ............ ........ .......... .............. ..............  6% 22.1M 13s
+   950K ............ .......... ........ .......... .......... 99% 32.8M 0s
+  1000K                                                       100% 57.7G=0.9s
+
+2026-11-02 23:37:17 (1.10 MB/s) - ‘download/icu74_devel-74.1_bootstrap-1-arm64.hpkg’ saved [1024031/1024031]
+
+... 13% 19.9M 6s
+   850K .......... ..... ................ . 11%... 30.6M. 7s
+   950K ............. .... ................ .... ........... ..................  6% 36.5M 12s
+  1000K ........ .............  ............... ........ .......... ...... 14% 34.1M 5s
+   900K .......... ........ .......... ..........  7% 45.2M 11s
+  1050K ................... 11%.. 24.5M. 7s.
+  1000K ..... .............. .......... .... .......... ............ .......... .......... .......... ................ 15% 33.5M 5s
+   950K ............ ..........  7% 45.0M 11s
+  1100K .... .......... ...... .......... 12% 41.2M 6s
+  1050K ............ .............. .......... ...... .......... .. .......... .............. 15% 45.0M 5s
+  1000K ................ ............ ..........  7% 31.1M 10s
+  1150K .... .......... .......... ...... ............... 12%. 29.2M 6s
+  1100K ............ ........ .......... 16% 38.1M 4s
+  1050K ............ .............. .......... .... .......... ............ ........ .......... ............ .. .................. 17%. 49.1M 13% 4s
+  1100K 35.5M  6s.
+  1150K. ......... ................ .................. ....... ........... ......  8% 19.4M 10s
+  1200K .......... .......... .......... 18% 43.2M 4s
+  1150K ...... .......... .... .......... ............ .............. .................. ........ 13% 22.7M 6s
+  1200K .......... ........ .......... .......... .............. .......... ....  8% 26.7M 10s
+  1250K .......... ............ .......... 14% 49.4M 5s
+  1250K .......... .......... .......... 18% 21.8M 4s
+  1200K .......... ............ .............. .......... .. .......... .............. .......... 19% 48.1M 4s
+  1250K .......... .......... ..............  8% 21.2M 9s
+  1300K .......... .. .......... .............. ............ 20% 46.3M 3s
+  1300K .......... .......... .......... .......... .......... 21% 49.5M 3s
+  1350K .......... .......... .....ExtractHPKGArchive1 build_packages/freetype-2.6.3_bootstrap-1-arm64 
+..... .......... .......... .......... .......... 74%  312K 0s
+   700K .......... .......... .......... .......... .......... 80% 61.3M 0s
+   750K .......... .......... .......... .......... .......... 85% 62.4M 0s
+   800K .......... .......... .......... .......... .......... 90%  128M 0s
+   850K .......... .......... .......... .......... .......... 96% 99.2M 0s
+   900K .......... .......... .......... ......               100%  148M=0.9s
+
+2026-11-02 23:37:18 (1.01 MB/s) - ‘download/ncurses6-6.6_bootstrap-1-arm64.hpkg’ saved [958992/958992]
+
+..... .......... .ExtractHPKGArchive1 build_packages/ncurses6-6.6_bootstrap-1-arm64 
+... 81%  326K 0s
+  1250K .......... .......... .......... .......... .......... 84% 48.0M 0s
+  1300K .......... .......... .......... .......... .......... 87% 51.3M 0s
+  1350K .......... .......... .......... .......... .......... 90% 39.1M 0s
+  1400K .......... .......... .......... .......... .......... 93% 61.3M 0s
+  1450K .......... .......... .......... .......... .......... 97% 40.1M 0s
+  1500K .......... .......... .......... .......... ..        100% 38.5M=1.0s
+
+2026-11-02 23:37:18 (1.44 MB/s) - ‘download/zlib_source-1.2.13_bootstrap-1-source.hpkg’ saved [1580025/1580025]
+
+ExtractHPKGArchive1 build_packages/zlib_source-1.2.13_bootstrap-1-source 
+. .......... .......... 15%  332K 6s
+  1300K .......... .... .......... ..........  9%  334K 10s
+  1350K .................. .......... .......... .... .......... .......... .......... ........ 15% 23.4M 6s
+  1350K ............... ........  9%.. 27.3M. 10s.
+  1400K. .. ................ .......... .... .......... ............ 16% 35.4M 5s
+  1400K .............. ............ .......... .......... .......... ..........  9% 28.6M 10s
+  1450K ...... .......... 16% 45.4M 5s
+  1450K .......... .......... ...... .......... .......... ................ 22%  327K 4s
+  1400K ................ .......... .......... 10% 34.5M 9s
+  1500K ...... .......... ...... .......... 17% 30.1M 5s
+  1500K .......... ................ .......... ............... .... ................. .......... 10% 31.7M 9s
+  1550K .. .......... ...... .......... 22% 22.1M 4s
+  1450K .............. ............ .......... 18% 32.1M 5s
+  1550K ...... .......... .... .......... ............ .............. .................. .......... .......... .... 10% 29.3M 9s
+  1600K .......... ............ .............. .......... .... .......... 23% 26.9M 3s
+  1500K .... 18% 24.8M 5s
+  1600K .......... .............. .............. ............ 11% 35.7M 8s
+  1650K .......... .... .......... .......... .......... ........ .......................  ................. 24% 31.7M 3s
+  1550K .......... ........ .......... .......... 11% 39.7M 8s
+  1700K .......... .... 19% 24.8M 4s
+  1650K .......... ...... .......... ............ .............. ............ .......... .......... ....... ............. ............ 11% 37.6M 8s
+  1750K .............. 19% 40.5M 4s
+  1700K .......... .. .......... ...... 25% 23.6M 3s
+  1600K .......... .............. ............ .......... .... .......... .......... 20% 53.6M 4s
+  1750K .............. .......... .. .......... .............. ................ 12% 30.6M 8s
+  1800K ............ .......... .... .......... ............ 20% 43.3M 4s
+  1800K .......... 26% 25.9M 3s
+  1650K .......... .......... ............ .......... .......... .......... .......... 12% 38.3M 7s
+  1850K ...... .......... .......... .................  ................... ........ .......... 21% 32.4M 4s
+  1850K .......... 26% 30.2M 3s
+  1700K .......... .... .......... 13% 53.0M 7s
+  1900K ........ .......... ........ .................. ................ ........ .......... ........ .......... 22% 38.2M 4s
+  1900K ....... ........ ............ ....... 13% 44.8M 7s
+  1950K ........ ................ 27% 30.6M 3s
+  1750K .................. ........ .......... ...... .......... .......... .......... 22% 47.0M 4s
+  1950K .... .......... ........ .......... .......... ................ 28% 39.6M 3s
+  1800K .............. .......... 13% 23.0M 7s.
+  2000K. .. .................. .. .......... .......... ........ .......... ........ .......... .......... 29% 46.9M 3s
+  1850K ............ ................. 23%..  23.1M. 4s.
+  2000K. .............. .......... .......... .... 14% 31.8M 7s
+  2050K .......... ............ ................ ...... ................ .. .......... .............. .......... .......... 30% 28.1M 2s
+  1900K ........ 14% 48.9M 6s
+  2100K .......... .... 23% 27.1M 3s
+  2050K .......... .......... ................ .................. ........ .......... ........ .......... .... .......... .......... 24% 51.1M 3s
+  2100K ............. ... .......... 30% 34.2M 2s
+  1950K ........ 14% 35.8M 6s
+  2150K .................. ................ .......... .......... .... .......... .......... .......... ........ ............ .......... ............ 15% 33.5M 6s
+  2200K .............. 24% 29.6M 3s
+  2150K ............ .......... .... 31% 26.4M 2s
+  2000K .......... .......... .......... .. .......... ............ .................. ............ .......... .... 32% 48.5M 2s
+  2050K .......... .... .......... 15% 36.2M 6s
+  2250K ............ .............. .......... .......... 25% 27.3M 3s
+  2200K .......... .......... ............ ........ .......... ............ ............ .......... 15% 36.5M 6s
+  2300K ........ 33% 29.1M 2s
+  2100K .......... .. .......... 26% 42.6M 3s
+  2250K ............ .................. ........ .......... .......... .......... .......... .......... .......... ........ ........ ........ 16% 37.2M 6s.
+  2350K. ...... 26% 47.7M 3s
+  2300K .......... 34% 38.2M 2s
+  2150K ................ .................. ........ .......... .......... .......... .. .......... ........ .......... .............. .. .................. 27% 35.0M 3s
+  2350K .......... 34% 35.8M 2s
+  2200K .......... 16%.. 24.0M. 5s.
+  2400K. ............ . .............. .......... ........ .......... .... .......... .......... .......... .......... 35% 37.1M 2s
+  2250K .............. .............. .......... 27%... 26.9M 16% 3s 41.3M
+  2400K 5s 
+  2450K. .............. ........ .......... .......... ........ .................. ........ .......... .......... .......... .......... .......... .......... 36% 29.1M 2s
+  2300K ...... 28% 31.5M 3s
+  2450K .......... ........ 17% 30.6M 5s
+  2500K .......... ........ ................ .................. ........ .......... ........ .......... .... .......... ............ 17% 44.7M 5s
+  2550K .............. 29% 39.5M 3s
+  2500K .......... ...... .......... 37% 28.9M 2s
+  2350K .. .......... .............. .......... .......... .............. ...... .............. ........... 17%.. 36.0M. 5s.
+  2600K. ........ 29% 38.7M 3s
+  2550K ............ .......... .......... ............ .......... .... .......... ...... 37% 27.0M 2s
+  2400K .......... .......... .......... ........ .................. .. ................ 18% 37.9M 5s
+  2650K ........ 38% 73.8M 2s
+  2450K .......... .......... .......... .......... .......... 39% 57.0M 2s
+  2500K .......... .......... .......... .......... .......... 40% 65.5M 2s
+  2550K .......... .......... .......... .......... .......... 41% 75.1M 2s
+  2600K .......... .......... .......... .......... .......... 41% 64.3M 2s
+  2650K .......... .......... .......... .......... .......... 42% 84.7M 1s
+  2700K .......... .......... .......... .......... .......... 43% 63.5M 1s
+  2750K .......... .......... .......... ........ .......... .......... 30%  364K 3s
+  2600K ............ .......... .......... .......... .......... 18%  365K 5s
+  2700K ...... .......... .......... ................ .......... .......... ...... .......... 30% 27.1M 3s
+  2650K .......... .......... 18% 43.7M 5s
+  2750K ...... .......... .......... .......... ................... ... .......... .......... 31% 58.5M 3s
+  2700K .......... ................ .......... .......... ...... 19% 35.8M 5s
+  2800K .......... .......... .......... 31% 50.1M 3s
+  2750K ...... .......... .............. .......... ............ 19% 47.5M 5s
+  2850K .......... ...... .......... .......... ................ .......... .......... ...... 32% 38.0M 3s
+  2800K .......... .......... .......... ...... 19% 58.9M 5s
+  2900K .......... .......... ................ .......... .......... ............ 33%. 45.7M 20% 2s
+  2850K 66.0M  5s
+  2950K ................... .... .................  ................... .......... ........ .......... .......... ...... 44%  361K 2s
+  2800K .......... .............. 20% 51.1M 5s
+  3000K .......... .......... ........ .......... .......... .............. .......... ............... 20% 33% 46.8M 5s 24.4M
+  3050K 2s 
+  2900K. .............. .......... .......... .......... ...... 45% 34.7M 1s
+  2850K .......... ........ .......... ........ ............. ............. ............. 34%.. 44.0M. 2s.
+  2950K  ................. .......... 21% 38.7M 5s
+  3100K ........ 45% 39.7M 1s
+  2900K .......... .. .......... ............ ........... ........ ............ ........ ........... .......... .......... ........ .......... 21% 36.0M 4s
+  3150K .......... 34% 29.5M 2s
+  3000K ................ .......... .......... .......... 46% 28.8M 1s
+  2950K .......... .......... ........ .......... .......... ................ .......... .......... 35% 47.1M 2s
+  3050K .......... .......... ...... .......... .. 21% 26.9M 4s
+  3200K .......... .............. 47% 39.9M 1s
+  3000K ............ .......... .......... .......... .......... 36% 40.6M 2s
+  3100K .......... ............ .......... ............ .......... 22%. 35.0M  4s.
+  3250K. ................ .... ........... .......... 36% 48.6M 2s
+  3150K ........ ................ .......... .......... 48% 26.1M 1s
+  3050K .......... .......... .. .......... .............. .......... .......... ............ .............. 22%.. 28.9M. 4s.
+  3300K.  ................... .. 37%.. 29.7M. 2s.
+  3200K. ........ ............ ......... .......... 49% 27.9M 1s
+  3100K .......... ............ .......... .......... 22% 50.6M. 4s.
+  3350K. .... ................. .......... ........ .......... ...... .......... ........ 37% 31.6M 2s
+  3250K ...............  ............. 49% 43.4M 1s
+  3150K ...... .......... ........ .................. .......... .......... ............ 23% 28.0M 4s
+  3400K ........ .......... ........ .......... .............. ... 38%.. 37.2M. 2s.
+  3300K. ............ ........ .......... .......... 23% 51.4M 4s
+  3450K .............. ........ 50% 24.4M 1s
+  3200K .......... .......... .......... .... .......... ........ .......... .......... ................ .......... .......... 23% 41.4M 4s
+  3500K .......... 38% 25.9M 2s
+  3350K ................ .......... .......... ........ 51% 32.0M 1s
+  3250K .......... .......... .......... .......... .......... .......... .......... 39% 41.6M 2s
+  3400K ............ .......... 24% 37.9M 4s
+  3550K .......... ........ .......... .......... 52% 38.5M 1s
+  3300K .......... .......... .......... .......... ...... .......... .......... ............ .......... .... .......... 40% 32.1M 2s
+  3450K ............ .......... 24% 29.5M 4s
+  3600K .......... .......... ........... ....... 52% 29.5M 1s
+  3350K .......... .......... .......... .......... .......... ................ .......... .......... 40% 37.3M 2s
+  3500K .......... ............ 24% 37.0M 4s
+  3650K .......... .......... .............. .......... .......... 53% 37.7M 1s
+  3400K ........ .......... ...... .......... .......... .......... 41% 40.3M 2s
+  3550K .... .......... ............ ............ 25% 38.9M 4s
+  3700K .......... ........ .....................  ................. .... .......... 54% 31.6M 1s
+  3450K ........ .......... ........ .......... .......... ............... 25% 32.2M 4s
+  3750K .............. ........... .... 41%.. 25.7M. 2s.
+  3600K. .... ............. .......... .......... .... .......... 55% 39.2M 1s
+  3500K .......... ................. ............ ........ ............. 26% 38.4M 4s
+  3800K .......... 42% 38.0M 2s
+  3650K .......... .... .......... ........ .......... .......... .............. .......... 56% 29.0M 1s
+  3550K .. .......... ............ .................. ............ 42% 35.3M 2s
+  3700K .......... .... .......... .... .......... 26% 28.2M 3s
+  3850K .......... .......... .......... .............. .......... 56% 29.3M 1s
+  3600K .......... .............. ............ .......... .... .......... 26% 46.1M 3s
+  3900K ...... .......... .......... 43% 33.6M 2s
+  3750K .......... .......... .............. .............. .......... .......... ........ 57% 32.5M 1s
+  3650K .......... ........ .......... ...... .......... 27% 30.6M 3s
+  3950K .......... 44% 33.7M 2s
+  3800K .............. .................. .......... .......... .... .......... .......... 58% 41.5M 1s
+  3700K .......... .... .............. ...... ................ .................. .......... .......... .......... 59% 47.3M 1s
+  3750K .......... 27% 26.8M 3s
+  4000K .......... .......... ... ................ ... 44% 24.8M 2s
+  3850K .......... .......... .......... ........ .......... .............. .......... 27% 51.6M 3s
+  4050K .......... ...... .......... 45% 54.5M 2s
+  3900K .......... .............. .......... .......... 60% 28.4M 1s
+  3800K .......... .......... .......... .......... .......... ...... .......... .......... 28% 30.2M 3s
+  4100K .......... ...... .......... 45% 32.2M 1s
+  3950K ........ .................. ........ .......... 60% 43.0M 1s
+  3850K .............. .......... .......... ........ .......... .......... .......... ............ 61%. 46.3M  1s.
+  3900K. ........... .......... ................ 28% 32.1M 3s
+  4150K ................ .......... 46% 22.8M 1s
+  4000K .......... ...... .......... ...... .......... .......... .......... ...... .......... 62% 43.0M 1s
+  3950K ...... .......... ......................... . 28%.. 28.6M.. 3s. 
+  4200K.. ................... ............ .. ............ ...... 47% 25.9M 1s
+  4050K .......... .......... ................ .......... ................. . 29%.. 50.0M. 3s.
+  4250K. ......... 63% 26.1M 1s
+  4000K .......... .......... .......... .......... ............ .......... .. .......... .............. ............ 47% 36.6M 1s
+  4100K .......... .... 64% 35.8M 1s
+  4050K .......... .......... ............ .......... 29% 27.5M 3s
+  4300K .......... .................. .......... .......... .... .......... .......... 64% 59.4M 1s
+  4100K .......... ........ 48% 28.6M 1s
+  4150K .......... ................. .... ........... .......... ........ .......... ........ .......... 29% 33.4M 3s
+  4350K ...... .......... ................ 65%. 29.7M 1s
+  4150K ......... 48% 46.2M 1s
+  4200K ................ ........ .......... ........ .......... ...... .......... ........ .......... ........ ................ .................. 66% 45.0M 1s
+  4200K ........ 30% 26.5M 3s
+  4400K .......... ...... .......... 49% 29.3M 1s
+  4250K .......... .......... ...... .............  ........... ............ .............. .................. ........ .......... 67% 29.5M 1s
+  4250K .......... 30%.  29.6M. 3s.
+  4450K. ................ .. 49%.. 43.9M 1s
+  4300K .......... .............. .......... ........ .......... .......... .............. ..... ............. .......... 30% 46.2M 3s
+  4500K .......... .... .......... 68% 42.9M 1s
+  4300K ........ .......... 50% 35.1M 1s
+  4350K ........ .................. .......... .......... .... .......... ............ 31% 35.7M 3s
+  4550K .................. ...........  ................. ...... ............ .............. .......... 68% 29.1M 1s
+  4350K .......... ........ 51% 22.7M 1s
+  4400K .......... .......... .......... .......... 31% 34.5M 3s
+  4600K .......... .......... .......... ............ .......... .... 69% 31.9M 1s
+  4400K .......... .......... .......... ........ .............. .......... .......... .......... 51% 35.9M 1s
+  4450K .......... .......... .......... .......... 31% 28.5M 3s
+  4650K .............. ............ .......... .... 70% 34.1M 1s
+  4450K .......... .... .......... .......... 52% 33.3M 1s
+  4500K .......... ........ .................. ................ .......... .......... 32% 46.1M 3s
+  4700K .... .......... ........ .......... .......... .............. 71% 24.9M 1s
+  4500K .......... .......... ........ .......... .......... .......... 32% 35.8M 3s
+  4750K ........ 52% 28.4M 1s
+  4550K .................. ........ .......... ........ .......... ........ .......... ........ 71% 62.0M 0s
+  4550K .................. 53% 46.5M 1s
+  4600K .......... .......... .......... .......... .......... .......... .......... .......... 72% 35.9M 0s
+  4600K ........ 32% 25.7M 3s
+  4800K .......... ........ .......... ........ .......... .... .......... .......... .......... .......... 54% 35.3M 1s
+  4650K .......... .......... ........ .................. ........ .......... 73% 32.9M 0s
+  4650K ........ 33% 33.0M 3s
+  4850K .......... ........ .......... .......... .............. .................. .......... .......... 54% 27.5M 1s
+  4700K .... .......... ............ .......... .......... ........ .......... 74% 27.9M 0s
+  4700K .......... .............. 33% 23.8M 3s
+  4900K .......... .......... ......... ........ ............ ......... 55% 34.4M 1s
+  4750K ...... .......... 75% 58.6M 0s
+  4750K .... .......... ................ 33%.. 66.6M. 2s 
+  4950K. .................. .......... .......... .................. .......... .......... .... .......... .......... .......... .. 55% 26.5M 1s
+  4800K .......... ............ .................. 34% 28.3M 2s
+  5000K ...... 75%.. 24.7M 0s
+  4800K .......... ........ .......... ........ .......... .......... .......... 56% 57.1M 1s
+  4850K .......... ........ .......... .......... .............. .......... .......... 34% 33.5M 2s
+  5050K ............ ............ 76% 29.3M 0s
+  4850K .......... .......... .............. .......... .......... .. ................ .......... 56% 28.8M 1s
+  4900K .......... .......... ........ .......... .......... 77% 37.3M 0s
+  4900K .......... .... .......... 34% 29.4M 2s
+  5100K .......... ............ ............ .......... .......... .......... .... .......... ............ ........... 57%.... 35% 56.9M 27.9M 2s 1s
+  5150K
+  4950K  ........... .......... .......... .......... ........ 78% 28.9M 0s
+  4950K .................. ........ .......... ........ .......... ........ .......... .......... 79%  100M 0s
+  5000K ................ 58% 28.4M 1s
+  5000K .......... .......... .......... ................ .......... 35% 23.0M 2s
+  5200K .......... ...... .......... 58%  110M 1s
+  5050K ........ .......... .......... .......... .......... 79% 28.0M 0s
+  5050K .......... .......... ...........  ................. .... .......... ................ ................ .......... 35% 26.9M 2s
+  5250K .......... ...... .......... 80% 44.9M 0s
+  5100K .......... ............ .......... 59% 23.6M 1s
+  5100K .......... ................ .......... .......... ...... .......... ...... .......... .......... 36% 36.0M 2s
+  5300K .......... ...... .......... 59% 34.7M 1s
+  5150K ...... ............... 81%.. 27.0M. 0s.
+  5150K  ................. .......... .......... .......... .................. ........ 82% 63.0M 0s
+  5200K .......... .......... .......... .......... .......... 83% 90.5M 0s
+  5250K .......... .......... .......... .......... .......... 83% 82.0M 0s
+  5300K .......... .......... .......... .......... .......... 84% 70.8M 0s
+  5350K .......... .......... .......... .......... .......... 85% 64.6M 0s
+  5400K .......... .......... .......... .......... .......... 86%  100M 0s
+  5450K .......... .......... .......... .......... .......... 86% 67.7M 0s
+  5500K .......... .......... .......... .......... .......... 87% 73.1M 0s
+  5550K .......... .......... .......... .......... ............ .......... .... 60%  495K 1s
+  5200K .......... .......... .......... ........ 36%  490K 2s
+  5350K .......... .............. .......... ............ .......... .......... 36%  112M 2s
+  5400K .......... 61% 37.3M 1s
+  5250K .......... .......... ............ .......... .......... .......... .......... .......... 61% 63.9M 1s
+  5300K .......... .. .......... 37% 43.8M 2s
+  5450K .......... .......... .......... .......... .......... ............ .......... .......... 37% 64.9M 2s
+  5500K .......... 62% 43.2M 1s
+  5350K .......... .......... ............ .......... .......... .......... .......... 37% 44.6M 2s
+  5550K ...... .......... .......... ................ 62% 45.8M 1s
+  5400K .......... .......... .......... ............ .......... .......... .......... 38% 50.5M 2s
+  5600K .......... .......... .......... .......... .. ................ 63% 33.3M 1s
+  5450K ........ 38% 65.4M 2s
+  5650K .......... ........ .......... ................ .. ................ ............ .. .............. 63%  110M 1s
+  5500K ........ 39% 45.4M 2s
+  5700K .......... ........ .................. ........ .......... ........ .......... ........ .......... 64% 45.2M 1s
+  5550K ........ 39%  104M 2s
+  5750K .................. .......... .......... .......... .......... 88%  482K 0s
+  5600K .......... ...... .......... ........ .......... .......... .......... .............. ...... .......... .. 65% 31.1M 1s
+  5600K .......... .............. ............ .......... .... 89% 44.5M 0s
+  5650K .......... .......... .......... .......... .......... 90% 94.3M 0s
+  5700K .......... .......... .......... .......... .......... 90% 83.8M 0s
+  5750K .......... .......... .......... .......... .......... 91% 99.6M 0s
+  5800K .......... .......... .......... .......... .......... 92% 99.1M 0s
+  5850K .......... .......... .......... ................ 39% 10.1M 2s
+  5800K .......... .......... 93% 40.4M 0s
+  5900K ............ .............. ............ .......... .......... ............. 65% . 11.4M. 1s.
+  5650K. ............ 40%.. 53.3M. 2s.
+  5850K  ............. .......... .. .......... ............ .......... .......... .............. ............ .......... 94% 38.5M 0s
+  5950K .... .......... 40% 61.9M 2s
+  5900K ........ 66% 35.7M 1s
+  5700K .......... .......... .................... ...... ................ .......... .... .......... ........ .......... .......... ................ 66% 49.1M 1s
+  5750K .............. .......... 40% 30.1M 2s
+  5950K .. 94% 27.2M 0s
+  6000K .......... .............. ........ .......... .......... .......... ...... ...... .............. ...... .......... .............. .................. 67% 29.7M 1s
+  5800K .......... 95% 29.5M 0s
+  6050K .......... ...... .......... .... 41% 27.0M 2s
+  6000K .......... ............ .............. .......... ........ .......... .......... .............. ........ .......... 67% 44.4M 1s
+  5850K .......... 41%.. 48.7M. 2s 96%
+  6050K 44.3M  0s.
+  6100K. ................ .... ....... .......... .......... ................ .............. ............ .......... .... .......... ........ .......... 68% 29.6M 1s
+  5900K .......... ............... 97%.. 29.0M. 0s.
+  6150K. .. 41%.. 28.8M. 2s.
+  6100K. ............. .......... ........ .......... .......... .......... .. .......... .......... .......... 69% 48.8M 1s
+  5950K .......... 98% 51.9M 0s
+  6200K .......... .......... .......... 42% 45.3M 2s
+  6150K .................. ........ .............  ............... ...... .......... ...............  ................... ........ .......... .......... 98% 31.0M 0s
+  6250K ...... 69% 27.4M 1s
+  6000K .......... .......... ............... ..... 42% 30.0M 2s
+  6200K .......... .......... ........ .......... ........ .................. ................ ........ .......... 42% 50.2M 2s
+  6250K ........ .......... 99% 41.0M 0s
+  6300K ...... 70% 30.2M 1s
+  6050K .......... ........ .......... .......... .............. .......... .......... ............ ............ .......... 43% 36.3M 2s
+  6300K ........ 70%. 60.0M  1s.
+  6100K. .. . . . . . . . . .   .                  100% 16.7M=1.4s
+
+2026-11-02 23:37:18 (4.36 MB/s) - ‘download/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’ saved [6474896/6474896]
+
+....... .......... .......... .............. ............ .......... 43% 57.0M 2s
+  6350K .... .......... ............ .............. 71% 45.0M 1s
+  6150K ............ .......... .... .......... .....ExtractHPKGArchive1 build_packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64 
+....... .......... 43% 40.3M 2s
+  6400K .......... .......... .......... .......... 72% 45.7M 1s
+  6200K ............ .......... ............ .. ................ .......... ............ 44% 48.4M 2s
+  6450K .......... .... .......... 72% 47.3M 1s
+  6250K ............ .......... .......... .......... .......... ...... 44%  116M 2s
+  6500K .......... .......... .......... .......... 73%  100M 1s
+  6300K ............ .......... ............... .... ........... .......... ............ 44% 42.8M 2s
+  6550K .............. .......... 73% 46.2M 1s
+  6350K .. .......... .............. ............ .......... .... .......... ............ 45% 45.6M 2s
+  6600K .............. ............ .......... .... 74% 39.2M 0s
+  6400K .......... ............ .............. .......... .. .......... 45% 46.8M 2s
+  6650K .............. ............ .......... .... 74% 46.0M 0s
+  6450K .................. .. ............ .......... 45%  108M 2s.
+  6700K. ........ .......... .......... ............ ............ ...... 75%. 45.8M. 0s.
+  6500K. ...... ............ .......... ............ .......... 46% 43.2M 2s
+  6750K ........... .... ............... .......... 76% 96.8M 0s
+  6550K ............ .......... .... .......... ............ .............. .......... .. 46% 42.2M 2s
+  6800K .......... ................. 76%.. 48.4M  0s.
+  6600K. ............... .... .......... ............ ............. 46%. 45.5M. 2s.
+  6850K.  ................... ..... ............ ........ 77%. 45.2M. 0s.
+  6650K. ....... .............. .. .............. .......... ............ 47% 45.1M 2s
+  6900K .......... ....... ............ ........ 77%. 44.8M. 0s.
+  6700K ...... .................  .................. .... 47%..  109M. 2s.
+  6950K. ...... ................ .......... 78%  112M 0s
+  6750K .. .......... ................ ...... .............. .......... ...... 47%. 46.7M. 2s.
+  7000K. ...... ................ .. .................. .... 79% 40.7M 0s
+  6800K .......... ............ .............. .......... .. .......... 48% 42.8M 2s
+  7050K .............. ............ .......... .... 79% 44.8M 0s
+  6850K .......... ............ .............. ............ .......... 48% 46.9M 2s
+  7100K .......... .. .................. .......... 80% 47.3M 0s
+  6900K.  ....................  ............... ............ .......... 48%  122M 1s
+  7150K .... .......... ............ .......... .......... .......... 80% 42.5M 0s
+  6950K .................  ................... ...... 49% 38.2M 1s
+  7200K .......... .......... .......... .......... 81% 99.8M 0s
+  7000K ............ .......... .... .......... ............ .............. ............ 49% 42.7M 1s
+  7250K .......... .......... .. .................. 81% 46.7M 0s
+  7050K .......... .......... .......... .......... .......... 82% 80.3M 0s
+  7100K .......... .......... .......... ...... .......... .......... .......... 83% 99.4M 0s
+  7150K ...... 49% 4.47M 1s
+  7300K .......... .......... .......... .......... .......... 50% 99.3M 1s
+  7350K .......... .......... .......... .......... .......... 50%  111M 1s
+  7400K .......... .......... .......... .......... .......... 51%  109M 1s
+  7450K .......... .......... .......... .......... .......... 51%  110M 1s
+  7500K ............ .............. ............ .......... .... .......... ............ .............. .......... 51%  106M 1s
+  7550K .. 83% 4.03M 0s
+  7200K .......... .......... .......... .......... .......... .......... ............ .............. ............ 84% 46.0M 0s
+  7250K .......... .... 52% 38.5M 1s
+  7600K .......... ............ .......... .......... .......... 84%  109M 0s
+  7300K .......... .......... ............ .......... .......... ...... .............. .......... 85% 46.5M 0s
+  7350K ............ 52% 34.8M 1s
+  7650K .......... .... .................  ................... .......... .. .......... .............. 85% 46.2M 0s
+  7400K. ........ 52%.. 46.3M. 1s
+  7700K .......... .... ............... ....... .......... .......... .......... .......... .......... 86%  112M 0s
+  7450K ............ 53% 47.2M 1s
+  7750K .............. ....... ........ ....... .............. ............ .......... .......... 53%  106M 1s
+  7800K .......... .......... 87% 44.9M 0s
+  7500K .......... ............ .......... .......... .......... .......... ...... .......... 53% 45.0M 1s
+  7850K .......... .......... 87% 44.2M 0s
+  7550K ...... .......... .......... .......... .......... ............ .......... .......... 54% 43.5M 1s
+  7900K .......... ................ .......... 88% 38.5M 0s
+  7600K .......... ...... .......... .......... .......... .......... ............ .......... 54% 44.8M 1s
+  7950K .... 88% 46.4M 0s
+  7650K .......... ............ .......... ............ ........ ................ .......... .......... .......... 89%  101M 0s
+  7700K .......... .. 54% 38.9M 1s
+  8000K .......... .......... ................ .... ................. .... ............... ...... 55%  106M 1s
+  8050K .......... .......... 90% 44.1M 0s
+  7750K .......... .......... ............ .......... .......... .......... .......... ...... 55% 44.7M 1s
+  8100K .......... .......... 90% 44.6M 0s
+  7800K ................ .......... .......... .......... ............ .......... .......... 55% 43.7M 1s
+  8150K ........ ............ 91% 44.1M 0s
+  7850K ...... .......... .......... .......... ...... .......... .......... .......... .......... 91%  102M 0s
+  7900K ............ 56% 44.3M 1s
+  8200K .......... .......... .......... .................  ................... ...... .......... 56%.  104M. 1s.
+  8250K. .. .............. 92% 44.9M 0s
+  7950K .......... ............ .......... .......... ....... ............. ............ .. .................. 56% 45.1M 1s
+  8300K .......... .......... 92% 39.6M 0s
+  8000K .......... .......... .......... .. .......... .......... .......... 57% 46.6M 1s
+  8350K .......... ................ .......... 93% 44.7M 0s
+  8050K .......... ...... .......... .......... .......... .......... ............ .......... 57% 37.3M 1s
+  8400K .......... .......... 94% 43.5M 0s
+  8100K .......... ...... .......... .......... .......... ................ ...... .............. 94% 99.6M 0s
+  8150K ............ 57% 46.1M 1s
+  8450K .......... .......... .......... .......... ...... .......... .......... .......... ...... 58%  104M 1s
+  8500K .......... .......... 95% 46.1M 0s
+  8200K .......... .......... ............ .......... .......... .......... ................ 58% 43.4M 1s
+  8550K .......... .......... 95% 43.0M 0s
+  8250K ...... .......... .......... .......... .......... ............ .......... .......... 58% 43.5M 1s
+  8600K .......... .......... 96% 44.9M 0s
+  8300K ...... .......... .......... ................ .......... .......... .......... .......... 97%  106M 0s
+  8350K .. .......... 59% 45.7M 1s
+  8650K .......... .......... .......... ................ .......... .......... ...... .......... 59%  102M 1s
+  8700K .......... .......... 97% 38.1M 0s
+  8400K .......... ............ .......... .......... .......... .......... 59% 41.6M 1s
+  8750K ...... .......... .......... ................ .......... 98% 38.5M 0s
+  8450K .......... .......... .......... .......... .......... 98%  123M 0s
+  8500K .......... .......... .......... .......... .......... 99%  105M 0s
+  8550K .......... .......... .......... .......... .......... 99%  111M 0s
+  8600K ......                                                100% 11.6T=1.5s
+
+2026-11-02 23:37:18 (5.70 MB/s) - ‘download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’ saved [8812771/8812771]
+
+ExtractHPKGArchive1 build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64 
+... .......... .......... .......... 60%  435K 1s
+  8800K .......... .......... .......... .......... .......... 60%  105M 1s
+  8850K .......... .......... .......... .......... .......... 60%  115M 1s
+  8900K .......... .......... .......... .......... .......... 61%  109M 1s
+  8950K .......... .......... .......... .......... .......... 61%  108M 1s
+  9000K .......... .......... .......... .......... .......... 61%  103M 1s
+  9050K .......... .......... .......... .......... .......... 62%  107M 1s
+  9100K .......... .......... .......... .......... .......... 62%  111M 1s
+  9150K .......... .......... .......... .......... .......... 62% 82.7M 1s
+  9200K .......... .......... .......... .......... .......... 63%  104M 1s
+  9250K .......... .......... .......... .......... .......... 63%  110M 1s
+  9300K .......... .......... .......... .......... .......... 64%  104M 1s
+  9350K .......... .......... .......... .......... .......... 64%  104M 1s
+  9400K .......... .......... .......... .......... .......... 64% 96.6M 1s
+  9450K .......... .......... .......... .......... .......... 65%  103M 1s
+  9500K .......... .......... .......... .......... .......... 65%  124M 1s
+  9550K .......... .......... .......... .......... .......... 65% 75.7M 1s
+  9600K .......... .......... .......... .......... .......... 66%  109M 1s
+  9650K .......... .......... .......... .......... .......... 66%  104M 1s
+  9700K .......... .......... .......... .......... .......... 66%  106M 1s
+  9750K .......... .......... .......... .......... .......... 67%  106M 1s
+  9800K .......... .......... .......... .......... .......... 67%  106M 1s
+  9850K .......... .......... .......... .......... .......... 67%  105M 1s
+  9900K .......... .......... .......... .......... .......... 68%  111M 1s
+  9950K .......... .......... .......... .......... .......... 68% 78.1M 1s
+ 10000K .......... .......... .......... .......... .......... 68%  106M 1s
+ 10050K .......... .......... .......... .......... .......... 69%  108M 1s
+ 10100K .......... .......... .......... .......... .......... 69%  106M 1s
+ 10150K .......... .......... .......... .......... .......... 69% 2.20M 1s
+ 10200K .......... .......... .......... .......... .......... 70%  102M 1s
+ 10250K .......... .......... .......... .......... .......... 70%  108M 1s
+ 10300K .......... .......... .......... .......... .......... 70%  108M 1s
+ 10350K .......... .......... .......... .......... .......... 71% 76.0M 1s
+ 10400K .......... .......... .......... .......... .......... 71% 99.2M 1s
+ 10450K .......... .......... .......... .......... .......... 71%  111M 1s
+ 10500K .......... .......... .......... .......... .......... 72%  110M 1s
+ 10550K .......... .......... .......... .......... .......... 72%  110M 1s
+ 10600K .......... .......... .......... .......... .......... 72% 99.7M 1s
+ 10650K .......... .......... .......... .......... .......... 73% 99.4M 1s
+ 10700K .......... .......... .......... .......... .......... 73%  124M 1s
+ 10750K .......... .......... .......... .......... .......... 73% 76.6M 1s
+ 10800K .......... .......... .......... .......... .......... 74%  110M 1s
+ 10850K .......... .......... .......... .......... .......... 74%  109M 1s
+ 10900K .......... .......... .......... .......... .......... 74%  100M 1s
+ 10950K .......... .......... .......... .......... .......... 75% 90.3M 1s
+ 11000K .......... .......... .......... .......... .......... 75%  122M 1s
+ 11050K .......... .......... .......... .......... .......... 75%  112M 1s
+ 11100K .......... .......... .......... .......... .......... 76%  111M 1s
+ 11150K .......... .......... .......... .......... .......... 76% 82.7M 0s
+ 11200K .......... .......... .......... .......... .......... 77% 99.5M 0s
+ 11250K .......... .......... .......... .......... .......... 77%  111M 0s
+ 11300K .......... .......... .......... .......... .......... 77%  110M 0s
+ 11350K .......... .......... .......... .......... .......... 78% 99.4M 0s
+ 11400K .......... .......... .......... .......... .......... 78%  110M 0s
+ 11450K .......... .......... .......... .......... .......... 78% 99.5M 0s
+ 11500K .......... .......... .......... .......... .......... 79%  110M 0s
+ 11550K .......... .......... .......... .......... .........ExtractHPKGArchive1 build_packages/ncurses6-6.6_bootstrap-1-arm64 
+. 79%  392K 0s
+ 11600K .......... .......... .......... .......... .......... 79% 86.2M 0s
+ 11650K .......... .......... .......... .......... .......... 80% 99.0M 0s
+ 11700K .......... .......... .......... .......... .......... 80%  123M 0s
+ 11750K .......... .......... .......... .......... .......... 80%  111M 0s
+ 11800K .......... .......... .......... .......... .......... 81%  111M 0s
+ 11850K .......... .......... .......... .......... .......... 81%  124M 0s
+ 11900K .......... .......... .......... .......... .......... 81%  110M 0s
+ 11950K .......... .......... .......... .......... .......... 82% 82.8M 0s
+ 12000K .......... .......... .......... .......... .......... 82%  129M 0s
+ 12050K .......... .......... .......... .......... .......... 82%  112M 0s
+ 12100K .......... .......... .......... .......... .......... 83%  107M 0s
+ 12150K .......... .......... .......... .......... .......... 83% 95.7M 0s
+ 12200K .......... .......... .......... .......... .......... 83% 99.6M 0s
+ 12250K .......... .......... .......... .......... .......... 84%  110M 0s
+ 12300K .......... .......... .......... .......... .......... 84%  100M 0s
+ 12350K .......... .......... .......... .......... .......... 84% 76.2M 0s
+ 12400K .......... .......... .......... .......... .......... 85%  109M 0s
+ 12450K .......... .......... .......... .......... .......... 85% 96.6M 0s
+ 12500K .......... .......... .......... .......... .......... 85%  105M 0s
+ 12550K .......... .......... .......... .......... .......... 86% 90.4M 0s
+ 12600K .......... .......... .......... .......... .......... 86%  110M 0s
+ 12650K .......... .......... .......... .......... .......... 86% 90.4M 0s
+ 12700K .......... .......... .......... .......... .......... 87%  110M 0s
+ 12750K .......... .......... .......... .......... .......... 87% 82.9M 0s
+ 12800K .......... .......... .......... .......... .......... 87% 99.3M 0s
+ 12850K .......... .......... .......... .......... .......... 88%  110M 0s
+ 12900K .......... .......... .......... .......... .......... 88% 90.4M 0s
+ 12950K .......... .......... .......... .......... .......... 89%  110M 0s
+ 13000K .......... .......... .......... .......... .......... 89% 99.5M 0s
+ 13050K .......... .......... .......... .......... .......... 89%  110M 0s
+ 13100K .......... .......... .......... .......... .......... 90% 99.7M 0s
+ 13150K .......... .......... .......... .......... .......... 90% 70.8M 0s
+ 13200K .......... .......... .......... .......... .......... 90%  111M 0s
+ 13250K .......... .......... .......... .......... .......... 91% 99.4M 0s
+ 13300K .......... .......... .......... .......... .......... 91%  110M 0s
+ 13350K .......... .......... .......... .......... .......... 91% 99.0M 0s
+ 13400K .......... .......... .......... .......... .......... 92%  111M 0s
+ 13450K .......... .......... .......... .......... .......... 92% 90.2M 0s
+ 13500K .......... .......... .......... .......... .......... 92%  111M 0s
+ 13550K .......... .......... .......... .......... .......... 93% 2.23M 0s
+ 13600K .......... .......... .......... .......... .......... 93% 99.1M 0s
+ 13650K .......... .......... .......... .......... .......... 93%  124M 0s
+ 13700K .......... .......... .......... .......... .......... 94% 99.3M 0s
+ 13750K .......... .......... .......... .......... .......... 94%  108M 0s
+ 13800K .......... .......... .......... .......... .......... 94%  113M 0s
+ 13850K .......... .......... .......... .......... .......... 95%  110M 0s
+ 13900K .......... .......... .......... .......... .......... 95% 99.9M 0s
+ 13950K .......... .......... .......... .......... .......... 95% 82.6M 0s
+ 14000K .......... .......... .......... .......... .......... 96% 99.3M 0s
+ 14050K .......... .......... .......... .......... .......... 96%  110M 0s
+ 14100K .......... .......... .......... .......... .......... 96%  110M 0s
+ 14150K .......... .......... .......... .......... .......... 97% 99.5M 0s
+ 14200K .......... .......... .......... .......... .......... 97%  110M 0s
+ 14250K .......... .......... .......... .......... .......... 97% 99.5M 0s
+ 14300K .......... .......... .......... .......... .......... 98%  110M 0s
+ 14350K .......... .......... .......... .......... .......... 98% 76.1M 0s
+ 14400K .......... .......... .......... .......... .......... 98% 99.6M 0s
+ 14450K .......... .......... .......... .......... .......... 99%  108M 0s
+ 14500K .......... .......... .......... .......... .......... 99% 83.8M 0s
+ 14550K .......... .......... .......... .......... .......... 99%  125M 0s
+ 14600K .....                                                 100% 10.6T=1.8s
+
+2026-11-02 23:37:18 (7.86 MB/s) - ‘download/icu74-74.1_bootstrap-1-arm64.hpkg’ saved [14956236/14956236]
+
+ExtractHPKGArchive1 build_packages/icu74-74.1_bootstrap-1-arm64 
+ExtractHPKGArchive1 build_packages/icu74-74.1_bootstrap-1-arm64 
+
+BUILD FAILURE:
+...failed updating 2 target(s)...
+...skipped 1 target(s)...
+...updated 324 target(s)...
+######## build[13] FAILED rc=1

@@ -1,0 +1,38 @@
+# evidence: attr-dir-race-repro (found while baking #986; jam pass 0 ExtractHPKGArchive1 failure)
+# instance: i-0d071d39017b2fbd9 (Ubuntu 24.04 arm64 cross-build host, generated.arm64 from fix/986-openssh-identity)   region: us-west-2   transport: SSM send-command b504f267-c31f-4059-bf33-ac142a9ca64e
+# script sha256: 74084a70188f433ed5a703df6e6469664cd9d107ba11bfb2e9d15a21de00f239
+# ---- script ----
+# | set -u
+# | cd /opt/src/haiku/generated.arm64
+# | grep -E "HAIKU_HOST_USE_XATTR|HAIKU_BUILD_ATTRIBUTES_DIR" build/BuildConfig
+# | P=objects/linux/arm64/release/tools/package/package
+# | export LD_LIBRARY_PATH=/opt/src/haiku/generated.arm64/objects/linux/lib
+# | AD=$(grep -o 'HAIKU_BUILD_ATTRIBUTES_DIR=[^ ]*' build/BuildConfig | head -1); echo "$AD"
+# | ls -ld attributes; ls attributes | wc -l
+# | run() {	# run <label>: 48 parallel extracts of the openssl3 hpkg into fresh dirs
+# | 	rm -rf /tmp/ar; mkdir -p /tmp/ar
+# | 	for i in $(seq 1 48); do mkdir -p /tmp/ar/$i; done; for i in $(seq 1 48); do ( $P extract -C /tmp/ar/$i download/openssl3-3.5.9-2-arm64.hpkg > /tmp/ar/$i.log 2>&1; echo $? > /tmp/ar/$i.rc ) & done; wait
+# | 	echo "$1: failed=$(grep -L '^0$' /tmp/ar/*.rc | wc -l)/48"; cat /tmp/ar/*.log | sed "s|/tmp/ar/[0-9]*|<dir>|" | sort | uniq -c | head -5
+# | }
+# | for t in 1 2 3; do
+# | 	mv attributes attributes.keep.$t && run "attributes dir ABSENT (fresh-tree state), try $t"
+# | 	rm -rf attributes; mv attributes.keep.$t attributes
+# | done
+# | for t in 1 2 3; do run "attributes dir PRESENT, try $t"; done
+# ---- raw output ----
+HAIKU_HOST_USE_XATTR		?= "0" ;
+HAIKU_HOST_USE_XATTR_REF	?= "1" ;
+HAIKU_BUILD_ATTRIBUTES_DIR	?= "/opt/src/haiku/generated.arm64/attributes" ;
+
+drwxr-xr-x 4274 root root 253952 Nov  2 23:37 attributes
+4272
+attributes dir ABSENT (fresh-tree state), try 1: failed=1/48
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+attributes dir ABSENT (fresh-tree state), try 2: failed=2/48
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+attributes dir ABSENT (fresh-tree state), try 3: failed=2/48
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+attributes dir PRESENT, try 1: failed=0/48
+attributes dir PRESENT, try 2: failed=0/48
+attributes dir PRESENT, try 3: failed=0/48
+

@@ -1,0 +1,20 @@
+# evidence: raw-to-volume
+# instance: i-0d071d39017b2fbd9 (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193)   region: us-west-2   transport: SSM send-command
+# what: dd of haiku-ec2.raw onto the blank 20 GiB gp3 volume vol-04b46066434676145, drop_caches, cmp. Then snapshot snap-07b819d27b056f89f -> register-image ami-03b4fc1a51c70cda4 (arm64/uefi/ena/hvm, root /dev/xvda, as graviton/pipeline/scripts/import-and-register.sh). Throwaway: tagged Project=haiku-graviton ephemeral=true, never candidate/canonical, deleted after evidence.
+# log: \r progress lines of 'aws s3' turned into newlines, and 'Completed ... remaining' progress lines dropped
+# ---- script ----
+# | set -euo pipefail
+# | RAW=/opt/src/haiku/haiku-ec2.raw
+# | DEV=$(lsblk -dbno NAME,SIZE | awk '$2==21474836480{print "/dev/"$1}')
+# | echo "target device: $DEV"; [ -b "$DEV" ]
+# | ls -l "$RAW"; sha256sum "$RAW"
+# | dd if="$RAW" of="$DEV" bs=16M oflag=direct status=none; echo "dd=$?"
+# | sync; echo 3 > /proc/sys/vm/drop_caches
+# | cmp "$RAW" "$DEV"; echo "cmp=$?"
+# ---- raw output ----
+target device: /dev/nvme1n1
+-rw-r--r-- 1 root root 21474836480 Nov  2 23:58 /opt/src/haiku/haiku-ec2.raw
+040e983d252159a899792cbde64c658ea037ea5b7a02be6580fd4ea8a8e47017  /opt/src/haiku/haiku-ec2.raw
+dd=0
+cmp=0
+rc=0
