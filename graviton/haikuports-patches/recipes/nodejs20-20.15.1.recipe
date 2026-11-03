@@ -12,7 +12,13 @@ LICENSE="BSD (2-clause)"
 # haiku-aarch64, which widens BN_ULONG in the public headers from 32 to 64 bits
 # under the same soname (lib:libcrypto = 3). This package imports BN_get_word, BN_set_word,
 # so a build against the older headers passes its BN_ULONG argument as 32-bit.
-REVISION="3"
+# 4, not 3 (issue 1004): nodejs20 and nodejs24 both installed bin/node and provided
+# cmd:node with no conflict, so with both installed packagefs silently picked one
+# (nodejs20 on a measured box, which broke Claude Code). nodejs24 is the default
+# node; nodejs20 now installs bin/node20 and provides cmd:node20, and its man page
+# is node20.1, so the two majors can be installed side by side. No green package
+# requires nodejs20's cmd:node.
+REVISION="4"
 SOURCE_URI="https://nodejs.org/dist/v$portVersion/node-v$portVersion.tar.gz"
 CHECKSUM_SHA256="da228a0c27922f02001d9a781793696432096ab2da658eb77d7fc21693f4c5cb"
 SOURCE_DIR="node-v$portVersion"
@@ -29,7 +35,7 @@ SECONDARY_ARCHITECTURES="x86"
 PROVIDES="
 	nodejs20$secondaryArchSuffix = $portVersion
 	cmd:corepack = $portVersion compat >= 20
-	cmd:node = $portVersion compat >= 20
+	cmd:node20 = $portVersion compat >= 20
 	"
 REQUIRES="
 	haiku$secondaryArchSuffix
@@ -97,6 +103,10 @@ INSTALL()
 {
 	make install
 
+	# bin/node belongs to the default major (nodejs24); see the REVISION note.
+	mv $prefix/bin/node $prefix/bin/node20
+	mv $prefix/share/man/man1/node.1 $prefix/share/man/man1/node20.1
+
 	mkdir -p $(dirname $docDir $includeDir $manDir)
 	mv $prefix/include $includeDir
 	mv $prefix/share/man $manDir
@@ -105,7 +115,7 @@ INSTALL()
 	packageEntries devel \
 		$developDir
 
-	strip $prefix/bin/node
+	strip $prefix/bin/node20
 	rm -rf $prefix/share
 }
 

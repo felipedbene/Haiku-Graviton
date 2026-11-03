@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-N20-side-by-side
+# instance: i-0fd49845aa23e5fef   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T160244Z   end: 20261103T160259Z   rc: 0
+# script sha256: 56456602b331d3192229cfedb829aaa24ce960e00cec86acbfe8c76a46fdc2b7
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 80 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | P=/boot/home/haikuports/packages
+# | package list -i $P/nodejs20-20.15.1-4-arm64.hpkg | grep -E "provides:"; package list $P/nodejs20-20.15.1-4-arm64.hpkg | grep -E "bin/|man1/" | head -5
+# | feed | pkgman install nodejs24 claude_code $P/nodejs20-20.15.1-4-arm64.hpkg 2>&1 | grep -E "package (nodejs|claude)|problem|Done"
+# | ls /boot/system/packages | grep -E "^nodejs"
+# | echo "node   -> $(node --version)   $(catattr SYS:PACKAGE_FILE /boot/system/bin/node | awk '{print $NF}')"
+# | echo "node20 -> $(node20 --version) $(catattr SYS:PACKAGE_FILE /boot/system/bin/node20 | awk '{print $NF}')"
+# | node20 -e 'console.log("node20 crypto", require("crypto").createHash("sha256").update("x").digest("hex").slice(0,8))'
+# | claude --version
+# ---- raw output ----
+	provides: nodejs20 = 20.15.1
+	provides: cmd:corepack = 20.15.1 (compatible >= 20)
+	provides: cmd:node20 = 20.15.1 (compatible >= 20)
+    install package nodejs20-20.15.1-4 from local file
+    install package nodejs24-24.22.2-1 from repository DeBeOS
+    install package claude_code-2.1.314-2 from repository DeBeOS
+[system] Done.
+nodejs20-20.15.1-4-arm64.hpkg
+nodejs24-24.22.2-1-arm64.hpkg
+node   -> v24.22.2   nodejs24-24.22.2-1-arm64.hpkg
+node20 -> v20.15.1 nodejs20-20.15.1-4-arm64.hpkg
+node20 crypto 2d711642
+2.1.314 (Claude Code)

@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-N20-build-summary
+# instance: i-0fd49845aa23e5fef   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T160049Z   end: 20261103T160054Z   rc: 0
+# script sha256: cbb33d7ce857b49c1a2715022693f5b50b7b754f64c988ec0c51752269486027
+# ---- script ----
+# | cat /boot/home/r14.log
+# | ls -la /boot/home/haikuports/packages/
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+=== nodejs20-20.15.1 build start 2026-11-03T15:12:18Z
+=== nodejs20-20.15.1 driver rc=1 2026-11-03T15:59:01Z
+    pkg: nodejs20-20.15.1-4-arm64.hpkg
+    pkg: nodejs20_devel-20.15.1-4-arm64.hpkg
+=== nodejs20-20.15.1 test rc=1 2026-11-03T16:00:39Z
+ALLDONE
+total 12046
+drwxr-xr-x 1 baron root     2048 Nov  3 15:59 .
+drwxr-xr-x 1 baron root     7168 Nov  3 15:59 ..
+-rw-r--r-- 1 baron root 12085787 Nov  3 15:58 nodejs20-20.15.1-4-arm64.hpkg
+-rw-r--r-- 1 baron root   226855 Nov  3 15:58 nodejs20_devel-20.15.1-4-arm64.hpkg
+c3a506df95d8c4c51146a79418158f22b2563c71a8036e26ef61b95f09caa89b  /boot/home/haikuports/packages/nodejs20-20.15.1-4-arm64.hpkg
+50de4a155e112ffc2357673fc8864d3abdac052d0c6a3bcf7e413c2f66dea9c6  /boot/home/haikuports/packages/nodejs20_devel-20.15.1-4-arm64.hpkg

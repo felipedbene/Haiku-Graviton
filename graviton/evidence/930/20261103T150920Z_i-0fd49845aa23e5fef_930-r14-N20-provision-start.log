@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-N20-provision-start
+# instance: i-0fd49845aa23e5fef   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T150920Z   end: 20261103T150928Z   rc: 0
+# script sha256: 8f6f2927d3ce2bceabe901efc663b0be244f259d4110471e1b651a9d34ed4eba
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | uname -a; df -k /boot | tail -1; sha256sum /boot/home/stage/prov.sh /boot/home/stage/nb.sh
+# | feed | pkgman install cmd:curl cmd:tar cmd:gzip 2>&1 | tail -1
+# | ( OVERLAY_REF=fix/1004-nodejs20-node20 DOWNLOAD_MIRROR=https://sources.debene.dev sh /boot/home/stage/prov.sh > /boot/home/prov.log 2>&1; echo "exit $?" >> /boot/home/prov.log ) < /dev/null > /dev/null 2>&1 &
+# | echo started
+# ---- raw output ----
+Haiku ip-10-128-12-140.us-west-2.comp R1~beta6+development hrev59996 Nov  3 2026 00:41:16 arm64 other Haiku
+   Root Inode: 524288
+daf7d327574e48ea75ca8fe879a49e7faffcb681770255149a398b4f1c76fea9  /boot/home/stage/prov.sh
+a1ec6075d28904b496f5cbd9af0dfd44e06a092bcc48bbae029b82d2134f9236  /boot/home/stage/nb.sh
+[system] Done.
+started
