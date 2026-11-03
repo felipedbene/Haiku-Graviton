@@ -1,0 +1,10 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-N20-progress
+# instance: i-0fd49845aa23e5fef   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T153810Z   end: 20261103T153819Z   rc: 0
+# script sha256: bff83f64415baba044fc440c3eb49d495e16454b8b3f8926490009a1af5c21ac
+# ---- script ----
+# | ls /boot/home/nb-*.out 2>/dev/null; L=$(ls -t /boot/home/nb-nodejs20*.log 2>/dev/null | head -1); [ -n "$L" ] && grep -aE "^\[ *[0-9]+/[0-9]+\]|^  [A-Z]+\(target\)" $L | tail -1; uptime
+# ---- raw output ----
+/boot/home/nb-nodejs20-20.15.1.out
+ 15:38:17  up   0:29,  0 users,  load average: 32.86, 30.94, 23.31

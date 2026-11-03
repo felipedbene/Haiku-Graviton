@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-N20-preinstall
+# instance: i-0fd49845aa23e5fef   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T151206Z   end: 20261103T151212Z   rc: 0
+# script sha256: 8663cbaff0064181a4e657e8d5060523faab31f55c3586fe5bafda9a594e0c36
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install icu74_devel 2>&1 | tail -2
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
