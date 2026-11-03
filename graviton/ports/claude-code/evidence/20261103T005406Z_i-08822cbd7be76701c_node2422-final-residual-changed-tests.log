@@ -1,0 +1,467 @@
+# evidence: node2422-final-residual-changed-tests
+# instance: i-08822cbd7be76701c   region: us-west-2
+# ssm command: 15dcaf17-3c04-44e3-8223-533fc5d28804 (agent status: Success)
+# start: 20261103T005406Z   end: 20261103T010019Z   rc: 0   log bytes: 28218
+# script sha256: c52cf170cbeef414975843b1e3c1c973d00a5e2e691e247a2c067813ef19455d
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.22.2 || exit 1
+# | f=/boot/home/node-parallel-final.tap
+# | echo "== skipped tests in the final parallel run, with reason"; grep -E '^ok .*# skip' $f | sed 's/^ok [0-9]* //' | sort
+# | echo "== perf-hooks-sliding-window-histogram and net-connect-abort-controller: TAP blocks"
+# | awk '/^(not )?ok .*(perf-hooks-sliding-window-histogram|net-connect-abort-controller)/{p=1} p&&/^(not )?ok /&&!/(perf-hooks-sliding-window-histogram|net-connect-abort-controller)/{p=0} p' $f | head -60
+# | for t in parallel/test-perf-hooks-sliding-window-histogram parallel/test-net-connect-abort-controller; do
+# |   echo "######## $t alone x10"; ok=0; for i in $(seq 10); do : | timeout 120 node test/$t.js > /tmp/o.txt 2>&1 && ok=$((ok+1)); done; echo "$t: $ok/10 pass alone"; [ $ok -lt 10 ] && head -30 /tmp/o.txt
+# |   echo "######## $t under 16-way load: --repeat 48"
+# |   : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap --repeat 48 $t > /tmp/rep.tap 2>&1; echo "rc=$? ok=$(grep -c '^ok ' /tmp/rep.tap) notok=$(grep -c '^not ok ' /tmp/rep.tap) timeout=$(grep -c '^    timeout$' /tmp/rep.tap)"
+# |   awk '/^not ok/{p=1;n++} p&&n<=1' /tmp/rep.tap | head -40
+# | done
+# ---- raw output ----
+== skipped tests in the final parallel run, with reason
+parallel/test-buffer-alloc-unsafe-is-initialized-with-zero-fill-flag # skip Only works in debug mode
+parallel/test-buffer-alloc-unsafe-is-uninitialized # skip Only works in debug mode
+parallel/test-child-process-dgram-reuseport # skip The `reusePort` is not supported
+parallel/test-child-process-exec-any-shells-windows # skip Windows specific test.
+parallel/test-child-process-net-reuseport # skip The `reusePort` option is not supported
+parallel/test-child-process-prototype-tampering # skip undefined
+parallel/test-child-process-stdio-overlapped # skip overlapped-checker binary is not available
+parallel/test-cluster-bind-privileged-port # skip Test is not supposed to be run as root.
+parallel/test-cluster-dgram-reuseport # skip The `reusePort` option is not supported
+parallel/test-cluster-net-reuseport # skip The `reusePort` option is not supported
+parallel/test-cluster-shared-handle-bind-privileged-port # skip as this test should not be run as `root`
+parallel/test-config-json-schema # skip this test requires QUIC
+parallel/test-coverage-with-inspector-disabled # skip V8 inspector is enabled
+parallel/test-crypto-argon2-unsupported # skip requires OpenSSL < 3.2
+parallel/test-crypto-boringssl-evp-list # skip BoringSSL-only test
+parallel/test-crypto-ecb # skip Blowfish is only available with the legacy provider in OpenSSl 3.x
+parallel/test-crypto-fips-indicator-strict # skip an active OpenSSL 3.4+ FIPS provider is required
+parallel/test-crypto-key-store-pkcs11 # skip missing a PKCS#11 provider test fixture
+parallel/test-crypto-mac-unsupported # skip this test requires a build without EVP_MAC support
+parallel/test-crypto-provider-hash-options # skip OpenSSL 4 provider support is required
+parallel/test-debug-process # skip This test is specific to Windows to test winapi_strerror
+parallel/test-dgram-reuseport # skip The `reusePort` option is not supported
+parallel/test-dgram-udp6-link-local-address # skip cannot find any IPv6 interfaces with a link local address
+parallel/test-diagnostics-channel-crypto-fips-indicator # skip an active OpenSSL 3.4+ FIPS provider is required
+parallel/test-dsa-fips-invalid-key # skip node compiled without FIPS OpenSSL.
+parallel/test-fs-access # skip as this test should not be run as `root`
+parallel/test-fs-copyfile-respect-permissions # skip as this test should not be run as `root`
+parallel/test-fs-lchmod # skip lchmod is only available on macOS
+parallel/test-fs-long-path # skip this test is Windows-specific.
+parallel/test-fs-mkdir-recursive-eaccess # skip as this test should not be run as `root`
+parallel/test-fs-read-file-sync-hostname # skip Test is linux specific.
+parallel/test-fs-read-stream # skip mkfifo not available
+parallel/test-fs-readdir-buffer # skip this tests works only on MacOS
+parallel/test-fs-readdir-pipe # skip This test is specific to Windows to test enumerate pipes
+parallel/test-fs-readdir-ucs2 # skip Test is linux specific.
+parallel/test-fs-readfilesync-enoent # skip Windows specific test.
+parallel/test-fs-realpath-namespaced-drive-win # skip This test is Windows-specific.
+parallel/test-fs-realpath-on-substed-drive # skip Test for Windows only
+parallel/test-fs-rmSync-eperm-retries # skip Windows-specific: EPERM sharing-violation retry in rmSync
+parallel/test-fs-watch-recursive-aix-preserve-watch-error # skip AIX-specific ENODEV handling
+parallel/test-fs-watch-recursive-linux-directory-watchers # skip the recursive watcher is native on this platform
+parallel/test-fs-watch-recursive-linux-parallel-remove # skip This test can run only on Linux
+parallel/test-fs-write-file-invalid-path # skip This test is for Windows only.
+parallel/test-http-full-response # skip problem spawning `ab`.
+parallel/test-http-localaddress # skip platform-specific test.
+parallel/test-http2-connect-options # skip platform-specific test.
+parallel/test-http2-tls-disconnect # skip no h2load
+parallel/test-https-localaddress # skip platform-specific test.
+parallel/test-icu-data-dir # skip missing Intl
+parallel/test-inspector-has-inspector-false # skip V8 inspector is enabled
+parallel/test-inspector-workers-flat-list # skip This test only works on a main thread
+parallel/test-macos-app-sandbox # skip App Sandbox is only available on Darwin
+parallel/test-module-readonly # skip test only runs on Windows
+parallel/test-module-subpath-import-long-path # skip this test is Windows-specific.
+parallel/test-module-unreadable-package-json # skip cannot make a file unreadable as root
+parallel/test-net-reuseport # skip The `reusePort` option is not supported
+parallel/test-openssl-unreadable-config # skip linux only
+parallel/test-path-win32-normalize-device-names # skip Windows only
+parallel/test-permission-drop-addons # skip addon not found
+parallel/test-permission-fs-windows-path # skip windows UNC path test
+parallel/test-pipe-abstract-socket # skip undefined
+parallel/test-pipe-abstract-socket-http # skip undefined
+parallel/test-process-config # skip config.gypi does not exist.
+parallel/test-process-execve-no-args # skip /boot/system/bin/nop binary is not available
+parallel/test-quic-address-validation # skip QUIC is not enabled
+parallel/test-quic-alpn # skip QUIC is not enabled
+parallel/test-quic-alpn-h3 # skip QUIC is not enabled
+parallel/test-quic-alpn-mismatch # skip QUIC is not enabled
+parallel/test-quic-blocklist # skip QUIC is not enabled
+parallel/test-quic-callback-error-onblocked # skip QUIC is not enabled
+parallel/test-quic-callback-error-ondatagram # skip QUIC is not enabled
+parallel/test-quic-callback-error-ondatagram-async # skip QUIC is not enabled
+parallel/test-quic-callback-error-ondatagramstatus # skip QUIC is not enabled
+parallel/test-quic-callback-error-onerror # skip QUIC is not enabled
+parallel/test-quic-callback-error-onerror-option # skip QUIC is not enabled
+parallel/test-quic-callback-error-onerror-validation # skip QUIC is not enabled
+parallel/test-quic-callback-error-onhandshake # skip QUIC is not enabled
+parallel/test-quic-callback-error-onnewtoken # skip QUIC is not enabled
+parallel/test-quic-callback-error-onpathvalidation # skip QUIC is not enabled
+parallel/test-quic-callback-error-onreset # skip QUIC is not enabled
+parallel/test-quic-callback-error-onsessionticket # skip QUIC is not enabled
+parallel/test-quic-callback-error-onstream # skip QUIC is not enabled
+parallel/test-quic-callback-error-onstream-async # skip QUIC is not enabled
+parallel/test-quic-callback-error-stream-onerror # skip QUIC is not enabled
+parallel/test-quic-callback-error-suppressed # skip QUIC is not enabled
+parallel/test-quic-callback-error-suppressed-async # skip QUIC is not enabled
+parallel/test-quic-cc-algorithm # skip QUIC is not enabled
+parallel/test-quic-certificate-compression # skip QUIC is not enabled
+parallel/test-quic-connection-concurrent # skip QUIC is not enabled
+parallel/test-quic-connection-limits # skip QUIC is not enabled
+parallel/test-quic-datagram # skip QUIC is not enabled
+parallel/test-quic-datagram-abandoned # skip QUIC is not enabled
+parallel/test-quic-datagram-drop-newest # skip QUIC is not enabled
+parallel/test-quic-datagram-drop-oldest # skip QUIC is not enabled
+parallel/test-quic-datagram-echo # skip QUIC is not enabled
+parallel/test-quic-datagram-edge-cases # skip QUIC is not enabled
+parallel/test-quic-datagram-frame-size-validation # skip QUIC is not enabled
+parallel/test-quic-datagram-multiple # skip QUIC is not enabled
+parallel/test-quic-datagram-no-detach # skip QUIC is not enabled
+parallel/test-quic-datagram-size-limits # skip QUIC is not enabled
+parallel/test-quic-datagram-sources # skip QUIC is not enabled
+parallel/test-quic-datagram-status # skip QUIC is not enabled
+parallel/test-quic-datagram-utf8 # skip QUIC is not enabled
+parallel/test-quic-default-stream-limits # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-busy # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-datagram # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-datagram-status # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-error # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-path # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-session # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-stream # skip QUIC is not enabled
+parallel/test-quic-diagnostics-channel-token # skip QUIC is not enabled
+parallel/test-quic-draining-period # skip QUIC is not enabled
+parallel/test-quic-edge-closing-ops # skip QUIC is not enabled
+parallel/test-quic-edge-concurrent-close # skip QUIC is not enabled
+parallel/test-quic-edge-destroyed-ops # skip QUIC is not enabled
+parallel/test-quic-edge-endpoint-destroy-active # skip QUIC is not enabled
+parallel/test-quic-edge-idempotent # skip QUIC is not enabled
+parallel/test-quic-edge-session-close-immediate # skip QUIC is not enabled
+parallel/test-quic-edge-session-destroy-immediate # skip QUIC is not enabled
+parallel/test-quic-enable-early-data # skip QUIC is not enabled
+parallel/test-quic-endpoint-async-dispose # skip QUIC is not enabled
+parallel/test-quic-endpoint-bind # skip QUIC is not enabled
+parallel/test-quic-endpoint-bind-failure # skip QUIC is not enabled
+parallel/test-quic-endpoint-busy # skip QUIC is not enabled
+parallel/test-quic-endpoint-close-destroy # skip QUIC is not enabled
+parallel/test-quic-endpoint-destroy-after-close # skip QUIC is not enabled
+parallel/test-quic-endpoint-destroy-cascade-close-frame # skip QUIC is not enabled
+parallel/test-quic-endpoint-idle-timeout # skip QUIC is not enabled
+parallel/test-quic-endpoint-onsession-throws # skip QUIC is not enabled
+parallel/test-quic-endpoint-reuse # skip QUIC is not enabled
+parallel/test-quic-endpoint-state-transitions # skip QUIC is not enabled
+parallel/test-quic-error-class # skip QUIC is not enabled
+parallel/test-quic-error-destroy-rejects-promises # skip QUIC is not enabled
+parallel/test-quic-exports # skip QUIC is not enabled
+parallel/test-quic-exports-constants # skip QUIC is not enabled
+parallel/test-quic-flow-control-blob # skip QUIC is not enabled
+parallel/test-quic-flow-control-block-resume # skip QUIC is not enabled
+parallel/test-quic-flow-control-params # skip QUIC is not enabled
+parallel/test-quic-flow-control-uni # skip QUIC is not enabled
+parallel/test-quic-h3-callback-errors # skip QUIC is not enabled
+parallel/test-quic-h3-close-behavior # skip QUIC is not enabled
+parallel/test-quic-h3-concurrent-requests # skip QUIC is not enabled
+parallel/test-quic-h3-datagram # skip QUIC is not enabled
+parallel/test-quic-h3-error-codes # skip QUIC is not enabled
+parallel/test-quic-h3-goaway # skip QUIC is not enabled
+parallel/test-quic-h3-goaway-non-h3 # skip QUIC is not enabled
+parallel/test-quic-h3-handshake-failure # skip QUIC is not enabled
+parallel/test-quic-h3-header-validation # skip QUIC is not enabled
+parallel/test-quic-h3-headers-support # skip QUIC is not enabled
+parallel/test-quic-h3-informational-headers # skip QUIC is not enabled
+parallel/test-quic-h3-maxstreamdata-external-buffer-failure # skip QUIC is not enabled
+parallel/test-quic-h3-origin # skip QUIC is not enabled
+parallel/test-quic-h3-pending-stream # skip QUIC is not enabled
+parallel/test-quic-h3-post-filehandle # skip QUIC is not enabled
+parallel/test-quic-h3-post-request # skip QUIC is not enabled
+parallel/test-quic-h3-priority # skip QUIC is not enabled
+parallel/test-quic-h3-qpack-settings # skip QUIC is not enabled
+parallel/test-quic-h3-request-rejected # skip QUIC is not enabled
+parallel/test-quic-h3-request-response # skip QUIC is not enabled
+parallel/test-quic-h3-settings # skip QUIC is not enabled
+parallel/test-quic-h3-status-code-type # skip QUIC is not enabled
+parallel/test-quic-h3-stream-destroy-with-headers # skip QUIC is not enabled
+parallel/test-quic-h3-stream-idle-timeout # skip QUIC is not enabled
+parallel/test-quic-h3-stream-without-onstream # skip QUIC is not enabled
+parallel/test-quic-h3-trailing-headers # skip QUIC is not enabled
+parallel/test-quic-h3-uni-stream-limit-start-failure # skip QUIC is not enabled
+parallel/test-quic-h3-uni-stream-teardown # skip QUIC is not enabled
+parallel/test-quic-h3-zero-rtt # skip QUIC is not enabled
+parallel/test-quic-h3-zero-rtt-bogus-ticket # skip QUIC is not enabled
+parallel/test-quic-h3-zero-rtt-rejected-settings # skip QUIC is not enabled
+parallel/test-quic-handshake # skip QUIC is not enabled
+parallel/test-quic-handshake-ipv6-only # skip QUIC is not enabled
+parallel/test-quic-handshake-timeout # skip QUIC is not enabled
+parallel/test-quic-internal-endpoint-listen-defaults # skip QUIC is not enabled
+parallel/test-quic-internal-endpoint-options # skip QUIC is not enabled
+parallel/test-quic-internal-endpoint-stats-state # skip QUIC is not enabled
+parallel/test-quic-internal-setcallbacks # skip QUIC is not enabled
+parallel/test-quic-keepalive # skip QUIC is not enabled
+parallel/test-quic-key-update # skip QUIC is not enabled
+parallel/test-quic-key-update-peer # skip QUIC is not enabled
+parallel/test-quic-list-endpoints # skip QUIC is not enabled
+parallel/test-quic-max-payload-size # skip QUIC is not enabled
+parallel/test-quic-max-window # skip QUIC is not enabled
+parallel/test-quic-maxstreamdata-external-buffer-failure # skip QUIC is not enabled
+parallel/test-quic-module-exports # skip QUIC is not enabled
+parallel/test-quic-multipacket-clienthello # skip QUIC is not enabled
+parallel/test-quic-new-token # skip QUIC is not enabled
+parallel/test-quic-perf-hooks # skip QUIC is not enabled
+parallel/test-quic-preferred-address-ignore # skip QUIC is not enabled
+parallel/test-quic-qlog # skip QUIC is not enabled
+parallel/test-quic-reject-unauthorized # skip QUIC is not enabled
+parallel/test-quic-session-application-options # skip QUIC is not enabled
+parallel/test-quic-session-close # skip QUIC is not enabled
+parallel/test-quic-session-close-error-code # skip QUIC is not enabled
+parallel/test-quic-session-close-graceful # skip QUIC is not enabled
+parallel/test-quic-session-close-sends-frame # skip QUIC is not enabled
+parallel/test-quic-session-destroy # skip QUIC is not enabled
+parallel/test-quic-session-destroy-reentrant # skip QUIC is not enabled
+parallel/test-quic-session-destroy-validate-options # skip QUIC is not enabled
+parallel/test-quic-session-emit-ordering # skip QUIC is not enabled
+parallel/test-quic-session-idle-timeout # skip QUIC is not enabled
+parallel/test-quic-session-initial-rtt # skip QUIC is not enabled
+parallel/test-quic-session-opened-early-destroy # skip QUIC is not enabled
+parallel/test-quic-session-opened-info # skip QUIC is not enabled
+parallel/test-quic-session-opened-validation # skip QUIC is not enabled
+parallel/test-quic-session-preferred-address # skip QUIC is not enabled
+parallel/test-quic-session-preferred-address-ignore # skip QUIC is not enabled
+parallel/test-quic-session-preferred-address-ipv6 # skip QUIC is not enabled
+parallel/test-quic-session-properties # skip QUIC is not enabled
+parallel/test-quic-session-stats # skip QUIC is not enabled
+parallel/test-quic-session-stats-datagram # skip QUIC is not enabled
+parallel/test-quic-session-stats-detailed # skip QUIC is not enabled
+parallel/test-quic-session-stream-lifecycle # skip QUIC is not enabled
+parallel/test-quic-session-transport-params # skip QUIC is not enabled
+parallel/test-quic-session-unobserved-error-close # skip QUIC is not enabled
+parallel/test-quic-shared-endpoint-stream-close # skip QUIC is not enabled
+parallel/test-quic-sni # skip QUIC is not enabled
+parallel/test-quic-sni-mismatch # skip QUIC is not enabled
+parallel/test-quic-sni-multi-entry # skip QUIC is not enabled
+parallel/test-quic-sni-setcontexts # skip QUIC is not enabled
+parallel/test-quic-stateless-reset # skip QUIC is not enabled
+parallel/test-quic-stats-tojson-inspect # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-basic # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-concurrent # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-echo # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-halfclose # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-large # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-server-initiated # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-setbody # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-varchunklen # skip QUIC is not enabled
+parallel/test-quic-stream-bidi-writer # skip QUIC is not enabled
+parallel/test-quic-stream-body-async-error # skip QUIC is not enabled
+parallel/test-quic-stream-body-async-iterable # skip QUIC is not enabled
+parallel/test-quic-stream-body-error # skip QUIC is not enabled
+parallel/test-quic-stream-body-filehandle # skip QUIC is not enabled
+parallel/test-quic-stream-body-pooled-buffer # skip QUIC is not enabled
+parallel/test-quic-stream-body-promise # skip QUIC is not enabled
+parallel/test-quic-stream-body-promise-error # skip QUIC is not enabled
+parallel/test-quic-stream-body-promise-reject # skip QUIC is not enabled
+parallel/test-quic-stream-body-readable-stream # skip QUIC is not enabled
+parallel/test-quic-stream-body-sources # skip QUIC is not enabled
+parallel/test-quic-stream-body-state # skip QUIC is not enabled
+parallel/test-quic-stream-body-string # skip QUIC is not enabled
+parallel/test-quic-stream-body-string-shorthand # skip QUIC is not enabled
+parallel/test-quic-stream-body-sync-iterable # skip QUIC is not enabled
+parallel/test-quic-stream-closed-promise # skip QUIC is not enabled
+parallel/test-quic-stream-closed-rejects # skip QUIC is not enabled
+parallel/test-quic-stream-destroy-emits-reset # skip QUIC is not enabled
+parallel/test-quic-stream-destroy-emits-stop-sending # skip QUIC is not enabled
+parallel/test-quic-stream-destroy-options-code # skip QUIC is not enabled
+parallel/test-quic-stream-destroy-options-validate # skip QUIC is not enabled
+parallel/test-quic-stream-error-graceful-close # skip QUIC is not enabled
+parallel/test-quic-stream-id-ordering # skip QUIC is not enabled
+parallel/test-quic-stream-idle-timeout # skip QUIC is not enabled
+parallel/test-quic-stream-iteration # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-batching # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-break # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-destroyed # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-double # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-nonreadable # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-pipeto # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-pull # skip QUIC is not enabled
+parallel/test-quic-stream-iteration-reset # skip QUIC is not enabled
+parallel/test-quic-stream-limits-pending # skip QUIC is not enabled
+parallel/test-quic-stream-limits-uni # skip QUIC is not enabled
+parallel/test-quic-stream-many-rapid # skip QUIC is not enabled
+parallel/test-quic-stream-onblocked # skip QUIC is not enabled
+parallel/test-quic-stream-pending # skip QUIC is not enabled
+parallel/test-quic-stream-priority # skip QUIC is not enabled
+parallel/test-quic-stream-read-after-blocked # skip QUIC is not enabled
+parallel/test-quic-stream-read-after-fin # skip QUIC is not enabled
+parallel/test-quic-stream-recv-coalescing # skip QUIC is not enabled
+parallel/test-quic-stream-reset-after-data # skip QUIC is not enabled
+parallel/test-quic-stream-reset-before-data # skip QUIC is not enabled
+parallel/test-quic-stream-reset-mid-transfer # skip QUIC is not enabled
+parallel/test-quic-stream-reset-stop # skip QUIC is not enabled
+parallel/test-quic-stream-setbody-errors # skip QUIC is not enabled
+parallel/test-quic-stream-slow-consumer # skip QUIC is not enabled
+parallel/test-quic-stream-stats # skip QUIC is not enabled
+parallel/test-quic-stream-stop-sending-buffered # skip QUIC is not enabled
+parallel/test-quic-stream-stop-sending-callback # skip QUIC is not enabled
+parallel/test-quic-stream-stop-sending-interaction # skip QUIC is not enabled
+parallel/test-quic-stream-uni-basic # skip QUIC is not enabled
+parallel/test-quic-stream-uni-no-onstream # skip QUIC is not enabled
+parallel/test-quic-stream-uni-server-initiated # skip QUIC is not enabled
+parallel/test-quic-stream-write-partial-view # skip QUIC is not enabled
+parallel/test-quic-stream-writer-api # skip QUIC is not enabled
+parallel/test-quic-stream-writer-dispose # skip QUIC is not enabled
+parallel/test-quic-stream-writer-drain-unhandled-rejection # skip QUIC is not enabled
+parallel/test-quic-stream-writer-fail-error-code # skip QUIC is not enabled
+parallel/test-quic-stream-zero-length # skip QUIC is not enabled
+parallel/test-quic-test-client # skip QUIC support is not enabled
+parallel/test-quic-test-server # skip QUIC support is not enabled
+parallel/test-quic-tls-ca # skip QUIC is not enabled
+parallel/test-quic-tls-crl # skip QUIC is not enabled
+parallel/test-quic-tls-keylog # skip QUIC is not enabled
+parallel/test-quic-tls-options # skip QUIC is not enabled
+parallel/test-quic-tls-trace # skip QUIC is not enabled
+parallel/test-quic-tls-verify-client # skip QUIC is not enabled
+parallel/test-quic-token-distinct # skip QUIC is not enabled
+parallel/test-quic-token-expired # skip QUIC is not enabled
+parallel/test-quic-token-reuse # skip QUIC is not enabled
+parallel/test-quic-token-secret # skip QUIC is not enabled
+parallel/test-quic-transport-params-validation # skip QUIC is not enabled
+parallel/test-quic-version # skip QUIC is not enabled
+parallel/test-quic-version-negotiation # skip QUIC is not enabled
+parallel/test-quic-version-negotiation-oversized-cid # skip QUIC is not enabled
+parallel/test-quic-writer-abort-signal # skip QUIC is not enabled
+parallel/test-quic-writer-async-dispose-ended # skip QUIC is not enabled
+parallel/test-quic-writer-backpressure # skip QUIC is not enabled
+parallel/test-quic-writer-write-rejects # skip QUIC is not enabled
+parallel/test-quic-zero-rtt # skip QUIC is not enabled
+parallel/test-quic-zero-rtt-datagram # skip QUIC is not enabled
+parallel/test-quic-zero-rtt-disabled-client # skip QUIC is not enabled
+parallel/test-quic-zero-rtt-disabled-server # skip QUIC is not enabled
+parallel/test-quic-zero-rtt-rejected-settings # skip QUIC is not enabled
+parallel/test-repl-preview-without-inspector # skip test is for node compiled with --without-inspector only
+parallel/test-repl-stdin-push-null # skip does not apply on non-TTY stdin
+parallel/test-require-long-path # skip this test is Windows-specific.
+parallel/test-spawn-cmd-named-pipe # skip this test is Windows-specific.
+parallel/test-stdin-from-file-spawn # skip This is test exists only on Linux/Win32/macOS
+parallel/test-strace-openat-openssl # skip linux only
+parallel/test-tls-dhparam-auto-boringssl # skip only applies to BoringSSL builds
+parallel/test-tls-no-sslv3 # skip `openssl s_client -ssl3` not supported.
+parallel/test-trace-events-net-abstract-socket # skip undefined
+parallel/test-tz-version # skip not using the icu data file present in deps/icu-small/source/data/in/icudt##l.dat.bz2
+parallel/test-util-styletext # skip Could not create TTY fd
+parallel/test-web-locks-no-livelock # skip Only works in debug mode
+parallel/test-webcrypto-fips-exceptions # skip requires OpenSSL >= 3 in FIPS mode
+parallel/test-windows-abort-exitcode # skip test is windows specific
+parallel/test-windows-failed-heap-allocation # skip Windows-only
+== perf-hooks-sliding-window-histogram and net-connect-abort-controller: TAP blocks
+ok 2600 parallel/test-perf-hooks-sliding-window-histogram-fast-calls
+  ---
+  duration_ms: 289.88200
+  ...
+not ok 2604 parallel/test-perf-hooks-sliding-window-histogram
+  ---
+  duration_ms: 515.44700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    0 !== 1
+    
+        at /boot/home/node-src/node-v24.22.2/test/parallel/test-perf-hooks-sliding-window-histogram.js:193:10 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 0,
+      expected: 1,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.22.2
+  ...
+not ok 4605 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 360058.61600
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-child-process-default-options.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-child-process-env.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-child-process-exec-env.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-cwd-enoent-improved-message.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-fs-link.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-fs-promises.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-fs-rmSync-special-char-additional-error.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-fs-stat-date.mjs
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-http-writable-true-after-close.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-http2-misbehaving-flow-control-paused.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-http2-misbehaving-flow-control.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-http2-sensitive-headers.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-perf-hooks-sliding-window-histogram.js
+/boot/system/bin/node --permission --allow-fs-read=* --allow-fs-write=* --allow-child-process /boot/home/node-src/node-v24.22.2/test/parallel/test-permission-fs-symlink-target-write.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-process-dlopen-error-message-crash.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-process-euid-egid.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-repl-underscore.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-setproctitle.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-util-exception-with-host-port.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-trace-events-fs-sync.js
+/boot/system/bin/node /boot/home/node-src/node-v24.22.2/test/parallel/test-trace-events-fs-async.js
+######## parallel/test-perf-hooks-sliding-window-histogram alone x10
+parallel/test-perf-hooks-sliding-window-histogram: 9/10 pass alone
+######## parallel/test-perf-hooks-sliding-window-histogram under 16-way load: --repeat 48
+rc=1 ok=46 notok=2 timeout=0
+not ok 9 parallel/test-perf-hooks-sliding-window-histogram
+  ---
+  duration_ms: 424.22600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    0 !== 1
+    
+        at /boot/home/node-src/node-v24.22.2/test/parallel/test-perf-hooks-sliding-window-histogram.js:193:10 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 0,
+      expected: 1,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.22.2
+  ...
+ok 10 parallel/test-perf-hooks-sliding-window-histogram
+  ---
+  duration_ms: 444.47700
+  ...
+ok 11 parallel/test-perf-hooks-sliding-window-histogram
+  ---
+  duration_ms: 426.86900
+  ...
+ok 12 parallel/test-perf-hooks-sliding-window-histogram
+  ---
+  duration_ms: 413.94500
+  ...
+######## parallel/test-net-connect-abort-controller alone x10
+parallel/test-net-connect-abort-controller: 10/10 pass alone
+######## parallel/test-net-connect-abort-controller under 16-way load: --repeat 48
+rc=1 ok=44 notok=4 timeout=4
+not ok 45 parallel/test-net-connect-abort-controller
+  ---
+  duration_ms: 360137.36900
+  severity: fail
+  exitcode: -15
+  stack: |-
+    timeout
+  ...

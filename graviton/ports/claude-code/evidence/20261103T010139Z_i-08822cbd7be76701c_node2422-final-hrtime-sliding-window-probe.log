@@ -1,0 +1,37 @@
+# evidence: node2422-final-hrtime-sliding-window-probe
+# instance: i-08822cbd7be76701c   region: us-west-2
+# ssm command: a8581fae-893d-44b5-8c2f-4cb5a5af7064 (agent status: Success)
+# start: 20261103T010139Z   end: 20261103T010218Z   rc: 0   log bytes: 586
+# script sha256: a89f081191c414a15dde050e85b4c405aedff9a4a4cefbb37975cfb1c130f973
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.22.2 || exit 1
+# | echo "== monotonicity of process.hrtime.bigint() (uv_hrtime), 8 workers + main, 10 s each"
+# | cat > /tmp/mono.js <<'J'
+# | const { Worker, isMainThread, parentPort } = require('worker_threads');
+# | function run(ms) { let prev = process.hrtime.bigint(), back = 0, worst = 0n, n = 0; const end = prev + BigInt(ms) * 1000000n;
+# |   for (;;) { const t = process.hrtime.bigint(); n++; if (t < prev) { back++; if (prev - t > worst) worst = prev - t; } prev = t; if (t > end) break; }
+# |   return { n, back, worst: worst.toString() }; }
+# | if (isMainThread) { const ws = []; for (let i = 0; i < 8; i++) ws.push(new Promise(r => { const w = new Worker(__filename); w.on('message', r); }));
+# |   const m = run(10000); Promise.all(ws).then(rs => { console.log(JSON.stringify({ main: m, workers: rs })); }); }
+# | else parentPort.postMessage(run(10000));
+# | J
+# | node /tmp/mono.js
+# | echo "== the test's own window: record() then snapshot() 200000 times across a 100 ms rotation"
+# | cat > /tmp/sw.js <<'J'
+# | const { createSlidingWindowHistogram } = require('perf_hooks');
+# | const h = createSlidingWindowHistogram({ chunks: 1, chunkDuration: 100, highest: 100 });
+# | let miss = 0, n = 0; const end = Date.now() + 10000;
+# | while (Date.now() < end) { h.record(2); n++; if (h.snapshot().count === 0) miss++; }
+# | console.log(JSON.stringify({ n, missed: miss }));
+# | J
+# | node /tmp/sw.js
+# | echo "== the test alone x40"
+# | ok=0; for i in $(seq 40); do : | node test/parallel/test-perf-hooks-sliding-window-histogram.js > /dev/null 2>&1 && ok=$((ok+1)); done; echo "$ok/40 pass"
+# ---- raw output ----
+== monotonicity of process.hrtime.bigint() (uv_hrtime), 8 workers + main, 10 s each
+{"main":{"n":265352009,"back":0,"worst":"0"},"workers":[{"n":272024008,"back":0,"worst":"0"},{"n":271202567,"back":0,"worst":"0"},{"n":271819718,"back":0,"worst":"0"},{"n":269105095,"back":0,"worst":"0"},{"n":274876089,"back":0,"worst":"0"},{"n":271067587,"back":0,"worst":"0"},{"n":272576346,"back":0,"worst":"0"},{"n":269799967,"back":0,"worst":"0"}]}
+== the test's own window: record() then snapshot() 200000 times across a 100 ms rotation
+{"n":1614198,"missed":49}
+== the test alone x40
+38/40 pass

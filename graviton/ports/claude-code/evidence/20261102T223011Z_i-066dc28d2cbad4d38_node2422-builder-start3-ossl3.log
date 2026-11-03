@@ -1,0 +1,79 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-builder-start3-ossl3
+# instance: i-066dc28d2cbad4d38   region: us-west-2
+# ssm command: 70bcfb4e-3ce0-425a-86c9-a985bc304edf (agent status: Success)
+# start: 20261102T223011Z   end: 20261102T223242Z   rc: 0   log bytes: 2206
+# script sha256: d0fe683de606ffd37b818c5e609344061c9d34209703f7de92836e49c2518554
+# ---- script ----
+# | set -u
+# | W=/boot/home/ossl3; rm -rf $W; mkdir -p $W; cd $W || exit 1
+# | /boot/system/bin/curl -sSfo SHA256SUMS 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/openssl359r3/SHA256SUMS?<PRESIGNED>' || exit 1
+# | /boot/system/bin/curl -sSfo openssl3-3.5.9-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/openssl359r3/openssl3-3.5.9-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | /boot/system/bin/curl -sSfo openssl3_devel-3.5.9-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/openssl359r3/openssl3_devel-3.5.9-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | /boot/system/bin/curl -sSfo openssl3_debuginfo-3.5.9-3-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/openssl359r3/openssl3_debuginfo-3.5.9-3-arm64.hpkg?<PRESIGNED>' || exit 1
+# | /boot/system/bin/curl -sSfo openssl3_man-3.5.9-3-any.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/openssl359r3/openssl3_man-3.5.9-3-any.hpkg?<PRESIGNED>' || exit 1
+# | /boot/system/bin/curl -sSfo libssh2-1.11.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/openssl359r3/libssh2-1.11.1-2-arm64.hpkg?<PRESIGNED>' || exit 1
+# | /boot/system/bin/curl -sSfo libssh2_devel-1.11.1-2-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/openssl359r3/libssh2_devel-1.11.1-2-arm64.hpkg?<PRESIGNED>' || exit 1
+# | cat SHA256SUMS
+# | cat > expect <<'X'
+# | 31505ec5b93ab676c5ab38f6308523df88b6afa790f35d2c8b813fb1433922ee  openssl3-3.5.9-3-arm64.hpkg
+# | 8b601a809c4857580305f4bbc8d4b7fa3c73e02a6c35694ef5834dfc07859d3d  openssl3_devel-3.5.9-3-arm64.hpkg
+# | 6c538278b272414cf4beb416c534d99d99fce1bdaad85ed33d17031c4faa4355  openssl3_debuginfo-3.5.9-3-arm64.hpkg
+# | f55a2618dc47187c3e16a32277956b52385136e38d89c8e4d8c7d4c0cb91b932  openssl3_man-3.5.9-3-any.hpkg
+# | 7fd69c5e86b883130fc02a8dc7b506025dfbfbb79da64e52661a69989bbcc333  libssh2-1.11.1-2-arm64.hpkg
+# | 9353b2182ceba3af5889fa7d7d5b3e759b8238debb25ccf129cc8b3daf1f4f8e  libssh2_devel-1.11.1-2-arm64.hpkg
+# | X
+# | sha256sum -c expect || exit 1
+# | sha256sum -c SHA256SUMS || exit 1
+# | package list -i openssl3-3.5.9-3-arm64.hpkg | grep -E 'version|provides'
+# | feed() { for i in $(seq 60); do echo 1; done; echo yes; }
+# | echo "== before: $(ls /boot/system/packages | grep -E '^(openssl3|libssh2)' | tr '\n' ' ')"
+# | feed | pkgman install $W/openssl3-3.5.9-3-arm64.hpkg $W/openssl3_devel-3.5.9-3-arm64.hpkg $W/openssl3_man-3.5.9-3-any.hpkg $W/libssh2-1.11.1-2-arm64.hpkg 2>&1 | grep -E '^ +(install|upgrade) package|\[system\] Done|problem'
+# | echo "== after: $(ls /boot/system/packages | grep -E '^(openssl3|libssh2)' | tr '\n' ' ')"
+# | grep -n -E 'define (SIXTY_FOUR_BIT_LONG|THIRTY_TWO_BIT|SIXTY_FOUR_BIT)' /boot/system/develop/headers/openssl/configuration.h
+# | openssl version
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | mv /boot/home/n2422.log /boot/home/n2422-attempt2-ossl2.log
+# | cd /boot/home/haikuports && rm -f packages/nodejs24-24.22.2-1-arm64.hpkg packages/nodejs24_devel-24.22.2-1-arm64.hpkg && rm -rf net-libs/nodejs/work-* && ls packages
+# | nohup sh -c 'cd /boot/home/haikuports && : | haikuporter -y -j32 nodejs24-24.22.2 > /boot/home/n2422.log 2>&1; echo "exit $?" >> /boot/home/n2422.log' > /dev/null 2>&1 &
+# | sleep 90; grep -a -E "Validating|Applying patch|openssl3|brotli" /boot/home/n2422.log | head; tail -1 /boot/home/n2422.log | cut -c1-150
+# ---- raw output ----
+9353b2182ceba3af5889fa7d7d5b3e759b8238debb25ccf129cc8b3daf1f4f8e  libssh2_devel-1.11.1-2-arm64.hpkg
+7fd69c5e86b883130fc02a8dc7b506025dfbfbb79da64e52661a69989bbcc333  libssh2-1.11.1-2-arm64.hpkg
+6c538278b272414cf4beb416c534d99d99fce1bdaad85ed33d17031c4faa4355  openssl3_debuginfo-3.5.9-3-arm64.hpkg
+8b601a809c4857580305f4bbc8d4b7fa3c73e02a6c35694ef5834dfc07859d3d  openssl3_devel-3.5.9-3-arm64.hpkg
+f55a2618dc47187c3e16a32277956b52385136e38d89c8e4d8c7d4c0cb91b932  openssl3_man-3.5.9-3-any.hpkg
+31505ec5b93ab676c5ab38f6308523df88b6afa790f35d2c8b813fb1433922ee  openssl3-3.5.9-3-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg: OK
+openssl3_devel-3.5.9-3-arm64.hpkg: OK
+openssl3_debuginfo-3.5.9-3-arm64.hpkg: OK
+openssl3_man-3.5.9-3-any.hpkg: OK
+libssh2-1.11.1-2-arm64.hpkg: OK
+libssh2_devel-1.11.1-2-arm64.hpkg: OK
+libssh2_devel-1.11.1-2-arm64.hpkg: OK
+libssh2-1.11.1-2-arm64.hpkg: OK
+openssl3_debuginfo-3.5.9-3-arm64.hpkg: OK
+openssl3_devel-3.5.9-3-arm64.hpkg: OK
+openssl3_man-3.5.9-3-any.hpkg: OK
+openssl3-3.5.9-3-arm64.hpkg: OK
+	version: 3.5.9-3
+	provides: openssl3 = 3.5.9 (compatible >= 3)
+	provides: lib:libcrypto = 3 (compatible >= 3)
+	provides: lib:libssl = 3 (compatible >= 3)
+	provides: cmd:c_rehash = 3.5.9 (compatible >= 3)
+	provides: cmd:openssl = 3.5.9 (compatible >= 3)
+== before: libssh2-1.11.1-1-arm64.hpkg openssl3-3.5.9-2-arm64.hpkg openssl3_devel-3.5.9-2-arm64.hpkg openssl3_man-3.5.9-2-any.hpkg 
+    upgrade package openssl3-3.5.9-2 to 3.5.9-3 from local file
+    upgrade package libssh2-1.11.1-1 to 1.11.1-2 from local file
+    upgrade package openssl3_man-3.5.9-2 to 3.5.9-3 from local file
+    upgrade package openssl3_devel-3.5.9-2 to 3.5.9-3 from local file
+[system] Done.
+== after: libssh2-1.11.1-2-arm64.hpkg openssl3-3.5.9-3-arm64.hpkg openssl3_devel-3.5.9-3-arm64.hpkg openssl3_man-3.5.9-3-any.hpkg 
+175:#  define SIXTY_FOUR_BIT_LONG
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+brotli-1.2.1-2-arm64.hpkg
+brotli_devel-1.2.1-2-arm64.hpkg
+brotli_python3.14-1.2.1-2-arm64.hpkg
+brotli_python310-1.2.1-2-arm64.hpkg
+Validating checksum of node-v24.22.2.tar.gz
+Initialized empty Git repository in /boot/home/haikuports/net-libs/nodejs/work-24.22.2/sources/node-v24.22.2/.git/

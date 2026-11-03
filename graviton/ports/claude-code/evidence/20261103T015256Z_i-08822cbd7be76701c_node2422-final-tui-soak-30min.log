@@ -1,0 +1,120 @@
+# evidence: node2422-final-tui-soak-30min
+# instance: i-08822cbd7be76701c   region: us-west-2
+# ssm command: 89d6c62c-b354-4355-923f-be337f01b75a (agent status: Success)
+# start: 20261103T015256Z   end: 20261103T022317Z   rc: 0   log bytes: 3055
+# script sha256: 13871584ea4b3880d8dee447b04821462da87957e1bd107a071c7ddc3bac2d94
+# ---- script ----
+# | #!/bin/bash
+# | # haiku-soak.sh [minutes] [interval-s]: run Claude Code's interactive TUI in tmux on Haiku
+# | # and sample the node team's resident memory (sum of listarea's alloc. = area ram_size)
+# | # and thread count every interval, then print min/max/first/last and the growth.
+# | # Runs on the Haiku target (via tools/ssh-run). Exits 1 if the process dies.
+# | set -u
+# | MIN=${1:-30} IV=${2:-30}
+# | S=soak; H=/tmp/soak-home; rm -rf $H; mkdir -p $H/.claude
+# | echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | tmux -L $S kill-server 2>/dev/null
+# | trap 'tmux -L $S kill-server 2>/dev/null' EXIT
+# | before=$(ps | awk '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ { print $(NF-3) }' | sort -n | tail -1)
+# | tmux -L $S new-session -d -s $S -x 120 -y 40 "cd /tmp && HOME=$H TERM=xterm-256color claude"
+# | sleep 15
+# | # Haiku ps: the team's args (truncated to 63 chars), then Id, #Threads, Gid, Uid. The
+# | # newest matching team that did not exist before the launch is ours.
+# | team=$(ps | awk -v b="${before:-0}" '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ && $(NF-3) > b { print $(NF-3) }' | sort -n | tail -1)
+# | echo "node team: ${team:-NOT FOUND}"; [ -n "$team" ] || { tmux -L $S capture-pane -t $S -p | head -20; exit 1; }
+# | rss() { listarea "$team" | awk 'NF >= 10 && $(NF-5) ~ /^[0-9a-f]+$/ { s += strtonum("0x" $(NF-5)) } END { printf "%d", s / 1024 }'; }
+# | threads() { ps | awk -v t="$team" '$(NF-3) == t { print $(NF-2); exit }'; }
+# | n=$(( MIN * 60 / IV )); echo "sampling $n x ${IV}s"
+# | first="" min="" max="" last=""
+# | for i in $(seq 0 $n); do
+# | 	r=$(rss); t=$(threads)
+# | 	[ -n "$r" ] && [ "$r" -gt 0 ] || { echo "sample $i: process gone"; tmux -L $S capture-pane -t $S -p | tail -15; exit 1; }
+# | 	echo "t=$((i * IV))s rss=${r}KB threads=${t:-?}"
+# | 	first=${first:-$r}; last=$r
+# | 	[ -z "$min" ] || [ "$r" -lt "$min" ] && min=$r
+# | 	[ -z "$max" ] || [ "$r" -gt "$max" ] && max=$r
+# | 	[ $i -lt $n ] && sleep "$IV"
+# | done
+# | echo "soak: first=${first}KB last=${last}KB min=${min}KB max=${max}KB growth=$(( last - first ))KB over ${MIN}min"
+# | echo "--- final screen"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | head -15
+# ---- raw output ----
+node team: 142643
+sampling 60 x 30s
+t=0s rss=313792KB threads=12
+t=30s rss=313796KB threads=12
+t=60s rss=313796KB threads=12
+t=90s rss=313796KB threads=12
+t=120s rss=192612KB threads=12
+t=150s rss=192612KB threads=12
+t=180s rss=192612KB threads=12
+t=210s rss=187048KB threads=12
+t=240s rss=187056KB threads=12
+t=270s rss=187052KB threads=12
+t=300s rss=187052KB threads=12
+t=330s rss=187056KB threads=12
+t=360s rss=187060KB threads=12
+t=390s rss=187068KB threads=12
+t=420s rss=187072KB threads=12
+t=450s rss=187076KB threads=12
+t=480s rss=187084KB threads=12
+t=510s rss=187088KB threads=12
+t=540s rss=187092KB threads=12
+t=570s rss=187100KB threads=12
+t=600s rss=187104KB threads=12
+t=630s rss=187108KB threads=12
+t=660s rss=187116KB threads=12
+t=690s rss=187120KB threads=12
+t=720s rss=187124KB threads=12
+t=750s rss=187132KB threads=12
+t=780s rss=187136KB threads=12
+t=810s rss=187140KB threads=12
+t=840s rss=187148KB threads=12
+t=870s rss=187152KB threads=12
+t=900s rss=187156KB threads=12
+t=930s rss=187164KB threads=12
+t=960s rss=187168KB threads=12
+t=990s rss=187172KB threads=12
+t=1020s rss=187180KB threads=12
+t=1050s rss=187184KB threads=12
+t=1080s rss=187188KB threads=12
+t=1110s rss=187196KB threads=12
+t=1140s rss=187200KB threads=12
+t=1170s rss=187204KB threads=12
+t=1200s rss=187212KB threads=12
+t=1230s rss=187216KB threads=12
+t=1260s rss=187220KB threads=12
+t=1290s rss=187228KB threads=12
+t=1320s rss=187232KB threads=12
+t=1350s rss=187240KB threads=12
+t=1380s rss=187244KB threads=12
+t=1410s rss=187248KB threads=12
+t=1440s rss=187256KB threads=12
+t=1470s rss=187260KB threads=12
+t=1500s rss=187264KB threads=12
+t=1530s rss=187272KB threads=12
+t=1560s rss=187276KB threads=12
+t=1590s rss=187280KB threads=12
+t=1620s rss=187284KB threads=12
+t=1650s rss=187288KB threads=12
+t=1680s rss=187292KB threads=12
+t=1710s rss=187300KB threads=12
+t=1740s rss=187304KB threads=12
+t=1770s rss=187308KB threads=12
+t=1800s rss=187316KB threads=12
+soak: first=313792KB last=187316KB min=187048KB max=313796KB growth=-126476KB over 30min
+--- final screen
+Welcome to Claude Code v2.1.314
+..........................................................
+     *                                       █████▓▓░
+                                 *         ███▓░     ░░
+            ░░░░░░                        ███▓░
+    ░░░   ░░░░░░░░░░                      ███▓░
+   ░░░░░░░░░░░░░░░░░░░    *                ██▓░░      ▓
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................

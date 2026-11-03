@@ -1,0 +1,20 @@
+# evidence: node2422-builder-provision-poll
+# instance: i-066dc28d2cbad4d38   region: us-west-2
+# ssm command: a3492377-a730-4d11-bbfa-e1d1d73eac9a (agent status: Success)
+# start: 20261102T181628Z   end: 20261102T181631Z   rc: 0   log bytes: 1013
+# script sha256: 6fe6062c0d35c3529c778cbaa75c2aa8e68ed44f19337205e69ab2bdb834759f
+# ---- script ----
+# | tail -c 1500 /boot/home/prov.log | tr -cd "\11\12\15\40-\176" | tail -12
+# ---- raw output ----
+overlay-apply: updated /boot/home/haikuports/haiku-apps/windowtailor/windowtailor-0.3.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/wput/wput-0.6.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/x16-emulator/x16_emulator-46.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/x264/x264-20220222.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/x265/x265-3.5.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/xcftools/xcftools-1.0.7.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.7-0.7.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.8-0.8.0.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/zopfli/zopfli-1.0.3.recipe
+overlay-apply: SKIP zstd-1.5.6.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: SKIP zstd-1.5.7.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: 158 updated, 19 placed, 6 patchset(s), 4 stage-1 skipped, 0 unplaced

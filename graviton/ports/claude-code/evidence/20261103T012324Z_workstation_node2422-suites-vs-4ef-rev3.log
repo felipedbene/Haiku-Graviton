@@ -1,0 +1,266 @@
+# evidence: node2422-suites-vs-4ef-rev3
+# host: workstation (macOS)
+# start: 20261103T012324Z   end: 20261103T012324Z   rc: 0
+# script sha256: 53d302209471d57b8abaef76118b01ccb8b388b22670cbb7bdd0798d4d726857
+# ---- script ----
+# | S=/Users/benfelip/.claude/jobs/e2147228/tmp/node2422; E=/Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence
+# | cat $S/bin/suitediff.py
+# | echo "== tests added in 24.22.2 (from git diff --name-status of the two tarballs): $(wc -l < $S/new-tests.txt); changed: $(wc -l < $S/modified-tests.txt)"
+# | F=$E/20261103T004249Z_i-08822cbd7be76701c_node2422-final-full-suites.log
+# | echo "################ A = 4ef344f5fa rev-3 run in RESULTS.md (172820Z), B = final nodejs24 24.22.2-1 (openssl3 3.5.9-3)"
+# | python3 -I $S/bin/suitediff.py $E/20261102T172820Z_i-0b36f8b4076970921_4ef-rev3-nodejs24-full-suites.log $F $S/new-tests.txt $S/modified-tests.txt
+# | echo "################ A = same-image control, nodejs24 24.21.0-3 on i-026c80afb9d541163, B = final"
+# | python3 -I $S/bin/suitediff.py $E/20261102T184448Z_i-026c80afb9d541163_node2422-ctl21-full-suites.log $F $S/new-tests.txt $S/modified-tests.txt
+# | echo "################ A = baseline build against openssl3 3.5.9-2, B = final against 3.5.9-3"
+# | python3 -I $S/bin/suitediff.py $E/20261102T224009Z_i-0ca2654bea9e3130b_node2422-early-ossl2-full-suites.log $F $S/new-tests.txt $S/modified-tests.txt
+# | echo "################ list of tests new in 24.22.2"; cat $S/new-tests.txt
+# ---- raw output (bash -x trace interleaved) ----
++ S=/Users/benfelip/.claude/jobs/e2147228/tmp/node2422
++ E=/Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence
++ cat /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/bin/suitediff.py
+#!/usr/bin/env python3
+# suitediff.py <baseline-log> <new-log> <new-tests.txt> <modified-tests.txt>
+# Per-test diff of two node suite evidence logs (the "-- every <suite> result" FAIL/TIMEOUT lists).
+import re, sys
+def fails(path):
+    d = {}
+    for line in open(path, errors="replace"):
+        m = re.match(r"^((parallel|sequential)/\S+) (FAIL|TIMEOUT)$", line.strip())
+        if m: d[m.group(1)] = m.group(3)
+    return d
+def totals(path):
+    return [l.rstrip() for l in open(path, errors="replace") if l.startswith("== parallel") or l.startswith("== sequential")]
+a, b = fails(sys.argv[1]), fails(sys.argv[2])
+new = set(open(sys.argv[3]).read().split()); mod = set(open(sys.argv[4]).read().split())
+tag = lambda t: (" [new in 24.22.2]" if t in new else (" [test changed in 24.22.2]" if t in mod else ""))
+print("A:", *totals(sys.argv[1]), sep="\n  "); print("B:", *totals(sys.argv[2]), sep="\n  ")
+print("A not ok: %d  B not ok: %d" % (len(a), len(b)))
+print("-- fail -> pass:"); [print(t + tag(t)) for t in sorted(set(a) - set(b))]
+print("-- pass -> fail (tests present in both trees):"); [print(t, b[t] + tag(t)) for t in sorted(set(b) - set(a)) if t not in new]
+print("-- failing, new in 24.22.2 (no 24.21.0 result):"); [print(t, b[t]) for t in sorted(set(b) - set(a)) if t in new]
+print("-- failing in both:"); [print(t, a[t], b[t] + tag(t)) for t in sorted(set(a) & set(b))]
+++ wc -l
+++ wc -l
++ echo '== tests added in 24.22.2 (from git diff --name-status of the two tarballs):       99; changed:      334'
+== tests added in 24.22.2 (from git diff --name-status of the two tarballs):       99; changed:      334
++ F=/Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence/20261103T004249Z_i-08822cbd7be76701c_node2422-final-full-suites.log
++ echo '################ A = 4ef344f5fa rev-3 run in RESULTS.md (172820Z), B = final nodejs24 24.22.2-1 (openssl3 3.5.9-3)'
+################ A = 4ef344f5fa rev-3 run in RESULTS.md (172820Z), B = final nodejs24 24.22.2-1 (openssl3 3.5.9-3)
++ python3 -I /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/bin/suitediff.py /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence/20261102T172820Z_i-0b36f8b4076970921_4ef-rev3-nodejs24-full-suites.log /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence/20261103T004249Z_i-08822cbd7be76701c_node2422-final-full-suites.log /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/new-tests.txt /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/modified-tests.txt
+A:
+  == parallel (trunk 4ef344f5fa, nodejs24-3 + libuv-5): rc=1, 275s, plan 1..4507, 4487 ok (323 skip), 20 not ok (0 timeout)
+  == sequential (trunk 4ef344f5fa, nodejs24-3 + libuv-5): rc=1, 140s, plan 1..120, 118 ok (0 skip), 2 not ok (0 timeout)
+B:
+  == parallel (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-3, run with 3.5.9-3, brotli 1.2.1-2, libuv-5): rc=1, 498s, plan 1..4605, 4582 ok (333 skip), 23 not ok (1 timeout)
+  == sequential (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-3, run with 3.5.9-3, brotli 1.2.1-2, libuv-5): rc=1, 119s, plan 1..121, 119 ok (0 skip), 2 not ok (0 timeout)
+A not ok: 22  B not ok: 25
+-- fail -> pass:
+parallel/test-child-process-spawnsync-args
+-- pass -> fail (tests present in both trees):
+parallel/test-http2-sensitive-headers FAIL
+parallel/test-net-connect-abort-controller TIMEOUT
+-- failing, new in 24.22.2 (no 24.21.0 result):
+parallel/test-fs-rmSync-special-char-additional-error FAIL
+parallel/test-perf-hooks-sliding-window-histogram FAIL
+-- failing in both:
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL
++ echo '################ A = same-image control, nodejs24 24.21.0-3 on i-026c80afb9d541163, B = final'
+################ A = same-image control, nodejs24 24.21.0-3 on i-026c80afb9d541163, B = final
++ python3 -I /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/bin/suitediff.py /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence/20261102T184448Z_i-026c80afb9d541163_node2422-ctl21-full-suites.log /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence/20261103T004249Z_i-08822cbd7be76701c_node2422-final-full-suites.log /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/new-tests.txt /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/modified-tests.txt
+A:
+  == parallel (24.21.0 tree, nodejs24 24.21.0-3 + libuv-5, same box control): rc=1, 505s, plan 1..4507, 4487 ok (323 skip), 20 not ok (1 timeout)
+  == sequential (24.21.0 tree, nodejs24 24.21.0-3 + libuv-5, same box control): rc=1, 138s, plan 1..120, 118 ok (0 skip), 2 not ok (0 timeout)
+B:
+  == parallel (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-3, run with 3.5.9-3, brotli 1.2.1-2, libuv-5): rc=1, 498s, plan 1..4605, 4582 ok (333 skip), 23 not ok (1 timeout)
+  == sequential (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-3, run with 3.5.9-3, brotli 1.2.1-2, libuv-5): rc=1, 119s, plan 1..121, 119 ok (0 skip), 2 not ok (0 timeout)
+A not ok: 22  B not ok: 25
+-- fail -> pass:
+-- pass -> fail (tests present in both trees):
+parallel/test-http2-sensitive-headers FAIL
+-- failing, new in 24.22.2 (no 24.21.0 result):
+parallel/test-fs-rmSync-special-char-additional-error FAIL
+parallel/test-perf-hooks-sliding-window-histogram FAIL
+-- failing in both:
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-net-connect-abort-controller TIMEOUT TIMEOUT
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL
++ echo '################ A = baseline build against openssl3 3.5.9-2, B = final against 3.5.9-3'
+################ A = baseline build against openssl3 3.5.9-2, B = final against 3.5.9-3
++ python3 -I /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/bin/suitediff.py /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence/20261102T224009Z_i-0ca2654bea9e3130b_node2422-early-ossl2-full-suites.log /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/evidence/20261103T004249Z_i-08822cbd7be76701c_node2422-final-full-suites.log /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/new-tests.txt /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/modified-tests.txt
+A:
+  == parallel (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-2 (baseline), brotli 1.2.1-2, libuv-5): rc=1, 271s, plan 1..4605, 4584 ok (332 skip), 21 not ok (0 timeout)
+  == sequential (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-2 (baseline), brotli 1.2.1-2, libuv-5): rc=1, 121s, plan 1..121, 119 ok (0 skip), 2 not ok (0 timeout)
+B:
+  == parallel (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-3, run with 3.5.9-3, brotli 1.2.1-2, libuv-5): rc=1, 498s, plan 1..4605, 4582 ok (333 skip), 23 not ok (1 timeout)
+  == sequential (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-3, run with 3.5.9-3, brotli 1.2.1-2, libuv-5): rc=1, 119s, plan 1..121, 119 ok (0 skip), 2 not ok (0 timeout)
+A not ok: 23  B not ok: 25
+-- fail -> pass:
+-- pass -> fail (tests present in both trees):
+parallel/test-net-connect-abort-controller TIMEOUT
+-- failing, new in 24.22.2 (no 24.21.0 result):
+parallel/test-perf-hooks-sliding-window-histogram FAIL
+-- failing in both:
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-rmSync-special-char-additional-error FAIL FAIL [new in 24.22.2]
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-http2-sensitive-headers FAIL FAIL
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL
++ echo '################ list of tests new in 24.22.2'
+################ list of tests new in 24.22.2
++ cat /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/new-tests.txt
+parallel/test-abortsignal-any-source-gc
+parallel/test-benchmark-compare
+parallel/test-child-process-kill-spawn-error
+parallel/test-child-process-send-boundsocket
+parallel/test-child-process-spawn-timeout-clear-on-error
+parallel/test-common-wpt-script-modifier
+parallel/test-crypto-cipherbase-options-fast-path
+parallel/test-crypto-cipheriv-cbc-cts
+parallel/test-crypto-cipheriv-xts
+parallel/test-crypto-fips-indicator-strict
+parallel/test-crypto-jwk-raw-validation
+parallel/test-crypto-key-encoding-provider-cipher
+parallel/test-crypto-key-objects-ec-jwk-private
+parallel/test-crypto-keygen-ec-group-names
+parallel/test-crypto-mac
+parallel/test-crypto-mac-errors
+parallel/test-crypto-mac-unsupported
+parallel/test-crypto-mac-vectors
+parallel/test-crypto-pkcs12
+parallel/test-crypto-prepare-asymmetric-cryptokey
+parallel/test-crypto-prepare-asymmetric-key
+parallel/test-crypto-provider-cache
+parallel/test-crypto-provider-cache-snapshot
+parallel/test-crypto-provider-hash-options
+parallel/test-crypto-provider-hashes
+parallel/test-crypto-random-cache-snapshot
+parallel/test-crypto-raw-key-type-validation
+parallel/test-crypto-rsa-multiprime-jwk
+parallel/test-crypto-rsa-oaep-mgf1
+parallel/test-crypto-rsa-pkcs1-public-key
+parallel/test-crypto-rsa-pss-parameters
+parallel/test-crypto-x509-brand-check
+parallel/test-crypto-x509-clone-transfer
+parallel/test-crypto-x509-hidden-slots
+parallel/test-crypto-x509-name-non-string
+parallel/test-diagnostics-channel-crypto-fips-indicator
+parallel/test-dns-resolve-null-bytes
+parallel/test-fs-cp-async-preserve-timestamps-dir
+parallel/test-fs-cp-sync-dir-exists-error-on-exist
+parallel/test-fs-cp-sync-directory-mode
+parallel/test-fs-cp-sync-preserve-timestamps-dir
+parallel/test-fs-glob-no-follow-symlink-globstar
+parallel/test-fs-rmSync-special-char-additional-error
+parallel/test-fs-watch-recursive-aix-preserve-watch-error
+parallel/test-fs-watch-recursive-linux-directory-watchers
+parallel/test-fs-watch-recursive-retry-directory-disappears-before-read
+parallel/test-fs-watch-recursive-retry-directory-disappears-before-watch
+parallel/test-fs-watch-recursive-root-disappears-before-read
+parallel/test-fs-watch-recursive-root-disappears-before-watch
+parallel/test-fs-watch-recursive-root-disappears-before-watch-no-throw
+parallel/test-fs-watch-recursive-watch-before-read
+parallel/test-http-agent-free-socket-pending-read
+parallel/test-http-client-abort-completed-keepalive
+parallel/test-http-server-connection-list-when-close-deferred
+parallel/test-http2-bidirectional-write-deadlock
+parallel/test-http2-reset-buffered-read
+parallel/test-http2-reset-pending-write
+parallel/test-http2-session-destroy-stream-handler
+parallel/test-http2-stream-backpressure-unread-peer
+parallel/test-internal-webidl-dictionary
+parallel/test-mark-promise-handled
+parallel/test-net-boundsocket-transfer-worker
+parallel/test-perf-hooks-histogram-qrde
+parallel/test-perf-hooks-histogram-qrde-oracle
+parallel/test-perf-hooks-histogram-qrde-worker
+parallel/test-perf-hooks-resourcetiming-attributes
+parallel/test-perf-hooks-resourcetiming-fetch
+parallel/test-perf-hooks-sliding-window-histogram
+parallel/test-perf-hooks-sliding-window-histogram-fast-calls
+parallel/test-permission-fs-filehandle-sync
+parallel/test-quic-h3-uni-stream-limit-start-failure
+parallel/test-quic-h3-uni-stream-teardown
+parallel/test-sqlite-diagnostic-channel
+parallel/test-sqlite-udf-close
+parallel/test-stream-readable-unobserved-eof-readable
+parallel/test-tls-alpn-callback-sync-end
+parallel/test-tls-alpn-callback-sync-end-newsession
+parallel/test-tls-alpn-callback-sync-write
+parallel/test-tls-certcb-sync-write
+parallel/test-tls-client-hello-fragmented
+parallel/test-tls-clienthello-sync-write
+parallel/test-tls-connect-non-canonical-ip
+parallel/test-tls-connect-single-use-context
+parallel/test-tls-keylog-sync-write
+parallel/test-tls-peer-certificate-repeated-reads
+parallel/test-tls-spki-blocklist
+parallel/test-util-debounce
+parallel/test-util-throttle
+parallel/test-util-throttle-timing
+parallel/test-web-locks-no-livelock
+parallel/test-webcrypto-fips-exceptions
+parallel/test-webcrypto-kem-hybrids
+parallel/test-webcrypto-webidl-brand
+parallel/test-webstreams-writer-closed-abort-pending
+parallel/test-whatwg-transformstream-parked-write-async-context
+parallel/test-whatwg-transformstream-parked-write-async-context-legacy
+parallel/test-whatwg-transformstream-parked-write-error
+parallel/test-zlib-zstd-reset
+sequential/test-perf-hooks-histogram-heapdump

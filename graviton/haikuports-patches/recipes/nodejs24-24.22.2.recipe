@@ -1,0 +1,119 @@
+SUMMARY="A JavaScript runtime built on Chrome's V8 Engine"
+DESCRIPTION="Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine. \
+As an asynchronous event driven JavaScript runtime, Node is designed to build scalable \
+network applications. In the following \"hello world\" example, many connections can be \
+handled concurrently. Upon each connection the callback is fired, but if there is no work \
+to be done, Node will sleep."
+HOMEPAGE="https://nodejs.org/"
+COPYRIGHT="2006-2019 The Node.js Foundation"
+LICENSE="BSD (2-clause)"
+REVISION="1"
+SOURCE_URI="https://nodejs.org/dist/v$portVersion/node-v$portVersion.tar.gz"
+CHECKSUM_SHA256="b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959"
+SOURCE_DIR="node-v$portVersion"
+# 24.22.x carries the upstream http2 fixes (nodejs/node PRs 66016, 63249) for the
+# stream that never closes when its last DATA and the RST arrive in one read (issue 954).
+# brotli >= 1.2.1: 24.22.0 exposes BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH, which first ships
+# in brotli 1.2.1 with the fix for CVE-2026-111497; 1.2.0 fails to compile src/node_zlib.cc.
+# nodejs-$portVersion.patchset is HaikuPorts' nodejs-24.21.0.patchset rebased onto
+# 24.22.2: the same hunks, only line offsets moved (claude-code PATCHES.md).
+# nodejs-$portVersion-debeos.patchset (DeBeOS, on top of HaikuPorts'): V8's CPU-profiler
+# sampler reads Haiku arm64 registers; ResetSignalHandlers keeps SIGPIPE ignored and skips
+# SIGKILLTHR; SIGKILLTHR has a name; os.cpus() returns the CPUs again (issue 917).
+# Root-caused in claude-code RESULTS.md (Node suites) and graviton/evidence/917/.
+PATCHES="nodejs-$portVersion.patchset
+	nodejs-$portVersion-debeos.patchset"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="?x86"
+
+PROVIDES="
+	nodejs24$secondaryArchSuffix = $portVersion
+	cmd:node = $portVersion compat >= 24
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libbrotlidec$secondaryArchSuffix >= 1.2.1
+	lib:libbrotlienc$secondaryArchSuffix >= 1.2.1
+	lib:libcares$secondaryArchSuffix
+	lib:libcrypto$secondaryArchSuffix
+	lib:libexecinfo$secondaryArchSuffix
+	lib:libicudata$secondaryArchSuffix
+	lib:libicui18n$secondaryArchSuffix
+	lib:libicuuc$secondaryArchSuffix
+	lib:libnghttp2$secondaryArchSuffix
+	lib:libssl$secondaryArchSuffix
+	lib:libuv$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	nodejs24${secondaryArchSuffix}_devel
+	"
+REQUIRES_devel="
+	nodejs24$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libbrotlidec$secondaryArchSuffix >= 1.2.1
+	devel:libbrotlienc$secondaryArchSuffix >= 1.2.1
+	devel:libcares$secondaryArchSuffix
+	devel:libexecinfo$secondaryArchSuffix
+	devel:libicudata$secondaryArchSuffix >= 78
+	devel:libicui18n$secondaryArchSuffix >= 78
+	devel:libicuuc$secondaryArchSuffix >= 78
+	devel:libnghttp2$secondaryArchSuffix
+	devel:libssl$secondaryArchSuffix
+	devel:libuv$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:find
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:make
+	cmd:ninja
+	cmd:pkg_config$secondaryArchSuffix
+	cmd:python3.14
+	cmd:which
+	"
+
+BUILD()
+{
+	./configure --with-intl=system-icu --dest-os=haiku \
+		--ninja \
+		--shared-brotli \
+		--shared-cares \
+		--shared-libuv \
+		--shared-nghttp2 \
+		--shared-openssl \
+		--shared-zlib \
+		--without-npm \
+		--without-corepack \
+		--prefix=$prefix
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	mkdir -p $(dirname $docDir $includeDir $manDir)
+	mv $prefix/include $includeDir
+	mv $prefix/share/man $manDir
+	mv $prefix/share/doc $docDir
+
+	packageEntries devel \
+		$developDir
+
+	strip $prefix/bin/node
+	rm -rf $prefix/share
+}
+
+TEST()
+{
+	# cctest 1 failure
+	# jstest 446 failure, 5178 success
+	make test-only
+}

@@ -1,0 +1,54 @@
+# evidence: node2422-early-ossl2-full-suites
+# instance: i-0ca2654bea9e3130b   region: us-west-2
+# ssm command: 86ba4027-d082-4212-b95b-c2e7bd1f2c89 (agent status: Success)
+# start: 20261102T224009Z   end: 20261102T224644Z   rc: 0   log bytes: 1596
+# script sha256: 82af70a92775da24e0a6fbf5727a87a6c7827c425e47790fb7ccbd7005cf0593
+# ---- script ----
+# | set -u
+# | cd /boot/home/node-src/node-v24.22.2 || exit 1
+# | echo "node $(node --version); $(ls /boot/system/packages | grep -E '^(nodejs24|libuv)-' | tr '\n' ' '); $(uname -v)"
+# | echo "cpus: $(sysinfo -cpu 2>/dev/null | grep -c 'CPU #')"
+# | for s in parallel sequential; do
+# | 	start=$(date +%s)
+# | 	: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap "$s" > /boot/home/node-$s-early-ossl2.tap 2>&1; rc=$?
+# | 	f=/boot/home/node-$s-early-ossl2.tap
+# | 	echo "== $s (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-2 (baseline), brotli 1.2.1-2, libuv-5): rc=$rc, $(( $(date +%s) - start ))s, plan $(grep -m1 '^1\.\.' $f), $(grep -c '^ok ' $f) ok ($(grep -c '^ok .*# skip' $f) skip), $(grep -c '^not ok ' $f) not ok ($(grep -c '^    timeout$' $f) timeout)"
+# | done
+# | for s in parallel sequential; do
+# | 	f=/boot/home/node-$s-early-ossl2.tap
+# | 	echo "-- every $s result: name, state (FAIL or TIMEOUT; ok and skip omitted)"
+# | 	awk '/^ok /{ if (n) print n, st; n=$3; st=($0 ~ /# skip/) ? "skip" : "ok"; next }
+# | 	     /^not ok /{ if (n) print n, st; n=$4; st="FAIL"; next }
+# | 	     /^    timeout$/{ if (st=="FAIL") st="TIMEOUT" }
+# | 	     END { if (n) print n, st }' $f | grep -E ' (FAIL|TIMEOUT)$'
+# | done
+# ---- raw output ----
+node v24.22.2; libuv-1.52.1-5-arm64.hpkg nodejs24-24.22.2-1-arm64.hpkg ; hrev59996 Nov  2 2026 14:49:36
+cpus: 0
+== parallel (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-2 (baseline), brotli 1.2.1-2, libuv-5): rc=1, 271s, plan 1..4605, 4584 ok (332 skip), 21 not ok (0 timeout)
+== sequential (24.22.2 tree, nodejs24 24.22.2-1 built against openssl3 3.5.9-2 (baseline), brotli 1.2.1-2, libuv-5): rc=1, 121s, plan 1..121, 119 ok (0 skip), 2 not ok (0 timeout)
+-- every parallel result: name, state (FAIL or TIMEOUT; ok and skip omitted)
+parallel/test-child-process-default-options FAIL
+parallel/test-child-process-env FAIL
+parallel/test-child-process-exec-env FAIL
+parallel/test-cwd-enoent-improved-message FAIL
+parallel/test-fs-link FAIL
+parallel/test-fs-promises FAIL
+parallel/test-fs-rmSync-special-char-additional-error FAIL
+parallel/test-fs-stat-date FAIL
+parallel/test-http-writable-true-after-close FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL
+parallel/test-http2-misbehaving-flow-control FAIL
+parallel/test-http2-sensitive-headers FAIL
+parallel/test-permission-fs-symlink-target-write FAIL
+parallel/test-process-dlopen-error-message-crash FAIL
+parallel/test-process-euid-egid FAIL
+parallel/test-repl-underscore FAIL
+parallel/test-setproctitle FAIL
+parallel/test-util-exception-with-host-port FAIL
+parallel/test-trace-events-fs-async FAIL
+parallel/test-trace-events-fs-sync FAIL
+parallel/test-worker-memory FAIL
+-- every sequential result: name, state (FAIL or TIMEOUT; ok and skip omitted)
+sequential/test-fs-watch FAIL
+sequential/test-module-loading FAIL

@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-staged-set-check
+# host: workstation (macOS)
+# start: 20261103T003704Z   end: 20261103T003708Z   rc: 0
+# script sha256: 6922c2a89d7abae8cbd5c88d7c9911ec4fb8a8e63dce72f4bdbbcd829f3badc5
+# ---- script ----
+# | D=/Users/benfelip/.claude/jobs/e2147228/tmp/node2422/stagecheck; rm -rf $D; mkdir -p $D; cd $D
+# | aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/node2422/
+# | aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/node2422/ .
+# | cat SHA256SUMS
+# | shasum -a 256 -c SHA256SUMS
+# ---- raw output (bash -x trace interleaved) ----
++ D=/Users/benfelip/.claude/jobs/e2147228/tmp/node2422/stagecheck
++ rm -rf /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/stagecheck
++ mkdir -p /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/stagecheck
++ cd /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/stagecheck
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/node2422/
+2026-11-02 18:36:36        593 SHA256SUMS
+2026-11-02 18:36:35     405584 brotli-1.2.1-2-arm64.hpkg
+2026-11-02 18:36:36      21218 brotli_devel-1.2.1-2-arm64.hpkg
+2026-11-02 18:36:36     398534 brotli_python3.14-1.2.1-2-arm64.hpkg
+2026-11-02 18:36:36     398199 brotli_python310-1.2.1-2-arm64.hpkg
+2026-11-02 18:36:35   18442577 nodejs24-24.22.2-1-arm64.hpkg
+2026-11-02 18:36:35     264611 nodejs24_devel-24.22.2-1-arm64.hpkg
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/node2422/ .
++ cat SHA256SUMS
+4d256116113f5f1d711764079c5d90df44d2b94f7f1c8f43455edce7c049779a  nodejs24-24.22.2-1-arm64.hpkg
+fd048f34993078f054bc3920d307a5220d8e54b6f24d3e31575e9f4dac5953f3  nodejs24_devel-24.22.2-1-arm64.hpkg
+ece9441f9d9b2121a5fa2865a8610bb126eeb5bcadae473e2a4dc2ce118f7163  brotli-1.2.1-2-arm64.hpkg
+35d22c7cb14614ee4f1a3e3994db2118a17a67890c87efbd11928d0a1cdc8274  brotli_devel-1.2.1-2-arm64.hpkg
+8c7392a90f09156fdee30faa4e9e8d02aef0c0668b76b12d84b13399115c89f7  brotli_python310-1.2.1-2-arm64.hpkg
+a0a8d085fdb07e1f4e444274960564ed9e355bc331fa55125726f2806c638e43  brotli_python3.14-1.2.1-2-arm64.hpkg
++ shasum -a 256 -c SHA256SUMS
+nodejs24-24.22.2-1-arm64.hpkg: OK
+nodejs24_devel-24.22.2-1-arm64.hpkg: OK
+brotli-1.2.1-2-arm64.hpkg: OK
+brotli_devel-1.2.1-2-arm64.hpkg: OK
+brotli_python310-1.2.1-2-arm64.hpkg: OK
+brotli_python3.14-1.2.1-2-arm64.hpkg: OK

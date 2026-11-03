@@ -1,0 +1,33 @@
+# evidence: node2422-linux-sliding-window-and-abort-controller
+# instance: i-07e75f6fd31c11c0e   region: us-west-2
+# ssm command: debdecf0-bf26-4e99-9527-6732fbc2c9ae (agent status: Success)
+# start: 20261103T010340Z   end: 20261103T010438Z   rc: 0   log bytes: 349
+# script sha256: 24deba7631d449252d918754164592c67bbc8c405dcd4ece762665aee9132c85
+# ---- script ----
+# | set -u
+# | uname -a; nproc
+# | mkdir -p /opt/n && cd /opt/n || exit 1
+# | curl -sSLf https://nodejs.org/dist/v24.22.2/SHASUMS256.txt -o SHASUMS.txt || exit 1
+# | curl -sSLf https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-arm64.tar.xz -o n.tar.xz || exit 1
+# | grep " node-v24.22.2-linux-arm64.tar.xz\$" SHASUMS.txt | sed 's/node-v24.22.2-linux-arm64.tar.xz/n.tar.xz/' | sha256sum -c - || exit 1
+# | tar -xJf n.tar.xz
+# | curl -sSLf https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz -o src.tgz || exit 1
+# | echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  src.tgz' | sha256sum -c - || exit 1
+# | tar xzf src.tgz node-v24.22.2/test node-v24.22.2/tools || exit 1
+# | N=/opt/n/node-v24.22.2-linux-arm64/bin/node; $N --version
+# | cd node-v24.22.2
+# | echo "== the test alone x200"; ok=0; for i in $(seq 200); do $N test/parallel/test-perf-hooks-sliding-window-histogram.js > /tmp/o 2>&1 && ok=$((ok+1)) || cp /tmp/o /tmp/fail; done; echo "$ok/200 pass"; [ -f /tmp/fail ] && head -12 /tmp/fail
+# | echo "== under 16-way load (test.py --repeat 96)"; python3 tools/test.py --shell=$N -j 16 -p tap --repeat 96 parallel/test-perf-hooks-sliding-window-histogram > /tmp/r.tap 2>&1; echo "ok=$(grep -c '^ok ' /tmp/r.tap) notok=$(grep -c '^not ok ' /tmp/r.tap)"
+# | echo "== net-connect-abort-controller under 16-way load (--repeat 48)"; python3 tools/test.py --shell=$N -j 16 -p tap --repeat 48 parallel/test-net-connect-abort-controller > /tmp/r2.tap 2>&1; echo "ok=$(grep -c '^ok ' /tmp/r2.tap) notok=$(grep -c '^not ok ' /tmp/r2.tap) timeout=$(grep -c '^    timeout$' /tmp/r2.tap)"
+# ---- raw output ----
+Linux ip-10-128-5-127 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+16
+n.tar.xz: OK
+src.tgz: OK
+v24.22.2
+== the test alone x200
+200/200 pass
+== under 16-way load (test.py --repeat 96)
+ok=96 notok=0
+== net-connect-abort-controller under 16-way load (--repeat 48)
+ok=48 notok=0 timeout=0

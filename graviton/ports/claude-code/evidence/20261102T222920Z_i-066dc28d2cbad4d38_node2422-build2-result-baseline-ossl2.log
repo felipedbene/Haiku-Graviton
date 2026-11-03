@@ -1,0 +1,69 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-build2-result-baseline-ossl2
+# instance: i-066dc28d2cbad4d38   region: us-west-2
+# ssm command: 5408a376-3822-427c-80de-ed6207ce5f00 (agent status: Success)
+# start: 20261102T222920Z   end: 20261102T222930Z   rc: 0   log bytes: 2652
+# script sha256: e3e111200df22b7295c8c7c5228d4dee697a8b8223f72bb7e85124e6edc4ceb6
+# ---- script ----
+# | L=/boot/home/n2422.log
+# | grep -a -n "^exit \|Validating checksum\|Applying patchset\|grabbing\|brotli\|openssl" $L | grep -v "removing\|updating dependency\|-I/packages" | cut -c1-250 | head -30
+# | cd /boot/home/haikuports/packages || exit 1
+# | ls -l
+# | mkdir -p /boot/home/baseline-ossl2 && cp nodejs24-24.22.2-1-arm64.hpkg nodejs24_devel-24.22.2-1-arm64.hpkg /boot/home/baseline-ossl2/ || exit 1
+# | cd /boot/home/baseline-ossl2 && sha256sum *.hpkg
+# | package list -i nodejs24-24.22.2-1-arm64.hpkg | grep -E "version|requires|source URL"
+# | echo "== installed openssl/brotli during the build"; pkgman search -i -D openssl3 2>&1 | grep openssl; pkgman search -i -D brotli 2>&1 | grep brotli
+# | mkdir -p /tmp/xn && cd /tmp/xn && rm -rf * && package extract /boot/home/baseline-ossl2/nodejs24-24.22.2-1-arm64.hpkg && ./bin/node --version && ./bin/node -p 'JSON.stringify({uv:process.versions.uv,openssl:process.versions.openssl,brotli:process.versions.brotli,nghttp2:process.versions.nghttp2,undici:process.versions.undici})'
+# | /boot/system/bin/curl -sSf -T /boot/home/baseline-ossl2/nodejs24-24.22.2-1-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/baseline-ossl2/nodejs24-24.22.2-1-arm64.hpkg?<PRESIGNED>' && echo up1
+# | /boot/system/bin/curl -sSf -T /boot/home/baseline-ossl2/nodejs24_devel-24.22.2-1-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/node2422-build/baseline-ossl2/nodejs24_devel-24.22.2-1-arm64.hpkg?<PRESIGNED>' && echo up2
+# ---- raw output ----
+2:Validating checksum of node-v24.22.2.tar.gz
+5:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.22.2.patchset" ...
+12:Applying patchset "/boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.22.2-debeos.patchset" ...
+15:	/boot/home/haikuports/packages/brotli-1.2.1-2-arm64.hpkg
+16:	/boot/home/haikuports/packages/brotli_devel-1.2.1-2-arm64.hpkg
+52:	/boot/system/packages/openssl3-3.5.9-2-arm64.hpkg
+53:	/boot/system/packages/openssl3_devel-3.5.9-2-arm64.hpkg
+2306:[1835/2018] CXX obj/src/permission/node_base.openssl_store_permission.o
+2532:[2014/2018] ACTION node: reset_openssl_cnf_c7de64acc334c781225dd9ecab90c07be41fb9a270532162e1ee46a250592683
+2677:	lib:libbrotlidec >= 1.2.1
+2678:	lib:libbrotlienc >= 1.2.1
+2751:grabbing nodejs24-24.22.2-1-arm64.hpkg and moving it to /boot/home/haikuports/packages/nodejs24-24.22.2-1-arm64.hpkg
+2752:grabbing nodejs24_devel-24.22.2-1-arm64.hpkg and moving it to /boot/home/haikuports/packages/nodejs24_devel-24.22.2-1-arm64.hpkg
+2761:exit 0
+total 19482
+-rw-r--r-- 1 baron root   405584 Nov  2 20:24 brotli-1.2.1-2-arm64.hpkg
+-rw-r--r-- 1 baron root    21218 Nov  2 20:24 brotli_devel-1.2.1-2-arm64.hpkg
+-rw-r--r-- 1 baron root   398534 Nov  2 20:24 brotli_python3.14-1.2.1-2-arm64.hpkg
+-rw-r--r-- 1 baron root   398199 Nov  2 20:24 brotli_python310-1.2.1-2-arm64.hpkg
+-rw-r--r-- 1 baron root 18441592 Nov  2 22:28 nodejs24-24.22.2-1-arm64.hpkg
+-rw-r--r-- 1 baron root   264610 Nov  2 22:28 nodejs24_devel-24.22.2-1-arm64.hpkg
+756626a0beabd6a65259c94b3e5220dc36142465d436438ff6cf563bded93bc6  nodejs24-24.22.2-1-arm64.hpkg
+97c1d4853e1714002d62a30ef88bcd4996bba33e20a3f39704286dad40a074b2  nodejs24_devel-24.22.2-1-arm64.hpkg
+	version: 24.22.2-1
+	source URL: https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz
+	source URL: https://sources.debene.dev/nodejs/node-v24.22.2.tar.gz
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libbrotlidec>=1.2.1
+	requires: lib:libbrotlienc>=1.2.1
+	requires: lib:libcares>=2.19.7
+	requires: lib:libcrypto>=3
+	requires: lib:libexecinfo>=1.1
+	requires: lib:libicudata>=78.3
+	requires: lib:libicui18n>=78.3
+	requires: lib:libicuuc>=78.3
+	requires: lib:libnghttp2>=14.28.2
+	requires: lib:libssl>=3
+	requires: lib:libuv>=1.0.0
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32
+== installed openssl/brotli during the build
+<system>    openssl3        3.5.9-2  arm64
+<system>    openssl3_devel  3.5.9-2  arm64
+<system>    openssl3_man    3.5.9-2  any  
+<system>    brotli        1.2.1-2  arm64
+<system>    brotli_devel  1.2.1-2  arm64
+v24.22.2
+{"uv":"1.52.1","openssl":"3.5.9","brotli":"1.2.1","nghttp2":"1.63.0","undici":"7.30.1"}
+up1
+up2

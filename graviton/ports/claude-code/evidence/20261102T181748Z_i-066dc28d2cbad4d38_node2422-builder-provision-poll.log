@@ -1,0 +1,20 @@
+# evidence: node2422-builder-provision-poll
+# instance: i-066dc28d2cbad4d38   region: us-west-2
+# ssm command: 11ac13b2-7518-481f-bf50-7a48e125148d (agent status: Success)
+# start: 20261102T181748Z   end: 20261102T181751Z   rc: 0   log bytes: 590
+# script sha256: 6fe6062c0d35c3529c778cbaa75c2aa8e68ed44f19337205e69ab2bdb834759f
+# ---- script ----
+# | tail -c 1500 /boot/home/prov.log | tr -cd "\11\12\15\40-\176" | tail -12
+# ---- raw output ----
+               (launchers; source deployed to /boot/home by haiku-bake-builder)
+
+Compute a dependency-ordered build chain (no PATH/env setup needed):
+  /boot/home/config/non-packaged/bin/depclosure <port>...
+
+Build a port (build-requires are covered by --all-dependencies):
+  export PATH=/boot/home/config/non-packaged/bin:$PATH
+  cd /boot/home/haikuporter && python3.14 ./haikuporter --config=/boot/home/haikuports.conf -y --all-dependencies <port>
+
+Publish the resulting .hpkg to the DeBeOS repo from a Haiku host:
+  graviton/scripts/haiku-repo-add   (see its header for HG_* env)
+exit 0

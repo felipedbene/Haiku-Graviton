@@ -1,0 +1,62 @@
+# evidence: node2422-linux-two-tests
+# instance: i-0fa1104eea75865c6   region: us-west-2
+# ssm command: f9d740fe-820f-4343-b39b-6a595905496c (agent status: Success)
+# start: 20261102T224915Z   end: 20261102T224931Z   rc: 1   log bytes: 1774
+# script sha256: 53a11e74fcefa96b7281c8768e4f139db2dc958141747377162489344622590d
+# ---- script ----
+# | set -u
+# | uname -a; id
+# | mkdir -p /opt/n && cd /opt/n || exit 1
+# | for v in 24.21.0 24.22.2; do
+# |   curl -sSLf https://nodejs.org/dist/v$v/SHASUMS256.txt -o SHASUMS-$v.txt || exit 1
+# |   curl -sSLf https://nodejs.org/dist/v$v/node-v$v-linux-arm64.tar.xz -o node-v$v-linux-arm64.tar.xz || exit 1
+# |   grep " node-v$v-linux-arm64.tar.xz\$" SHASUMS-$v.txt | sha256sum -c - || exit 1
+# |   tar -xJf node-v$v-linux-arm64.tar.xz
+# | done
+# | curl -sSLf https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz -o node-v24.22.2.tar.gz || exit 1
+# | echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz' | sha256sum -c - || exit 1
+# | tar xzf node-v24.22.2.tar.gz node-v24.22.2/test || exit 1
+# | chown -R ubuntu node-v24.22.2
+# | for v in 24.21.0 24.22.2; do ./node-v$v-linux-arm64/bin/node -p "process.version+' nghttp2 '+process.versions.nghttp2+' openssl '+process.versions.openssl"; done
+# | cd node-v24.22.2
+# | for t in parallel/test-http2-sensitive-headers parallel/test-fs-rmSync-special-char-additional-error; do
+# |   for v in 24.21.0 24.22.2; do
+# |     N=/opt/n/node-v$v-linux-arm64/bin/node
+# |     for who in root ubuntu; do
+# |       ok=0; for i in 1 2 3 4 5; do if [ $who = root ]; then $N test/$t.js > /tmp/o 2>&1; else sudo -u ubuntu $N test/$t.js > /tmp/o 2>&1; fi; [ $? -eq 0 ] && ok=$((ok+1)); done
+# |       echo "$t node $v as $who: $ok/5 pass"; [ $ok -lt 5 ] && head -8 /tmp/o | sed 's/^/    /'
+# |     done
+# |   done
+# | done
+# ---- raw output ----
+Linux ip-10-128-12-238 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+uid=0(root) gid=0(root) groups=0(root)
+node-v24.21.0-linux-arm64.tar.xz: OK
+node-v24.22.2-linux-arm64.tar.xz: OK
+node-v24.22.2.tar.gz: OK
+v24.21.0 nghttp2 1.70.0 openssl 3.5.8
+v24.22.2 nghttp2 1.70.0 openssl 3.5.9
+parallel/test-http2-sensitive-headers node 24.21.0 as root: 5/5 pass
+parallel/test-http2-sensitive-headers node 24.21.0 as ubuntu: 5/5 pass
+parallel/test-http2-sensitive-headers node 24.22.2 as root: 5/5 pass
+parallel/test-http2-sensitive-headers node 24.22.2 as ubuntu: 5/5 pass
+parallel/test-fs-rmSync-special-char-additional-error node 24.21.0 as root: 0/5 pass
+    node:fs:2110
+      binding.chmod(path, mode);
+              ^
+    
+    Error: ENOENT: no such file or directory, chmod '/opt/n/node-v24.22.2/test/.tmp.0/速_dir'
+        at Object.chmodSync (node:fs:2110:11)
+        at Object.<anonymous> (/opt/n/node-v24.22.2/test/parallel/test-fs-rmSync-special-char-additional-error.js:64:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+parallel/test-fs-rmSync-special-char-additional-error node 24.21.0 as ubuntu: 5/5 pass
+parallel/test-fs-rmSync-special-char-additional-error node 24.22.2 as root: 0/5 pass
+    node:fs:2110
+      binding.chmod(path, mode);
+              ^
+    
+    Error: ENOENT: no such file or directory, chmod '/opt/n/node-v24.22.2/test/.tmp.0/速_dir'
+        at Object.chmodSync (node:fs:2110:11)
+        at Object.<anonymous> (/opt/n/node-v24.22.2/test/parallel/test-fs-rmSync-special-char-additional-error.js:64:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+parallel/test-fs-rmSync-special-char-additional-error node 24.22.2 as ubuntu: 5/5 pass

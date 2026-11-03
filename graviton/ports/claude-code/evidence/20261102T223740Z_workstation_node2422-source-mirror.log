@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: node2422-source-mirror
+# host: workstation (macOS)
+# start: 20261102T223740Z   end: 20261102T223751Z   rc: 0
+# script sha256: 73bb08c21d102e987078dfc3163ffdfb757504244bbe1e1fe2ab3fa8d3ba615b
+# ---- script ----
+# | cd /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/dl
+# | shasum -a 256 node-v24.22.2.tar.gz
+# | grep -c b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959 /Users/benfelip/Projects/hg-node2422/graviton/haikuports-patches/recipes/nodejs24-24.22.2.recipe
+# | aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/download-mirror/nodejs/
+# | aws s3 cp --only-show-errors node-v24.22.2.tar.gz s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/download-mirror/nodejs/node-v24.22.2.tar.gz
+# | aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/download-mirror/nodejs/
+# | curl -sSf -o /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/mirror-check.tgz https://sources.debene.dev/nodejs/node-v24.22.2.tar.gz
+# | shasum -a 256 /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/mirror-check.tgz
+# | curl -sSI https://sources.debene.dev/nodejs/node-v24.21.0.tar.gz | head -1
+# ---- raw output (bash -x trace interleaved) ----
++ cd /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/dl
++ shasum -a 256 node-v24.22.2.tar.gz
+b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz
++ grep -c b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959 /Users/benfelip/Projects/hg-node2422/graviton/haikuports-patches/recipes/nodejs24-24.22.2.recipe
+1
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/download-mirror/nodejs/
++ aws s3 cp --only-show-errors node-v24.22.2.tar.gz s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/download-mirror/nodejs/node-v24.22.2.tar.gz
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/download-mirror/nodejs/
+2026-11-02 16:37:43  117453394 node-v24.22.2.tar.gz
++ curl -sSf -o /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/mirror-check.tgz https://sources.debene.dev/nodejs/node-v24.22.2.tar.gz
++ shasum -a 256 /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/mirror-check.tgz
+b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/mirror-check.tgz
++ curl -sSI https://sources.debene.dev/nodejs/node-v24.21.0.tar.gz
++ head -1
+HTTP/2 403 

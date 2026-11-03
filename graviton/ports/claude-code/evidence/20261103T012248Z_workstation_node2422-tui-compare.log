@@ -1,0 +1,359 @@
+# evidence: node2422-tui-compare
+# host: workstation (macOS)
+# start: 20261103T012248Z   end: 20261103T012250Z   rc: 0
+# script sha256: 39a02b15183911b6e28fe244da0779ac32297b8dd506aa4f9f4852c009d7b5f1
+# ---- script ----
+# | cd /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/tui
+# | rm -rf tui-A tui-A37 tui-B x4ef && mkdir x4ef
+# | shasum -a 256 tui-A-linux.tgz tui-A-linux-tmux37c.tgz tui-B-haiku-node2422.tgz tui-B-haiku-4ef344f5fa.tgz
+# | tar xzf tui-A-linux.tgz && tar xzf tui-A-linux-tmux37c.tgz && tar xzf tui-B-haiku-node2422.tgz && tar xzf tui-B-haiku-4ef344f5fa.tgz -C x4ef
+# | C=/Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/tools/tui-compare.sh
+# | echo "######## A = real binary on Linux (tmux 3.4), B = nodejs24 24.22.2-1 on Haiku (tmux 3.7c)"
+# | bash $C tui-A tui-B | grep -vE '^PASS'; echo "rc=$?"
+# | echo "######## A = real binary on Linux (tmux 3.7c), B = nodejs24 24.22.2-1 on Haiku (tmux 3.7c)"
+# | bash $C tui-A37 tui-B | grep -vE '^PASS'; echo "rc=$?"
+# | echo "######## A = 4ef344f5fa capture (nodejs24 24.21.0-2), B = this capture: every snapshot"
+# | for n in x4ef/tui-B/*.n; do b=$(basename $n .n); k=$(cat $n); for i in $(seq 1 $k); do cmp -s x4ef/tui-B/$b.$i.B tui-B/$b.$i.B && echo same || echo "DIFF $b#$i"; done; done | sort | uniq -c; true 2>&1 | tail -1
+# ---- raw output (bash -x trace interleaved) ----
++ cd /Users/benfelip/.claude/jobs/e2147228/tmp/node2422/tui
++ rm -rf tui-A tui-A37 tui-B x4ef
++ mkdir x4ef
++ shasum -a 256 tui-A-linux.tgz tui-A-linux-tmux37c.tgz tui-B-haiku-node2422.tgz tui-B-haiku-4ef344f5fa.tgz
+591ad1b9d3dccf65ed9514310261b6c64419d543234cd14f171915cd732caca0  tui-A-linux.tgz
+1fc9e34a22f4e3539bf48684303d36c71d28a35b7735161996c6d2e21fe60c05  tui-A-linux-tmux37c.tgz
+74955056c400b74e97e1ee2cc53d1ff08d67851e1904037d2beb2900ff732eb5  tui-B-haiku-node2422.tgz
+e0c077eb14c2775d026ebd581b853897ac8ac4d55602fc0203f61d9c014cbabe  tui-B-haiku-4ef344f5fa.tgz
++ tar xzf tui-A-linux.tgz
++ tar xzf tui-A-linux-tmux37c.tgz
++ tar xzf tui-B-haiku-node2422.tgz
++ tar xzf tui-B-haiku-4ef344f5fa.tgz -C x4ef
++ C=/Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/tools/tui-compare.sh
++ echo '######## A = real binary on Linux (tmux 3.4), B = nodejs24 24.22.2-1 on Haiku (tmux 3.7c)'
+######## A = real binary on Linux (tmux 3.4), B = nodejs24 24.22.2-1 on Haiku (tmux 3.7c)
++ bash /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/tools/tui-compare.sh tui-A tui-B
++ grep -vE '^PASS'
+FAIL text-100x30#5
+1c1
+<  Paste code here if prompted > ****************************M-pM-^_M-^GM-:M-pM-^_M-^GM-8M-pM-^_M-^GM-/M-pM-^_M-^GM-5   1M-oM-8M-^O M-bM-^CM-#M-bM-^]M-$M-oM-8M-^O
+---
+>  Paste code here if prompted > ****************************M-pM-^_M-^GM-:M-pM-^_M-^GM-8M-pM-^_M-^GM-/M-pM-^_M-^GM-5 1M-oM-8M-^OM-bM-^CM-# M-bM-^]M-$M-oM-8M-^O
+FAIL text-40x20#5
+8c8
+<                                1M-oM-8M-^O M-bM-^CM-#M-bM-^]M-$M-oM-8M-^O
+---
+>                                1M-oM-8M-^OM-bM-^CM-# M-bM-^]M-$M-oM-8M-^O
+FAIL text-resize#4
+2c2
+<                                M-pM-^_M-^GM-:M-pM-^_M-^GM-8M-pM-^_M-^GM-/M-pM-^_M-^GM-5   1M-oM-8M-^O M-bM-^CM-#M-bM-^]M-$M-oM-8M-^O
+---
+>                                M-pM-^_M-^GM-:M-pM-^_M-^GM-8M-pM-^_M-^GM-/M-pM-^_M-^GM-5 1M-oM-8M-^OM-bM-^CM-# M-bM-^]M-$M-oM-8M-^O
+FAIL text-resize#6
+1c1
+<  Paste code here if prompted > ****************************M-pM-^_M-^GM-:M-pM-^_M-^GM-8M-pM-^_M-^GM-/M-pM-^_M-^GM-5   1M-oM-8M-^O M-bM-^CM-#M-bM-^]M-$M-oM-8M-^O
+---
+>  Paste code here if prompted > ****************************M-pM-^_M-^GM-:M-pM-^_M-^GM-8M-pM-^_M-^GM-/M-pM-^_M-^GM-5 1M-oM-8M-^OM-bM-^CM-# M-bM-^]M-$M-oM-8M-^O
+tui-compare: pass=60 fail=4 unsettled=0 missing=0
++ echo rc=0
+rc=0
++ echo '######## A = real binary on Linux (tmux 3.7c), B = nodejs24 24.22.2-1 on Haiku (tmux 3.7c)'
+######## A = real binary on Linux (tmux 3.7c), B = nodejs24 24.22.2-1 on Haiku (tmux 3.7c)
++ bash /Users/benfelip/Projects/hg-node2422/graviton/ports/claude-code/tools/tui-compare.sh tui-A37 tui-B
++ grep -vE '^PASS'
+tui-compare: pass=33 fail=0 unsettled=0 missing=0
++ echo rc=0
+rc=0
++ echo '######## A = 4ef344f5fa capture (nodejs24 24.21.0-2), B = this capture: every snapshot'
+######## A = 4ef344f5fa capture (nodejs24 24.21.0-2), B = this capture: every snapshot
++ for n in 'x4ef/tui-B/*.n'
++ sort
+++ basename x4ef/tui-B/login-flow.n .n
++ uniq -c
++ b=login-flow
+++ cat x4ef/tui-B/login-flow.n
++ k=3
+++ seq 1 3
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/login-flow.1.B tui-B/login-flow.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/login-flow.2.B tui-B/login-flow.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/login-flow.3.B tui-B/login-flow.3.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/text-100x30.n .n
++ b=text-100x30
+++ cat x4ef/tui-B/text-100x30.n
++ k=8
+++ seq 1 8
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.1.B tui-B/text-100x30.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.2.B tui-B/text-100x30.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.3.B tui-B/text-100x30.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.4.B tui-B/text-100x30.4.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.5.B tui-B/text-100x30.5.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.6.B tui-B/text-100x30.6.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.7.B tui-B/text-100x30.7.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-100x30.8.B tui-B/text-100x30.8.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/text-40x20.n .n
++ b=text-40x20
+++ cat x4ef/tui-B/text-40x20.n
++ k=8
+++ seq 1 8
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.1.B tui-B/text-40x20.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.2.B tui-B/text-40x20.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.3.B tui-B/text-40x20.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.4.B tui-B/text-40x20.4.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.5.B tui-B/text-40x20.5.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.6.B tui-B/text-40x20.6.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.7.B tui-B/text-40x20.7.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-40x20.8.B tui-B/text-40x20.8.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/text-resize.n .n
++ b=text-resize
+++ cat x4ef/tui-B/text-resize.n
++ k=6
+++ seq 1 6
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-resize.1.B tui-B/text-resize.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-resize.2.B tui-B/text-resize.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-resize.3.B tui-B/text-resize.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-resize.4.B tui-B/text-resize.4.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-resize.5.B tui-B/text-resize.5.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-resize.6.B tui-B/text-resize.6.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/text-rtl-vscode.n .n
++ b=text-rtl-vscode
+++ cat x4ef/tui-B/text-rtl-vscode.n
++ k=6
+++ seq 1 6
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl-vscode.1.B tui-B/text-rtl-vscode.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl-vscode.2.B tui-B/text-rtl-vscode.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl-vscode.3.B tui-B/text-rtl-vscode.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl-vscode.4.B tui-B/text-rtl-vscode.4.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl-vscode.5.B tui-B/text-rtl-vscode.5.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl-vscode.6.B tui-B/text-rtl-vscode.6.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/text-rtl.n .n
++ b=text-rtl
+++ cat x4ef/tui-B/text-rtl.n
++ k=5
+++ seq 1 5
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl.1.B tui-B/text-rtl.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl.2.B tui-B/text-rtl.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl.3.B tui-B/text-rtl.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl.4.B tui-B/text-rtl.4.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/text-rtl.5.B tui-B/text-rtl.5.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-100x30.n .n
++ b=theme-100x30
+++ cat x4ef/tui-B/theme-100x30.n
++ k=1
+++ seq 1 1
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-100x30.1.B tui-B/theme-100x30.1.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-120x40.n .n
++ b=theme-120x40
+++ cat x4ef/tui-B/theme-120x40.n
++ k=1
+++ seq 1 1
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-120x40.1.B tui-B/theme-120x40.1.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-200x50.n .n
++ b=theme-200x50
+++ cat x4ef/tui-B/theme-200x50.n
++ k=1
+++ seq 1 1
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-200x50.1.B tui-B/theme-200x50.1.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-40x20.n .n
++ b=theme-40x20
+++ cat x4ef/tui-B/theme-40x20.n
++ k=1
+++ seq 1 1
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-40x20.1.B tui-B/theme-40x20.1.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-60x16.n .n
++ b=theme-60x16
+++ cat x4ef/tui-B/theme-60x16.n
++ k=1
+++ seq 1 1
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-60x16.1.B tui-B/theme-60x16.1.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-80x24.n .n
++ b=theme-80x24
+++ cat x4ef/tui-B/theme-80x24.n
++ k=1
+++ seq 1 1
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-80x24.1.B tui-B/theme-80x24.1.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-arrow-resize.n .n
++ b=theme-arrow-resize
+++ cat x4ef/tui-B/theme-arrow-resize.n
++ k=4
+++ seq 1 4
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrow-resize.1.B tui-B/theme-arrow-resize.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrow-resize.2.B tui-B/theme-arrow-resize.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrow-resize.3.B tui-B/theme-arrow-resize.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrow-resize.4.B tui-B/theme-arrow-resize.4.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-arrows.n .n
++ b=theme-arrows
+++ cat x4ef/tui-B/theme-arrows.n
++ k=11
+++ seq 1 11
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.1.B tui-B/theme-arrows.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.2.B tui-B/theme-arrows.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.3.B tui-B/theme-arrows.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.4.B tui-B/theme-arrows.4.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.5.B tui-B/theme-arrows.5.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.6.B tui-B/theme-arrows.6.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.7.B tui-B/theme-arrows.7.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.8.B tui-B/theme-arrows.8.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.9.B tui-B/theme-arrows.9.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.10.B tui-B/theme-arrows.10.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-arrows.11.B tui-B/theme-arrows.11.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-resize.n .n
++ b=theme-resize
+++ cat x4ef/tui-B/theme-resize.n
++ k=5
+++ seq 1 5
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-resize.1.B tui-B/theme-resize.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-resize.2.B tui-B/theme-resize.2.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-resize.3.B tui-B/theme-resize.3.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-resize.4.B tui-B/theme-resize.4.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-resize.5.B tui-B/theme-resize.5.B
++ echo same
++ for n in 'x4ef/tui-B/*.n'
+++ basename x4ef/tui-B/theme-vscode.n .n
++ b=theme-vscode
+++ cat x4ef/tui-B/theme-vscode.n
++ k=2
+++ seq 1 2
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-vscode.1.B tui-B/theme-vscode.1.B
++ echo same
++ for i in '$(seq 1 $k)'
++ cmp -s x4ef/tui-B/theme-vscode.2.B tui-B/theme-vscode.2.B
++ echo same
+  64 same
++ true
++ tail -1

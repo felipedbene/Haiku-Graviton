@@ -1,0 +1,85 @@
+# evidence: node2422-954-before
+# instance: i-026c80afb9d541163   region: us-west-2
+# ssm command: bccd84cb-8217-487b-abda-b9c376638e0d (agent status: Success)
+# start: 20261102T182356Z   end: 20261102T183348Z   rc: 0   log bytes: 3982
+# script sha256: 44f638ae309b1d2f91e2c1d690bdeb4c4cad04699bf8d66d1580e41c78114dd1
+# ---- script ----
+# | set -u
+# | cd /boot/home/w954 || exit 1
+# | echo "node $(node --version); $(ls /boot/system/packages | grep -E '^(nodejs24|libuv)-' | tr '\n' ' ')"
+# | echo "######## h2coalesce954 on 24.21.0 (before)"
+# | for m in coalesced separate; do node h2coalesce954.mjs $m 20 | tail -21; echo "$m rc=$?"; done
+# | echo "######## parallel/test-http2-many-writes-and-destroy x2560 (8-way, 30 s deadline) on 24.21.0 (before)"
+# | T=/boot/home/src21/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+# | sha256sum $T
+# | for b in 1 2 3 4; do rm -rf out-before-$b; python3 -I hang954.py 640 8 30 $T out-before-$b | grep -E 'SUMMARY|^RUN'; done
+# | echo "== hang captures: $(ls out-before-*/hang*.txt 2>/dev/null | wc -l)"
+# | for f in $(ls out-before-*/hang*.txt 2>/dev/null | head -2); do echo "################ $f"; grep -E '^=== (HANG|5 s after)' $f; grep -E 'ESTABLISHED|established|close-wait|fin-wait' $f | grep 127.0.0.1 | head -4; done
+# ---- raw output ----
+node v24.21.0; libuv-1.52.1-5-arm64.hpkg nodejs24-24.21.0-3-arm64.hpkg 
+######## h2coalesce954 on 24.21.0 (before)
+round 1 coalesced: FAIL server still open after 5008 ms
+round 2 coalesced: FAIL server still open after 5003 ms
+round 3 coalesced: FAIL server still open after 5006 ms
+round 4 coalesced: FAIL server still open after 5004 ms
+round 5 coalesced: FAIL server still open after 5010 ms
+round 6 coalesced: FAIL server still open after 5005 ms
+round 7 coalesced: FAIL server still open after 5009 ms
+round 8 coalesced: FAIL server still open after 5003 ms
+round 9 coalesced: FAIL server still open after 5004 ms
+round 10 coalesced: FAIL server still open after 5004 ms
+round 11 coalesced: FAIL server still open after 5004 ms
+round 12 coalesced: FAIL server still open after 5007 ms
+round 13 coalesced: FAIL server still open after 5004 ms
+round 14 coalesced: FAIL server still open after 5006 ms
+round 15 coalesced: FAIL server still open after 5006 ms
+round 16 coalesced: FAIL server still open after 5004 ms
+round 17 coalesced: FAIL server still open after 5007 ms
+round 18 coalesced: FAIL server still open after 5005 ms
+round 19 coalesced: FAIL server still open after 5006 ms
+round 20 coalesced: FAIL server still open after 5004 ms
+h2coalesce954 coalesced: 20/20 rounds failed
+coalesced rc=0
+round 1 separate: PASS server closed after 210 ms
+round 2 separate: PASS server closed after 201 ms
+round 3 separate: PASS server closed after 210 ms
+round 4 separate: PASS server closed after 201 ms
+round 5 separate: PASS server closed after 210 ms
+round 6 separate: PASS server closed after 210 ms
+round 7 separate: PASS server closed after 210 ms
+round 8 separate: PASS server closed after 211 ms
+round 9 separate: PASS server closed after 211 ms
+round 10 separate: PASS server closed after 210 ms
+round 11 separate: PASS server closed after 201 ms
+round 12 separate: PASS server closed after 210 ms
+round 13 separate: PASS server closed after 210 ms
+round 14 separate: PASS server closed after 211 ms
+round 15 separate: PASS server closed after 210 ms
+round 16 separate: PASS server closed after 210 ms
+round 17 separate: PASS server closed after 201 ms
+round 18 separate: PASS server closed after 210 ms
+round 19 separate: PASS server closed after 210 ms
+round 20 separate: PASS server closed after 210 ms
+h2coalesce954 separate: 0/20 rounds failed
+separate rc=0
+######## parallel/test-http2-many-writes-and-destroy x2560 (8-way, 30 s deadline) on 24.21.0 (before)
+f066bc8385d74d06429025cd686494ab42fd01a21c04adda4e6696de12ce3a46  /boot/home/src21/node-v24.21.0/test/parallel/test-http2-many-writes-and-destroy.js
+SUMMARY runs=640 hung=12 failed(nonzero)=0 wall=123s median=0.15s max-completed=31.19s
+SUMMARY runs=640 hung=11 failed(nonzero)=0 wall=117s median=0.16s max-completed=35.73s
+SUMMARY runs=640 hung=12 failed(nonzero)=0 wall=121s median=0.15s max-completed=35.67s
+SUMMARY runs=640 hung=11 failed(nonzero)=0 wall=117s median=0.15s max-completed=35.65s
+== hang captures: 46
+################ out-before-1/hang0030.txt
+=== HANG run 30 pid 1020 after 30.0s (deadline 30s)
+=== 5 s after bt918: still running
+tcp         0      0 [127.0.0.1]:44370     [127.0.0.1]:41242     fin-wait2    1021/node
+tcp         0      0 [::ffff:127.0.0.1]:41242 [::ffff:127.0.0.1]:44370 close-wait   1021/node
+tcp         0      0 [127.0.0.1]:44410     [127.0.0.1]:41244     fin-wait2    1020/node
+tcp         0      0 [::ffff:127.0.0.1]:41244 [::ffff:127.0.0.1]:44410 close-wait   1020/node
+################ out-before-1/hang0031.txt
+=== HANG run 31 pid 1021 after 35.8s (deadline 30s)
+=== 5 s after bt918: still running
+tcp         0      0 [127.0.0.1]:44370     [127.0.0.1]:41242     fin-wait2    1021/node
+tcp         0      0 [::ffff:127.0.0.1]:41242 [::ffff:127.0.0.1]:44370 close-wait   1021/node
+tcp         0      0 [127.0.0.1]:45198     [127.0.0.1]:41911     fin-wait2    1537/node
+tcp         0      0 [::ffff:127.0.0.1]:41911 [::ffff:127.0.0.1]:45198 close-wait   1537/node

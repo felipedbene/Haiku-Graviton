@@ -1,0 +1,15 @@
+# evidence: node2422-final-uninstall-claude
+# instance: i-08822cbd7be76701c   region: us-west-2
+# ssm command: 58bdc1be-9c15-492b-bb1e-6ab8e5cdc242 (agent status: Success)
+# start: 20261103T011154Z   end: 20261103T011157Z   rc: 0   log bytes: 299
+# script sha256: 8ca75caeeacb66b3a2cdc4554cd9092e7fe663f5dcaa1ca07735e29cc765cfda
+# ---- script ----
+# | set -u
+# | echo "== before: $(ls /boot/system/packages | grep -E '^(nodejs24|libuv|claude_code)' | tr '\n' ' ')"
+# | { for i in $(seq 60); do echo 1; done; echo yes; } | pkgman uninstall claude_code 2>&1 | grep -E 'uninstall package|\[system\] Done|problem'
+# | echo "== after: $(ls /boot/system/packages | grep -E '^(nodejs24|libuv|claude_code)' | tr '\n' ' ')"
+# ---- raw output ----
+== before: claude_code-2.1.314-2-arm64.hpkg libuv-1.52.1-5-arm64.hpkg nodejs24-24.22.2-1-arm64.hpkg nodejs24_devel-24.22.2-1-arm64.hpkg 
+    uninstall package claude_code-2.1.314-2
+[system] Done.
+== after: libuv-1.52.1-5-arm64.hpkg nodejs24-24.22.2-1-arm64.hpkg nodejs24_devel-24.22.2-1-arm64.hpkg 

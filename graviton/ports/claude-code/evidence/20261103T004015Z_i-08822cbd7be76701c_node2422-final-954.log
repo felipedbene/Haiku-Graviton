@@ -1,0 +1,75 @@
+# evidence: node2422-final-954
+# instance: i-08822cbd7be76701c   region: us-west-2
+# ssm command: 0f54d1be-c89e-415c-887e-e117c82e1e31 (agent status: Success)
+# start: 20261103T004015Z   end: 20261103T004223Z   rc: 0   log bytes: 3252
+# script sha256: 0275ab00bbdfb221e8854adb4ba1b5cd90945feca1ef1bdb48ecac80cfae25aa
+# ---- script ----
+# | set -u
+# | cd /boot/home/w954 || exit 1
+# | echo "node $(node --version); $(ls /boot/system/packages | grep -E '^(nodejs24|libuv|openssl3|brotli)-' | tr '\n' ' ')"
+# | echo "######## h2coalesce954 (after)"
+# | for m in coalesced separate; do node h2coalesce954.mjs $m 20; echo "$m rc=$?"; done
+# | echo "######## parallel/test-http2-many-writes-and-destroy x5120 (8-way, 30 s deadline), 24.22.2 tree"
+# | T=/boot/home/node-src/node-v24.22.2/test/parallel/test-http2-many-writes-and-destroy.js
+# | sha256sum $T
+# | for b in 1 2 3 4 5 6 7 8; do rm -rf out-after-$b; python3 -I hang954.py 640 8 30 $T out-after-$b | grep -E 'SUMMARY|^RUN|^HANG'; done
+# | echo "== hang captures: $(ls out-after-*/hang*.txt 2>/dev/null | wc -l); nonzero-run logs: $(ls out-after-*/run*.log 2>/dev/null | wc -l)"
+# | for f in $(ls out-after-*/hang*.txt out-after-*/run*.log 2>/dev/null | head -3); do echo "################ $f"; head -40 $f; done
+# ---- raw output ----
+node v24.22.2; brotli-1.2.1-2-arm64.hpkg libuv-1.52.1-5-arm64.hpkg nodejs24-24.22.2-1-arm64.hpkg openssl3-3.5.9-3-arm64.hpkg 
+######## h2coalesce954 (after)
+round 1 coalesced: PASS server closed after 9 ms
+round 2 coalesced: PASS server closed after 10 ms
+round 3 coalesced: PASS server closed after 10 ms
+round 4 coalesced: PASS server closed after 11 ms
+round 5 coalesced: PASS server closed after 11 ms
+round 6 coalesced: PASS server closed after 10 ms
+round 7 coalesced: PASS server closed after 10 ms
+round 8 coalesced: PASS server closed after 10 ms
+round 9 coalesced: PASS server closed after 11 ms
+round 10 coalesced: PASS server closed after 11 ms
+round 11 coalesced: PASS server closed after 10 ms
+round 12 coalesced: PASS server closed after 10 ms
+round 13 coalesced: PASS server closed after 9 ms
+round 14 coalesced: PASS server closed after 11 ms
+round 15 coalesced: PASS server closed after 10 ms
+round 16 coalesced: PASS server closed after 9 ms
+round 17 coalesced: PASS server closed after 11 ms
+round 18 coalesced: PASS server closed after 9 ms
+round 19 coalesced: PASS server closed after 10 ms
+round 20 coalesced: PASS server closed after 10 ms
+h2coalesce954 coalesced: 0/20 rounds failed
+coalesced rc=0
+round 1 separate: PASS server closed after 210 ms
+round 2 separate: PASS server closed after 209 ms
+round 3 separate: PASS server closed after 211 ms
+round 4 separate: PASS server closed after 202 ms
+round 5 separate: PASS server closed after 211 ms
+round 6 separate: PASS server closed after 200 ms
+round 7 separate: PASS server closed after 210 ms
+round 8 separate: PASS server closed after 211 ms
+round 9 separate: PASS server closed after 211 ms
+round 10 separate: PASS server closed after 211 ms
+round 11 separate: PASS server closed after 209 ms
+round 12 separate: PASS server closed after 211 ms
+round 13 separate: PASS server closed after 201 ms
+round 14 separate: PASS server closed after 210 ms
+round 15 separate: PASS server closed after 210 ms
+round 16 separate: PASS server closed after 202 ms
+round 17 separate: PASS server closed after 201 ms
+round 18 separate: PASS server closed after 210 ms
+round 19 separate: PASS server closed after 201 ms
+round 20 separate: PASS server closed after 211 ms
+h2coalesce954 separate: 0/20 rounds failed
+separate rc=0
+######## parallel/test-http2-many-writes-and-destroy x5120 (8-way, 30 s deadline), 24.22.2 tree
+f066bc8385d74d06429025cd686494ab42fd01a21c04adda4e6696de12ce3a46  /boot/home/node-src/node-v24.22.2/test/parallel/test-http2-many-writes-and-destroy.js
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=15s median=0.17s max-completed=0.53s
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=15s median=0.17s max-completed=0.25s
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=15s median=0.17s max-completed=0.25s
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=14s median=0.17s max-completed=0.23s
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=15s median=0.17s max-completed=0.24s
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=15s median=0.17s max-completed=0.25s
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=14s median=0.17s max-completed=0.24s
+SUMMARY runs=640 hung=0 failed(nonzero)=0 wall=15s median=0.17s max-completed=0.25s
+== hang captures: 0; nonzero-run logs: 0

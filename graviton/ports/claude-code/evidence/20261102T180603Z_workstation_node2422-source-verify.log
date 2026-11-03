@@ -1,0 +1,51 @@
+# evidence: node2422-source-verify
+# host: workstation (macOS)
+# start: 20261102T180603Z   end: 20261102T180605Z   rc: 0
+# script sha256: 93135868e3ed725157b89c85f4b070c5de04a6d797ab93d94863c395696f45af
+# ---- script ----
+# | cd /Users/benfelip/.claude/jobs/e2147228/tmp/node2422
+# | curl -sSf https://nodejs.org/dist/index.json | python3 -I -c 'import json,sys; d=json.load(sys.stdin); [print(x["version"],x["date"]) for x in d if x["version"].startswith("v24.2")]'
+# | curl -sSf -o SHASUMS256.txt https://nodejs.org/dist/v24.22.2/SHASUMS256.txt
+# | curl -sSf -o SHASUMS256.txt.sig https://nodejs.org/dist/v24.22.2/SHASUMS256.txt.sig
+# | grep -E ' node-v24.22.2.tar.(gz|xz)$' SHASUMS256.txt
+# | shasum -a 256 dl/node-v24.22.2.tar.gz
+# | grep ' node-v24.22.2.tar.gz$' SHASUMS256.txt | (cd dl && shasum -a 256 -c -)
+# | (cd keys/release-keys && git remote get-url origin && git log -1 --format='%H %cI')
+# | grep -i 5BE8A3F6C8A5C01D106C0AD820B1A390B168D356 keys/release-keys/keys.list
+# | gpg --batch --verify SHASUMS256.txt.sig SHASUMS256.txt
+# ---- raw output (bash -x trace interleaved) ----
++ cd /Users/benfelip/.claude/jobs/e2147228/tmp/node2422
++ curl -sSf https://nodejs.org/dist/index.json
++ python3 -I -c 'import json,sys; d=json.load(sys.stdin); [print(x["version"],x["date"]) for x in d if x["version"].startswith("v24.2")]'
+v24.22.2 2026-10-27
+v24.22.1 2026-10-20
+v24.22.0 2026-10-14
+v24.21.0 2026-09-07
+v24.20.0 2026-08-26
+v24.2.0 2025-06-09
++ curl -sSf -o SHASUMS256.txt https://nodejs.org/dist/v24.22.2/SHASUMS256.txt
++ curl -sSf -o SHASUMS256.txt.sig https://nodejs.org/dist/v24.22.2/SHASUMS256.txt.sig
++ grep -E ' node-v24.22.2.tar.(gz|xz)$' SHASUMS256.txt
+b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz
+8fe2ec1723bb9f8d0b683907c82708debbeda64af21cb2aa214c4241eed0a061  node-v24.22.2.tar.xz
++ shasum -a 256 dl/node-v24.22.2.tar.gz
+b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  dl/node-v24.22.2.tar.gz
++ grep ' node-v24.22.2.tar.gz$' SHASUMS256.txt
++ cd dl
++ shasum -a 256 -c -
+node-v24.22.2.tar.gz: OK
++ cd keys/release-keys
++ git remote get-url origin
+https://github.com/nodejs/release-keys.git
++ git log -1 '--format=%H %cI'
+481637f813e912c4aa3622d7964ab426c97b8e8d 2026-09-01T11:41:09-03:00
++ grep -i 5BE8A3F6C8A5C01D106C0AD820B1A390B168D356 keys/release-keys/keys.list
+5BE8A3F6C8A5C01D106C0AD820B1A390B168D356
++ gpg --batch --verify SHASUMS256.txt.sig SHASUMS256.txt
+gpg: Signature made Wed Oct 28 13:36:28 2026 CDT
+gpg:                using EDDSA key 5BE8A3F6C8A5C01D106C0AD820B1A390B168D356
+gpg: Good signature from "Antoine du Hamel <antoine.duhamel@platformatic.dev>" [unknown]
+gpg:                 aka "Antoine du Hamel <duhamelantoine1995@gmail.com>" [unknown]
+gpg: WARNING: This key is not certified with a trusted signature!
+gpg:          There is no indication that the signature belongs to the owner.
+Primary key fingerprint: 5BE8 A3F6 C8A5 C01D 106C  0AD8 20B1 A390 B168 D356
