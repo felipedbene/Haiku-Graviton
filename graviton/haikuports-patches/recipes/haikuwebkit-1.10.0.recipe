@@ -26,6 +26,9 @@ LICENSE="GNU LGPL v2
 # (its libJavaScriptCore.so.18 carries the CLoop interpreter, 62 cloop strings, no
 # assembler), so this reproduces the shipped configuration rather than cutting a
 # feature. A Haiku ARM64 JIT (clear_caches() for cacheFlush) is separate porting work.
+# -DENABLE_WEBASSEMBLY=OFF: WebKitFeatures.cmake rejects WebAssembly with C_LOOP
+# ("ENABLE_WEBASSEMBLY conflicts with ENABLE_C_LOOP"); WebAssembly needs a JIT tier, so
+# the shipped C_LOOP 1.10.0-2 cannot have had it either.
 REVISION="3"
 
 SOURCE_URI="https://codeberg.org/haiku/haikuwebkit/releases/download/HaikuWebKit-$portVersion/haikuwebkit-$portVersion.tar.gz"
@@ -118,7 +121,7 @@ BUILD()
 	export DISABLE_ASLR=1
 	export PKG_CONFIG_LIBDIR="`finddir B_SYSTEM_DIRECTORY`/$relativeDevelopLibDir/pkgconfig"
 	Tools/Scripts/build-webkit --haiku --no-webkit2 --no-fatal-warnings --makeargs "$jobArgs" \
-		--cmakeargs="-DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_BUILD_TYPE=Release -DUSE_LD_LLD=OFF -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON -DSHOULD_INSTALL_JS_SHELL=ON -DCMAKE_CXX_FLAGS='-ftrack-macro-expansion=0 --param ggc-min-expand=10'"
+		--cmakeargs="-DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_BUILD_TYPE=Release -DUSE_LD_LLD=OFF -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON -DENABLE_WEBASSEMBLY=OFF -DSHOULD_INSTALL_JS_SHELL=ON -DCMAKE_CXX_FLAGS='-ftrack-macro-expansion=0 --param ggc-min-expand=10'"
 }
 
 INSTALL()
