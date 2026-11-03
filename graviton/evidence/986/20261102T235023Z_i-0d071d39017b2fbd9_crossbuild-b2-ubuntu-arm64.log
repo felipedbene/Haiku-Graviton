@@ -1,0 +1,1641 @@
+# evidence: crossbuild-b2-ubuntu-arm64
+# instance: i-0d071d39017b2fbd9 (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193)   region: us-west-2   transport: SSM send-command
+# what: same driver re-run from scratch on the same box (it rm -rf's /opt/src). Result: jam pass 0 FAILED again on issue 992, openssl3 extract.
+# log: \r progress lines of 'aws s3' turned into newlines, and 'Completed ... remaining' progress lines dropped
+# ---- raw output ----
+start 20261102T235023Z
+292453d322 evidence: #986 baseline collision on canonical, and the #987 keymaker test
+8337c15cea ssh: keep command substitution out of the .PackageInfo heredoc
+78203abc90 ssh: give the image's cross-built openssh its own package identity
+/opt/src/haiku/graviton/ssh/build-openssh-arm64.sh:44:PKG_NAME=openssh_debeos
+/opt/src/haiku/graviton/ssh/UserBuildConfig:24:HG_SSH_PACKAGE = openssh_debeos-10.4p1-1-arm64.hpkg ;
+######## install[0]: export DEBIAN_FRONTEND=noninteractive
+######## install[1]: apt-get update -qq
+######## install[2]: apt-get install -y --no-install-recommends git build-essential g++ make bison flex gawk nasm wget cu
+Reading package lists...
+Building dependency tree...
+Reading state information...
+git is already the newest version (1:2.43.0-1ubuntu7.4).
+build-essential is already the newest version (12.10ubuntu1).
+g++ is already the newest version (4:13.2.0-7ubuntu1).
+make is already the newest version (4.3-4.1build2).
+bison is already the newest version (2:3.8.2+dfsg-1ubuntu0.24.04.1).
+flex is already the newest version (2.6.4-8.2build1).
+gawk is already the newest version (1:5.2.1-2ubuntu0.1).
+nasm is already the newest version (2.16.01-1build1).
+wget is already the newest version (1.21.4-1ubuntu4.5).
+curl is already the newest version (8.5.0-2ubuntu10.16).
+xz-utils is already the newest version (5.6.1+really5.4.5-1ubuntu0.4).
+zstd is already the newest version (1.5.5+dfsg2-2build1.1).
+zlib1g-dev is already the newest version (1:1.3.dfsg-3.1ubuntu2.3).
+libzstd-dev is already the newest version (1.5.5+dfsg2-2build1.1).
+libtool is already the newest version (2.4.7-7build1).
+autoconf is already the newest version (2.71-3).
+automake is already the newest version (1:1.16.5-1.3ubuntu1).
+texinfo is already the newest version (7.1-3build2).
+gettext is already the newest version (0.21-14ubuntu2).
+python3 is already the newest version (3.12.3-0ubuntu2.1).
+python-is-python3 is already the newest version (3.11.4-1).
+gdisk is already the newest version (1.0.10-1build1).
+rsync is already the newest version (3.2.7-1ubuntu1.5).
+sudo is already the newest version (1.9.15p5-3ubuntu5.24.04.4).
+attr is already the newest version (1:2.5.2-1ubuntu0.1).
+ca-certificates is already the newest version (20260816ubuntu0.24.04.1).
+unzip is already the newest version (6.0-28ubuntu4.1).
+file is already the newest version (1:5.45-3build1).
+0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+######## install[3]: curl -sSLf "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
+######## install[4]: (cd /tmp && unzip -q awscliv2.zip && ./aws/install)
+You can now run: /usr/local/bin/aws --version
+Tip: run 'aws configure agent-toolkit' to set up AWS skills and the AWS MCP server for your AI coding agent(s).
+######## phase install rc=0
+######## pre_build[0]: set -euo pipefail
+######## pre_build[1]: export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+######## pre_build[2]: export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+######## pre_build[3]: echo "HAIKU_TOP=$HAIKU_TOP  GEN=$GEN"
+HAIKU_TOP=/opt/src/haiku  GEN=/opt/src/haiku/generated.arm64
+######## pre_build[4]: git clone --depth 1 --branch "$BUILDTOOLS_BRANCH" "$BUILDTOOLS_REPO" "$HAIKU_TOP/../buildtools"
+Cloning into '/opt/src/haiku/../buildtools'...
+Updating files:  10% (17144/169489)
+Updating files:  11% (18644/169489)
+Updating files:  12% (20339/169489)
+Updating files:  13% (22034/169489)
+Updating files:  14% (23729/169489)
+Updating files:  15% (25424/169489)
+Updating files:  16% (27119/169489)
+Updating files:  17% (28814/169489)
+Updating files:  18% (30509/169489)
+Updating files:  19% (32203/169489)
+Updating files:  19% (33034/169489)
+Updating files:  20% (33898/169489)
+Updating files:  21% (35593/169489)
+Updating files:  22% (37288/169489)
+Updating files:  23% (38983/169489)
+Updating files:  24% (40678/169489)
+Updating files:  25% (42373/169489)
+Updating files:  25% (43993/169489)
+Updating files:  26% (44068/169489)
+Updating files:  27% (45763/169489)
+Updating files:  28% (47457/169489)
+Updating files:  29% (49152/169489)
+Updating files:  30% (50847/169489)
+Updating files:  31% (52542/169489)
+Updating files:  32% (54237/169489)
+Updating files:  33% (55932/169489)
+Updating files:  34% (57627/169489)
+Updating files:  35% (59322/169489)
+Updating files:  36% (61017/169489)
+Updating files:  37% (62711/169489)
+Updating files:  38% (64406/169489)
+Updating files:  39% (66101/169489)
+Updating files:  40% (67796/169489)
+Updating files:  41% (69491/169489)
+Updating files:  42% (71186/169489)
+Updating files:  43% (72881/169489)
+Updating files:  44% (74576/169489)
+Updating files:  45% (76271/169489)
+Updating files:  46% (77965/169489)
+Updating files:  47% (79660/169489)
+Updating files:  48% (81355/169489)
+Updating files:  49% (83050/169489)
+Updating files:  49% (83793/169489)
+Updating files:  50% (84745/169489)
+Updating files:  51% (86440/169489)
+Updating files:  52% (88135/169489)
+Updating files:  53% (89830/169489)
+Updating files:  54% (91525/169489)
+Updating files:  55% (93219/169489)
+Updating files:  56% (94914/169489)
+Updating files:  57% (96609/169489)
+Updating files:  58% (98304/169489)
+Updating files:  59% (99999/169489)
+Updating files:  60% (101694/169489)
+Updating files:  61% (103389/169489)
+Updating files:  62% (105084/169489)
+Updating files:  63% (106779/169489)
+Updating files:  64% (108473/169489)
+Updating files:  65% (110168/169489)
+Updating files:  66% (111863/169489)
+Updating files:  67% (113558/169489)
+Updating files:  68% (115253/169489)
+Updating files:  69% (116948/169489)
+Updating files:  70% (118643/169489)
+Updating files:  71% (120338/169489)
+Updating files:  72% (122033/169489)
+Updating files:  72% (122994/169489)
+Updating files:  73% (123727/169489)
+Updating files:  74% (125422/169489)
+Updating files:  75% (127117/169489)
+Updating files:  76% (128812/169489)
+Updating files:  77% (130507/169489)
+Updating files:  78% (132202/169489)
+Updating files:  79% (133897/169489)
+Updating files:  80% (135592/169489)
+Updating files:  81% (137287/169489)
+Updating files:  82% (138981/169489)
+Updating files:  83% (140676/169489)
+Updating files:  84% (142371/169489)
+Updating files:  84% (143954/169489)
+Updating files:  85% (144066/169489)
+Updating files:  86% (145761/169489)
+Updating files:  87% (147456/169489)
+Updating files:  88% (149151/169489)
+Updating files:  89% (150846/169489)
+Updating files:  90% (152541/169489)
+Updating files:  91% (154235/169489)
+Updating files:  92% (155930/169489)
+Updating files:  93% (157625/169489)
+Updating files:  94% (159320/169489)
+Updating files:  94% (160332/169489)
+Updating files:  95% (161015/169489)
+Updating files:  96% (162710/169489)
+Updating files:  97% (164405/169489)
+Updating files:  98% (166100/169489)
+Updating files:  99% (167795/169489)
+Updating files: 100% (169489/169489)
+Updating files: 100% (169489/169489), done.
+######## pre_build[5]: export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+######## pre_build[6]: if ! command -v jam >/dev/null 2>&1; then
+######## pre_build[7]: BT_SHA="$(git -C "$HAIKU_TOP/../buildtools" rev-parse --short HEAD)"
+######## pre_build[8]: echo "buildtools HEAD=$BT_SHA"
+buildtools HEAD=d2e0a41eb
+######## pre_build[9]: CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64-${BT_SHA}.tar.zst"
+######## pre_build[10]: mkdir -p "$GEN"
+######## pre_build[11]: if aws s3 cp "$CT_CACHE" /tmp/ct.tar.zst --region "$AWS_DEFAULT_REGION" 2>/dev/null; then
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst to ../../../tmp/ct.tar.zst
+== restoring cross-tools cache (s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst) ==
+######## pre_build[12]: printf 'HAVE_CROSS_TOOLS=%s\nCT_CACHE=%s\n' "$HAVE_CROSS_TOOLS" "$CT_CACHE" > /tmp/ct.env
+######## phase pre_build rc=0
+######## build[0]: set -euo pipefail
+######## build[1]: export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+######## build[2]: export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+######## build[3]: export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+######## build[4]: . /tmp/ct.env
+######## build[5]: NPROC="$(nproc)"
+######## build[6]: cd "$GEN"
+######## build[7]: if [ "$HAVE_CROSS_TOOLS" = "1" ] && [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; t
+== configure (reuse cached cross-tools) ==
+Configured successfully!
+######## build[8]: export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
+######## build[9]: mkdir -p "$HG_POOL_DIR"
+######## build[10]: aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude 
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg to ../hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/jasper-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper-2.0.33-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libpng16-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16-1.6.53-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg to ../hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/ncurses6-6.6-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3-3.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3-3.5.9-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_man-3.5.9-2-any.hpkg to ../hpkg-pool/openssl3_man-3.5.9-2-any.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/tiff-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff-4.7.0-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zlib-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib-1.3.2-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd-1.5.6-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd-1.5.7-1-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg to ../hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/openssl3_man-3.5.7-1-any.hpkg to ../hpkg-pool/openssl3_man-3.5.7-1-any.hpkg
+download: s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg
+######## build[11]: # Must-have packages: the image is WRONG without these, so their
+ok: amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg was built from this tree's source (sha256:c2516c23c3bfe7948937642c3b4628619b7e7306ae9eb022ff70d6141eb514e2)
+total 57396
+drwxr-xr-x  2 root root     4096 Nov  2 23:51 .
+drwxr-xr-x 13 root root     4096 Nov  2 23:51 ..
+-rw-r--r--  1 root root 36856490 Nov  1 20:15 amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+-rw-r--r--  1 root root   109432 Sep 22 14:22 ca_root_certificates-2026_07_16-1-any.hpkg
+-rw-r--r--  1 root root   427396 Sep 22 14:22 debeos_cloudwatch-0.1.0-1-arm64.hpkg
+-rw-r--r--  1 root root    63254 Sep 22 14:22 fluidlite-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root    81370 Sep 22 14:22 fluidlite_devel-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root   184608 Sep 22 14:22 jasper-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root    30188 Sep 22 14:22 jasper_devel-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root   600692 Sep 22 14:22 libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root    57443 Sep 22 14:22 libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root   349435 Sep 22 14:22 libpng16-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   194287 Sep 22 14:22 libpng16_devel-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   225097 Sep 22 14:22 libvorbis-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   153942 Sep 22 14:22 libvorbis_devel-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   795387 Oct 17 18:35 ncurses6-6.6-1-arm64.hpkg
+-rw-r--r--  1 root root   958992 Sep 22 14:22 ncurses6-6.6_bootstrap-1-arm64.hpkg
+-rw-r--r--  1 root root  3717163 Sep 22 14:22 openssl3-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  3400263 Oct 17 18:37 openssl3-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root  2278528 Sep 22 14:22 openssl3_devel-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2179701 Oct 17 18:37 openssl3_devel-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root   555837 Sep 22 14:22 openssl3_man-3.5.7-1-any.hpkg
+-rw-r--r--  1 root root   520649 Oct 17 18:37 openssl3_man-3.5.9-2-any.hpkg
+-rw-r--r--  1 root root   193823 Sep 22 14:22 tiff-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root  1154788 Sep 22 14:22 tiff_devel-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root   120495 Oct 17 18:34 zlib-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root    34849 Oct 17 18:34 zlib_devel-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root   408182 Sep 22 14:22 zstd-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root   364566 Oct 17 18:37 zstd-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root    88366 Sep 22 14:22 zstd_devel-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root    87602 Oct 17 18:37 zstd_devel-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2501000 Sep 22 14:22 zstd_source-1.5.6-2-arm64.hpkg
+warning: no host 'package' tool under /opt/src/haiku/generated.arm64/objects, so the
+  vendor of the staged files is UNVERIFIED. A file not vendored
+  'Haiku Project' will instead fail much later, in jam, as "has
+  unexpected vendor" from RepositoryCache1 .../HaikuPorts-local.
+  Run a jam pass first, then re-run this script, to check it here.
+staged: ca_root_certificates-2026_07_16-1-any.hpkg
+staged: openssl3_man-3.5.9-2-any.hpkg
+staged: jasper-2.0.33-2-arm64.hpkg
+staged: jasper_devel-2.0.33-2-arm64.hpkg
+staged: libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+staged: libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+staged: libpng16-1.6.53-1-arm64.hpkg
+staged: libpng16_devel-1.6.53-1-arm64.hpkg
+staged: tiff-4.7.0-1-arm64.hpkg
+staged: tiff_devel-4.7.0-1-arm64.hpkg
+staged: openssl3-3.5.9-2-arm64.hpkg
+staged: openssl3_devel-3.5.9-2-arm64.hpkg
+staged: zstd-1.5.7-1-arm64.hpkg
+staged: zstd_devel-1.5.7-1-arm64.hpkg
+staged: zstd_source-1.5.6-2-arm64.hpkg
+staged: zlib-1.3.2-1-arm64.hpkg
+staged: zlib_devel-1.3.2-1-arm64.hpkg
+MISSING in pool: haikuwebkit-1.10.0-2-arm64.hpkg
+MISSING in pool: haikuwebkit_devel-1.10.0-2-arm64.hpkg
+MISSING in pool: which-2.21-6-arm64.hpkg
+staged: fluidlite-1.0.9-3-arm64.hpkg
+staged: fluidlite_devel-1.0.9-3-arm64.hpkg
+staged: libvorbis-1.3.7-1-arm64.hpkg
+staged: libvorbis_devel-1.3.7-1-arm64.hpkg
+21 staged into /opt/src/haiku/generated.arm64/download, 3 missing from /opt/src/haiku/hpkg-pool, 0 rejected, 0 already staged with the wrong vendor
+stage-local-packages reported missing packages (features for any un-staged pkg stay off)
+######## build[12]: echo "== jam pass 0 (pre-extract all build-feature archives) =="
+== jam pass 0 (pre-extract all build-feature archives) ==
+######## build[13]: HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" haiku-extract-build-features
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type regular ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+AddHaikuImagePackages: package bzip2 not available! 
+AddHaikuImagePackages: package ffmpeg6 not available! 
+AddHaikuImagePackages: package glu not available! 
+AddHaikuImagePackages: package gutenprint9 not available! 
+AddHaikuImagePackages: package lame not available! 
+AddHaikuImagePackages: package mesa not available! 
+AddHaikuImagePackages: package mesa_devel not available! 
+AddHaikuImagePackages: package mesa_swpipe not available! 
+AddHaikuImagePackages: package netcat not available! 
+AddHaikuImagePackages: package sharutils not available! 
+AddHaikuImagePackages: package unzip not available! 
+AddHaikuImagePackages: package which not available! 
+AddHaikuImagePackages: package zip not available! 
+AddHaikuImagePackages: package diffutils not available! 
+AddHaikuImagePackages: package gzip not available! 
+AddHaikuImagePackages: package tar not available! 
+AddHaikuImagePackages: package tcpdump not available! 
+...patience...
+...found 2614 target(s)...
+...updating 327 target(s)...
+MkDir1 build_packages 
+MkDir1 objects 
+MkDir1 /opt/src/haiku/generated.arm64/objects 
+MkDir1 objects/haiku 
+MkDir1 objects/linux 
+MkDir1 /opt/src/haiku/generated.arm64/objects/linux 
+MkDir1 objects/haiku/arm64 
+MkDir1 objects/linux/arm64 
+MkDir1 /opt/src/haiku/generated.arm64/objects/linux/lib 
+MkDir1 objects/haiku/arm64/packaging 
+MkDir1 objects/linux/arm64/release 
+MkDir1 objects/haiku/arm64/packaging/repositories 
+MkDir1 objects/linux/arm64/release/build 
+MkDir1 objects/linux/arm64/release/tools 
+ChecksumFileSHA256 objects/haiku/arm64/packaging/repositories/HaikuPorts-checksum 
+MkDir1 objects/linux/arm64/release/build/libroot 
+MkDir1 objects/linux/arm64/release/build/libpackage 
+MkDir1 objects/linux/arm64/release/build/libshared 
+MkDir1 objects/linux/arm64/release/build/libbe 
+MkDir1 objects/linux/arm64/release/tools/package 
+C++ objects/linux/arm64/release/build/libroot/function_remapper.o 
+C++ objects/linux/arm64/release/build/libroot/atomic.o 
+C++ objects/linux/arm64/release/build/libroot/byteorder.o 
+C++ objects/linux/arm64/release/build/libroot/errors.o 
+C++ objects/linux/arm64/release/build/libroot/find_directory.o 
+C++ objects/linux/arm64/release/build/libroot/fs.o 
+C++ objects/linux/arm64/release/build/libroot/fs_attr.o 
+C++ objects/linux/arm64/release/build/libroot/fs_descriptors.o 
+C++ objects/linux/arm64/release/build/libroot/misc.o 
+C++ objects/linux/arm64/release/build/libroot/sem.o 
+C++ objects/linux/arm64/release/build/libroot/thread.o 
+C++ objects/linux/arm64/release/build/libroot/SHA256.o 
+C++ objects/linux/arm64/release/build/libroot/driver_settings.o 
+Cc objects/linux/arm64/release/build/libroot/strlcpy.o 
+Cc objects/linux/arm64/release/build/libroot/strlcat.o 
+Cc objects/linux/arm64/release/build/libroot/strnlen.o 
+C++ objects/linux/arm64/release/build/libroot/KMessage.o 
+DownloadLocatedFile1 download/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/icu74-74.1_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/icu74_devel-74.1_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/freetype-2.6.3_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/zlib_source-1.2.13_bootstrap-1-source.hpkg 
+DownloadLocatedFile1 download/ncurses6-6.6_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/expat-2.5.0_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/expat_devel-2.5.0_bootstrap-1-arm64.hpkg 
+C++ objects/linux/arm64/release/build/libpackage/ActivationTransaction.o 
+C++ objects/linux/arm64/release/build/libpackage/Attributes.o 
+C++ objects/linux/arm64/release/build/libpackage/ChecksumAccessors.o 
+C++ objects/linux/arm64/release/build/libpackage/CommitTransactionResult.o 
+C++ objects/linux/arm64/release/build/libpackage/Context.o 
+C++ objects/linux/arm64/release/build/libpackage/DownloadFileRequest.o 
+C++ objects/linux/arm64/release/build/libpackage/FetchFileJob.o 
+C++ objects/linux/arm64/release/build/libpackage/Job.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfo.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoContentHandler.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/icu74-74.1_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoParser.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoSet.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/freetype-2.6.3_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageResolvable.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageResolvableExpression.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/ncurses6-6.6_bootstrap-1-arm64.hpkg
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/zlib_source-1.2.13_bootstrap-1-source.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageRoster.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/PackageVersion.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/expat-2.5.0_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/RepositoryCache.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryConfig.o 
+--2026-11-02 23:51:33--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/expat_devel-2.5.0_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/build/libpackage/RepositoryInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/Request.o 
+C++ objects/linux/arm64/release/build/libpackage/TempfileManager.o 
+C++ objects/linux/arm64/release/build/libpackage/User.o 
+C++ objects/linux/arm64/release/build/libpackage/ValidateChecksumJob.o 
+C++ objects/linux/arm64/release/build/libpackage/AttributeDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPool.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPoolImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPoolNoLock.o 
+C++ objects/linux/arm64/release/build/libpackage/BufferPool.o 
+C++ objects/linux/arm64/release/build/libpackage/PoolBuffer.o 
+C++ objects/linux/arm64/release/build/libpackage/DataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/ErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/FDDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/FetchUtils.o 
+C++ objects/linux/arm64/release/build/libshared/Keymap.o 
+MkDir1 objects/linux/arm64/release/build/libbe/app 
+C++ objects/linux/arm64/release/tools/package/command_add.o 
+C++ objects/linux/arm64/release/build/libbe/app/Application.o 
+Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/app/AppMisc.o 
+C++ objects/linux/arm64/release/build/libbe/app/Looper.o 
+C++ objects/linux/arm64/release/build/libbe/app/Message.o 
+C++ objects/linux/arm64/release/build/libbe/app/MessageAdapter.o 
+C++ objects/linux/arm64/release/build/libbe/app/Messenger.o 
+C++ objects/linux/arm64/release/build/libbe/app/MessageUtils.o 
+C++ objects/linux/arm64/release/build/libbe/app/TypeConstants.o 
+C++ objects/linux/arm64/release/tools/package/command_checksum.o 
+C++ objects/linux/arm64/release/tools/package/command_create.o 
+C++ objects/linux/arm64/release/tools/package/command_dump.o 
+C++ objects/linux/arm64/release/tools/package/command_extract.o 
+C++ objects/linux/arm64/release/tools/package/command_info.o 
+C++ objects/linux/arm64/release/tools/package/command_list.o 
+C++ objects/linux/arm64/release/tools/package/command_recompress.o 
+...on 100th target...
+C++ objects/linux/arm64/release/tools/package/package.o 
+Archive objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a 
+C++ objects/linux/arm64/release/tools/package/PackageWriterListener.o 
+C++ objects/linux/arm64/release/tools/package/PackageWritingUtils.o 
+MkDir1 objects/linux/arm64/release/build/libbe/icon 
+MkDir1 objects/linux/arm64/release/build/libbe/interface 
+ar: creating objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a
+MkDir1 objects/linux/arm64/release/build/libbe/storage 
+Ranlib objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a 
+C++ objects/linux/arm64/release/build/libbe/icon/FlatIconFormat.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Bitmap.o 
+C++ objects/linux/arm64/release/build/libbe/storage/AppFileInfo.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Directory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DriverSettings.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Entry.o 
+C++ objects/linux/arm64/release/build/libbe/storage/EntryList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/FdIO.o 
+C++ objects/linux/arm64/release/build/libbe/storage/File.o 
+C++ objects/linux/arm64/release/build/libbe/storage/FileIO.o 
+C++ objects/linux/arm64/release/build/libbe/storage/FindDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MergedDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Mime.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeType.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Node.o 
+C++ objects/linux/arm64/release/build/libbe/storage/NodeInfo.o 
+C++ objects/linux/arm64/release/build/libbe/storage/OffsetFile.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Path.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceFile.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceItem.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Resources.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourcesContainer.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceStrings.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Statable.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SymLink.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Volume.o 
+206.189.242.242
+206.189.242.242Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+206.189.242.242Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... C++ objects/linux/arm64/release/build/libbe/storage/storage_support.o 
+C++ objects/linux/arm64/release/build/libbe/storage/AppMetaMimeCreator.o 
+C++ objects/linux/arm64/release/build/libbe/storage/AssociatedTypes.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Database.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DatabaseDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DatabaseLocation.o 
+C++ objects/linux/arm64/release/build/libbe/storage/database_support.o 
+C++ objects/linux/arm64/release/build/libbe/storage/InstalledTypes.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeEntryProcessor.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeInfoUpdater.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSniffer.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSnifferAddon.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSnifferAddonManager.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SnifferRules.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Supertype.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SupportingApps.o 
+C++ objects/linux/arm64/release/build/libbe/storage/TextSnifferAddon.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Err.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DisjList.o 
+../src/kits/app/MessageAdapter.cpp: In static member function ‘static status_t BPrivate::MessageAdapter::_UnflattenR5Message(uint32, BMessage*, BDataIO*)’:
+../src/kits/app/MessageAdapter.cpp:567:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  567 |                 reader(&header->target, sizeof(header->target));
+      |                        ^~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:571:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  571 |                 reader(&header->reply_port, sizeof(header->reply_port));
+      |                        ^~~~~~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:572:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  572 |                 reader(&header->reply_target, sizeof(header->reply_target));
+      |                        ^~~~~~~~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:573:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  573 |                 reader(&header->reply_team, sizeof(header->reply_team));
+      |                        ^~~~~~~~~~~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/Pattern.o 
+C++ objects/linux/arm64/release/build/libbe/storage/PatternList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Parser.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::Rename(const char*, const char*)’:
+../src/build/libbe/app/Message.cpp:652:28: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  652 |         int32 *nextField = &fHeader->hash_table[hash];
+      |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:665:37: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  665 |                         nextField = &fHeader->hash_table[hash];
+      |                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:667:45: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  667 |                                 nextField = &fFields[*nextField].next_field;
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:681:29: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  681 |                 nextField = &field->next_field;
+      |                             ^~~~~~~~~~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/Range.o 
+C++ objects/linux/arm64/release/build/libbe/storage/RPattern.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::_AddField(const char*, type_code, bool, field_header**)’:
+../src/build/libbe/app/Message.cpp:1292:28: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1292 |         int32 *nextField = &fHeader->hash_table[hash];
+      |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1294:29: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1294 |                 nextField = &fFields[*nextField].next_field;
+      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::_RemoveField(field_header*)’:
+../src/build/libbe/app/Message.cpp:1333:33: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1333 |         int32 *value = fHeader->hash_table;
+      |                        ~~~~~~~~~^~~~~~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindPoint(const char*, BPoint*) const’:
+../src/build/libbe/app/Message.cpp:1644:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BPoint’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1644 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1683:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1683 | DEFINE_FUNCTIONS(BPoint, Point, B_POINT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+In file included from ../headers/build/os/interface/Point.h:1,
+                 from ../headers/build/../os/interface/Rect.h:11,
+                 from ../headers/build/os/interface/Rect.h:1,
+                 from ../headers/build/os/app/Message.h:16,
+                 from ../src/build/libbe/app/Message.cpp:10:
+../headers/build/../os/interface/Point.h:15:7: note: ‘class BPoint’ declared here
+   15 | class BPoint {
+      |       ^~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindPoint(const char*, int32, BPoint*) const’:
+../src/build/libbe/app/Message.cpp:1660:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BPoint’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1660 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1683:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1683 | DEFINE_FUNCTIONS(BPoint, Point, B_POINT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Point.h:15:7: note: ‘class BPoint’ declared here
+   15 | class BPoint {
+      |       ^~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindRect(const char*, BRect*) const’:
+../src/build/libbe/app/Message.cpp:1644:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BRect’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1644 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1684:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1684 | DEFINE_FUNCTIONS(BRect, Rect, B_RECT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Rect.h:15:7: note: ‘class BRect’ declared here
+   15 | class BRect {
+      |       ^~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindRect(const char*, int32, BRect*) const’:
+../src/build/libbe/app/Message.cpp:1660:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BRect’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1660 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1684:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1684 | DEFINE_FUNCTIONS(BRect, Rect, B_RECT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Rect.h:15:7: note: ‘class BRect’ declared here
+   15 | class BRect {
+      |       ^~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/RPatternList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Rule.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindMessenger(const char*, int32, BMessenger*) const’:
+../src/build/libbe/app/Message.cpp:1970:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BMessenger’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1970 |                 memcpy(messenger, data, sizeof(BMessenger));
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../headers/build/private/app/MessagePrivate.h:13,
+                 from ../src/build/libbe/app/Message.cpp:12:
+../headers/build/os/app/Messenger.h:20:7: note: ‘class BMessenger’ declared here
+   20 | class BMessenger {
+      |       ^~~~~~~~~~
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+C++ objects/linux/arm64/release/build/libbe/interface/ColorConversion.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Gradient.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientLinear.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientRadial.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientRadialFocus.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientDiamond.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientConic.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GraphicsDefs.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Point.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Rect.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Region.o 
+C++ objects/linux/arm64/release/build/libbe/interface/RegionSupport.o 
+C++ objects/linux/arm64/release/build/libbe/interface/SystemPalette.o 
+C++ objects/linux/arm64/release/build/libbe/icon/FlatIconImporter.o 
+C++ objects/linux/arm64/release/build/libbe/icon/LittleEndianBuffer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathCommandQueue.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Defines.o 
+C++ objects/linux/arm64/release/build/libbe/icon/MessageImporter.o 
+HTTP request sent, awaiting response... C++ objects/linux/arm64/release/build/libbe/icon/PathSourceShape.o 
+C++ objects/linux/arm64/release/build/libbe/icon/ReferenceImage.o 
+HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... C++ objects/linux/arm64/release/build/libbe/icon/Shape.o 
+../src/build/libbe/interface/SystemPalette.cpp: In function ‘void FillColorMap(const rgb_color*, color_map*)’:
+../src/build/libbe/interface/SystemPalette.cpp:95:15: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘rgb_color’ {aka ‘struct rgb_color’} with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+   95 |         memcpy(map->color_list, palette, sizeof(map->color_list));
+      |         ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../headers/build/os/interface/GraphicsDefs.h:1,
+                 from ../src/build/libbe/interface/SystemPalette.cpp:13:
+../headers/build/../os/interface/GraphicsDefs.h:42:16: note: ‘rgb_color’ {aka ‘struct rgb_color’} declared here
+   42 | typedef struct rgb_color {
+      |                ^~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/icon/VectorPath.o 
+C++ objects/linux/arm64/release/build/libbe/icon/GradientTransformable.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Style.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Transformable.o 
+C++ objects/linux/arm64/release/build/libbe/icon/AffineTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/CompoundStyleTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/ContourTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathSource.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PerspectiveTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/StrokeTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/StyleTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/TransformerFactory.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Icon.o 
+C++ objects/linux/arm64/release/build/libbe/icon/IconRenderer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/IconUtils.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_arc.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_arrowhead.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_bezier_arc.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_bspline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_curves.o 
+...on 200th target...
+C++ objects/linux/arm64/release/build/libbe/icon/agg_embedded_raster_fonts.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_gsv_text.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_image_filters.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_line_aa_basics.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_line_profile_aa.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_rounded_rect.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_sqrt_tables.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_affine.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_double_path.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_single_path.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_warp_magnifier.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_bspline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_contour.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_dash.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_markers_term.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_smooth_poly1.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_stroke.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_clip_polygon.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_clip_polyline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_segmentator.o 
+MkDir1 objects/linux/arm64/release/build/libbe/support 
+C++ objects/linux/arm64/release/build/libshared/NaturalCompare.o 
+C++ objects/linux/arm64/release/build/libbe/support/Archivable.o 
+C++ objects/linux/arm64/release/build/libbe/support/BlockCache.o 
+../src/libs/agg/src/agg_gsv_text.cpp: In member function ‘void agg::gsv_text::load_font(const char*)’:
+../src/libs/agg/src/agg_gsv_text.cpp:559:22: warning: ignoring return value of ‘size_t fread(void*, size_t, size_t, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  559 |                 fread(&m_loaded_font[0], 1, len, fd);
+      |                 ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/support/BufferIO.o 
+C++ objects/linux/arm64/release/build/libbe/support/ByteOrder.o 
+C++ objects/linux/arm64/release/build/libbe/support/CompressionAlgorithm.o 
+302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74-74.1_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74-74.1_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/support/DataIO.o 
+C++ objects/linux/arm64/release/build/libbe/support/DataPositionIOWrapper.o 
+C++ objects/linux/arm64/release/build/libbe/support/Flattenable.o 
+C++ objects/linux/arm64/release/build/libbe/support/Job.o 
+C++ objects/linux/arm64/release/build/libbe/support/JobQueue.o 
+302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/zlib_source-1.2.13_bootstrap-1-source.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/zlib_source-1.2.13_bootstrap-1-source.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/support/List.o 
+302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/expat_devel-2.5.0_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/expat_devel-2.5.0_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/expat-2.5.0_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/expat-2.5.0_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype-2.6.3_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/freetype-2.6.3_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6-6.6_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6-6.6_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/support/Locker.o 
+C++ objects/linux/arm64/release/build/libbe/support/PointerList.o 
+C++ objects/linux/arm64/release/build/libbe/support/Referenceable.o 
+C++ objects/linux/arm64/release/build/libbe/support/String.o 
+302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg [following]
+--2026-11-02 23:51:34--  https://haiku-buildpackages.cdn.haiku-os.org/packages/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/support/StringList.o 
+C++ objects/linux/arm64/release/build/libbe/support/Url.o 
+C++ objects/linux/arm64/release/build/libbe/support/ZlibCompressionAlgorithm.o 
+C++ objects/linux/arm64/release/build/libbe/support/ZstdCompressionAlgorithm.o 
+C++ objects/linux/arm64/release/build/libshared/RegExp.o 
+C++ objects/linux/arm64/release/build/libshared/StringForSize.o 
+C++ objects/linux/arm64/release/build/libpackage/GlobalWritableFileInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/HPKGDefs.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageContentHandler.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageData.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntry.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryAttribute.o 
+95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapAccessorBase.o 
+Link objects/linux/arm64/release/build/libroot/libroot_build.so 
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageWriterImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/ReaderImplBase.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryContentHandler.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryReader.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryReaderImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryWriterImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/Strings.o 
+C++ objects/linux/arm64/release/build/libpackage/UserSettingsFileInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/WriterImplBase.o 
+C++ objects/linux/arm64/release/build/libpackage/HPKGDefsV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageContentHandlerV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataReaderV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryAttributeV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryV1.o 
+Chmod1 objects/linux/arm64/release/build/libroot/libroot_build.so 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoContentHandlerV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderImplV1.o 
+File /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderV1.o 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+C++ objects/linux/arm64/release/build/libpackage/ReaderImplBaseV1.o 
+C++ objects/linux/arm64/release/build/libpackage/NoErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/StandardErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/Exceptions.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryBuilder.o 
+Archive objects/linux/arm64/release/build/libshared/libshared_build.a 
+ar: creating objects/linux/arm64/release/build/libshared/libshared_build.a
+C++ objects/linux/arm64/release/build/libpackage/Solver.o 
+Ranlib objects/linux/arm64/release/build/libshared/libshared_build.a 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackage.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackageSpecifier.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackageSpecifierList.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverProblem.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverProblemSolution.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverRepository.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/app/app_kit.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverResult.o 
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+connected.
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/interface/interface_kit.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/storage/storage_kit.o 
+HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/support/support_kit.o 
+200 OK
+Length: 219730 (215K) [application/octet-stream]
+Saving to: ‘download/expat-2.5.0_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 187189 (183K) [application/octet-stream]
+Saving to: ‘download/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 17087 (17K) [application/octet-stream]
+Saving to: ‘download/expat_devel-2.5.0_bootstrap-1-arm64.hpkg’
+
+     0K .......... ......                                     100%  271M=0s
+
+2026-11-02 23:51:35 (271 MB/s) - ‘download/expat_devel-2.5.0_bootstrap-1-arm64.hpkg’ saved [17087/17087]
+
+200 OK
+Length: 14956236 (14M) [application/octet-stream]
+Saving to: ‘download/icu74-74.1_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 437219 (427K) [application/octet-stream]
+Saving to: ‘download/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 8812771 (8.4M) [application/octet-stream]
+Saving to: ‘download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 1201309 (1.1M) [application/octet-stream]
+Saving to: ‘download/freetype-2.6.3_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 1580025 (1.5M) [application/octet-stream]
+Saving to: ‘download/zlib_source-1.2.13_bootstrap-1-source.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 6474896 (6.2M) [application/octet-stream]
+Saving to: ‘download/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/icon/icon_kit.o 
+Link /opt/src/haiku/generated.arm64/objects/linux/lib/libbe_build.so 
+200 OK
+Length: 958992 (937K) [application/octet-stream]
+Saving to: ‘download/ncurses6-6.6_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 1024031 (1000K) [application/octet-stream]
+Saving to: ‘download/icu74_devel-74.1_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libbe_build.so 
+Link /opt/src/haiku/generated.arm64/objects/linux/lib/libpackage_build.so 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libpackage_build.so 
+Link objects/linux/arm64/release/tools/package/package 
+......... .......... 23%  289K 1s
+    50K .......... .......... .......... .......... .............. .......... 27%  288K 0s
+    50K .......... .......... .......... .......... .............. ..........  0%  288K 51s
+    50K .......... .......... .................. .......... 11%  286K 1s
+    50K .......... .......... .................. ..........  0%  286K 30s
+    50K .......... .......... .................. ..........  4%  286K 4s
+    50K .......... .......... .................. ..........  3%  284K 5s
+    50K .......... .......... .................. ..........  0%  284K 22s
+    50K .......... .......... .......... .......... ...... .......... ...... .......... ...... .......... .............. ..........  5%  275K 3s
+    50K .......... .......... .........Chmod1 objects/linux/arm64/release/tools/package/package 
+. .......... ...... .......... .....ExtractHPKGArchive1 build_packages/openssl3-3.5.9-2-arm64 
+...on 300th target...
+ExtractHPKGArchive1 build_packages/fluidlite_devel-1.0.9-3-arm64 
+ExtractHPKGArchive1 build_packages/libvorbis-1.3.7-1-arm64 
+ExtractHPKGArchive1 build_packages/libpng16-1.6.53-1-arm64 
+ExtractHPKGArchive1 build_packages/jasper-2.0.33-2-arm64 
+ExtractHPKGArchive1 build_packages/libjpeg_turbo-3.1.4.1-1-arm64 
+ExtractHPKGArchive1 build_packages/zlib-1.3.2-1-arm64 
+ExtractHPKGArchive1 build_packages/tiff-4.7.0-1-arm64 
+ExtractHPKGArchive1 build_packages/zstd-1.5.7-1-arm64 
+ExtractHPKGArchive1 build_packages/zstd_source-1.5.6-2-arm64 
+......... ..........  4%  274K 3s
+    50K .......... ...Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+....... .........
+mkdir -p "build_packages/openssl3-3.5.9-2-arm64"
+LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/src/haiku/generated.arm64/objects/linux/lib" \
+objects/linux/arm64/release/tools/package/package extract -C "build_packages/openssl3-3.5.9-2-arm64" "download/openssl3-3.5.9-2-arm64.hpkg"
+
+...failed ExtractHPKGArchive1 build_packages/openssl3-3.5.9-2-arm64 ...
+ExtractHPKGArchive1 build_packages/zlib-1.3.2-1-arm64 
+ExtractHPKGArchive1 build_packages/tiff-4.7.0-1-arm64 
+ExtractHPKGArchive1 build_packages/jasper-2.0.33-2-arm64 
+ExtractHPKGArchive1 build_packages/libvorbis-1.3.7-1-arm64 
+ExtractHPKGArchive1 build_packages/zstd-1.5.7-1-arm64 
+ExtractHPKGArchive1 build_packages/libpng16-1.6.53-1-arm64 
+ExtractHPKGArchive1 build_packages/libjpeg_turbo-3.1.4.1-1-arm64 
+. .......... ...... .......... .......... 46%  289K 0s
+   100K .......... .......... .......... .......... .......... 69% 17.5M 0s
+   150K .......... .......... .......... 54%  288K 0s
+   100K .......... .......... .......... .......... ........  0%  289K 50s
+   100K .......... ........ 82% 19.2M 0s
+   150K .................. ........ .......... ........ .......... ..........  1% 18.7M 34s
+   150K .......... .......... .......... 23%  287K 1s
+   100K .......... .......... .......... .......... ........  1%  287K 30s
+   100K .......... ........ 35% 36.4M 1s
+   150K .................. .......... .......... .... .......... ............  1% 28.0M 20s
+   150K ..............  8%  287K 4s
+   100K .......... .......... .......... .......... .......... 12% 38.8M 2s
+   150K ..............  6%  284K 5s
+   100K .......... .......... .......... .......... ........  1%  285K 22s
+   100K .......... ........  9% 53.1M 3s
+   150K .................. ........ .......... ........ .......... ..........  2% 30.3M 15s
+   150K .......... .......... .......... .......... ...... .......... ...... ..                   100% 1.10M=0.4s
+
+2026-11-02 23:51:36 (482 KB/s) - ‘download/freetype_devel-2.6.3_bootstrap-1-arm64.hpkg’ saved [187189/187189]
+
+. .......... .......... .......... .. .......... .......... .......... ...... .......... ...... 10%  276K 3s
+   100K .......... .......... .......... .......... .......... 16% 66.2M 2s
+   150K ..............  9%  275K 3s
+   100K .......... .......... .......... .......... .......... 14% 35.4M 2s
+   150K .............. .......... .. .......... .......... .......... ...... .......... .. .......... .......... .......... .......... 93%  293K 0s
+   200K .......... ....                                       100%  155M=0.5s
+
+2026-11-02 23:51:36 (413 KB/s) - ‘download/expat-2.5.0_bootstrap-1-arm64.hpkg’ saved [219730/219730]
+
+ExtractHPKGArchive1 build_packages/expat-2.5.0_bootstrap-1-arm64 
+.........  1%  292K 38s
+   200K .......... .......... .......... .......... ..........  1% 46.1M 30s
+   250K .......... .......... .......... .......... ..........  2% 43.2M 25s
+   300K .......... .................. 46%  288K 1s
+   200K .......... .......... .......... ..................  2%  289K 22s
+   200K ........ .......... ...... 58%. 45.2M. 0s.
+   250K. ...... ............ .............. .......... .. ..........  2% 63.7M 18s
+   250K .............. ............ .......... .... .......... 70% 47.5M 0s
+   300K ............ .............. ............ ..........  3% 51.7M 15s
+   300K .......... .................. 17%  288K 3s
+   200K .......... .......... .......... .......... .......... 21% 62.1M 2s
+   250K .....ExtractHPKGArchive1 build_packages/expat-2.5.0_bootstrap-1-arm64 
+..... .......... .......... .......... .......... 25% 67.3M 2s
+   300K .......... .................. 12%  285K 4s
+   200K .......... .......... .......... ..................  3%  286K 16s
+   200K ........ .......... 16% 44.1M 3s
+   250K ........ .......... ........ .......... ........ .................. ........ ..........  3% 24.3M 13s
+   250K ........ .......... 19% 23.6M 2s
+   300K ........ .......... ........ .................. .......... ..........  4% 18.8M 11s
+   300K .......... .......... .......... ...... .......... ...... .......... ...... .......... ...... .......... ...... .......... .............. 21%  277K 2s
+   200K .......... .......... .......... .......... .......... 26% 56.2M 1s
+   250K .......... .......... .......... .......... .......... 32% 80.2M 1s
+   300K .......... .................. 19%  276K 2s
+   200K .......... .......... .......... .......... .......... 24% 77.3M 2s
+   250K .......... .......... .......... .......... .......... 29% 76.3M 1s
+   300K .......... .......... .......... ...... .......... .......... ..........  2%  292K 28s
+   350K .......... .......... .......... .......... ..........  2% 36.3M 25s
+   400K .......... .......... .......... .......... ..........  3% 42.0M 22s
+   450K .......... .......... .......... .......... ..........  3% 47.9M 20s
+   500K .......... .......... .......... .......... ..........  3% 69.1M 18s
+   550K .......... .......... .......... .......... ..........  4% 90.5M 16s
+   600K .......... .......... .......... .......... ..........  4%  101M 15s
+   650K .......... .......... 81%  290K 0s
+   350K .......... .......... .......... ........ ..........  4%  290K 16s
+   350K .......... .............. ............ .......... .... 93% 39.2M 0s
+   400K .......... ............ .............. ......                          100%  107M=0.7s
+
+2026-11-02 23:51:36 (610 KB/s) - ‘download/ncurses6_devel-6.6_bootstrap-1-arm64.hpkg’ saved [437219/437219]
+
+.  4% 42.2M 14s
+   400K .......... .......... .......... .......... ..........  5% 90.4M 13s
+   450K .......... .......... .......... .......... ..........  5% 88.0M 11s
+   500K .......... .......... .......... .......... ..........  6% 93.2M 10s
+   550K .......... .......... .......... .......... ..........  6% 98.2M 9s
+   600K ............ .......... 29%  289K 2s
+   350K .... .......... ............ .............. ............ .......... .... ..........  7% 49.7M 9s
+   650K ............ .......... 34% 46.3M 1s
+   400K .......... .......... .......... .......... .......... 38%  106M 1s
+   450K .......... .......... .......... .......... .......... 42% 91.2M 1s
+   500K .......... .......... .......... .......... .......... 46% 90.5M 1s
+   550K .......... .......... .......... .......... .......... 51% 99.2M 1s
+   600K ............ .......... 22%  289K 2s
+   350K .......... .......... .......... .......... .............. ..........  5%  292K 12s
+   350K .......... ....... 25%. 51.3M 2s
+   400K .......... ........ .......... ........ .......... ........ .................. ........  6% 43.6M 10s
+   400K .......... ........ 29% 53.0M 2s
+   450K .......... ........ .......... ........ .................. ........ .......... ........  7% 55.3M 9s
+   450K .......... ........ 32% 54.5M 1s
+   500K .......... ........ .................. ........ .......... ........ .......... ........  7% 50.6M 8s
+   500K .......... ........ 35% 53.9M 1s
+   550K .................. ........ .......... ........ .......... ........ .......... ........  8% 55.0M 7s
+   550K .................. 38% 51.1M 1s
+   600K ........ .......... ........ .......... ........ .......... ..........  9% 57.7M 7s
+   600K .......... .......... .......... .......... .......... 10% 37.1M 6s
+   650K .......... .......... ...... .......... ...... .......... .... .......... .......... .................. ............ .......... 37%  278K 1s
+   350K .......... .......... .......... .......... .......... 42% 34.7M 1s
+   400K .......... .......... .......... .......... .......... 48% 49.9M 1s
+   450K .......... .......... .......... .......... .......... 53% 76.4M 1s
+   500K .......... .......... .......... .......... .......... 58%  105M 1s
+   550K .......... .......... .......... .......... .......... 64% 96.6M 0s
+   600K .......... .......... ........ .......... 34%  276K 1s
+   350K .......... .......... .......... .......... .......... 39% 44.0M 1s
+   400K .......... .......... .......... .......... .......... 44% 83.3M 1s
+   450K .......... .......... .......... .......... .......... 49% 98.3M 1s
+   500K .......... .......... .......... .......... .......... 54%  103M 1s
+   550K .......... .......... .......... .......... .......... 59% 98.8M 0s
+   600K .............. ............ .......... .......... ................ .................. .......... ..........  4%  297K 17s
+   700K .......... .......... .......... .......... ..........  5% 57.0M 16s
+   750K .......... .......... .......... .......... ..........  5% 19.1M 15s
+   800K .......... .......... .......... .......... ..........  5% 38.5M 14s
+   850K .......... .......... .......... .......... ..........  6% 41.1M 13s
+   900K .......... .......... .......... .......... ..........  6% 52.5M 13s
+   950K .......... .......... .............. ............ .......... ..........  6% 61.8M 12s
+  1000K .......... .......... ...... ..........  8%  292K 10s
+   700K .......... ................ .......... ..........  7% 44.7M 11s
+  1050K .......... ...........  ........... .......... ..........  8% 38.2M 9s
+   750K .......... ................ .......... ..........  7% 37.4M 11s
+  1100K ...... .......... .......... .......... .......... ............ ..........  9% 32.5M 9s
+   800K .......... .......... ..........  7% 43.8M 10s
+  1150K ...... .......... .. .......... 55%  290K 1s
+   650K .............. ................ ............ .......... ....  9% 40.8M 8s
+   850K .......... ...... .......... .......... .................. ........ .......... ............ ............ .......... 59% 31.6M 1s
+   700K ....  8% 22.4M 10s
+  1200K .......... .......... 10% 41.5M 8s
+   900K .......... ...... .......... .......... .............. .......... .......... ......... ................ .... ............. .......... 63% 34.1M 0s
+   750K ....  8% 31.2M 9s
+  1250K .......... .......... 11% 30.9M 7s
+   950K .................. ........ .......... ............ .............. .......... .. .......... ........ .......... .......... .................. 11% 37.9M 7s
+  1000K ........ 68% 26.7M 0s
+   800K .......... ..........  8% 28.2M 9s
+  1300K .......... .... .......... ............ ............ .......... ........ .......... .......... 12% 37.7M 6s
+  1050K .............. .......... 72% 35.3M 0s
+   850K .......... ........ .......... ........ .................. .......... .......... 12% 36.9M 6s
+  1100K .... .......... .. .............. 42%  291K 1s
+   650K ............ .............. .......... .... .......... 11%  294K 7s
+   700K ........ 76% 21.9M 0s
+   900K .......... .. .......... ............ .................. ................ ............ .......... 13% 26.4M 6s
+  1150K .. .......... ........ .......... 45% 23.3M 1s
+   700K ............ ............ .......... 11% 28.4M 7s
+   750K .... .......... .......... ............ .......... .... .......... ............ 80% 21.2M 0s
+   950K .............. .......... 48% 37.8M 1s
+   750K ........ .................. ................ .......... .......... .... 13% 19.3M 5s
+  1200K .......... ............ .......... .......... ........ .......... ........ .......... .. 12% 20.6M 6s
+   800K .......... .......... .......... ........ .............. .......... .......... ........ 51% 19.9M 1s
+   800K .......... .............. 85% 17.3M 0s
+  1000K ................ .......... 14% 22.3M 5s
+  1250K .......... ...... 13% 29.6M 6s
+   850K .......... ........ .......... ........ ................ .......... .......... .............. .......... .......... .... .......... ............ ............ 55% 24.6M 1s
+   850K .......... ........ 15% 30.6M 5s
+  1300K .......... .. .......... 89% 26.7M 0s
+  1050K .......... 14% 29.6M 5s
+   900K .......... .......... ............ .......... .... .......... ...... .......... .......... ................  9% 4.16M 9s
+  1350K .................. ........ .......... ........ .......... 93% 27.0M 0s
+  1100K .......... 15% 29.0M 5s
+   950K .......... .......... ............ .............. 58% 19.2M 1s
+   900K .......... ...... .......... .. .......... .............. ................ 15% 39.6M 5s
+  1000K ............ .......... 98% 30.1M 0s
+  1150K .... .......... .......... ............ .......... ............ .......... ...                             100% 31.6M=0.9s
+
+2026-11-02 23:51:36 (1.28 MB/s) - ‘download/freetype-2.6.3_bootstrap-1-arm64.hpkg’ saved [1201309/1201309]
+
+. .......... 16% 41.6M 4s
+  1050K ............ 61% 22.1M 1s
+   950K .............. .......... .......... ........ .......... ........ .......... 17% 52.0M 4s
+  1100K .......... .............. .......... .ExtractHPKGArchive1 build_packages/freetype-2.6.3_bootstrap-1-arm64 
+. .......... .......... .......... 18% 43.3M 4s
+  1150K .......... 64% 27.3M 0s
+  1000K .......... .......... ............ ............. ....... .............. ............ .......... .......... 68% 40.6M 0s
+  1050K ...... 18% 37.6M 4s
+  1200K .......... .......... .......... ...... .......... .......... ................ .......... 19% 43.6M 4s
+  1250K .......... ...... .......... 71% 38.0M 0s
+  1100K ............ .............. ............ .......... .... .......... ............ ................ 15% 5.05M 5s
+  1350K .............. 20% 47.6M 3s
+  1300K .......... .. .......... .............. .......... .......... ........ .......... 74% 26.2M 0s
+  1150K .......... .......... .......... .......... .......... 77% 24.4M 0s
+  1200K .......... .......... .......... .......... .............. 21% 3.08M 3s
+  1350K ............ 81% 3.75M 0s
+  1250K .......... .... .......... ............ .............. .......... .ExtractHPKGArchive1 build_packages/freetype-2.6.3_bootstrap-1-arm64 
+. .......... 69%  282K 0s
+   650K .......... .......... .......... .......... .......... 74% 46.1M 0s
+   700K .......... .......... .......... .......... .......... 80% 41.3M 0s
+   750K .......... .......... .......... .......... .......... 85% 32.9M 0s
+   800K .......... .......... .......... .......... .......... 90% 37.4M 0s
+   850K .......... .......... .......... .......... .......... 96% 36.5M 0s
+   900K .......... .......... .......... ......               100% 40.0M=0.9s
+
+2026-11-02 23:51:36 (1.00 MB/s) - ‘download/ncurses6-6.6_bootstrap-1-arm64.hpkg’ saved [958992/958992]
+
+ExtractHPKGArchive1 build_packages/ncurses6-6.6_bootstrap-1-arm64 
+. .......... 64%  279K 0s
+   650K .......... .......... .......... .......... .......... 69% 46.3M 0s
+   700K .......... .......... .......... .......... .......... 74% 80.5M 0s
+   750K .......... .......... .......... .......... .......... 79% 62.1M 0s
+   800K .......... .......... .......... .......... .......... 84% 90.5M 0s
+   850K .......... .......... .......... .......... .......... 89% 99.3M 0s
+   900K .......... .......... .......... .......... .......... 94% 99.4M 0s
+   950K .......... .......... .......... .......... .......... 99% 99.3M 0s
+  1000K                                                       100% 57.7G=0.9s
+
+2026-11-02 23:51:36 (1.07 MB/s) - ‘download/icu74_devel-74.1_bootstrap-1-arm64.hpkg’ saved [1024031/1024031]
+
+. .......... .......... .......... ..........  9%  343K 10s
+  1400K .......... .......... .......... .......... ..........  9% 52.2M 9s
+  1450K .......... .......... .......... .......... .......... 10% 51.5M 9s
+  1500K .......... .......... .......... .......... .......... 10% 56.6M 9s
+  1550K .......... .......... .......... .......... .......... 10% 40.8M 9s
+  1600K .......... .......... .......... .......... .......... 11% 52.9M 8s
+  1650K .......... .......... .......... .......... .......... 11% 61.6M 8s
+  1700K .......... .......... .......... .......... .......... 11% 58.4M 8s
+  1750K .......... .......... .......... .......... .......... 12% 59.6M 7s
+  1800K ........ .......... ........ .......... .......... .......... .......... 12% 46.1M 7s
+  1850K .......... .......... ...... .......... .......... 16%  341K. 5s.
+  1400K. ............ ........... .......... 13% 58.7M 7s
+  1900K ...... .......... .......... ................ .......... .......... ...... .......... 16% 40.0M 5s
+  1450K ........ ............ 13% 50.8M 7s
+  1950K ........... ........ ............ ..... .......... ............ .............. .......... 13% 43.4M 7s
+  2000K .......... ........ .......... 17% 32.3M 5s
+  1500K ........ .......... ........ .................. ........ .......... ........ 14% 44.7M 6s
+  2050K .......... .......... .......... .......... .......... .......... 18% 42.0M 5s
+  1550K ...... 14% 70.8M 6s
+  2100K .......... .......... ................ .......... .......... ...... .......... .......... 14% 49.0M 6s
+  2150K ................ .......... .......... ...... 18% 34.4M 5s
+  1600K .......... .......... .......... .......... 15% 69.6M 6s
+  2200K ............ .......... .... .......... ............ .......... 19% 34.9M 4s
+  1650K .......... .......... ................ .......... .......... 15% 39.8M 6s
+  2250K .......... .......... .. .......... .............. ............ 19% 51.1M 4s
+  1700K .......... .... .......... 15% 47.9M 6s
+  2300K ............ .............. ............ .......... .......... 20% 40.4M 4s
+  1750K .......... .......... ...... .......... .......... .......... 16% 46.0M 6s
+  2350K ...... .......... .......... ................ 20% 57.4M 4s
+  1800K .......... .......... ...... .......... .......... ................ .......... .......... 21% 53.8M 4s
+  1850K ...... 16% 32.2M 5s
+  2400K .......... .......... .......... .......... .......... .......... 22%. 47.3M. 4s.
+  1900K. . ............. .......... .......... .......... ......... ................... 22%  349K 4s
+  1400K ........ .......... ........ 16% 23.2M 5s
+  2450K .......... .......... .............. 84%  348K 0s
+  1300K .......... ...... .......... 22% 28.5M 4s
+  1950K .... .......... .... .......... .......... 17% 43.6M 5s
+  2500K .......... .......... ................ .............. ............ .......... ...... .......... ............ .............. ............ .......... .......... 17% 32.1M 5s.
+  2550K  ................... 22% 17.6M 4s
+  1450K ............ 87% 20.5M 0s
+  1350K .......... 23% 20.1M 4s
+  2000K .......... .......... .......... .. .......... .......... .......... .. .......... .............. ............ .......... .........  23%.. 50.2M. 3s.
+  2050K. .......... ...... ............ ................ 17% 32.1M 5s
+  2600K ................ 90% 29.1M 0s
+  1400K .................  ................ ......... .......... 23% 18.9M 3s
+  1500K. .... ........... .... .......... ............ ................ .............. 24% 27.4M 3s
+  2100K .......... .. .......... 18% 24.9M 5s
+  2650K ............ .............. .......... .. .......... ...... .......... 93% 21.1M 0s
+  1450K .............. ................ ............ .......... 24% 23.9M 3s
+  1550K ...... .......... .... .......... ...... .......... 18% 29.7M 5s
+  2700K .......... 24% 24.0M 3s
+  2150K .................. ................ ........ .......... ............ ............ ...... .......... ........ ........ .......... 97% 21.9M 0s
+  1500K ........ .......... ........ .................. 25% 31.6M 3s
+  2200K ........ 25% 22.4M 3s
+  1600K .......... ............ ............ .......... .......... .............. .......... .. .......... ...... .......... 26% 45.8M 3s
+  2250K .......... ..        100% 24.1M=1.1s
+
+2026-11-02 23:51:36 (1.41 MB/s) - ‘download/zlib_source-1.2.13_bootstrap-1-source.hpkg’ saved [1580025/1580025]
+
+......... ............ .......... .......... .......... 26% 27.6M 3s
+  1650K .......... .......... ...... ................ 26% 51.0M 3s
+  2300K .... .......... ............ .............. 26% 66.6M 3s
+  1700K .......... .......... .......ExtractHPKGArchive1 build_packages/zlib_source-1.2.13_bootstrap-1-source 
+. .......... .......... .......... 27% 39.7M 3s
+  2350K .... .......... .......... 27% 55.8M 3s
+  1750K .......... .......... .............. ............ .......... .......... 28% 71.5M 3s
+  1800K .......... .......... ...... .......... .......... ................ .......... 27% 29.3M 3s
+  2400K .......... ...... .......... 29% 54.5M 3s
+  1850K .......... .......... ...... .......... .......... .......... .......... 30% 68.7M 2s
+  1900K .................. .. ................ .......... ........ 28% 35.0M 3s
+  2450K .......... .......... .............. .......... 30% 56.3M 2s
+  1950K .......... ........ .......... ........ .......... .......... .............. 29% 48.6M 3s
+  2500K .......... .......... ........ 31% 46.8M 2s
+  2000K .......... .......... .......... .... .......... ............ .............. 29% 54.8M 3s
+  2550K ............ 32% 72.7M 2s
+  2050K .......... .... .......... ............ .............. .......... .. .......... .............. 30% 48.3M 2s
+  2600K ............ 33% 52.0M 2s
+  2100K .......... .......... .......... .......... .......... ............ .......... .... .......... 30% 52.6M 2s
+  2650K ............ 34% 51.4M 2s
+  2150K .......... .......... .......... .......... ...... .......... .......... .......... .......... 31% 57.0M 2s
+  2700K ............ 34% 47.0M 2s
+  2200K .............. .......... .......... ........ .......... ........ .......... 31% 48.3M 2s
+  2750K ........ .......... .......... 35% 43.0M 2s
+  2250K .......... .......... .......... .......... .......... 36% 56.9M 2s
+  2300K .......... .......... .......... .......... .......... 37% 77.6M 2s
+  2350K .......... .......... .......... .......... .......... 37% 60.5M 2s
+  2400K .......... .......... .......... .......... .......... 38% 82.1M 2s
+  2450K .......... .......... .......... .......... .......... 39% 90.1M 2s
+  2500K .......... .......... .......... .......... .......... 40% 59.2M 2s
+  2550K .......... .......... .......... .......... .......... 41% 72.8M 2s
+  2600K .......... .......... .......... .......... .......... 41% 65.7M 2s
+  2650K .......... .......... .......... .......... .......... 42% 84.0M 1s
+  2700K .......... .......... .......... .......... .......... 43% 9.96M 1s
+  2750K .......... .......... .......... .......... .............. .......... 18%  349K 5s
+  2750K .......... .......... .......... .......... .......... 19% 41.8M 5s
+  2800K .......... .......... .......... .......... .......... 19% 73.3M 5s
+  2850K .......... .......... .......... .......... .......... 19% 66.4M 5s
+  2900K .......... .......... .......... .......... .......... 20% 47.5M 5s
+  2950K .......... .......... .......... .......... .......... 20% 83.0M 5s
+  3000K .......... .......... .......... .......... .......... 20% 69.8M 5s
+  3050K .......... .......... .......... .......... .......... 21% 67.1M 5s
+  3100K .......... .......... .......... .......... .......... 21% 73.9M 4s
+  3150K .......... .......... .......... .......... .......... 21% 64.5M 4s
+  3200K .......... .......... .......... .......... .......... 22% 75.6M 4s
+  3250K .......... .......... .......... .......... .......... 22% 49.4M 4s
+  3300K .......... .......... .......... .......... .......... 22% 66.6M 4s
+  3350K .......... .......... .......... .......... .......... 23% 70.5M 4s
+  3400K ................ .......... .......... ............ .. .................. .... .......... 23% 58.8M 4s
+  3450K ............ .............. .......... .. 32%  355K 3s
+  2800K .......... .............. ............ .......... .... .......... 23% 63.8M 4s
+  3500K .......... .................. .......... 33% 44.7M 2s
+  2850K .......... .... .......... ............ .............. .......... 24% 53.6M 4s
+  3550K .......... ........ .......... ........ .......... ........ 33% 55.7M 2s
+  2900K .......... ........ .................. ........ 24% 38.1M 4s
+  3600K .......... ........ .......... ........ .......... .......... .............. 34% 45.5M 2s
+  2950K ............ 24% 64.3M 4s
+  3650K .......... .... .......... ............ .......... .......... .......... 25% 83.3M 4s
+  3700K .......... ...... .......... .......... ............ .............. 34%. 37.3M. 2s.
+  3000K  ................. 25% 79.9M 4s
+  3750K .......... .......... ........ .......... ........ .......... ........ .................. 26% 50.6M 4s
+  3800K ........ .......... 35% 39.5M 2s
+  3050K ........ .......... ........ .......... ........ .................. .......... .......... 36% 53.6M 2s
+  3100K .... .......... 26% 45.2M 3s
+  3850K ............ .............. .......... .. .......... .............. .......... .......... 26% 66.1M 3s
+  3900K ........ .......... 36% 57.2M 2s
+  3150K .......... .............. ............ .......... .... .......... ............ .............. .......... 27% 49.0M 3s
+  3950K ....... 37%. 38.5M. 2s.
+  3200K.  ................. .......... .......... .... .......... ............ .............. ............ 37% 64.4M 2s
+  3250K .......... .... 27% 41.5M 3s
+  4000K .......... .......... .......... ........ .................. ........ .......... .......... 38% 42.6M 2s
+  3300K .......... .... 27% 44.9M 3s
+  4050K .......... ............ .............. .......... .......... ........ .......... ........ 28% 71.5M 3s
+  4100K .......... ........ 38% 45.0M 2s
+  3350K .................. ........ .......... ........ .......... ........ .......... ........ 28% 41.8M 3s
+  4150K .................. 39% 58.0M 2s
+  3400K .......... .......... .......... .......... .......... ...... ............... 40%  55.2M. 2s.
+  3450K. ............ .......... 28% 47.1M 3s
+  4200K ............ .......... .... .......... .... 44%  349K 2s
+  2800K .............. ...... .................... .......... .......... 40% 37.6M 2s
+  3500K .... .......... 29% 36.0M 3s
+  4250K ............ .............. .......... ...... .......... .. .......... .............. .......... ...................  29%. 46.3M. 3s.
+  4300K. ........... .......... 41% 28.6M 2s
+  3550K .......... .............. ............ 45% 20.4M 2s
+  2850K .......... .... .......... ............ ............ .......... .... .......... .......... .......... 29% 29.4M 3s
+  4350K ........ .................. ............ 45% 42.0M 1s
+  2900K .......... .. 41% 26.7M 2s
+  3600K .......... .......... ........... ... .......... ............ .............. ............ .......... ............ ........ 30% 28.3M 3s
+  4400K .................. 42%. 46%. 43.5M  32.8M 2s 1s.
+  3650K
+  2950K.  ...................... ........ .......... .. .......... ............ .......... .......... .............. ............ .......... .... 30% 52.1M 3s
+  4450K .......... ........ 42% 35.8M 2s
+  3700K .......... .......... 47% 29.3M 1s
+  3000K .............. .................. ........ .......... ........ .......... ...... .......... .......... 43% 45.6M 2s
+  3750K ................ 30%. 28.0M. 3s.
+  4500K. ........... . .................. ........ .......... 48% 40.4M 1s
+  3050K ...... .......... .......... .......... .... .......... .......... 31% 49.8M 3s
+  4550K .............. .......... .......... ................ 44% 29.1M 2s
+  3800K .......... .......... .... .......... .......... .......... .... .......... 49% 25.7M 1s
+  3100K .......... .......... .......... 44% 45.3M 2s
+  3850K ............ .................. 31% 29.2M 3s
+  4600K .......... .......... .... .......... .......... .......... ...... .......... 49% 37.9M 1s
+  3150K .......... .............. .......... .......... 31% 47.2M 3s
+  4650K .............. .......... .......... 45% 30.9M 2s
+  3900K .......... ............ .......... ........ .......... .......... .............. .......... .......... .......... .......... 45% 53.9M 1s
+  3950K .... .......... 32% 32.1M 3s
+  4700K .......... .......... 50% 22.0M 1s
+  3200K .......... .............. .......... .......... .... .......... .......... .......... 32% 46.4M 3s
+  4750K ...... .......... .......... .............. .......... 46% 28.5M 1s
+  4000K .......... .............. .......... .......... ...... 51% 28.3M 1s
+  3250K .......... ........ .......... .......... .............. ................ .......... 32% 26.4M 3s
+  4800K .......... ........ 47% 29.5M 1s
+  4050K .......... .......... .......... .......... ...............  52%... 28.9M. 1s.
+  3300K. ........ ....... .. .......... .............. ................ ............ 47% 39.6M 1s
+  4100K .......... .... 33% 28.3M 3s
+  4850K. .... ........... .......... .......... ................ 52% 50.4M 1s
+  3350K .......... .......... .............. .......... .......... .... .......... .......... 33% 42.5M 2s
+  4900K .............. .. .......... ........ 48% 29.1M 1s
+  4150K .......... .......... .......... .......... ........... ............... 53% 28.8M 1s
+  3400K .......... .......... .......... .................. 48% 50.8M 1s
+  4200K .......... .......... .......... 33% 28.2M 2s
+  4950K .......... ...........  ............... 54% 41.5M 1s
+  3450K ........ .......... .......... .......... .......... 49% 40.6M 1s
+  4250K ............. .... .......... ......... .......... .......... .......... 55% 48.4M 1s
+  3500K ........ .......... .......... 34% 29.2M 2s
+  5000K .......... .......... .......... ................ .................. .......... .......... 49% 29.0M 1s
+  4300K .....  .................... 34%  47.1M. 2s.
+  5050K. ............ .......... 56% 28.7M 1s
+  3550K .......... .............. .......... .......... .......... .......... .......... .......... .......... ...... .......... 34% 41.7M 2s
+  5100K .......... .............. .......... 50% 24.1M 1s
+  4350K .......... .............. .......... 56% 26.2M 1s
+  3600K .......... .......... .......... .......... .......... .......... ....... 57% . 61.1M. 1s.
+  3650K. ............ ........ ........... .............. .......... 35% 27.4M 2s
+  5150K .......... .............. .......... 51% 24.7M 1s
+  4400K .......... ...... .......... .......... ........... ... .......... ........ 58% 27.9M 1s
+  3700K .......... .......... .............. .................. ........ 35% 25.6M 2s
+  5200K .......... ........ 51% 42.5M 1s
+  4450K .......... ........ .......... .... .......... .......... ................ 59% 42.7M 1s
+  3750K .......... .......... .............. ............ 52% 34.7M 1s
+  4500K .......... .......... ........ .......... .......... .......... .... 35% 23.4M 2s
+  5250K .......... .......... .......... .............  ............... ............. 52%.. 33.6M.. 1s..
+  4550K ......... 36%.. 61.8M. 2s.
+  5300K. . 60%.. 24.0M. 1s.
+  3800K. ........ ....... .......... .......... .......... .......... ...... .......... 60% 91.9M 1s
+  3850K .......... .......... .......... .......... .......... ............ 53% 27.8M 1s
+  4600K .............. 36% 27.5M 2s
+  5350K ............ .......... ........ .......... .. .......... .............. .......... .......... 61% 28.4M 1s
+  3900K .......... ................ .......... .......... 54% 59.7M 1s
+  4650K .......... .......... .......... 36% 34.1M 2s
+  5400K ............ ......... ........ ....... ............ .............. .......... .......... .......... .......... 62% 27.7M 1s
+  3950K .......... .......... .......... 54% 27.7M 1s
+  4700K ...... .......... .......... .......... .......... 37% 27.3M 2s
+  5450K .......... .......... .. .......... ............ .............. .......... 55% 33.5M 1s
+  4750K .. 63% 25.9M 1s
+  4000K .......... .............. ............ .......... .... .......... ............ ................ .............. .......... 55% 34.4M 1s
+  4800K .......... ........ 64% 32.3M 1s
+  4050K .......... .......... .............. .......... .. .......... .............. ............ 64% 79.8M 1s
+  4100K .......... .... 56% 42.3M 1s
+  4850K .......... .......... .................. .......... .......... .... .......... .......... 56% 60.9M. 1s.
+  4900K. ........ 65%.. 42.5M. 1s.
+  4150K. .. .......... .......... .............. .............. .. ............... ....... ........ 57% 63.8M 1s
+  4950K .................. 66% 60.5M 1s
+  4200K ........ .......... ........ .......... .......... .............. .......... .......... 58% 43.2M 1s
+  5000K ........ .......... 67% 34.1M 1s
+  4250K ........ .......... ........ .......... ........ .................. .......... .......... 68%  100M 1s
+  4300K .... .......... 58% 43.0M 1s
+  5050K .......... .......... ........ .................. ........ .......... ........ .......... 59%  110M 1s
+  5100K ........ .......... 68% 43.8M 1s
+  4350K .......... .............. .......... .......... ........ .......... .......... .............. .......... 59% 32.2M 1s
+  5150K .......... ........ 69% 37.2M 1s
+  4400K .......... .......... .......... .... .......... ............ .............. ............ 70% 59.0M 1s
+  4450K .......... .... 60% 38.7M 1s
+  5200K .......... .......... .......... ........ .......... .......... .............. .......... 61% 61.6M 1s
+  5250K .......... ........ 71% 42.4M 1s
+  4500K .......... ........ .................. ........ .......... ........ .......... .......... 71% 65.5M 0s
+  4550K .............. 61% 42.9M 1s
+  5300K .......... .......... ........ .......... .......... .......... .... .......... .......... 62% 59.8M 1s
+  5350K .................. 72% 42.9M 0s
+  4600K .......... .......... .... .......... .......... .......... ........ .................. 62% 59.1M 1s
+  5400K ........ .......... 73% 59.2M 0s
+  4650K ........ .......... ........ .......... .......... .............. .......... .......... 63% 44.8M 1s
+  5450K ........ .......... 74% 33.5M 0s
+  4700K ........ .......... ........ .................. ........ .......... .......... .......... 75%  110M 0s
+  4750K .... .......... 63% 42.2M 1s
+  5500K .......... .................. .......... .......... .......... .......... 75% 37.9M 0s
+  4800K .......... .......... .......... .......... .......... 76% 61.6M 0s
+  4850K .......... .......... .......... .......... .......... 77% 78.6M 0s
+  4900K .......... .......... .......... .......... .......... 78% 90.4M 0s
+  4950K .......... .......... .......... .......... .......... 79% 99.5M 0s
+  5000K .......... .......... .......... .......... .......... 79% 81.6M 0s
+  5050K .......... .......... .......... .......... .......... 80% 97.2M 0s
+  5100K .......... .......... .......... .......... .......... 81% 71.6M 0s
+  5150K .......... .......... .......... .......... .......... 82% 76.9M 0s
+  5200K .......... .......... .......... .......... .......... 83% 99.2M 0s
+  5250K .......... .......... .......... .......... .......... 83% 70.4M 0s
+  5300K .......... .......... .......... .......... .......... 84% 93.1M 0s
+  5350K .......... .......... .......... .......... .......... 85% 79.7M 0s
+  5400K .......... .......... .......... .......... .......... 86%  105M 0s
+  5450K .......... .......... .......... .......... .......... 86% 94.9M 0s
+  5500K .......... .......... .......... .......... .......... 87% 73.1M 0s
+  5550K .......... .......... .......... .......... .......... 88% 75.8M 0s
+  5600K .......... .......... .......... .... .......... 37%  446K 2s
+  5500K .......... .......... .......... .......... .......... 37% 61.6M 2s
+  5550K .......... .......... .......... .......... .......... 38% 50.4M 2s
+  5600K .......... .......... .......... .......... .......... 38% 95.3M 2s
+  5650K .......... .......... .......... .......... .......... 39% 65.8M 2s
+  5700K .......... .......... .......... .......... .......... 39%  107M 2s
+  5750K .......... .......... .......... .......... .......... 39% 95.3M 2s
+  5800K .......... .......... .......... .......... .......... 40%  107M 2s
+  5850K .......... .......... .......... .......... .......... 40%  104M 2s
+  5900K .......... .......... .......... .......... .......... 40%  104M 2s
+  5950K .......... .......... .......... .......... .......... 41% 62.2M 2s
+  6000K .......... .......... .......... .......... .......... 41% 90.4M 2s
+  6050K .......... .......... .......... .......... .......... 41%  100M 2s
+  6100K .......... .......... .......... .......... .......... 42%  110M 2s
+  6150K .......... .......... .......... .......... .......... 42%  100M 2s
+  6200K ........ .......... .......... .......... 64%  467K 1s
+  5550K .......... .......... .......... .......... .......... 65% 43.8M 1s
+  5600K .......... .......... .......... .......... .......... 65% 62.5M 1s
+  5650K .......... .......... .......... .......... .......... 66% 82.7M 1s
+  5700K .......... .......... .......... .......... .......... 66% 60.5M 1s
+  5750K .......... .......... ........ .......... ........ .......... ........ .................. 67%  110M 1s
+  5800K ........ .......... 42% 6.94M 2s
+  6250K ........ .......... ........ .......... ........ .................. .......... .......... 43% 45.8M 2s
+  6300K.  ............. 67% 41.4M 1s
+  5850K ............ .............. .......... .. .......... .............. ............ .......... 43% 64.7M 2s
+  6350K .... .......... 68% 59.6M 1s
+  5900K ............ .............. .......... .......... ........ .......... ........ .......... 69% 57.0M 1s
+  5950K ........ .................. ........ 43% 39.8M 2s
+  6400K .......... .......... .......... .... .......... .......... .................. ........ 69% 38.6M 1s
+  6000K .......... ........ 44% 45.3M 2s.
+  6450K. ...... .............. ...... ........ .......... .......... .............. .......... 70% 45.3M 1s
+  6050K .......... ........ 44% 46.0M 2s
+  6500K .......... ........ .................. ........ .......... ........ .......... .......... 44%  103M 2s
+  6550K .......... .......... .......... 70% 45.4M 1s
+  6100K .......... ...... .......... .......... ................ 45% 64.8M 2s
+  6600K .......... .......... .......... .......... .......... 45%  107M 2s
+  6650K .......... .......... .......... .......... .......... 45%  110M 2s
+  6700K .......... .......... .......... .......... .......... 46%  106M 2s
+  6750K .......... .......... .......... .......... .......... 46% 73.9M 2s
+  6800K .......... .......... .......... .......... .......... 46%  129M 2s
+  6850K .......... .......... .......... .......... .......... 47% 75.5M 2s
+  6900K .......... .......... .......... .......... .......... 47% 97.1M 2s
+  6950K .......... .......... .......... .......... .......... 47%  101M 2s
+  7000K .......... .......... .......... .......... .......... 48% 98.2M 2s
+  7050K .......... .......... .......... .......... .......... 48% 86.7M 1s
+  7100K .......... .......... .......... .......... .......... 48% 82.2M 1s
+  7150K .......... .......... .......... .......... .......... 49% 55.9M 1s
+  7200K .......... .......... .......... .......... .......... 49%  109M 1s
+  7250K .......... .......... .......... .......... .............. .......... 89%..... 49%  436K 58.1M 1s
+  7300K 0s 
+  5650K.... ......... ........ ............ .............. .......... .......... ........ .......... .......... 71% 5.34M 1s
+  6150K ............ .......... .......... 50% 36.6M 1s
+  7350K .......... .......... .......... .......... ...... 90% 29.5M 0s
+  5700K .......... .......... ........ .......... ........ .......... ........ .......... ........ 90% 63.0M 0s
+  5750K .................. 72% 28.2M 1s
+  6200K .......... .......... ............ 50% 27.1M 1s
+  7400K .......... .......... .... .......... ............ .......... .......... 51% 89.6M 1s
+  7450K .......... .......... ........ .......... .......... 72% 36.4M. 1s.
+  6250K. ........... 91% 27.8M 0s
+  5800K .......... .......... ........ .......... .......... .......... .......... 73% 61.2M 1s
+  6300K ........ .......... .......... .......... .......... 51% 28.6M 1s
+  7500K .......... ................ .......... .......... 92% 33.8M 0s
+  5850K .......... .......... .......... .............. .......... .......... ...... .......... .......... .......... 51% 33.2M 1s
+  7550K .......... .......... ............ ... 93%........  32.6M. 0s.
+  5900K. .......... .............. .......... 73% 18.4M 1s
+  6350K .......... ........ .......... .......... .......... 94% 57.6M 0s
+  5950K .... .......... .......... ................ .......... 52% 26.6M 1s
+  7600K .......... .......... .......... .......... ................ .......... .......... .... 74% 27.2M 0s
+  6400K .......... .......... .......... ........ .......... 94% 26.3M 0s
+  6000K .......... .............. .......... 74% 60.4M 0s
+  6450K .......... .......... ............ 52% 29.6M 1s
+  7650K .......... .......... .......... .......... .......... .......... ...... 52%  101M 1s
+  7700K .......... .......... ........ .......... ........ 95% 29.3M 0s
+  6050K .......... .......... .............. 75% 30.0M 0s
+  6500K .......... .......... .......... .......... ............ .......... .......... .......... 53% 30.5M 1s
+  7750K .......... .......... ...... .......... .......... 96% 40.0M 0s
+  6100K .......... ........ 76% 38.0M 0s
+  6550K .......... .......... .............. ............ .......... ...... .......... .... .......... ............ 53% 47.1M 1s
+  7800K ................ 76%  111M 0s
+  6600K .......... .......... .......... ............ .......... .......... .......... .......... 53% 44.3M 1s
+  7850K ...... .......... 77% 44.2M 0s
+  6650K .......... .......... .......... .......... .......... 77% 90.3M 0s
+  6700K .......... .......... .......... .......... .......... 78%  124M 0s
+  6750K .......... .......... .......... .......... .......... 79% 76.6M 0s
+  6800K .......... .......... .......... .......... .......... 79%  110M 0s
+  6850K .......... .......... .......... .......... .......... 80% 82.8M 0s
+  6900K .......... .......... .......... .......... .......... 80%  110M 0s
+  6950K .......... .......... .......... .......... .......... 81%  110M 0s
+  7000K .......... .......... .......... .......... .......... 81% 99.4M 0s
+  7050K .......... .......... .......... .......... .......... 82%  111M 0s
+  7100K .......... .......... .......... .......... .......... 83%  110M 0s
+  7150K .......... .......... .......... .......... .......... 83% 76.5M 0s
+  7200K .......... .......... .......... .......... .......... 84% 79.0M 0s
+  7250K .......... .......... .......... .......... .......... 84%  110M 0s
+  7300K .......... .......... .......... .......... .......... 85% 99.8M 0s
+  7350K .......... .......... .......... .......... .......... 85% 53.8M 0s
+  7400K .......... .......... .......... 97% 4.73M 0s
+  6150K .......... .......... .......... .......... .......... 98%  112M 0s
+  6200K .............. .......... .......... 86% 39.1M 0s
+  7450K .......... .......... .......... .......... .......... .......... .......... .......... 98% 45.0M 0s
+  6250K ........ .......... 87% 67.0M 0s
+  7500K ........ .......... ........ .......... .......... .......... .......... 87%  112M 0s
+  7550K .......... ................ .......... .......... ...... .......... 99% 46.7M 0s
+  6300K .......... .............. .......... .. 88% 63.9M 0s
+  7600K .......... .............. .......... .......... 54% 4.25M 1s
+  7900K .......... .......... .......... ............ .......... ...  . . . . .   . . . . ...... 54%   109M  1s 
+  7950K   .            100% 24.1M=1.4s
+
+2026-11-02 23:51:37 (4.30 MB/s) - ‘download/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’ saved [6474896/6474896]
+
+..... .......... .......... .......... 88% 34.7M 0s
+  7650K .......... ............ .............. ............ .......... .......... .......... 54% 38.4M 1s
+  8000K .......... .......... .......... .......... .......... 55% 99.3M 1s
+  8050K .......... ...ExtractHPKGArchive1 build_packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64 
+. .......... .......... 89% 29.6M 0s
+  7700K .......... .......... .............. ............ .......... .... .......... .......... 55% 44.3M 1s
+  8100K .......... .......... .............. 90% 44.0M 0s
+  7750K .......... .......... .......... .......... .... .......... ............ 90%  110M 0s
+  7800K .............. 55% 44.5M 1s
+  8150K .......... .......... .......... .......... .... .......... .......... .......... .......... 91% 42.5M 0s
+  7850K .............. 56% 43.1M 1s
+  8200K .......... .......... ........ .......... ........ .......... .......... 56% 99.8M 1s
+  8250K .............. .......... .......... 91% 43.8M 0s
+  7900K .......... .............. .......... .. .......... .............. .......... .......... 56% 44.3M 1s
+  8300K .......... .............. .......... 92% 44.9M 0s
+  7950K .......... .......... ...........  ............. ............ .............. .......... 57% 45.2M 1s
+  8350K .......... .......... .......... .......... .......... 92% 38.5M 0s
+  8000K .......... ...... 57% 61.7M 1s
+  8400K .......... .......... .......... .......... .......... 57% 99.2M 1s
+  8450K .......... .......... .......... .......... .......... 58%  110M 1s
+  8500K .......... .......... .......... .......... .......... 58%  100M 1s
+  8550K .......... .......... .......... .......... .......... 58% 95.4M 1s
+  8600K .......... .......... .......... .......... .......... 59%  103M 1s
+  8650K .......... .......... .......... .......... .......... 59%  103M 1s
+  8700K .......... .......... .......... .......... .......... 59%  102M 1s
+  8750K .......... .......... .......... .......... .......... 60% 63.2M 1s
+  8800K .......... .......... .......... .......... .......... 60%  135M 1s
+  8850K .......... .......... .......... .......... .......... 60%  102M 1s
+  8900K .......... .......... .......... .......... .......... 61% 99.8M 1s
+  8950K .......... .......... .......... .......... .......... 61% 91.5M 1s
+  9000K .......... .......... .......... .......... .......... 61%  111M 1s
+  9050K .......... .......... .......... .......... .......... 62% 98.6M 1s
+  9100K .......... .......... .......... .......... .......... 62%  104M 1s
+  9150K .......... .......... .......... .......... .......... 62% 71.3M 1s
+  9200K .......... .......... .......... .......... .......... 63% 95.8M 1s
+  9250K .......... .......... .............. .......... .......... .......... 93% 4.03M 0s
+  8050K .......... .......... .......... .......... .......... 94%  102M 0s
+  8100K .......... .......... .......... .......... .......... 94%  110M 0s
+  8150K .......... .......... .......... .......... .......... 95% 99.3M 0s
+  8200K .......... .......... .......... .......... .......... 95%  110M 0s
+  8250K .......... .......... .......... .......... .......... 96% 99.3M 0s
+  8300K .......... .......... .......... .......... .......... 97%  111M 0s
+  8350K .......... .......... .......... .......... .......... 97% 82.5M 0s
+  8400K .......... .......... .......... .......... .......... 98% 99.6M 0s
+  8450K .......... .......... .......... .......... .......... 98% 99.2M 0s
+  8500K .......... .......... .......... .......... .......... 99% 99.3M 0s
+  8550K .......... .......... .......... .......... .......... 99% 99.7M 0s
+  8600K ......                                                100% 11.6T=1.5s
+
+2026-11-02 23:51:37 (5.73 MB/s) - ‘download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’ saved [8812771/8812771]
+
+ExtractHPKGArchive1 build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64 
+. .......... .......... 63%  408K 1s
+  9300K .......... .......... .......... .......... .......... 64%  106M 1s
+  9350K .......... .......... .......... .......... .......... 64%  104M 1s
+  9400K .......... .......... .......... .......... .......... 64%  110M 1s
+  9450K .......... .......... .......... .......... .......... 65%  111M 1s
+  9500K .......... .......... .......... .......... .......... 65%  110M 1s
+  9550K .......... .......... .......... .......... .......... 65% 76.6M 1s
+  9600K .......... .......... .......... .......... .......... 66%  111M 1s
+  9650K .......... .......... .......... .......... .......... 66%  110M 1s
+  9700K .......... .......... .......... .......... .......... 66%  111M 1s
+  9750K .......... .......... .......... .......... .......... 67%  110M 1s
+  9800K .......... .......... .......... .......... .......... 67% 93.7M 1s
+  9850K .......... .......... .......... .......... .......... 67%  118M 1s
+  9900K .......... .......... .......... .......... .......... 68%  111M 1s
+  9950K .......... .......... .......... .......... .......... 68% 76.3M 1s
+ 10000K .......... .......... .......... .......... .......... 68% 1.11M 1s
+ 10050K .......... .......... .......... .......... .......... 69%  473M 1s
+ 10100K .......... .......... .......... .......... .......... 69%  461M 1s
+ 10150K .......... .......... .......... .......... .......... 69%  429M 1s
+ 10200K .......... .......... .......... .......... .......... 70%  482M 1s
+ 10250K .......... .......... .......... .......... .......... 70%  464M 1s
+ 10300K .......... .......... .......... .......... .......... 70%  475M 1s
+ 10350K .......... .......... .......... .......... .......... 71%  351M 1s
+ 10400K .......... .......... .......... .......... .......... 71%  480M 1s
+ 10450K .......... .......... .......... .......... .......... 71%  477M 1s
+ 10500K .......... .......... .......... .......... .......... 72%  455M 1s
+ 10550K .......... .......... .......... .......... .......... 72%  478M 1s
+ 10600K .......... .......... .......... .......... .......... 72%  394M 1s
+ 10650K .......... .......... .......... .......... .......... 73%  475M 1s
+ 10700K .......... .......... .......... .......... .......... 73%  441M 1s
+ 10750K .......... .......... .......... .......... .......... 73%  346M 1s
+ 10800K .......... .......... .......... .......... .......... 74%  476M 1s
+ 10850K .......... .......... .......... .......... .......... 74%  461M 1s
+ 10900K .......... .......... .......... .......... .......... 74%  470M 1s
+ 10950K .......... .......... .......... .......... .......... 75%  476M 1s
+ 11000K .......... .......... .......... .......... .......... 75%  460M 1s
+ 11050K .......... .......... .......... .......... .......... 75%  409M 1s
+ 11100K .......... .......... .......... .......... .......... 76%  443M 1s
+ 11150K .......... .......... .......... .......... .......... 76%  368M 0s
+ 11200K .......... .......... .......... .......... .......... 77%  483M 0s
+ 11250K .......... .......... .......... .......... .......... 77%  450M 0s
+ 11300K .......... .......... .......... .......... .......... 77%  490M 0s
+ 11350K .......... .......... .......... .......... .......... 78%  450M 0s
+ 11400K .......... .......... .......... .......... .......... 78%  495M 0s
+ 11450K .......... .......... .......... .......... .......... 78%  471M 0s
+ 11500K .......... .......... .......... .......... .......... 79%  351M 0s
+ 11550K .......... .......... .......... .......... .......... 79%  348M 0s
+ 11600K .......... .......... .......... .......... .......... 79%  452M 0s
+ 11650K .......... .......... .......... .......... .......... 80%  494M 0s
+ 11700K .......... .......... .......... .......... .......... 80%  472M 0s
+ 11750K .......... .......... .......... .......... .......... 80%  439M 0s
+ 11800K .......... .......... .......... .......... .......... 81%  465M 0s
+ 11850K .......... .......... .......... .......... .......... 81%  465M 0s
+ 11900K .......... .......... .......... .......... .......... 81%  471M 0s
+ 11950K .......... .......... .......... .......... .......... 82%  322M 0s
+ 12000K .......... .......... .......... .......... .......... 82%  472M 0s
+ 12050K .......... .......... .......... .......... .......... 82%  472M 0s
+ 12100K .......... .......... .......... .......... .......... 83%  462M 0s
+ 12150K .......... .......... .....ExtractHPKGArchive1 build_packages/ncurses6-6.6_bootstrap-1-arm64 
+..... .......... .......... 83%  415K 0s
+ 12200K .......... .......... .......... .......... .......... 83% 88.0M 0s
+ 12250K .......... .......... .......... .......... .......... 84%  111M 0s
+ 12300K .......... .......... .......... .......... .......... 84%  124M 0s
+ 12350K .......... .......... .......... .......... .......... 84% 82.7M 0s
+ 12400K .......... .......... .......... .......... .......... 85%  122M 0s
+ 12450K .......... .......... .......... .......... .......... 85%  110M 0s
+ 12500K .......... .......... .......... .......... .......... 85%  123M 0s
+ 12550K .......... .......... .......... .......... .......... 86%  111M 0s
+ 12600K .......... .......... .......... .......... .......... 86%  111M 0s
+ 12650K .......... .......... .......... .......... .......... 86%  110M 0s
+ 12700K .......... .......... .......... .......... .......... 87%  124M 0s
+ 12750K .......... .......... .......... .......... .......... 87% 76.8M 0s
+ 12800K .......... .......... .......... .......... .......... 87% 99.0M 0s
+ 12850K .......... .......... .......... .......... .......... 88%  111M 0s
+ 12900K .......... .......... .......... .......... .......... 88% 99.0M 0s
+ 12950K .......... .......... .......... .......... .......... 89%  110M 0s
+ 13000K .......... .......... .......... .......... .......... 89% 99.4M 0s
+ 13050K .......... .......... .......... .......... .......... 89% 99.6M 0s
+ 13100K .......... .......... .......... .......... .......... 90% 99.2M 0s
+ 13150K .......... .......... .......... .......... .......... 90% 76.5M 0s
+ 13200K .......... .......... .......... .......... .......... 90%  110M 0s
+ 13250K .......... .......... .......... .......... .......... 91%  110M 0s
+ 13300K .......... .......... .......... .......... .......... 91% 99.9M 0s
+ 13350K .......... .......... .......... .......... .......... 91% 99.1M 0s
+ 13400K .......... .......... .......... .......... .......... 92%  110M 0s
+ 13450K .......... .......... .......... .......... .......... 92% 95.1M 0s
+ 13500K .......... .......... .......... .......... .......... 92%  110M 0s
+ 13550K .......... .......... .......... .......... .......... 93% 76.5M 0s
+ 13600K .......... .......... .......... .......... .......... 93% 99.2M 0s
+ 13650K .......... .......... .......... .......... .......... 93% 94.7M 0s
+ 13700K .......... .......... .......... .......... .......... 94%  117M 0s
+ 13750K .......... .......... .......... .......... .......... 94% 99.9M 0s
+ 13800K .......... .......... .......... .......... .......... 94% 99.0M 0s
+ 13850K .......... .......... .......... .......... .......... 95%  110M 0s
+ 13900K .......... .......... .......... .......... .......... 95% 99.3M 0s
+ 13950K .......... .......... .......... .......... .......... 95% 76.7M 0s
+ 14000K .......... .......... .......... .......... .......... 96% 99.1M 0s
+ 14050K .......... .......... .......... .......... .......... 96% 1.57M 0s
+ 14100K .......... .......... .......... .......... .......... 96%  110M 0s
+ 14150K .......... .......... .......... .......... .......... 97%  110M 0s
+ 14200K .......... .......... .......... .......... .......... 97%  100M 0s
+ 14250K .......... .......... .......... .......... .......... 97%  110M 0s
+ 14300K .......... .......... .......... .......... .......... 98%  110M 0s
+ 14350K .......... .......... .......... .......... .......... 98% 76.6M 0s
+ 14400K .......... .......... .......... .......... .......... 98%  110M 0s
+ 14450K .......... .......... .......... .......... .......... 99%  110M 0s
+ 14500K .......... .......... .......... .......... .......... 99% 99.3M 0s
+ 14550K .......... .......... .......... .......... .......... 99%  111M 0s
+ 14600K .....                                                 100% 10.6T=1.8s
+
+2026-11-02 23:51:37 (7.87 MB/s) - ‘download/icu74-74.1_bootstrap-1-arm64.hpkg’ saved [14956236/14956236]
+
+ExtractHPKGArchive1 build_packages/icu74-74.1_bootstrap-1-arm64 
+ExtractHPKGArchive1 build_packages/icu74-74.1_bootstrap-1-arm64 
+
+BUILD FAILURE:
+...failed updating 1 target(s)...
+...skipped 1 target(s)...
+...updated 325 target(s)...
+######## build[13] FAILED rc=1

@@ -30,7 +30,9 @@ injection**. This is why:
   `archive/package-chain-status.md`.)*
   This cross-builds **OpenSSH 10.4p1** (+ static **zlib 1.3.1**) against the
   arm64 cross-tools and the already-built `haiku`/`haiku_devel` package staging
-  dirs, then wraps it as `openssh-10.4p1-1-arm64.hpkg`.
+  dirs, then wraps it as `openssh_debeos-10.4p1-1-arm64.hpkg`. The name is not
+  `openssh`: that is the DeBeOS repo's OpenSSL-linked recipe build, and sharing
+  its identity let a repo revision bump replace the image's sshd (#986).
 - **Independent of jam** — it only *reads* the staging dirs and never writes
   `generated.arm64`, so it is safe to run while an image build is in progress.
 - Stages a sysroot at `/opt/haiku/sysroot-arm64` (COPIES headers/libs, never

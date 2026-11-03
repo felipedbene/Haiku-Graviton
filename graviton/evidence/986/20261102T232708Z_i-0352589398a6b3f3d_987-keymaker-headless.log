@@ -1,0 +1,181 @@
+# evidence: 987-keymaker-headless
+# instance: i-0352589398a6b3f3d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T232708Z   end: 20261102T232823Z   rc: 0
+# script sha256: 7cc84ed95b6a84b7a6f85f8c2a17278cd4a8ec12c0ac6cbd9726f27b91290cd4
+# ---- script ----
+# | set -u
+# | cd /boot/home/o986
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | echo "== swap the image's openssh for green's (uninstall, then install the green hpkg), detached so the ssh session that runs this can drop"
+# | cat > /boot/home/o986/swap.sh <<'EOS'
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman uninstall openssh 2>&1 | grep -vE '^\*\*\* please enter'; echo "uninstall rc=${PIPESTATUS[1]}"
+# | feed | pkgman install /boot/home/o986/green-openssh-10.4p1-1-arm64.hpkg 2>&1 | grep -vE '^\*\*\* please enter'; echo "install rc=${PIPESTATUS[1]}"
+# | echo SWAP-DONE
+# | EOS
+# | ( bash /boot/home/o986/swap.sh ) < /dev/null > /boot/home/o986/swap.log 2>&1 &
+# | sleep 60; cat /boot/home/o986/swap.log
+# | sha256sum /boot/system/packages/openssh*.hpkg; ssh -V
+# | echo "== app_server running?"; ps | grep -c '[a]pp_server'
+# | echo "== upstream keymaker (as packaged), headless"
+# | cmp /boot/system/boot/post-install/sshd_keymaker.sh /dev/null >/dev/null 2>&1; sha256sum /boot/system/boot/post-install/sshd_keymaker.sh
+# | sh /boot/system/boot/post-install/sshd_keymaker.sh; echo "upstream keymaker rc=$?"
+# | echo "== fixed keymaker, all keys already present"
+# | sha256sum /boot/home/o986in/sshd_keymaker.fixed.sh
+# | sh /boot/home/o986in/sshd_keymaker.fixed.sh; echo "fixed keymaker rc=$?"
+# | echo "== fixed keymaker, keys removed: generates them headless"
+# | mkdir -p /boot/home/o986/keybak && mv /boot/system/settings/ssh/ssh_host_* /boot/home/o986/keybak/
+# | sh /boot/home/o986in/sshd_keymaker.fixed.sh </dev/null; echo "fixed keymaker rc=$?"
+# | ls -l /boot/system/settings/ssh/ | grep host_
+# | for k in /boot/system/settings/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$k"; done
+# | echo "== fixed keymaker, ssh-keygen made to fail (a failing ssh-keygen first on PATH): must exit 1"
+# | mkdir -p /boot/home/o986/fakebin && printf '#!/bin/sh\necho "fake ssh-keygen: refusing" >&2\nexit 1\n' > /boot/home/o986/fakebin/ssh-keygen && chmod +x /boot/home/o986/fakebin/ssh-keygen
+# | rm -f /boot/system/settings/ssh/ssh_host_rsa_key /boot/system/settings/ssh/ssh_host_rsa_key.pub
+# | PATH=/boot/home/o986/fakebin:$PATH sh /boot/home/o986in/sshd_keymaker.fixed.sh </dev/null; echo "fixed keymaker with failing ssh-keygen rc=$?"
+# | echo "-- and the upstream one in the same situation:"
+# | PATH=/boot/home/o986/fakebin:$PATH sh /boot/system/boot/post-install/sshd_keymaker.sh </dev/null; echo "upstream keymaker with failing ssh-keygen rc=$?"
+# | sh /boot/home/o986in/sshd_keymaker.fixed.sh </dev/null >/dev/null 2>&1; echo "regenerate rsa rc=$?"; ls /boot/system/settings/ssh/ | grep -c host_
+# ---- raw output ----
+== swap the image's openssh for green's (uninstall, then install the green hpkg), detached so the ssh session that runs this can drop
+The following changes will be made:
+  in system:
+    uninstall package openssh-10.4p1-1
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : [system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_23:27:16"
+[system] Cleaning up ...
+[system] Done.
+uninstall rc=0
+PfƒÎ2 repochecksum-1 []
+Validating checksum for DeBeOS...done.
+The following changes will be made:
+  in system:
+    install package libedit-20230828_3.1-1 from repository DeBeOS
+    install package openssh-10.4p1-1 from local file
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) :        libedit-20230828_3.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libedit-20230828_3.1-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] warning: package openssh-10.4p1-1-arm64.hpkg: The post-installation script  "/boot/system/boot/post-install/sshd_keymaker.sh" failed with exit code 1.
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_23:27:16-1"
+[system] Cleaning up ...
+[system] Done.
+install rc=0
+SWAP-DONE
+b902d39bd06dd200ee28e057b6eeba4f22cac4563844de2ddaa137fc50272b40  /boot/system/packages/openssh-10.4p1-1-arm64.hpkg
+OpenSSH_10.4p1, OpenSSL 3.5.9 29 Sep 2026
+== app_server running?
+1
+== upstream keymaker (as packaged), headless
+436b3da98e670f280bfc1074e83d3d0fda7ea0094089c701affd11ba40ff3183  /boot/system/boot/post-install/sshd_keymaker.sh
+BApplication: initialization failed: General system error
+upstream keymaker rc=1
+== fixed keymaker, all keys already present
+9725494e532881f0af988c644f01dd797de3d6f6c6b29160993d5f190074027a  /boot/home/o986in/sshd_keymaker.fixed.sh
+BApplication: initialization failed: General system error
+fixed keymaker rc=0
+== fixed keymaker, keys removed: generates them headless
+BApplication: initialization failed: General system error
+Generating public/private ecdsa key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_ecdsa_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_ecdsa_key.pub
+The key fingerprint is:
+SHA256:tH3wJFJcA5VTAPnieQIRvB36jNIFkZIX8iYO/ojoQAs baron@ip-10-128-14-80.us-west-2.compute.internal
+The key's randomart image is:
++---[ECDSA 256]---+
+|      .o+*+*=+.  |
+|      oo*.+ o.   |
+|    . .o=*oo..   |
+|   . o ++++=.    |
+|E.  . ..SB.oo    |
+|o... o. o *..    |
+|o.. . ..   o     |
+|o                |
+| .               |
++----[SHA256]-----+
+BApplication: initialization failed: General system error
+Generating public/private rsa key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_rsa_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_rsa_key.pub
+The key fingerprint is:
+SHA256:HSLrvofuygB4SkmwV0H6u8Xcx5rg1tWxILUp0WjsIho baron@ip-10-128-14-80.us-west-2.compute.internal
+The key's randomart image is:
++---[RSA 3072]----+
+|.  .+. . o       |
+|.. o    = o      |
+|..o   .o.o.o     |
+|o.E.. .o+o+..    |
+|oo.o....So.o o   |
+|.+.  = . .. o    |
+|. . . *o..o      |
+|   o =o.o+       |
+|    +=*oo        |
++----[SHA256]-----+
+BApplication: initialization failed: General system error
+Generating public/private ed25519 key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_ed25519_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_ed25519_key.pub
+The key fingerprint is:
+SHA256:gOhGLs1Eh9rerYP76zQUj0CIWXCv68BywOP5v4tlxmo baron@ip-10-128-14-80.us-west-2.compute.internal
+The key's randomart image is:
++--[ED25519 256]--+
+|o==..            |
+|++.+ .           |
+| o= + .          |
+|oB.o + .         |
+|o+B.o.. S        |
+|o++oo .          |
+|o+o.o*           |
+|.+oEO.           |
+|  +B=*o          |
++----[SHA256]-----+
+BApplication: initialization failed: General system error
+Generating public/private mldsa44-ed25519 key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+The key fingerprint is:
+SHA256:E0SN0VEKRNcOAb6lS39gHAgCxW/1ZhgH6LQJ9QayacE baron@ip-10-128-14-80.us-west-2.compute.internal
+The key's randomart image is:
++[MLDSA44-ED25519-+
+|  .==.+=XB+=.    |
+|    E*o*++=..    |
+|    += +*=+o     |
+|   .  *..*+..    |
+|     .  So+      |
+|       . = .     |
+|        . . .    |
+|           .     |
+|                 |
++----[SHA256]-----+
+ssh-keygen: generating new host keys: MLDSA44-ED25519 
+BApplication: initialization failed: General system error
+fixed keymaker rc=0
+-rw------- 1 baron root    545 Nov  2 23:28 ssh_host_ecdsa_key
+-rw-r--r-- 1 baron root    210 Nov  2 23:28 ssh_host_ecdsa_key.pub
+-rw------- 1 baron root    452 Nov  2 23:28 ssh_host_ed25519_key
+-rw-r--r-- 1 baron root    130 Nov  2 23:28 ssh_host_ed25519_key.pub
+-rw------- 1 baron root   4051 Nov  2 23:28 ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root   1926 Nov  2 23:28 ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root   4051 Nov  2 23:28 ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root   1926 Nov  2 23:28 ssh_host_mldsa44_ed25519_key.pub
+-rw------- 1 baron root   2643 Nov  2 23:28 ssh_host_rsa_key
+-rw-r--r-- 1 baron root    602 Nov  2 23:28 ssh_host_rsa_key.pub
+256 SHA256:tH3wJFJcA5VTAPnieQIRvB36jNIFkZIX8iYO/ojoQAs baron@ip-10-128-14-80.us-west-2.compute.internal (ECDSA)
+256 SHA256:gOhGLs1Eh9rerYP76zQUj0CIWXCv68BywOP5v4tlxmo baron@ip-10-128-14-80.us-west-2.compute.internal (ED25519)
+256 SHA256:E0SN0VEKRNcOAb6lS39gHAgCxW/1ZhgH6LQJ9QayacE baron@ip-10-128-14-80.us-west-2.compute.internal (MLDSA44-ED25519)
+256 SHA256:gZK6QtAwycFnU7ONBtO0IU1KNX+/VfOWMiucNXlqc58 baron@ip-10-128-14-80.us-west-2.compute.internal (MLDSA44-ED25519)
+3072 SHA256:HSLrvofuygB4SkmwV0H6u8Xcx5rg1tWxILUp0WjsIho baron@ip-10-128-14-80.us-west-2.compute.internal (RSA)
+== fixed keymaker, ssh-keygen made to fail (a failing ssh-keygen first on PATH): must exit 1
+BApplication: initialization failed: General system error
+fake ssh-keygen: refusing
+sshd_keymaker: ssh-keygen -t rsa -f /boot/system/settings/ssh/ssh_host_rsa_key -N  failed
+fake ssh-keygen: refusing
+sshd_keymaker: ssh-keygen -A failed
+BApplication: initialization failed: General system error
+fixed keymaker with failing ssh-keygen rc=1
+-- and the upstream one in the same situation:
+BApplication: initialization failed: General system error
+fake ssh-keygen: refusing
+fake ssh-keygen: refusing
+BApplication: initialization failed: General system error
+upstream keymaker with failing ssh-keygen rc=1
+regenerate rsa rc=0
+10

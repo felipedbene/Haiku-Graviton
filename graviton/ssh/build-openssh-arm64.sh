@@ -14,7 +14,7 @@
 # not both write generated.arm64, but this script never writes there).
 #
 # Usage:  ./build-openssh-arm64.sh
-# Output: $OUT/openssh-$OSSH_VERSION-1-arm64.hpkg
+# Output: $OUT/$PKG_NAME-$OSSH_VERSION-$PKG_REVISION-arm64.hpkg
 #         $OUT/image/{sshd_config,ssh_config,launch-sshd,services,authorized_keys}
 set -euo pipefail
 
@@ -29,6 +29,19 @@ ZLIB_VERSION=${ZLIB_VERSION:-1.3.1}
 # so an upstream version bump 404s every bake (haikuports a1fcf91857, 10.6p1,
 # 2026-10-09). Bump both together.
 HAIKUPORTS_REV=${HAIKUPORTS_REV:-abfcb50d4e6782a1d97bd3fabb72c036c4942c14}
+# The package is NOT named "openssh" (issue 986). The DeBeOS repo carries the
+# HaikuPorts recipe build of openssh, linked against openssl3, under that name.
+# Same name and version would make the two builds one package identity with two
+# different contents: pkgman would treat a box as already having the repo build,
+# and the first repo revision above this one would replace this sshd on the next
+# `pkgman update`. That replacement removes sshd_boot.sh, which the launch job
+# runs, and the repo build's privsep path, key types and post-install differ
+# from this one's. Under a distinct name the repo build is never an update
+# candidate for this package (libsolv's policy_findupdatepackages() takes a
+# different name only if it "replaces" this one, which the recipe does not), and
+# the CONFLICTS below make installing the repo build a solver problem that has
+# to be answered, not a silent swap.
+PKG_NAME=openssh_debeos
 PKG_REVISION=1
 SRCDIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -176,7 +189,7 @@ cp "openssh-$OSSH_VERSION/LICENCE" "$STAGE/data/licenses/OpenSSH"
 mkdir -p "$STAGE/var/empty"
 
 cat > "$STAGE/.PackageInfo" <<EOF
-name			openssh
+name			$PKG_NAME
 version			$OSSH_VERSION-$PKG_REVISION
 architecture		arm64
 summary			"Secure Shell client and server (remote login program)"
@@ -188,7 +201,7 @@ libnetwork and libbsd, all part of the base haiku package."
 packager		"haiku-graviton port <felipe@localhost>"
 # vendor "DeBeOS": this DeBeOS-built package is baked straight into
 # system/packages, so it must report the same vendor as the DeBeOS repo -- else
-# a later `pkgman install`/refresh that supersedes it would force an "allow
+# a later "pkgman install"/refresh that supersedes it would force an "allow
 # vendor change" (the gcc/cc1 breakage of issue #39). Set at build time (no
 # metadata repack needed for a package we build ourselves).
 vendor			"DeBeOS"
@@ -199,7 +212,7 @@ copyrights {
 	"2005-2025 Tatu Ylonen et al."
 }
 provides {
-	openssh = $OSSH_VERSION
+	$PKG_NAME = $OSSH_VERSION
 	cmd:scp = $OSSH_VERSION
 	cmd:sftp = $OSSH_VERSION
 	cmd:ssh = $OSSH_VERSION
@@ -212,12 +225,19 @@ provides {
 requires {
 	haiku
 }
+# Both packages ship the same paths (bin/sshd, bin/ssh, lib/openssh/...), so they
+# can never be active together. Naming the conflict turns "pkgman install
+# openssh" into a question that names this package, instead of packagefs
+# refusing the second activation ("Name in use") after the fact.
+conflicts {
+	openssh
+}
 urls {
 	"https://www.openssh.com/"
 }
 EOF
 
-HPKG=$OUT/openssh-$OSSH_VERSION-$PKG_REVISION-arm64.hpkg
+HPKG=$OUT/$PKG_NAME-$OSSH_VERSION-$PKG_REVISION-arm64.hpkg
 rm -f "$HPKG"
 # The host 'package' tool links libroot_build.so from the build's linux objects,
 # which is not on the default loader search path -- point LD_LIBRARY_PATH at it.

@@ -1,0 +1,26 @@
+# evidence: 986-after-second-login
+# instance: i-0ca41bc85fb510e1a   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003129Z   end: 20261103T003150Z   rc: 0
+# script sha256: 04ec536e100212e882038af33aeb75b157a9a22988563b6c98561355b0c8cddc
+# ---- script ----
+# | echo "second fresh login after the applied pkgman update"
+# | echo "SSH_CONNECTION=${SSH_CONNECTION:-unset}"; id; uptime
+# | ps | grep -E "[s]shd"
+# | catattr SYS:PACKAGE_FILE /boot/system/bin/sshd /boot/system/lib/openssh/sshd-session
+# | ls /boot/system/packages | grep -i ssh
+# | pkgman list-repos
+# ---- raw output ----
+second fresh login after the applied pkgman update
+SSH_CONNECTION=10.128.7.248 30405 10.128.9.32 22
+uid=0(baron) gid=0(root) groups=0(root)
+ 00:31:37  up   0:04,  0 users,  load average: 0.04, 0.01, 0.00
+/boot/system/bin/sshd -D                              61        1    0    0 
+/boot/system/lib/openssh/sshd-session -D -R          524        1    0    0 
+/boot/system/lib/openssh/sshd-session -D -R          526        1    0    0 
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
+/boot/system/lib/openssh/sshd-session : string : openssh_debeos-10.4p1-1-arm64.hpkg
+openssh_debeos-10.4p1-1-arm64.hpkg
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1

@@ -1,0 +1,312 @@
+# evidence: 986-after-fresh-image
+# instance: i-0ca41bc85fb510e1a   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003039Z   end: 20261103T003100Z   rc: 0
+# script sha256: c00429eeae4275bfdd77bbcdfc7584607e362064e591b3bb1c8879b9f7f83813
+# ---- script ----
+# | set -u
+# | echo "== sshd is up (this script arrived over a fresh ed25519 login through EICE)"
+# | ps | grep -E '[s]shd' ; ssh -V
+# | grep -E 'sshd_boot|sshd\[' /boot/system/var/log/syslog | head -20
+# | echo "== host keys, generated headless at first boot by sshd_boot.sh"
+# | ls -l /boot/system/settings/ssh/ | grep host_
+# | for k in /boot/system/settings/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$k"; done
+# | grep -E '^HostKey' /boot/system/settings/ssh/sshd_config
+# | echo "== the login this runs over"; echo "SSH_CONNECTION=${SSH_CONNECTION:-unset}"; id
+# | echo "== image"; uname -v; date -u
+# | if pkgman list-repos | grep -q o986sim; then echo yes | pkgman drop-repo o986sim; echo "pre-clean drop-repo rc=$?"; fi
+# | echo "== openssh-ish packages in system/packages"
+# | ls -l /boot/system/packages | grep -i ssh
+# | for f in /boot/system/packages/openssh*.hpkg; do echo "-- $f"; sha256sum "$f"; package list -i "$f"; done
+# | echo "== which package /boot/system/bin/sshd comes from"; ls -l /boot/system/bin/sshd; catattr SYS:PACKAGE_FILE /boot/system/bin/sshd 2>&1; ssh -V
+# | echo "== launch job + boot script"; cat /boot/system/settings/launch/sshd | grep -v '^#'; ls -l /boot/system/bin/sshd_boot.sh
+# | echo "== repos"; pkgman list-repos
+# | echo "== green index: openssh entry, and anything requiring openssh / cmd:ssh*"
+# | mkdir -p /boot/home/o986 && cd /boot/home/o986
+# | # no curl on the image: repo and hpkg were fetched on the workstation from packages.debene.dev and pushed
+# | cp /boot/home/o986in/repo repo; echo "0e5fba70faec53d8f03ddb7588f09b19e0cf58f69718daaf859df902f3c7046b  repo" | sha256sum -c -
+# | package_repo list -v repo > repo.txt; echo "package_repo rc=$?"
+# | awk '/^package-attributes:/{p=0} /^\tname: openssh$/{p=1; print "package-attributes:"} p' repo.txt
+# | echo "-- packages whose requires/conflicts/replaces name openssh*, or require cmd:ssh/sshd/scp/sftp/ssh_keygen"
+# | awk '/^package-attributes:/{n=""} /^\tname: /{n=$2} /^\tversion: /{v=$2}
+# |   /^\t(requires|conflicts|replaces|supplements): / { if ($2 ~ /^(openssh|cmd:ssh|cmd:sshd|cmd:scp|cmd:sftp|cmd:ssh_keygen)/) print n"-"v": "$0 }' repo.txt
+# | echo "== simulate green's next openssh revision: green's 10.4p1-1 repacked as 10.4p1-2, in a local repo"
+# | cp /boot/home/o986in/green-openssh-10.4p1-1-arm64.hpkg .; echo "b902d39bd06dd200ee28e057b6eeba4f22cac4563844de2ddaa137fc50272b40  green-openssh-10.4p1-1-arm64.hpkg" | sha256sum -c -
+# | rm -rf x && mkdir x && package extract -C x green-openssh-10.4p1-1-arm64.hpkg; echo "extract rc=$?"
+# | sed -i 's/^version\([[:space:]]*\)10.4p1-1$/version\110.4p1-2/' x/.PackageInfo
+# | grep -n '^version\|^name' x/.PackageInfo
+# | mkdir -p lrepo && rm -f lrepo/*.hpkg lrepo/repo
+# | (cd x && package create -q ../lrepo/openssh-10.4p1-2-arm64.hpkg); echo "create rc=$?"
+# | package list -i lrepo/openssh-10.4p1-2-arm64.hpkg | head -8
+# | cat > lrepo/repo.info <<'R'
+# | name o986sim
+# | vendor "DeBeOS"
+# | summary "issue 986: green's openssh at the next revision (simulation)"
+# | priority 1
+# | baseurl file:///boot/home/o986/lrepo
+# | identifier o986sim
+# | architecture arm64
+# | R
+# | (cd lrepo && package_repo create repo.info openssh-10.4p1-2-arm64.hpkg); echo "repo create rc=$?"
+# | sha256sum lrepo/repo | cut -d" " -f1 > lrepo/repo.sha256
+# | sha256sum lrepo/repo lrepo/repo.info; cat lrepo/repo.sha256
+# | pkgman add-repo file:///boot/home/o986/lrepo; echo "add-repo rc=$?"
+# | pkgman list-repos
+# | echo "== pkgman update (all), answered 'no': the plan only"
+# | printf 'no\n' | pkgman update > upd-all.txt 2>&1; echo "pkgman update rc=$?"
+# | grep -vE '^\*\*\* please enter' upd-all.txt
+# | echo "-- plan lines naming ssh:"; grep -i 'ssh' upd-all.txt || echo "(none)"
+# | echo "== pkgman install openssh (the green build), answered 'no'"
+# | printf 'no\n' | pkgman install openssh > inst-green.txt 2>&1; echo "pkgman install openssh rc=$?"
+# | grep -vE '^\*\*\* please enter' inst-green.txt | head -40
+# | echo "== apply pkgman update (all), green + o986sim enabled; only 'yes' is fed, so a solver problem would abort instead of being answered"
+# | printf 'yes\n' | pkgman update > upd-apply.txt 2>&1; echo "pkgman update rc=$?"
+# | grep -vE '^\*\*\* please enter|^Continue\?' upd-apply.txt | grep -vE 'KiB\]$' | tail -40
+# | echo "-- apply plan lines naming ssh:"; grep -i 'ssh' upd-apply.txt || echo "(none)"
+# | echo "== after the update"
+# | ls -l /boot/system/packages | grep -i ssh
+# | catattr SYS:PACKAGE_FILE /boot/system/bin/sshd /boot/system/bin/sshd_boot.sh; ssh -V
+# | ps | grep -E '[s]shd'
+# | echo yes | pkgman drop-repo o986sim; echo "drop-repo rc=${PIPESTATUS[1]}"
+# ---- raw output ----
+== sshd is up (this script arrived over a fresh ed25519 login through EICE)
+/boot/system/bin/sshd -D                              61        1    0    0 
+/boot/system/lib/openssh/sshd-session -D -R          385        1    0    0 
+/boot/system/lib/openssh/sshd-session -D -R          387        1    0    0 
+OpenSSH_10.4p1, without OpenSSL
+== host keys, generated headless at first boot by sshd_boot.sh
+-rw------- 1 baron root  411 Nov  3 00:27 ssh_host_ed25519_key
+-rw-r--r-- 1 baron root   96 Nov  3 00:27 ssh_host_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  3 00:27 ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  3 00:27 ssh_host_mldsa44-ed25519_key.pub
+256 SHA256:9j+/Sy/9ZNIa1DrYLLBe37/mTKhWk2IxHW5/dnzkV/g baron@shredder (ED25519)
+256 SHA256:7OPo5hOZqg3tWEc8swUqhyU2Zsh628qIP9RuxXuE1fY baron@shredder (MLDSA44-ED25519)
+HostKey /boot/system/settings/ssh/ssh_host_ed25519_key
+== the login this runs over
+SSH_CONNECTION=10.128.7.248 25815 10.128.9.32 22
+uid=0(baron) gid=0(root) groups=0(root)
+== image
+hrev59996 Nov  2 2026 23:53:26
+Tue Nov  3 00:30:47 GMT 2026
+== openssh-ish packages in system/packages
+-rw-r--r-- 1 baron root  3462925 Nov  2 23:58 openssh_debeos-10.4p1-1-arm64.hpkg
+-- /boot/system/packages/openssh_debeos-10.4p1-1-arm64.hpkg
+df8c9b06183adb660c9fedc14f5c27b757ee9bf887d725e98c01616fa6aa89aa  /boot/system/packages/openssh_debeos-10.4p1-1-arm64.hpkg
+package-attributes:
+	name: openssh_debeos
+	summary: Secure Shell client and server (remote login program)
+	description: OpenSSH cross-built for Haiku/arm64 for the AWS Graviton port.
+Configured --without-openssl because no OpenSSL package exists for arm64, so
+only Ed25519 keys and OpenSSH's internal ciphers are supported. Statically
+linked against zlib; the only shared library dependencies are libroot,
+libnetwork and libbsd, all part of the base haiku package.
+	vendor: DeBeOS
+	packager: haiku-graviton port <felipe@localhost>
+	architecture: arm64
+	version: 10.4p1-1
+	copyright: 2005-2025 Tatu Ylonen et al.
+	license: OpenSSH
+	URL: https://www.openssh.com/
+	provides: openssh_debeos = 10.4p1
+	provides: cmd:scp = 10.4p1
+	provides: cmd:sftp = 10.4p1
+	provides: cmd:ssh = 10.4p1
+	provides: cmd:ssh_add = 10.4p1
+	provides: cmd:ssh_agent = 10.4p1
+	provides: cmd:ssh_keygen = 10.4p1
+	provides: cmd:ssh_keyscan = 10.4p1
+	provides: cmd:sshd = 10.4p1
+	requires: haiku
+	conflicts: openssh
+== which package /boot/system/bin/sshd comes from
+-r-xr-xr-x 1 baron root 723104 Nov  2 23:56 /boot/system/bin/sshd
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
+OpenSSH_10.4p1, without OpenSSL
+== launch job + boot script
+
+service x-vnd.openssh-sshd {
+	launch /bin/sh /boot/system/bin/sshd_boot.sh
+	legacy
+}
+-r-xr-xr-x 1 baron root 4971 Nov  2 23:56 /boot/system/bin/sshd_boot.sh
+== repos
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+== green index: openssh entry, and anything requiring openssh / cmd:ssh*
+repo: OK
+package_repo rc=0
+package-attributes:
+	name: openssh
+	summary: Secure Shell client and server (remote login program)
+	description: OpenSSH is a free version of the SSH connectivity tools that technical users of the Internet rely on. Users of telnet, rlogin, and ftp may not realize that their password is transmitted across the Internet unencrypted, but it is.
+
+OpenSSH encrypts all traffic (including passwords) to effectively eliminate eavesdropping, connection hijacking, and other attacks. Additionally, OpenSSH provides secure tunneling capabilities and several authentication methods, and supports all SSH protocol versions.
+
+The OpenSSH suite replaces rlogin and telnet with the ssh program, rcp with scp, and ftp with sftp. Also included is sshd (the server side of the package), and the other utilities like ssh-add, ssh-agent, ssh-keysign, ssh-keyscan, ssh-keygen and sftp-server.
+	vendor: DeBeOS
+	packager: DeBeOS <packages@debene.dev>
+	architecture: arm64
+	version: 10.4p1-1
+	copyright: 2005-2020 Tatu Ylonen et al.
+	license: OpenSSH
+	URL: http://www.openssh.com/
+	source URL: https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.4p1.tar.gz
+	source URL: https://ports-mirror.haiku-os.org/openssh/openssh-10.4p1.tar.gz
+	provides: openssh = 10.4p1 (compatible >= 5)
+	provides: cmd:scp = 10.4p1 (compatible >= 5)
+	provides: cmd:sftp = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_add = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_agent = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_copy_id = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_keygen = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_keyscan = 10.4p1 (compatible >= 5)
+	provides: cmd:sshd = 10.4p1 (compatible >= 5)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: cmd:grep>=3.11
+	requires: cmd:login
+	requires: cmd:passwd
+	requires: cmd:sed>=4.9
+	requires: lib:libcrypto>=3
+	requires: lib:libedit>=0.0.72
+	requires: lib:libncurses>=6.6.0
+	requires: lib:libssl>=3
+	requires: lib:libz>=1.3.2
+	global writable file: settings/ssh directory keep-old
+	global writable file: settings/ssh/ssh_config keep-old
+	global writable file: settings/ssh/sshd_config keep-old
+	user settings file: settings/ssh directory
+	user settings file: settings/ssh/ssh_config template data/openssh/ssh_config.default
+	user settings file: settings/ssh/sshd_config template data/openssh/sshd_config.default
+	user: sshd
+		real name: sshd user
+		home:      /packages/openssh-10.4p1-1/.self/data/openssh/empty
+		shell:     /bin/true
+		group:     sshd
+	group: sshd
+	post-install script: boot/post-install/sshd_keymaker.sh
+	post-install script: boot/post-install/fix_openssh_config_paths.sh
+	checksum: b902d39bd06dd200ee28e057b6eeba4f22cac4563844de2ddaa137fc50272b40
+-- packages whose requires/conflicts/replaces name openssh*, or require cmd:ssh/sshd/scp/sftp/ssh_keygen
+autossh-1.4g-1: 	requires: cmd:ssh>=10.4p1
+keychain-2.8.5-1: 	requires: cmd:ssh_agent>=10.4p1
+keychain-2.8.5-1: 	requires: cmd:ssh_add>=10.4p1
+ssh_askpass-0.3-1: 	requires: cmd:ssh>=10.4p1
+== simulate green's next openssh revision: green's 10.4p1-1 repacked as 10.4p1-2, in a local repo
+green-openssh-10.4p1-1-arm64.hpkg: OK
+extract rc=0
+1:name			openssh
+2:version			10.4p1-2
+create rc=0
+package-attributes:
+	name: openssh
+	summary: Secure Shell client and server (remote login program)
+	description: OpenSSH is a free version of the SSH connectivity tools that technical users of the Internet rely on. Users of telnet, rlogin, and ftp may not realize that their password is transmitted across the Internet unencrypted, but it is.
+
+OpenSSH encrypts all traffic (including passwords) to effectively eliminate eavesdropping, connection hijacking, and other attacks. Additionally, OpenSSH provides secure tunneling capabilities and several authentication methods, and supports all SSH protocol versions.
+
+The OpenSSH suite replaces rlogin and telnet with the ssh program, rcp with scp, and ftp with sftp. Also included is sshd (the server side of the package), and the other utilities like ssh-add, ssh-agent, ssh-keysign, ssh-keyscan, ssh-keygen and sftp-server.
+openssh (10.4p1-2)
+	checksum: 7bc77398084a3cd49989ee4d657c79b58352e25f75de15a46305920623a15fe0
+----- Package Repository Info -----
+package count                     1
+-----------------------------------
+header size:                     72
+repository header size:         535
+package attributes size:       2011
+total size:                    1388
+-----------------------------------
+repo create rc=0
+351b316f2223825a3abb95dcb5eade9d59710560c66998b8580e62acdcf82282  lrepo/repo
+cccfd78afb762417913e2a6594b3d80fcb3ff573a017f3c84922367d593bab62  lrepo/repo.info
+351b316f2223825a3abb95dcb5eade9d59710560c66998b8580e62acdcf82282
+Error: Failed to open repository file "/boot/system/cache/package-repositories/o986sim": No such file or directory
+Fetching repository info from file:///boot/home/o986/lrepo ...
+Activating repository config from file:///boot/home/o986/lrepo ...
+Fetching repository checksum from file:///boot/home/o986/lrepo ...
+Validating checksum for o986sim ...
+Fetching repository-cache from file:///boot/home/o986/lrepo ...
+Validating checksum for o986sim ...
+Activating repository cache for o986sim ...
+add-repo rc=0
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+        o986sim
+		base-url:  file:///boot/home/o986/lrepo
+		identifier: o986sim
+		priority:  1
+== pkgman update (all), answered 'no': the plan only
+pkgman update rc=1
+Error: Failed to open repository file "/boot/system/cache/package-repositories/DeBeOS": No such file or directory
+ ÀN;} repochecksum-1 []
+Validating checksum for DeBeOS...done.
+ ÀN;} repocache-2 [ KiB]
+Validating checksum for DeBeOS...done.
+ ÀN;} repochecksum-1 []
+Validating checksum for o986sim...done.
+The following changes will be made:
+  in system:
+    install package bzip2-1.0.8-3 from repository DeBeOS
+    upgrade package gawk-3.1.8_bootstrap-2 to 5.3.0-1 from repository DeBeOS
+    upgrade package coreutils-9.9_bootstrap-1 to 9.11-2 from repository DeBeOS
+    install package graphite2-1.3.14-4 from repository DeBeOS
+    upgrade package freetype-2.6.3_bootstrap-1 to 2.14.3-1 from repository DeBeOS
+    install package harfbuzz-14.2.0-1 from repository DeBeOS
+Continue? [yes/no] (yes) : 
+-- plan lines naming ssh:
+(none)
+== pkgman install openssh (the green build), answered 'no'
+pkgman install openssh rc=1
+PVfåä repochecksum-1 []
+Validating checksum for DeBeOS...done.
+PVfåä repochecksum-1 []
+Validating checksum for o986sim...done.
+Encountered problems:
+problem 1: package openssh_debeos-10.4p1-1 conflicts with openssh provided by openssh-10.4p1-1
+  solution 1:
+    - allow deinstallation of openssh_debeos-10.4p1-1
+  solution 2:
+    - do not install "providing openssh"
+Please select a solution, skip the problem for now or quit.
+select [1...2/s/q]: *** invalid input
+select [1...2/s/q]: 
+== apply pkgman update (all), green + o986sim enabled; only 'yes' is fed, so a solver problem would abort instead of being answered
+pkgman update rc=0
+ÀÆˆRc repochecksum-1 []
+Validating checksum for DeBeOS...done.
+ÀÆˆRc repochecksum-1 []
+Validating checksum for o986sim...done.
+The following changes will be made:
+  in system:
+    install package bzip2-1.0.8-3 from repository DeBeOS
+    upgrade package gawk-3.1.8_bootstrap-2 to 5.3.0-1 from repository DeBeOS
+    upgrade package coreutils-9.9_bootstrap-1 to 9.11-2 from repository DeBeOS
+    install package graphite2-1.3.14-4 from repository DeBeOS
+    upgrade package freetype-2.6.3_bootstrap-1 to 2.14.3-1 from repository DeBeOS
+    install package harfbuzz-14.2.0-1 from repository DeBeOS
+Validating checksum for http://packages.debene.dev/arm64/packages/bzip2-1.0.8-3-arm64.hpkg...done.
+pÇˆRc gawk-5.3.0-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/gawk-5.3.0-1-arm64.hpkg...done.
+pÇˆRc coreutils-9.11-2-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/coreutils-9.11-2-arm64.hpkg...done.
+Validating checksum for http://packages.debene.dev/arm64/packages/graphite2-1.3.14-4-arm64.hpkg...done.
+Validating checksum for http://packages.debene.dev/arm64/packages/freetype-2.14.3-1-arm64.hpkg...done.
+pÇˆRc harfbuzz-14.2.0-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/harfbuzz-14.2.0-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-03_00:30:53"
+[system] Cleaning up ...
+[system] Done.
+-- apply plan lines naming ssh:
+(none)
+== after the update
+-rw-r--r-- 1 baron root  3462925 Nov  2 23:58 openssh_debeos-10.4p1-1-arm64.hpkg
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
+/boot/system/bin/sshd_boot.sh : string : openssh_debeos-10.4p1-1-arm64.hpkg
+OpenSSH_10.4p1, without OpenSSL
+/boot/system/bin/sshd -D                              61        1    0    0 
+Removing repository o986sim ...
+Really remove the repository 'o986sim'? [yes/no] (no) : drop-repo rc=0
