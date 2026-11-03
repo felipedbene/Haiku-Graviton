@@ -82,6 +82,12 @@ count_regions(const char* imagePath, char const* buff, int phnum, int phentsize)
 			case PT_STACK:
 				// we don't use it
 				break;
+			case PT_GNU_PROPERTY:
+				// The arm64 BTI/PAC feature bits of .note.gnu.property are not
+				// honoured (BTI would need guarded-page mappings). Skipping the
+				// header is safe: BTI and PAC instructions are in the hint
+				// space and execute as NOPs while the features are off.
+				break;
 			case PT_TLS:
 				// will be handled at some other place
 				break;
@@ -198,6 +204,9 @@ parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 				break;
 			case PT_STACK:
 				// we don't use it
+				break;
+			case PT_GNU_PROPERTY:
+				// not honoured, see count_regions()
 				break;
 			case PT_TLS:
 				image->dso_tls_id
