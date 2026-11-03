@@ -1,0 +1,268 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2
+# instance: i-01ad0dca726d2849a   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T012349Z   end: 20261103T012548Z   rc: 0
+# script sha256: 9f3e4ca6925e3379421fe19c295604d62debcbb9aabb3ca090a78ea82fd9b055
+# ---- script ----
+# | # Cross-build trunk (080461b087, the base AMI's commit) and fix/996-gnu-property
+# | # with the oven's cross-tools, revision and __DATE__/__TIME__ pinned to the base
+# | # image's kernel, so the trunk arm can be compared with the image byte for byte.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | # The 8 GiB root is too small; the second EBS volume holds the tree.
+# | D=$(lsblk -dnpo NAME,SIZE | awk '$2=="80G"{print $1}'); echo "data disk: $D"
+# | mountpoint -q /opt/w || { mkfs.ext4 -q -F "$D" && mkdir -p /opt/w && mount "$D" /opt/w; }
+# | df -h /opt/w | tail -1
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/r996
+# | cd /opt/w && rm -rf hg buildtools out hpkg-pool && mkdir -p out
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg || exit 1
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools || exit 1
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam || exit 1
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 1
+# | sha256sum /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | # Stage the oven's local packages exactly as cross-build.yml does (zlib/zstd
+# | # headers for the EFI loader's packagefs come from these), then pre-extract
+# | # every build-feature archive (oven's jam pass 0).
+# | POOL=/opt/w/hpkg-pool; mkdir -p $POOL
+# | aws s3 sync --only-show-errors "s3://$WB/hpkg-pool/" "$POOL/" --exclude "*" --include "ncurses6-*" --include "openssl3-*" --include "openssl3_devel-*" --include "openssl3_man-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*" || exit 1
+# | ls $POOL | wc -l
+# | (cd .. && ./graviton/scripts/haiku-stage-local-packages "$PWD/generated" "$POOL") > ../../out/stage.log 2>&1; echo "stage rc=$?"; tail -3 ../../out/stage.log
+# | jam -q -j$(nproc) haiku-extract-build-features > ../../out/jam-extract.log 2>&1; echo "extract rc=$?"; tail -3 ../../out/jam-extract.log
+# | ls build_packages | grep -E "^z" 
+# | REV=hrev59996
+# | export SOURCE_DATE_EPOCH=$(date -u -d '2026-11-03 00:41:16' +%s); echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+# | rm -f haiku-revision
+# | R=objects/haiku/arm64/release/system
+# | build() {	# build <label> <git-ref>
+# | 	git -C .. checkout -q -f "$2" || { echo "CHECKOUT FAILED $2"; return 1; }
+# | 	git -C .. log -1 --format="$1 %H %s"
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION="$REV" runtime_loader "<revisioned>kernel_arm64" "<revisioned>libroot.so" haiku_loader.efi > ../../out/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' ../../out/jam-$1.log) warnings_elf=$(grep -cE 'elf(_load_image)?\.cpp.*warning' ../../out/jam-$1.log)"
+# | 	[ $rc = 0 ] || { tail -30 ../../out/jam-$1.log; return 1; }
+# | 	cp $R/runtime_loader/runtime_loader ../../out/runtime_loader.$1
+# | 	cp $R/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.$1
+# | 	cp $R/libroot/revisioned/libroot.so ../../out/libroot.so.$1
+# | 	cp $(find objects/haiku/arm64/release/system/boot -name haiku_loader.efi -type f | head -1) ../../out/haiku_loader.efi.$1
+# | 	sha256sum ../../out/*.$1
+# | }
+# | build trunk 080461b0879bf023623264add3f7a45d5af53121 || exit 1
+# | git -C .. fetch -q origin fix/996-gnu-property
+# | build fix996 FETCH_HEAD || exit 1
+# | git -C .. diff --stat 080461b0879bf023623264add3f7a45d5af53121 FETCH_HEAD
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | cd ../../out
+# | for f in runtime_loader kernel_arm64 libroot.so haiku_loader.efi; do
+# | 	cmp -s $f.trunk $f.fix996 && echo "$f: identical across arms" || echo "$f: DIFFERS across arms"
+# | done
+# | # The fixed runtime_loader must carry the new case: look for the 0x6474e553
+# | # immediate the switch compares against (mov/movk pair 0xe553, 0x6474).
+# | ${X}objdump -d runtime_loader.fix996 | grep -cE '#0x6474, lsl #16' ; ${X}objdump -d runtime_loader.trunk | grep -cE '#0x6474, lsl #16'
+# | sha256sum *.trunk *.fix996 | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive . $OUT/out/ && aws s3 ls $OUT/out/
+# ---- raw output ----
+data disk: /dev/nvme1n1
+/dev/nvme1n1     79G  2.8G   72G   4% /opt/w
+apt rc=0
+/usr/local/bin/aws
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+b883f60f7cfa8fdd159bf5f8be8b7738bf9b459981c87e8d517f8e3fd6ed4c12  /tmp/ct.tar.zst
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+30
+stage rc=1
+staged: libvorbis-1.3.7-1-arm64.hpkg
+staged: libvorbis_devel-1.3.7-1-arm64.hpkg
+21 staged into /opt/w/hg/generated/download, 3 missing from /opt/w/hpkg-pool, 0 rejected, 0 already staged with the wrong vendor
+extract rc=0
+ExtractHPKGArchive1 build_packages/icu74-74.1_bootstrap-1-arm64 
+ExtractHPKGArchive1 build_packages/ncurses6-6.6_bootstrap-1-arm64 
+...updated 327 target(s)...
+zlib-1.3.2-1-arm64
+zlib_source-1.2.13_bootstrap-1-source
+zstd-1.5.7-1-arm64
+zstd_source-1.5.6-2-arm64
+SOURCE_DATE_EPOCH=1793666476
+trunk 080461b0879bf023623264add3f7a45d5af53121 ssh: give the image's cross-built openssh its own package identity (#995)
+JAM trunk rc=0 wall=16s failed=0 warnings_elf=1
+2baa9f03765a64e38645c12ebcb3e80adf177668a6f37853868ae1dda5afe7f3  ../../out/haiku_loader.efi.trunk
+4025cac278ea3ec3303b2924c2f2503d21a9c786235e1e46cd578f6dc79c62f5  ../../out/kernel_arm64.trunk
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  ../../out/libroot.so.trunk
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  ../../out/runtime_loader.trunk
+fix996 01f4306a740fefc5ae2a97b72cb79814c3e2579b kernel, boot loader: list PT_GNU_PROPERTY as a known, unused type
+JAM fix996 rc=0 wall=15s failed=0 warnings_elf=1
+530d6d298322c138a38ab5b290279c3cf56f28e7708549ab280a7bea503ba5e6  ../../out/haiku_loader.efi.fix996
+31a7773ce540c5f5efe78fb85f833b5e796c4ff59f60aa2861f7faa021972351  ../../out/kernel_arm64.fix996
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  ../../out/libroot.so.fix996
+7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  ../../out/runtime_loader.fix996
+ headers/build/os/kernel/elf.h                | 1 +
+ headers/os/kernel/elf.h                      | 1 +
+ src/system/boot/loader/elf.cpp               | 1 +
+ src/system/kernel/elf.cpp                    | 1 +
+ src/system/runtime_loader/elf_load_image.cpp | 9 +++++++++
+ 5 files changed, 13 insertions(+)
+runtime_loader: DIFFERS across arms
+kernel_arm64: DIFFERS across arms
+libroot.so: identical across arms
+haiku_loader.efi: DIFFERS across arms
+0
+0
+2baa9f03765a64e38645c12ebcb3e80adf177668a6f37853868ae1dda5afe7f3  haiku_loader.efi.trunk
+4025cac278ea3ec3303b2924c2f2503d21a9c786235e1e46cd578f6dc79c62f5  kernel_arm64.trunk
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  runtime_loader.trunk
+530d6d298322c138a38ab5b290279c3cf56f28e7708549ab280a7bea503ba5e6  haiku_loader.efi.fix996
+31a7773ce540c5f5efe78fb85f833b5e796c4ff59f60aa2861f7faa021972351  kernel_arm64.fix996
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.fix996
+7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  runtime_loader.fix996
+2026-11-03 01:25:42        692 SHA256SUMS
+2026-11-03 01:25:42     572918 haiku_loader.efi.fix996
+2026-11-03 01:25:42     572918 haiku_loader.efi.trunk
+2026-11-03 01:25:42     101179 jam-extract.log
+2026-11-03 01:25:42     733619 jam-fix996.log
+2026-11-03 01:25:42     749422 jam-trunk.log
+2026-11-03 01:25:42    2551369 kernel_arm64.fix996
+2026-11-03 01:25:42    2551369 kernel_arm64.trunk
+2026-11-03 01:25:42    1366771 libroot.so.fix996
+2026-11-03 01:25:42    1366771 libroot.so.trunk
+2026-11-03 01:25:42     157156 runtime_loader.fix996
+2026-11-03 01:25:42     157156 runtime_loader.trunk
+2026-11-03 01:25:42       1525 stage.log
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+++ lsblk -dnpo NAME,SIZE
+++ awk '$2=="80G"{print $1}'
++ D=/dev/nvme1n1
++ echo 'data disk: /dev/nvme1n1'
++ mountpoint -q /opt/w
++ df -h /opt/w
++ tail -1
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo 'apt rc=0'
++ command -v aws
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/r996
++ cd /opt/w
++ rm -rf hg buildtools out hpkg-pool
++ mkdir -p out
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ sha256sum /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ POOL=/opt/w/hpkg-pool
++ mkdir -p /opt/w/hpkg-pool
++ aws s3 sync --only-show-errors s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/hpkg-pool/ /opt/w/hpkg-pool/ --exclude '*' --include 'ncurses6-*' --include 'openssl3-*' --include 'openssl3_devel-*' --include 'openssl3_man-*' --include 'zstd-*' --include 'zstd_devel-*' --include 'zstd_source-*' --include 'zlib-*' --include 'zlib_devel-*' --include 'ca_root_certificates-*' --include 'amazon_ssm_agent-*' --include 'debeos_cloudwatch-*' --include 'fluidlite-*' --include 'fluidlite_devel-*' --include 'libvorbis-*' --include 'libvorbis_devel-*' --include 'libpng16-*' --include 'libpng16_devel-*' --include 'libjpeg_turbo-*' --include 'libjpeg_turbo_devel-*' --include 'jasper-*' --include 'jasper_devel-*' --include 'tiff-*' --include 'tiff_devel-*'
++ ls /opt/w/hpkg-pool
++ wc -l
++ echo 'stage rc=1'
++ tail -3 ../../out/stage.log
+++ nproc
++ jam -q -j32 haiku-extract-build-features
++ echo 'extract rc=0'
++ tail -3 ../../out/jam-extract.log
++ ls build_packages
++ grep -E '^z'
++ REV=hrev59996
+++ date -u -d '2026-11-03 00:41:16' +%s
++ export SOURCE_DATE_EPOCH=1793666476
++ SOURCE_DATE_EPOCH=1793666476
++ echo SOURCE_DATE_EPOCH=1793666476
++ rm -f haiku-revision
++ R=objects/haiku/arm64/release/system
++ build trunk 080461b0879bf023623264add3f7a45d5af53121
++ git -C .. checkout -q -f 080461b0879bf023623264add3f7a45d5af53121
++ git -C .. log -1 '--format=trunk %H %s'
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793669108
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 runtime_loader '<revisioned>kernel_arm64' '<revisioned>libroot.so' haiku_loader.efi
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out/jam-trunk.log
+++ grep -cE 'elf(_load_image)?\.cpp.*warning' ../../out/jam-trunk.log
++ echo 'JAM trunk rc=0 wall=16s failed=0 warnings_elf=1'
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/runtime_loader/runtime_loader ../../out/runtime_loader.trunk
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.trunk
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out/libroot.so.trunk
+++ find objects/haiku/arm64/release/system/boot -name haiku_loader.efi -type f
+++ head -1
++ cp objects/haiku/arm64/release/system/boot/efi/haiku_loader.efi ../../out/haiku_loader.efi.trunk
++ sha256sum ../../out/haiku_loader.efi.trunk ../../out/kernel_arm64.trunk ../../out/libroot.so.trunk ../../out/runtime_loader.trunk
++ git -C .. fetch -q origin fix/996-gnu-property
++ build fix996 FETCH_HEAD
++ git -C .. checkout -q -f FETCH_HEAD
++ git -C .. log -1 '--format=fix996 %H %s'
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793669125
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 runtime_loader '<revisioned>kernel_arm64' '<revisioned>libroot.so' haiku_loader.efi
++ rc=0
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out/jam-fix996.log
+++ grep -cE 'elf(_load_image)?\.cpp.*warning' ../../out/jam-fix996.log
++ echo 'JAM fix996 rc=0 wall=15s failed=0 warnings_elf=1'
++ '[' 0 = 0 ']'
++ cp objects/haiku/arm64/release/system/runtime_loader/runtime_loader ../../out/runtime_loader.fix996
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.fix996
++ cp objects/haiku/arm64/release/system/libroot/revisioned/libroot.so ../../out/libroot.so.fix996
+++ find objects/haiku/arm64/release/system/boot -name haiku_loader.efi -type f
+++ head -1
++ cp objects/haiku/arm64/release/system/boot/efi/haiku_loader.efi ../../out/haiku_loader.efi.fix996
++ sha256sum ../../out/haiku_loader.efi.fix996 ../../out/kernel_arm64.fix996 ../../out/libroot.so.fix996 ../../out/runtime_loader.fix996
++ git -C .. diff --stat 080461b0879bf023623264add3f7a45d5af53121 FETCH_HEAD
++ X=/opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ cd ../../out
++ for f in runtime_loader kernel_arm64 libroot.so haiku_loader.efi
++ cmp -s runtime_loader.trunk runtime_loader.fix996
++ echo 'runtime_loader: DIFFERS across arms'
++ for f in runtime_loader kernel_arm64 libroot.so haiku_loader.efi
++ cmp -s kernel_arm64.trunk kernel_arm64.fix996
++ echo 'kernel_arm64: DIFFERS across arms'
++ for f in runtime_loader kernel_arm64 libroot.so haiku_loader.efi
++ cmp -s libroot.so.trunk libroot.so.fix996
++ echo 'libroot.so: identical across arms'
++ for f in runtime_loader kernel_arm64 libroot.so haiku_loader.efi
++ cmp -s haiku_loader.efi.trunk haiku_loader.efi.fix996
++ echo 'haiku_loader.efi: DIFFERS across arms'
++ /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d runtime_loader.fix996
++ grep -cE '#0x6474, lsl #16'
++ /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d runtime_loader.trunk
++ grep -cE '#0x6474, lsl #16'
++ sha256sum haiku_loader.efi.trunk kernel_arm64.trunk libroot.so.trunk runtime_loader.trunk haiku_loader.efi.fix996 kernel_arm64.fix996 libroot.so.fix996 runtime_loader.fix996
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/r996/out/
++ aws s3 ls s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/r996/out/

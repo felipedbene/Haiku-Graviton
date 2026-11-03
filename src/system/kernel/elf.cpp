@@ -2249,6 +2249,7 @@ load_kernel_add_on(const char *path)
 				continue;
 			case PT_PHDR:
 			case PT_STACK:
+			case PT_GNU_PROPERTY:
 				// we don't use it
 				continue;
 			case PT_EH_FRAME:

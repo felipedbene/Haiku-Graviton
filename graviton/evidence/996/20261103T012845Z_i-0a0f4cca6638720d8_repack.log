@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack
+# instance: i-0a0f4cca6638720d8   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T012845Z   end: 20261103T012950Z   rc: 0
+# script sha256: cc4d955fd348822dd8fbe22cc7ccc7eb857726907508512a9d70c58e1e3741b3
+# ---- script ----
+# | # Candidate: swap the fix/996 runtime_loader and kernel_arm64 (pushed over
+# | # ssh into /boot/home/rp, nothing installed) into the base image's haiku package.
+# | set -e
+# | cd /boot/home/rp
+# | echo "7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  runtime_loader.fix996" | sha256sum -c
+# | echo "31a7773ce540c5f5efe78fb85f833b5e796c4ff59f60aa2861f7faa021972351  kernel_arm64.fix996" | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg)
+# | sha256sum "$P"; rm -rf x && mkdir x && package extract -C x "$P"
+# | sha256sum x/runtime_loader x/kernel_arm64
+# | cat runtime_loader.fix996 > x/runtime_loader
+# | cat kernel_arm64.fix996 > x/kernel_arm64
+# | package create -C x ../haiku-new.hpkg > /dev/null && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"
+# | cd /boot/home && rm -rf rp; sync
+# | ls /boot/system/packages | grep -cE 'hpkg$'
+# ---- raw output ----
+runtime_loader.fix996: OK
+kernel_arm64.fix996: OK
+195f99bfbcae352cff52059665571ebedd111f616509f94734b3fcb4005ac4f7  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  x/runtime_loader
+4025cac278ea3ec3303b2924c2f2503d21a9c786235e1e46cd578f6dc79c62f5  x/kernel_arm64
+-rw-r--r-- 1 baron root 20513603 Nov  3 01:29 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20645329 Nov  3 00:44 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+bca390f26e689fdfa07a7411435f40aa5011b313186bc2394d60ee72e3d3ac5f  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+27

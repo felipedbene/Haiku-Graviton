@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-bti2
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T011950Z   end: 20261103T012001Z   rc: 0
+# script sha256: e532a9abcb02539c11c9de6a72b53f9afdbd0b4d6e5a5cdff760a8ff13983426
+# ---- script ----
+# | # Stock image: a minimal C program carrying a GNU property note (BTI+PAC via
+# | # -mbranch-protection=standard and -z force-bti) and a control without it.
+# | pkgman install -y haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/r996 && cd /boot/home/r996
+# | cat > hello.c <<'C'
+# | #include <stdio.h>
+# | int main(void) { puts("hello from a PT_GNU_PROPERTY image"); return 0; }
+# | C
+# | gcc -O2 -mbranch-protection=standard -Wl,-z,force-bti -o hello_prop hello.c; echo "cc prop rc=$?"
+# | gcc -O2 -o hello_plain hello.c; echo "cc plain rc=$?"
+# | for b in hello_prop hello_plain; do
+# | 	echo "== $b"; sha256sum $b
+# | 	readelf -lW $b | grep -E 'GNU_PROPERTY' || echo "(no PT_GNU_PROPERTY)"
+# | 	readelf -nW $b | grep -iE 'AArch64 feature|properties' | head -3
+# | 	./$b 2>&1; echo "$b rc=$?"
+# | done
+# | grep -E "hello_(prop|plain)" /var/log/syslog | tail -4
+# ---- raw output ----
+[system] Done.
+cc prop rc=0
+cc plain rc=0
+== hello_prop
+9e25324f618bc2a43c4c18ec7d744ee9ff2156452c8d980dcd360c360a5da53b  hello_prop
+  GNU_PROPERTY   0x020048 0x0000000000020048 0x0000000000020048 0x000020 0x000020 R   0x8
+  GNU                  0x00000010	NT_GNU_PROPERTY_TYPE_0	      Properties: AArch64 feature: BTI
+hello_prop rc=16
+== hello_plain
+ecf785d5844edbdd05f212cb00d9c8f7c4d7d8b91abaf482d62b2bbb66991c13  hello_plain
+(no PT_GNU_PROPERTY)
+hello from a PT_GNU_PROPERTY image
+hello_plain rc=0
+KERN: runtime_loader: /boot/home/r996/hello_prop: Unhandled pheader type in count 0x6474e553
+KERN: runtime_loader: /boot/home/r996/hello_prop: Unhandled pheader type in parse 0x6474e553
+/boot/system/develop/lib/crtn.o: warning: BTI is required by -z force-bti, but this input object file lacks the necessary property note.
+/boot/system/develop/lib/crti.o: warning: BTI is required by -z force-bti, but this input object file lacks the necessary property note.
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/crtbeginS.o: warning: BTI is required by -z force-bti, but this input object file lacks the necessary property note.
+/boot/system/develop/lib/start_dyn.o: warning: BTI is required by -z force-bti, but this input object file lacks the necessary property note.
+/boot/system/develop/lib/init_term_dyn.o: warning: BTI is required by -z force-bti, but this input object file lacks the necessary property note.
+/tmp//ccBDkF6v.o: warning: BTI is required by -z force-bti, but this input object file lacks the necessary property note.
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/crtendS.o: warning: BTI is required by -z force-bti, but this input object file lacks the necessary property note.

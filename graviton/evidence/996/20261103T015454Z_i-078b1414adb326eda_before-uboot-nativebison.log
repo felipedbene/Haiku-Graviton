@@ -1,0 +1,52 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-uboot-nativebison
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T015454Z   end: 20261103T015505Z   rc: 0
+# script sha256: 61bac21b53bbeb2b7a79ea8869447e79422409b5efc2f52b9645bae2cff4dd8f
+# ---- script ----
+# | # Stock arm, control: with green's x86-64 bison replaced by a natively built
+# | # bison (unmodified ports-tree recipe), does u_boot_tools-2026.07-2 build on
+# | # the UNFIXED runtime_loader too?
+# | cat /boot/home/r996/hp3-before.log
+# | L=/boot/home/r996/haikuporter-uboot2-before.log
+# | grep -nE 'runtime_loader|Unhandled pheader|Troubles' $L | head
+# | awk '/^Building/{exit} {print}' $L | grep -E 'packages/(bison|openssl3)' | sort -u
+# | tail -4 $L
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+start 20261103T015123Z
+bison-3.0.5.recipe
+bison-3.8.2.recipe
+patches
+work-3.8.2
+ports tree 1d23c3acf3003c17cc5d2aa57907cb2e6d13fd5b 2026-11-02
+haikuporter bison attempt 1 rc=1
+unresolved: cmd:help2man 
+[system] Done.
+haikuporter bison attempt 2 rc=0
+built: /boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg
+6768fe600509565772a1e79ad9df6a0b6a272263c23f8f6eaf7fcdc0d37b7a6a  /boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg
+d88708988bcb28eb1cb4d56b3ae7c11181bf279da400ec5c2e3f729354763fdd  /boot/home/haikuports/packages/bison_debuginfo-3.8.2-1-arm64.hpkg
+[system] Cleaning up ...
+[system] Done.
+bison-3.8.2-1-arm64.hpkg
+bison (GNU Bison) 3.8.2
+native bison rc=0
+  Machine:                           AArch64
+== haikuporter u_boot_tools 20261103T015253Z
+haikuporter u_boot_tools rc=0
+-rw-r--r-- 1 baron root  737900 Nov  3 01:52 bison-3.8.2-1-arm64.hpkg
+-rw-r--r-- 1 baron root  591821 Nov  3 01:52 bison_debuginfo-3.8.2-1-arm64.hpkg
+-rw-r--r-- 1 baron root 1013074 Nov  3 01:53 u_boot_tools-2026.07-2-arm64.hpkg
+end 20261103T015339Z
+DONE
+	/boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg
+	/boot/system/packages/openssl3-3.5.9-3-arm64.hpkg
+	/boot/system/packages/openssl3_devel-3.5.9-3-arm64.hpkg
+----------------------------------------------------------------------
+dev-embedded::u_boot_tools-2026.07
+	/boot/home/haikuports/dev-embedded/u_boot_tools/u_boot_tools-2026.07.recipe
+----------------------------------------------------------------------
+6768fe600509565772a1e79ad9df6a0b6a272263c23f8f6eaf7fcdc0d37b7a6a  /boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg
+d88708988bcb28eb1cb4d56b3ae7c11181bf279da400ec5c2e3f729354763fdd  /boot/home/haikuports/packages/bison_debuginfo-3.8.2-1-arm64.hpkg
+72e1abcbcddf50d379b516d15bcbd7fbf38ec4058ea3ce552b202676400dc2c2  /boot/home/haikuports/packages/u_boot_tools-2026.07-2-arm64.hpkg

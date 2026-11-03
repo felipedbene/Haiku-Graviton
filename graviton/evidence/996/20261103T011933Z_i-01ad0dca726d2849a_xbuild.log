@@ -1,0 +1,178 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-01ad0dca726d2849a   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T011933Z   end: 20261103T012140Z   rc: 1
+# script sha256: 477d767030b824f08a8146f781eeba90119278753b37a5f2c56444432408213e
+# ---- script ----
+# | # Cross-build trunk (080461b087, the base AMI's commit) and fix/996-gnu-property
+# | # with the oven's cross-tools, revision and __DATE__/__TIME__ pinned to the base
+# | # image's kernel, so the trunk arm can be compared with the image byte for byte.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | # The 8 GiB root is too small; the second EBS volume holds the tree.
+# | D=$(lsblk -dnpo NAME,SIZE | awk '$2=="80G"{print $1}'); echo "data disk: $D"
+# | mountpoint -q /opt/w || { mkfs.ext4 -q -F "$D" && mkdir -p /opt/w && mount "$D" /opt/w; }
+# | df -h /opt/w | tail -1
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/r996
+# | cd /opt/w && rm -rf hg buildtools out && mkdir -p out
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg || exit 1
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools || exit 1
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam || exit 1
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 1
+# | sha256sum /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | REV=hrev59996
+# | export SOURCE_DATE_EPOCH=$(date -u -d '2026-11-03 00:41:16' +%s); echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+# | rm -f haiku-revision
+# | R=objects/haiku/arm64/release/system
+# | build() {	# build <label> <git-ref>
+# | 	git -C .. checkout -q -f "$2" || { echo "CHECKOUT FAILED $2"; return 1; }
+# | 	git -C .. log -1 --format="$1 %H %s"
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION="$REV" runtime_loader "<revisioned>kernel_arm64" "<revisioned>libroot.so" haiku_loader.efi > ../../out/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' ../../out/jam-$1.log) warnings_elf=$(grep -cE 'elf(_load_image)?\.cpp.*warning' ../../out/jam-$1.log)"
+# | 	[ $rc = 0 ] || { tail -30 ../../out/jam-$1.log; return 1; }
+# | 	cp $R/runtime_loader/runtime_loader ../../out/runtime_loader.$1
+# | 	cp $R/kernel/revisioned/kernel_arm64 ../../out/kernel_arm64.$1
+# | 	cp $R/libroot/revisioned/libroot.so ../../out/libroot.so.$1
+# | 	cp $(find objects/haiku/arm64/release/system/boot -name haiku_loader.efi -type f | head -1) ../../out/haiku_loader.efi.$1
+# | 	sha256sum ../../out/*.$1
+# | }
+# | build trunk 080461b0879bf023623264add3f7a45d5af53121 || exit 1
+# | git -C .. fetch -q origin fix/996-gnu-property
+# | build fix996 FETCH_HEAD || exit 1
+# | git -C .. diff --stat 080461b0879bf023623264add3f7a45d5af53121 FETCH_HEAD
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | cd ../../out
+# | for f in runtime_loader kernel_arm64 libroot.so haiku_loader.efi; do
+# | 	cmp -s $f.trunk $f.fix996 && echo "$f: identical across arms" || echo "$f: DIFFERS across arms"
+# | done
+# | # The fixed runtime_loader must carry the new case: look for the 0x6474e553
+# | # immediate the switch compares against (mov/movk pair 0xe553, 0x6474).
+# | ${X}objdump -d runtime_loader.fix996 | grep -cE '#0x6474, lsl #16' ; ${X}objdump -d runtime_loader.trunk | grep -cE '#0x6474, lsl #16'
+# | sha256sum *.trunk *.fix996 | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive . $OUT/out/ && aws s3 ls $OUT/out/
+# ---- raw output ----
+data disk: /dev/nvme1n1
+/dev/nvme1n1     79G   24K   75G   1% /opt/w
+apt rc=0
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+b883f60f7cfa8fdd159bf5f8be8b7738bf9b459981c87e8d517f8e3fd6ed4c12  /tmp/ct.tar.zst
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+SOURCE_DATE_EPOCH=1793666476
+trunk 080461b0879bf023623264add3f7a45d5af53121 ssh: give the image's cross-built openssh its own package identity (#995)
+JAM trunk rc=1 wall=19s failed=4 warnings_elf=1
+C++ objects/haiku/arm64/release/system/boot/loader/file_systems/packagefs/efi/FdIO.o 
+C++ objects/haiku/arm64/release/system/boot/loader/file_systems/packagefs/efi/CompressionAlgorithm.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/boot/efi/boot_libroot_efi.o 
+C++ objects/haiku/arm64/release/system/boot/loader/file_systems/packagefs/efi/ZlibCompressionAlgorithm.o 
+C++ objects/haiku/arm64/release/system/boot/loader/file_systems/packagefs/efi/ZstdCompressionAlgorithm.o 
+...on 200th target...
+Archive objects/haiku/arm64/release/system/boot/loader/efi/boot_partitions.a 
+Ranlib objects/haiku/arm64/release/system/boot/loader/efi/boot_partitions.a 
+../src/kits/support/ZlibCompressionAlgorithm.cpp:15:10: fatal error: zlib.h: No such file or directory
+   15 | #include <zlib.h>
+      |          ^~~~~~~~
+compilation terminated.
+
+/opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/kits/support/ZlibCompressionAlgorithm.cpp" -Os -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -fno-rtti -include ../headers/private/kernel/util/kernel_cpp.h -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -DBOOT_ARCHIVE_IMAGE_OFFSET=192 -fpic -fno-stack-protector -fPIC -fshort-wchar -Wno-error=unused-variable -Wno-error=main -fvisibility=hidden -D_KERNEL_MODE -D_BOOT_MODE -DARCH_arm64 -D__HAIKU_PRIMARY_PACKAGING_ARCH=\"arm64\" -DHAIKU_DISTRO_COMPATIBILITY_DEFAULT -DHAIKU_TARGET_PLATFORM_HAIKU -DHAIKU_REGULAR_BUILD -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/system/boot/loader/file_systems/packagefs -iquote objects/common/system/boot/loader/file_systems/packagefs/efi -iquote objects/linux/arm64/common/system/boot/loader/file_systems/packagefs/efi -iquote objects/haiku/arm64/common/system/boot/loader/file_systems/packagefs/efi -iquote ../src/kits/package -iquote ../src/kits/package/hpkg -iquote ../src/kits/storage -iquote ../src/kits/support -I ../headers/private/kernel -I ../headers/private/shared -I ../headers/private/storage -I ../headers/private/support -I ../headers/private/kernel/boot/platform/efi -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++ -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/aarch64-unknown-haiku -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/backward -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/ext -I ../headers/glibc -I ../headers/posix -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include-fixed -I ../headers -I ../headers/os -I ../headers/os/add-ons -I ../headers/os/add-ons/file_system -I ../headers/os/add-ons/graphics -I ../headers/os/add-ons/input_server -I ../headers/os/add-ons/registrar -I ../headers/os/add-ons/screen_saver -I ../headers/os/add-ons/tracker -I ../headers/os/app -I ../headers/os/device -I ../headers/os/drivers -I ../headers/os/game -I ../headers/os/interface -I ../headers/os/kernel -I ../headers/os/locale -I ../headers/os/media -I ../headers/os/mail -I ../headers/os/midi -I ../headers/os/midi2 -I ../headers/os/net -I ../headers/os/storage -I ../headers/os/support -I ../headers/os/translation -I ../headers/private/. -o "objects/haiku/arm64/release/system/boot/loader/file_systems/packagefs/efi/ZlibCompressionAlgorithm.o"
+
+...failed C++ objects/haiku/arm64/release/system/boot/loader/file_systems/packagefs/efi/ZlibCompressionAlgorithm.o ...
+Archive objects/haiku/arm64/release/system/boot/libs/efi/boot_fdt.a 
+Ranlib objects/haiku/arm64/release/system/boot/libs/efi/boot_fdt.a 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/boot/platform/efi/arch/arm64/efi/boot_platform_efi_arm64.o 
+Archive objects/haiku/arm64/release/system/boot/loader/file_systems/fat/efi/boot_fatfs.a 
+Ranlib objects/haiku/arm64/release/system/boot/loader/file_systems/fat/efi/boot_fatfs.a 
+Archive objects/haiku/arm64/release/system/boot/loader/file_systems/bfs/efi/boot_bfs.a 
+Ranlib objects/haiku/arm64/release/system/boot/loader/file_systems/bfs/efi/boot_bfs.a 
+Archive objects/haiku/arm64/release/system/boot/loader/efi/boot_loader.a 
+Ranlib objects/haiku/arm64/release/system/boot/loader/efi/boot_loader.a 
+
+BUILD FAILURE:
+...failed updating 3 target(s)...
+...skipped 16 target(s)...
+...updated 202 target(s)...
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+++ lsblk -dnpo NAME,SIZE
+++ awk '$2=="80G"{print $1}'
++ D=/dev/nvme1n1
++ echo 'data disk: /dev/nvme1n1'
++ mountpoint -q /opt/w
++ mkfs.ext4 -q -F /dev/nvme1n1
++ mkdir -p /opt/w
++ mount /dev/nvme1n1 /opt/w
++ df -h /opt/w
++ tail -1
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/r996
++ cd /opt/w
++ rm -rf hg buildtools out
++ mkdir -p out
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ sha256sum /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/w/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ REV=hrev59996
+++ date -u -d '2026-11-03 00:41:16' +%s
++ export SOURCE_DATE_EPOCH=1793666476
++ SOURCE_DATE_EPOCH=1793666476
++ echo SOURCE_DATE_EPOCH=1793666476
++ rm -f haiku-revision
++ R=objects/haiku/arm64/release/system
++ build trunk 080461b0879bf023623264add3f7a45d5af53121
++ git -C .. checkout -q -f 080461b0879bf023623264add3f7a45d5af53121
++ git -C .. log -1 '--format=trunk %H %s'
++ rm -rf objects/haiku/arm64/release/system
+++ date +%s
++ s=1793668871
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 runtime_loader '<revisioned>kernel_arm64' '<revisioned>libroot.so' haiku_loader.efi
++ rc=1
+++ date +%s
+++ grep -cE '\.\.\.failed' ../../out/jam-trunk.log
+++ grep -cE 'elf(_load_image)?\.cpp.*warning' ../../out/jam-trunk.log
++ echo 'JAM trunk rc=1 wall=19s failed=4 warnings_elf=1'
++ '[' 1 = 0 ']'
++ tail -30 ../../out/jam-trunk.log
++ return 1
++ exit 1
+failed to run commands: exit status 1

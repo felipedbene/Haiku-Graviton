@@ -61,20 +61,27 @@ Two things make this expensive to diagnose:
    runtime_loader: /boot/system/bin/bison: Unhandled pheader type in parse 0x6474e553
    ```
 
-   `0x6474e553` is `PT_GNU_PROPERTY`, which Haiku's `elf.h` does not define and
-   `parse_program_headers()` therefore rejects with `B_BAD_DATA`. That is a true statement
-   about the loader, but it is **not the bug here** — the binary was for the wrong
-   architecture *and* the wrong operating system and could never have run. Do not go fix
-   the loader on the strength of this message; check `readelf -l` for an `INTERP` line
-   first. (A loader that named the machine type before parsing segments would have made
-   this a five-second diagnosis, which is worth remembering separately.)
+   `0x6474e553` is `PT_GNU_PROPERTY`. That message came from a real loader defect, which
+   also refused genuine arm64 Haiku binaries that carry a GNU property note (issue 996);
+   the runtime_loader now skips the header. But it was **not the bug here**: the binary
+   was for the wrong architecture *and* the wrong operating system and could never have
+   run. With the loader fixed, the same poisoned bison dies one step later, still without
+   naming the architecture:
+
+   ```
+   runtime_loader: /boot/system/bin/bison: Troubles handling dynamic section
+   ```
+
+   Check `readelf -h` (Machine) and `readelf -l` (an `INTERP` line) first. (A loader that
+   named the machine type before parsing segments would have made this a five-second
+   diagnosis, which is worth remembering separately; issue 1000.)
 
 The practical consequence is that **any port whose build runs `bison` fails until the
 poisoned packages are out of the pool** — the visible symptom being a build tool dying with
 no yacc-related message anywhere. `sys-devel/jam` was the case that exposed it. Both
 poisoned files are still present in `hpkg-out/arm64/` and in the shared package repository;
 they are build inputs rather than shipped output, but they should be quarantined at source
-rather than worked around per guest.
+rather than worked around per guest. Still true for the x86-64 one as of 2026-11-03 (issue 999).
 
 ## The mtime trap — read before editing a recipe in the guest
 

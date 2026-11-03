@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack
+# instance: i-0a0f4cca6638720d8   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T012729Z   end: 20261103T012741Z   rc: 127
+# script sha256: 3f648597b20ec971ce18fac57f48ad8d0f02ae83d353e107a7d5e94a72a42dee
+# ---- script ----
+# | set -- 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/r996/out/runtime_loader.fix996?<PRESIGNED>' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/r996/out/kernel_arm64.fix996?<PRESIGNED>'
+# | # Candidate: swap the fix/996 runtime_loader and kernel_arm64 into the base
+# | # image's haiku package. Fetched with python's urllib so nothing else is
+# | # installed into the image that becomes the candidate AMI.
+# | set -e
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | for f in runtime_loader kernel_arm64; do
+# | 	/boot/system/bin/python3 -I -c 'import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$1" $f.fix996
+# | 	shift
+# | done
+# | echo "7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  runtime_loader.fix996" | sha256sum -c
+# | echo "31a7773ce540c5f5efe78fb85f833b5e796c4ff59f60aa2861f7faa021972351  kernel_arm64.fix996" | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg)
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | sha256sum x/runtime_loader x/kernel_arm64
+# | cat runtime_loader.fix996 > x/runtime_loader
+# | cat kernel_arm64.fix996 > x/kernel_arm64
+# | package create -C x ../haiku-new.hpkg > /dev/null && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"
+# | cd /boot/home && rm -rf rp; sync
+# | ls /boot/system/packages | grep -cE 'hpkg$'
+# | 
+# ---- raw output ----
+/tmp/run-83324-a31bda.sh: line 8: /boot/system/bin/python3: No such file or directory
+failed to run commands: exit status 127

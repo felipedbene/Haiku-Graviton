@@ -1,0 +1,55 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-libload
+# instance: i-0049c2ef2e2645f37   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T015403Z   end: 20261103T015414Z   rc: 0
+# script sha256: 6a2fcba04f4ce2fb58403d1e5b4c22d7be8c2a75d228e96885023f7181e08672
+# ---- script ----
+# | # Library-loading regression check, identical on both arms: dlopen() every top-level
+# | # shared library under /boot/system/lib (each in a fresh process, so one bad
+# | # library cannot mask another), then a few library-heavy programs.
+# | uname -a; sha256sum /boot/system/runtime_loader
+# | mkdir -p /boot/home/r996 && cd /boot/home/r996
+# | cat > dlo.c <<'C'
+# | #include <dlfcn.h>
+# | #include <stdio.h>
+# | int main(int argc, char** argv) {
+# | 	void* h = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+# | 	if (h == NULL) { printf("FAIL %s: %s\n", argv[1], dlerror()); return 1; }
+# | 	return 0;
+# | }
+# | C
+# | gcc -O2 -o dlo dlo.c || exit 1
+# | ok=0; bad=0
+# | for l in $(find /boot/system/lib -maxdepth 1 -name 'lib*.so*' -type f | sort); do
+# | 	if ./dlo "$l" > dlo.out 2>&1; then ok=$((ok+1)); else bad=$((bad+1)); cat dlo.out; fi
+# | done
+# | echo "dlopen: ok=$ok failed=$bad"
+# | echo "== python3.14 extension modules"
+# | python3.14 -I -c 'import ssl, zlib, ctypes, sqlite3, hashlib, lzma, bz2, json; print(ssl.OPENSSL_VERSION, hashlib.sha256(b"x").hexdigest()[:16])'; echo "rc=$?"
+# | echo "== node crypto"
+# | node -e 'console.log(process.versions.openssl, require("crypto").createHash("sha256").update("x").digest("hex").slice(0,16))'; echo "rc=$?"
+# | echo "== C++ (libstdc++) build and run"
+# | printf '#include <iostream>\n#include <string>\nint main(){std::string s("c++ ok");std::cout<<s<<std::endl;}\n' > cxx.cpp && g++ -O2 -o cxx cxx.cpp && ./cxx; echo "rc=$?"
+# | echo "== ssh client config parse"; ssh -G localhost | head -2; echo "rc=$?"
+# | grep -cE "Unhandled pheader|Troubles handling" /var/log/syslog
+# ---- raw output ----
+Haiku ip-10-128-14-35.us-west-2.compu R1~beta6+development hrev59996 Nov  3 2026 00:41:16 arm64 arm64 Haiku
+7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  /boot/system/runtime_loader
+FAIL /boot/system/lib/libgcc_s.so: Not an executable
+FAIL /boot/system/lib/libmidi.so: Missing library
+dlopen: ok=100 failed=2
+== python3.14 extension modules
+OpenSSL 3.5.9 29 Sep 2026 2d711642b726b044
+rc=0
+== node crypto
+3.5.9 2d711642b726b044
+rc=0
+== C++ (libstdc++) build and run
+c++ ok
+rc=0
+== ssh client config parse
+host localhost
+user baron
+rc=0
+4
+Pseudo-terminal will not be allocated because stdin is not a terminal.
