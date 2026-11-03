@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: crossbuild-resume1-launch
+# instance: i-03163f59f6dc9f7f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: 992 workaround: rm the partial build_packages/libvorbis-1.3.7-1-arm64, resume build phase at [13]
+# start: 20261103T223841Z   end: 20261103T223852Z   rc: 0
+# script sha256: f0511383bf110167f3d2c1d1d6e82d10209f4c170dc6d3545d2634fcf6c79734
+# ---- script ----
+# | # Issue 992 workaround, as #986: the pass-0 extraction that failed left a partial
+# | # build_packages/libvorbis tree that jam would treat as up to date; remove it and re-run
+# | # the build phase from command 13 (jam pass 0) with the carried CodeBuild state. Detached.
+# | set -euo pipefail
+# | find /opt/src/haiku/generated.arm64/build_packages/libvorbis-1.3.7-1-arm64 -maxdepth 2 | head -20
+# | rm -rf /opt/src/haiku/generated.arm64/build_packages/libvorbis-1.3.7-1-arm64
+# | mv /opt/xb.log /opt/xb-b1.log
+# | rm -f /opt/xb.rc
+# | nohup bash -c 'RESUME=build:13 bash /opt/xb.sh > /opt/xb.log 2>&1; echo $? > /opt/xb.rc' > /dev/null 2>&1 &
+# | sleep 3; head -3 /opt/xb.log; echo resumed
+# ---- raw output ----
+/opt/src/haiku/generated.arm64/build_packages/libvorbis-1.3.7-1-arm64
+/opt/src/haiku/generated.arm64/build_packages/libvorbis-1.3.7-1-arm64/lib
+start 20261103T223844Z
+######## build[13]: HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" haiku-extract-build-features
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+resumed

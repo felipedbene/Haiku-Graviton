@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: mkimgs-raw
+# instance: i-03163f59f6dc9f7f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stage the ext2/btrfs test images uncompressed
+# start: 20261103T231140Z   end: 20261103T231150Z   rc: 0
+# script sha256: 1367d7b91e4df6ee1410e8051416e68210e302477c1aec3c4226f58bb2f7ab6e
+# ---- script ----
+# | # Stage the same fresh ext2/btrfs images uncompressed (Haiku's minimum image has no gunzip).
+# | set -euo pipefail
+# | cd /opt/ref
+# | for fs in ext2 btrfs; do
+# | 	gzip -dkf $fs-h.img.gz; sha256sum $fs-h.img; ls -l $fs-h.img
+# | 	aws s3 cp --quiet $fs-h.img s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/s1008/$fs-h.img
+# | done
+# ---- raw output ----
+3a959b8e5cf38db28a6248adaffb104ce7b1489a585cc280c666c3dff6d576a8  ext2-h.img
+-rw-r--r-- 1 root root 268435456 Nov  3 23:10 ext2-h.img
+8a2c912c96ce9309f7bd6f84f4b76bfc184d7fb1a0302300d63537d880650b21  btrfs-h.img
+-rw-r--r-- 1 root root 268435456 Nov  3 23:10 btrfs-h.img

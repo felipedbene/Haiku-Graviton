@@ -1,0 +1,64 @@
+# evidence: before1-console-kdl
+# instance: i-08c5b1781d3f0ffa0 (stock canonical ami-010361cfdaa9d22e1, c7g.2xlarge, fresh)   region: us-west-2   source: ec2 get-console-output --latest, fetched 20261103T2305Z
+# what: the before-sticky-canonical run (same timestamp prefix 20261103T223533Z) ended in KDL at its last step, 'unmount /ram1008' after sticky1008 ran on that ramfs: ASSERT vnodes.IsEmpty() in ~fs_mount (vfs.cpp:148). SSM output was lost with the box; it was terminated (no reboot) and the before run was redone on a fresh launch without the unmount.
+# ---- console tail ----
+package_daemon: [11175983:    68] Doing first boot processing #22 for package findutils-4.9.0_bootstrap-1-arm64.hpkg.
+package_daemon: [11177379:    68] Doing first boot processing #23 for package openssl3_man-3.5.9-3-any.hpkg.
+package_daemon: [11178668:    68] Doing first boot processing #24 for package libjpeg_turbo-3.1.4.1-1-arm64.hpkg.
+package_daemon: [11180029:    68] Doing first boot processing #25 for package coreutils-9.9_bootstrap-1-arm64.hpkg.
+package_daemon: [11181398:    68] Doing first boot processing #26 for package haiku_loader-r1~beta6_hrev59996-1-arm64.hpkg.
+Launching x-vnd.haiku-media_server failed: No such file or directory
+Running first login script /boot/system/boot/first-login/default_deskbar_items.sh ...
+slab memory manager: created area 0xffff00002a001000 (7631)
+framebuffer: init_hardware()
+devfs: scanned "graphics": mode 2 -> 2, latched 2, probe No error, legacy No error
+RemoteHWInterface: session cookie for port 10900 published in /boot/system/settings/remote_desktop/session_cookie.10900
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/wacom
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+ps2_hid: init_hardware
+ps2_hid: init_driver
+module: Search for bus_managers/ps2/v1 failed.
+devfs: scanned "input": mode 2 -> 2, latched 2, probe No error, legacy No error
+AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+load addon /boot/system/add-ons/input_server/filters/screen_saver failed
+ena: rx offload observed after 1000 frames: l4_csum_checked 778, l4_csum_err 0, l3_proto==ipv4 997, l3_csum_err 0 (rx_supported 0x7, rx_enabled 0x0)
+slab memory manager: created area 0xffff00002a801000 (10370)
+ena: rx offload observed after 50000 frames: l4_csum_checked 49778, l4_csum_err 0, l3_proto==ipv4 49997, l3_csum_err 0 (rx_supported 0x7, rx_enabled 0x0)
+package_daemon: [110776342:    68] CommitTransactionHandler::_ChangePackageActivation(): activating 3, deactivating 0 packages
+unknown: [110777866:    68] Volume::_ChangeActivation(): 3 new packages, 0 old packages
+slab memory manager: created area 0xffff00002b001000 (10375)
+unknown: [111034393:    68] package "gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg" activated
+unknown: [111035813:    68] package "binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg" activated
+unknown: [111041893:    68] package "haiku_devel-r1~beta6_hrev59996-1-arm64.hpkg" activated
+package_daemon: [111276508:    68] Volume::_PackagesEntryCreated("gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg")
+package_daemon: [111277702:    68] Volume::_PackagesEntryCreated("binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg")
+package_daemon: [111279080:    68] Volume::_PackagesEntryCreated("haiku_devel-r1~beta6_hrev59996-1-arm64.hpkg")
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+PANIC: ASSERT FAILED (../src/system/kernel/fs/vfs.cpp:148): vnodes.IsEmpty()
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 567 "unmount" running on CPU 2
+iframe 0xffff000000756cc7 (end = 0xffff000000756fff)
+stack trace for thread 0x237 "unmount"
+    kernel stack: 0xffff000000752000 to 0xffff000000757000
+      user stack: 0x0000014b37196000 to 0x0000014b3b196000
+frame            caller     <image>:function + offset
+ 0 ffff000000756810 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff000000756860 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000007568d0[0m [36m"�iu"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000007568d0 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff000000756990[0m [36m"�ju"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�2C���"[0m, std::__va_list: [34m0x1a7920[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff000000756990 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff000000756ab0 (+ 288) ffff000000136dac   <kernel_arm64> fs_unmount(char*: [34m0xffff000000756b40[0m, int32: [34m1301280[0m, uint32: [34m0xffff0000[0m, [34mfalse[0m) + 0x28c
+ 5 ffff000000756b40 (+ 144) ffff00000013db20   <kernel_arm64> _user_unmount + 0xa0
+ 6 ffff000000756ba0 (+  96) ffff0000000a71e8   <kernel_arm64> syscall_dispatcher + 0x1318
+ 7 ffff000000756bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+ 8 ffff000000756cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff000000756cc7
+ELR=000001c98ec37530 SPSR=0000000020000000
+LR =000001d05d4a4198 SP  =0000014b3b195ef0 FP =0000014b3b195ef0
+ESR=000000005600006a FAR =000001d05d4b40b8
+ 9 0000014b3b195ef0 (+   0) 000001c98ec37530   </boot/system/lib/libroot.so> _kern_unmount (nearest) + 0x04
+10 0000014b3b195fa0 (+ 176) 000001d05d4a4310   </boot/system/bin/unmount> _start + 0x50
+11 0000014b3b195fd0 (+  48) 0000014389456348   </boot/system/runtime_loader> runtime_loader + 0x128
+12 0000000000000000 (+   0) 0000082e99055208   <commpage> commpage_thread_exit + 0x00
+

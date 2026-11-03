@@ -1,0 +1,62 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-claude-code
+# instance: i-03ae76584724039bc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: BEFORE (stock canonical, /tmp 0777): Claude Code startup warning check
+# start: 20261103T232533Z   end: 20261103T232610Z   rc: 0
+# script sha256: d3966d319578774b385063f17ed15a06ba7a97eb32c6a55ead8841065c6611bf
+# ---- script ----
+# | # Issue 1008: Claude Code startup on this arm. Install claude_code + tmux from the green
+# | # repo, start the interactive TUI in tmux the working-soak.sh way (Bedrock, instance-profile
+# | # credentials, onboarding pre-accepted, fresh HOME), wait for the prompt, capture the pane,
+# | # and look for the "Cross-session messaging is off" warning. Also: claude --version/--help.
+# | pkgman install -y claude_code tmux 2>&1 | tail -1
+# | command -v claude tmux || exit 1
+# | ls -ld /tmp /boot/system/cache/tmp
+# | export DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | claude --version
+# | L=cc1008; H=/tmp/ws-home-$L; rm -rf $H; mkdir -p $H/.claude
+# | W=$(cd /tmp && pwd -P)/ws-$L; rm -rf $W; mkdir -p $W
+# | echo '{"prefersReducedMotion":true,"theme":"dark","permissions":{"allow":["Bash(echo:*)","Read","Write"]}}' > $H/.claude/settings.json
+# | echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$W\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | tmux -L $L kill-server 2>/dev/null
+# | tmux -L $L new-session -d -s $L -x 160 -y 50 "cd $W && env DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=$AWS_REGION ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude"
+# | for i in $(seq 1 120); do tmux -L $L capture-pane -t $L -p | grep -q '^❯' && break; sleep 1; done
+# | sleep 8
+# | echo "---- pane after $i s ----"
+# | tmux -L $L capture-pane -t $L -p -S -60 | grep -v '^ *$'
+# | echo "---- grep ----"
+# | tmux -L $L capture-pane -t $L -p -S -200 | grep -i -A2 "cross-session" && echo "WARNING PRESENT" || echo "NO cross-session warning"
+# | ls -la $H/.claude 2>&1 | head -20
+# | find /tmp -maxdepth 2 -newer $H/.claude.json -type d 2>/dev/null | grep -v "ws-" | head -20
+# | tmux -L $L kill-server
+# ---- raw output ----
+[system] Done.
+/boot/system/bin/claude
+/boot/system/bin/tmux
+drwxrwxrwx 1 baron root 2048 Nov  3 23:25 /boot/system/cache/tmp
+lrwxrwxrwx 1 baron root   22 Nov  3 22:52 /tmp -> /boot/system/cache/tmp
+2.1.314 (Claude Code)
+---- pane after 12 s ----
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/ws-cc1008
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable without the sticky bit (owner 0:0, mode
+  0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+                                                          tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts · ← for agents
+---- grep ----
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable without the sticky bit (owner 0:0, mode
+  0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+
+WARNING PRESENT
+total 40
+drwxr-xr-x 1 baron root 2048 Nov  3 23:25 .
+drwxr-xr-x 1 baron root 2048 Nov  3 23:25 ..
+drwxr-xr-x 1 baron root 2048 Nov  3 23:25 backups
+drwxr-xr-x 1 baron root 2048 Nov  3 23:25 cache
+drwxr-xr-x 1 baron root 2048 Nov  3 23:25 plugins
+drwx------ 1 baron root 2048 Nov  3 23:25 sessions
+-rw-r--r-- 1 baron root  101 Nov  3 23:25 settings.json

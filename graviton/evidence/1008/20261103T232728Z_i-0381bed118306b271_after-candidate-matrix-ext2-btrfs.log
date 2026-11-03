@@ -1,0 +1,132 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-matrix-ext2-btrfs
+# instance: i-0381bed118306b271   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: AFTER (candidate arm): mount the registered ext2/btrfs images and run the matrix
+# start: 20261103T232728Z   end: 20261103T232739Z   rc: 0
+# script sha256: c07cd6f9480dfc453a3f8d3b77f4c161841ecb4807fa7efa09c3a86edd94f738
+# ---- script ----
+# | # Issue 1008 matrix, ext2/btrfs half, step 2: mount the images the previous command
+# | # registered (diskimage list; a mount in the same command as the register fails ENOENT for
+# | # minutes, a later command mounts at once) and run the matrix. D = that command's directory.
+# | D=$(ls -d /boot/home/t1008-* | sort | tail -1); cd $D || exit 1; echo "dir $D"
+# | sha256sum sticky1008 sticky1008.c
+# | diskimage list
+# | dev_of() { diskimage list | awk -v f="$D/$1" '$2 == f { print $3 }' | tail -1; }
+# | mnt() { dev=$(dev_of $2); echo "$2 -> $dev"; [ -n "$dev" ] || return 1; mkdir -p $3; mount -t $1 $dev $3 || return 1; df $3 | tail -2; }
+# | echo "=== ext2 full matrix ==="; mnt ext2 ext2-full.img $D/m-ext2-full && { ./sticky1008 $D/m-ext2-full; echo "rc=$?"; }
+# | echo "=== ext2 -x rmdir-nonempty-dn ==="; mnt ext2 ext2-x.img $D/m-ext2-x && { ./sticky1008 -x rmdir-nonempty-dn $D/m-ext2-x; echo "rc=$?"; }
+# | echo "=== btrfs ==="; mnt btrfs btrfs.img $D/m-btrfs && { touch $D/m-btrfs/probe; echo "touch rc=$?"; ./sticky1008 $D/m-btrfs; echo "rc=$?"; }
+# ---- raw output ----
+dir /boot/home/t1008-232704
+1583d9aa628a101086b5754ba0c87cd0d74ba651b3f44df3ca930bc1f2d33bcd  sticky1008
+90d27bb4634c8eb300209de0b8310da622b01b048dcbb7c22bbda441f2ccb384  sticky1008.c
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1008-232704/ext2-full.img/dev/disk/virtual/files/3/raw
+     4  /boot/home/t1008-232704/ext2-x.img /dev/disk/virtual/files/4/raw
+     5  /boot/home/t1008-232704/btrfs.img  /dev/disk/virtual/files/5/raw
+=== ext2 full matrix ===
+ext2-full.img -> 
+=== ext2 -x rmdir-nonempty-dn ===
+ext2-x.img -> /dev/disk/virtual/files/4/raw
+   Free Nodes: 0
+   Root Inode: 2
+base /boot/home/t1008-232704/m-ext2-x: mode 0755 owner 0:0
+dir S: mode 1777 owner 2003
+PASS dir=S actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=S actor=A(entry-owner)  op=rmdir-nonempty-dn  (-x)
+PASS dir=S actor=B(other-user)   op=create-own         got=OK        expected=OK       
+PASS dir=S actor=B(other-user)   op=unlink-f           got=EPERM     expected=EPERM    
+PASS dir=S actor=B(other-user)   op=rename-f-away      got=EPERM     expected=EPERM    
+PASS dir=S actor=B(other-user)   op=rename-f-out       got=EPERM     expected=EPERM    
+PASS dir=S actor=B(other-user)   op=rename-own-over-f  got=EPERM     expected=EPERM    
+PASS dir=S actor=B(other-user)   op=rmdir-empty-de     got=EPERM     expected=EPERM    
+SKIP dir=S actor=B(other-user)   op=rmdir-nonempty-dn  (-x)
+PASS dir=S actor=C(dir-owner)    op=create-own         got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=S actor=C(dir-owner)    op=rmdir-nonempty-dn  (-x)
+PASS dir=S actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=S actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=S actor=root            op=rmdir-nonempty-dn  (-x)
+dir N: mode 0777 owner 2003
+PASS dir=N actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=N actor=A(entry-owner)  op=rmdir-nonempty-dn  (-x)
+PASS dir=N actor=B(other-user)   op=create-own         got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=N actor=B(other-user)   op=rmdir-nonempty-dn  (-x)
+PASS dir=N actor=C(dir-owner)    op=create-own         got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=N actor=C(dir-owner)    op=rmdir-nonempty-dn  (-x)
+PASS dir=N actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=N actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=N actor=root            op=rmdir-nonempty-dn  (-x)
+dir W: mode 0755 owner 0
+PASS dir=W actor=A(entry-owner)  op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-own-over-f  got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rmdir-empty-de     got=EACCES    expected=EACCES   
+SKIP dir=W actor=A(entry-owner)  op=rmdir-nonempty-dn  (-x)
+PASS dir=W actor=B(other-user)   op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-own-over-f  got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rmdir-empty-de     got=EACCES    expected=EACCES   
+SKIP dir=W actor=B(other-user)   op=rmdir-nonempty-dn  (-x)
+PASS dir=W actor=C(dir-owner)    op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-own-over-f  got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rmdir-empty-de     got=EACCES    expected=EACCES   
+SKIP dir=W actor=C(dir-owner)    op=rmdir-nonempty-dn  (-x)
+PASS dir=W actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=W actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=W actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+SKIP dir=W actor=root            op=rmdir-nonempty-dn  (-x)
+SUMMARY rows=72 failures=0 skipped=12
+rc=0
+=== btrfs ===
+btrfs.img -> /dev/disk/virtual/files/5/raw
+   Free Nodes: 0
+   Root Inode: 256
+touch rc=1
+base /boot/home/t1008-232704/m-btrfs: mode 0755 owner 0:0
+rc=2
+touch: cannot touch '/boot/home/t1008-232704/m-btrfs/probe': Read-only file system
+setup: mkdir(/boot/home/t1008-232704/m-btrfs/sticky1008.691): Read-only file system

@@ -1,0 +1,594 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-matrix-canonical
+# instance: i-03ae76584724039bc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: BEFORE: stock canonical ami-010361cfdaa9d22e1, fresh c7g.2xlarge launch (gcc already installed by the aborted first attempt, log 20261103T231047Z): sticky1008 on BFS /tmp, ramfs, ext2, btrfs
+# start: 20261103T231328Z   end: 20261103T231356Z   rc: 0
+# script sha256: 6449b355a4d4c5f3084af7ef13681c95a36723d2f2141bcbfcb08ec92ef2b9c7
+# ---- script ----
+# | # Issue 1008 matrix on a Haiku arm: probe /tmp and the modules in use, build
+# | # graviton/scripts/sticky1008.c, run it as root on /tmp (BFS), on a ramfs mount, and on
+# | # ext2 and btrfs images (made by Ubuntu mkfs, attached with diskimage). Nothing is
+# | # unmounted: unmounting the ramfs after this workload KDLs the stock kernel (see
+# | # before1-console-kdl); the instance is terminated afterwards instead.
+# | uname -a
+# | ls -ld /tmp /boot/system/cache/tmp
+# | stat -c '%a %u:%g %n' /boot/system/cache/tmp
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/bfs /boot/system/add-ons/kernel/file_systems/ramfs /boot/system/add-ons/kernel/file_systems/ext2 /boot/system/add-ons/kernel/file_systems/btrfs /boot/system/servers/launch_daemon
+# | command -v useradd || echo "no useradd"
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -1
+# | command -v gcc || exit 1
+# | mkdir -p /boot/home/t1008 && cd /boot/home/t1008
+# | cat > sticky1008.c <<'CEOF'
+# | /*
+# |  * sticky1008.c -- issue 1008: POSIX restricted deletion in sticky directories,
+# |  * and the write permission rmdir() needs.
+# |  *
+# |  * Run as root: sticky1008 [base-directory]   (default /tmp)
+# |  *
+# |  * Under <base>/sticky1008.<pid> (root, 0755) it makes three directories:
+# |  *   S  1777, owned by the "directory owner" user C
+# |  *   N  0777, owned by C (no sticky bit: today's behaviour must stay)
+# |  *   W  0755, owned by root (only root may remove entries)
+# |  * and for every (directory, actor, operation) recreates, as root, a file "f"
+# |  * and the directories "de" (empty) and "dn" (not empty) owned by user A, plus
+# |  * a file "mine" owned by the actor, then performs the operation in a child
+# |  * that has dropped to the actor's uid/gid. Actors: A (owner of the entries),
+# |  * B (an unrelated user), C (owner of the directory) and root.
+# |  *
+# |  * The expected result of each row is what POSIX specifies and Linux does
+# |  * (may_delete(): write+search on the directory, then check_sticky(), EPERM).
+# |  * Every row prints got/expected; the last line is the failure count, and the
+# |  * exit status is non-zero if any row failed.
+# |  */
+# | 
+# | #include <errno.h>
+# | #include <fcntl.h>
+# | #include <grp.h>
+# | #include <stdbool.h>
+# | #include <stdio.h>
+# | #include <stdlib.h>
+# | #include <string.h>
+# | #include <sys/stat.h>
+# | #include <sys/types.h>
+# | #include <sys/wait.h>
+# | #include <unistd.h>
+# | 
+# | #define UID_A	2001
+# | #define UID_B	2002
+# | #define UID_C	2003
+# | 
+# | static char sBase[1024];
+# | static int sFailures;
+# | static int sRows;
+# | 
+# | struct actor {
+# | 	const char*	name;
+# | 	uid_t		uid;
+# | };
+# | 
+# | static const struct actor kActors[] = {
+# | 	{ "A(entry-owner)", UID_A },
+# | 	{ "B(other-user)", UID_B },
+# | 	{ "C(dir-owner)", UID_C },
+# | 	{ "root", 0 },
+# | };
+# | 
+# | enum {
+# | 	OP_CREATE,			/* open(dir/new, O_CREAT|O_EXCL) */
+# | 	OP_UNLINK,			/* unlink(dir/f) */
+# | 	OP_RENAME_AWAY,		/* rename(dir/f, dir/g) */
+# | 	OP_RENAME_OUT,		/* rename(dir/f, <base>/out/f.<actor>) */
+# | 	OP_RENAME_OVER,		/* rename(dir/mine, dir/f) */
+# | 	OP_RMDIR_EMPTY,		/* rmdir(dir/de) */
+# | 	OP_RMDIR_FULL,		/* rmdir(dir/dn) */
+# | 	OP_COUNT
+# | };
+# | 
+# | static const char* kOpNames[OP_COUNT] = {
+# | 	"create-own", "unlink-f", "rename-f-away", "rename-f-out",
+# | 	"rename-own-over-f", "rmdir-empty-de", "rmdir-nonempty-dn"
+# | };
+# | 
+# | 
+# | static const char*
+# | errno_name(int error)
+# | {
+# | 	switch (error) {
+# | 		case 0:			return "OK";
+# | 		case EPERM:		return "EPERM";
+# | 		case EACCES:	return "EACCES";
+# | 		case ENOTEMPTY:	return "ENOTEMPTY";
+# | 		case EEXIST:	return "EEXIST";
+# | 		case ENOENT:	return "ENOENT";
+# | 		case EISDIR:	return "EISDIR";
+# | 		case ENOTDIR:	return "ENOTDIR";
+# | 		default:		return strerror(error);
+# | 	}
+# | }
+# | 
+# | 
+# | static void
+# | die(const char* what, const char* path)
+# | {
+# | 	fprintf(stderr, "setup: %s(%s): %s\n", what, path, strerror(errno));
+# | 	exit(2);
+# | }
+# | 
+# | 
+# | static void
+# | make_file(const char* path, uid_t owner)
+# | {
+# | 	int fd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0644);
+# | 	if (fd < 0)
+# | 		die("open", path);
+# | 	if (fchown(fd, owner, owner) != 0)
+# | 		die("fchown", path);
+# | 	close(fd);
+# | }
+# | 
+# | 
+# | static void
+# | make_dir(const char* path, mode_t mode, uid_t owner)
+# | {
+# | 	if (mkdir(path, 0700) != 0)
+# | 		die("mkdir", path);
+# | 	if (chown(path, owner, owner) != 0)
+# | 		die("chown", path);
+# | 	/* chmod() after mkdir(), so the umask cannot drop S_ISVTX */
+# | 	if (chmod(path, mode) != 0)
+# | 		die("chmod", path);
+# | }
+# | 
+# | 
+# | /* Remove (as root) whatever an earlier row left behind in a directory. */
+# | static void
+# | remove_quiet(const char* path)
+# | {
+# | 	if (unlink(path) != 0 && errno != ENOENT)
+# | 		die("unlink", path);
+# | }
+# | 
+# | 
+# | static void
+# | reset_entries(const char* dir, uid_t actor)
+# | {
+# | 	char path[1200];
+# | 	static const char* kFiles[] = { "f", "g", "mine", "new" };
+# | 	for (size_t i = 0; i < sizeof(kFiles) / sizeof(kFiles[0]); i++) {
+# | 		snprintf(path, sizeof(path), "%s/%s", dir, kFiles[i]);
+# | 		remove_quiet(path);
+# | 	}
+# | 	snprintf(path, sizeof(path), "%s/dn/inner", dir);
+# | 	remove_quiet(path);
+# | 	snprintf(path, sizeof(path), "%s/dn", dir);
+# | 	if (rmdir(path) != 0 && errno != ENOENT)
+# | 		die("rmdir", path);
+# | 	snprintf(path, sizeof(path), "%s/de", dir);
+# | 	if (rmdir(path) != 0 && errno != ENOENT)
+# | 		die("rmdir", path);
+# | 
+# | 	snprintf(path, sizeof(path), "%s/f", dir);
+# | 	make_file(path, UID_A);
+# | 	snprintf(path, sizeof(path), "%s/mine", dir);
+# | 	make_file(path, actor);
+# | 	snprintf(path, sizeof(path), "%s/de", dir);
+# | 	make_dir(path, 0755, UID_A);
+# | 	snprintf(path, sizeof(path), "%s/dn", dir);
+# | 	make_dir(path, 0755, UID_A);
+# | 	snprintf(path, sizeof(path), "%s/dn/inner", dir);
+# | 	make_file(path, UID_A);
+# | }
+# | 
+# | 
+# | static int
+# | do_op(int op, char dirKind, const char* dir, const struct actor* actor)
+# | {
+# | 	char from[1200], to[1200];
+# | 	int fd;
+# | 
+# | 	switch (op) {
+# | 		case OP_CREATE:
+# | 			snprintf(from, sizeof(from), "%s/new", dir);
+# | 			fd = open(from, O_CREAT | O_EXCL | O_WRONLY, 0644);
+# | 			if (fd < 0)
+# | 				return errno;
+# | 			close(fd);
+# | 			return 0;
+# | 		case OP_UNLINK:
+# | 			snprintf(from, sizeof(from), "%s/f", dir);
+# | 			return unlink(from) == 0 ? 0 : errno;
+# | 		case OP_RENAME_AWAY:
+# | 			snprintf(from, sizeof(from), "%s/f", dir);
+# | 			snprintf(to, sizeof(to), "%s/g", dir);
+# | 			return rename(from, to) == 0 ? 0 : errno;
+# | 		case OP_RENAME_OUT:
+# | 			snprintf(from, sizeof(from), "%s/f", dir);
+# | 			snprintf(to, sizeof(to), "%s/out/f.%c.%u", sBase, dirKind,
+# | 				(unsigned)actor->uid);
+# | 			return rename(from, to) == 0 ? 0 : errno;
+# | 		case OP_RENAME_OVER:
+# | 			snprintf(from, sizeof(from), "%s/mine", dir);
+# | 			snprintf(to, sizeof(to), "%s/f", dir);
+# | 			return rename(from, to) == 0 ? 0 : errno;
+# | 		case OP_RMDIR_EMPTY:
+# | 			snprintf(from, sizeof(from), "%s/de", dir);
+# | 			return rmdir(from) == 0 ? 0 : errno;
+# | 		case OP_RMDIR_FULL:
+# | 			snprintf(from, sizeof(from), "%s/dn", dir);
+# | 			return rmdir(from) == 0 ? 0 : errno;
+# | 	}
+# | 	return EINVAL;
+# | }
+# | 
+# | 
+# | static int
+# | expected(char dirKind, int op, const struct actor* actor)
+# | {
+# | 	if (op == OP_CREATE) {
+# | 		/* W is 0755 root: only root may create there */
+# | 		return dirKind == 'W' && actor->uid != 0 ? EACCES : 0;
+# | 	}
+# | 
+# | 	if (dirKind == 'W' && actor->uid != 0) {
+# | 		/* no write permission on the directory: may_delete()'s first check */
+# | 		return EACCES;
+# | 	}
+# | 
+# | 	if (dirKind == 'S' && actor->uid != 0 && actor->uid != UID_C
+# | 		&& actor->uid != UID_A) {
+# | 		/* the sticky rule comes before the emptiness check */
+# | 		return EPERM;
+# | 	}
+# | 
+# | 	if (op == OP_RMDIR_FULL)
+# | 		return ENOTEMPTY;
+# | 	return 0;
+# | }
+# | 
+# | 
+# | static void
+# | run_row(char dirKind, const char* dir, int op, const struct actor* actor)
+# | {
+# | 	reset_entries(dir, actor->uid);
+# | 
+# | 	int pipeFDs[2];
+# | 	if (pipe(pipeFDs) != 0)
+# | 		die("pipe", "");
+# | 
+# | 	pid_t child = fork();
+# | 	if (child < 0)
+# | 		die("fork", "");
+# | 	if (child == 0) {
+# | 		close(pipeFDs[0]);
+# | 		int result;
+# | 		gid_t gid = actor->uid;
+# | 		if (actor->uid != 0
+# | 			&& (setgroups(1, &gid) != 0 || setgid(gid) != 0
+# | 				|| setuid(actor->uid) != 0)) {
+# | 			fprintf(stderr, "child: cannot become uid %u: %s\n",
+# | 				(unsigned)actor->uid, strerror(errno));
+# | 			_exit(3);
+# | 		}
+# | 		if (actor->uid != 0 && (geteuid() != actor->uid || getuid() == 0)) {
+# | 			fprintf(stderr, "child: still privileged\n");
+# | 			_exit(3);
+# | 		}
+# | 		result = do_op(op, dirKind, dir, actor);
+# | 		if (write(pipeFDs[1], &result, sizeof(result)) != sizeof(result))
+# | 			_exit(4);
+# | 		_exit(0);
+# | 	}
+# | 	close(pipeFDs[1]);
+# | 
+# | 	int result = -1;
+# | 	ssize_t bytes = read(pipeFDs[0], &result, sizeof(result));
+# | 	close(pipeFDs[0]);
+# | 	int status;
+# | 	if (waitpid(child, &status, 0) != child || !WIFEXITED(status)
+# | 		|| WEXITSTATUS(status) != 0 || bytes != sizeof(result)) {
+# | 		fprintf(stderr, "child for %c %s %s failed (status %d)\n", dirKind,
+# | 			actor->name, kOpNames[op], status);
+# | 		exit(2);
+# | 	}
+# | 
+# | 	int want = expected(dirKind, op, actor);
+# | 	sRows++;
+# | 	bool pass = result == want;
+# | 	if (!pass)
+# | 		sFailures++;
+# | 	printf("%s dir=%c actor=%-15s op=%-18s got=%-9s expected=%-9s\n",
+# | 		pass ? "PASS" : "FAIL", dirKind, actor->name, kOpNames[op],
+# | 		errno_name(result), errno_name(want));
+# | }
+# | 
+# | 
+# | int
+# | main(int argc, char** argv)
+# | {
+# | 	const char* base = argc > 1 ? argv[1] : "/tmp";
+# | 	if (geteuid() != 0) {
+# | 		fprintf(stderr, "run as root\n");
+# | 		return 2;
+# | 	}
+# | 
+# | 	struct stat st;
+# | 	if (stat(base, &st) != 0)
+# | 		die("stat", base);
+# | 	printf("base %s: mode %04o owner %u:%u\n", base,
+# | 		(unsigned)(st.st_mode & 07777), (unsigned)st.st_uid,
+# | 		(unsigned)st.st_gid);
+# | 
+# | 	snprintf(sBase, sizeof(sBase), "%s/sticky1008.%d", base, (int)getpid());
+# | 	make_dir(sBase, 0755, 0);
+# | 
+# | 	char path[1200];
+# | 	snprintf(path, sizeof(path), "%s/out", sBase);
+# | 	make_dir(path, 0777, 0);
+# | 
+# | 	struct { char kind; mode_t mode; uid_t owner; } dirs[] = {
+# | 		{ 'S', 01777, UID_C },
+# | 		{ 'N', 0777, UID_C },
+# | 		{ 'W', 0755, 0 },
+# | 	};
+# | 
+# | 	for (size_t d = 0; d < sizeof(dirs) / sizeof(dirs[0]); d++) {
+# | 		char dir[1100];
+# | 		snprintf(dir, sizeof(dir), "%s/%c", sBase, dirs[d].kind);
+# | 		make_dir(dir, dirs[d].mode, dirs[d].owner);
+# | 		if (stat(dir, &st) != 0)
+# | 			die("stat", dir);
+# | 		printf("dir %c: mode %04o owner %u\n", dirs[d].kind,
+# | 			(unsigned)(st.st_mode & 07777), (unsigned)st.st_uid);
+# | 		if ((st.st_mode & 07777) != dirs[d].mode) {
+# | 			fprintf(stderr, "setup: %s did not keep mode %04o\n", dir,
+# | 				(unsigned)dirs[d].mode);
+# | 			return 2;
+# | 		}
+# | 
+# | 		for (size_t a = 0; a < sizeof(kActors) / sizeof(kActors[0]); a++) {
+# | 			for (int op = 0; op < OP_COUNT; op++)
+# | 				run_row(dirs[d].kind, dir, op, &kActors[a]);
+# | 		}
+# | 	}
+# | 
+# | 	printf("SUMMARY rows=%d failures=%d\n", sRows, sFailures);
+# | 	return sFailures == 0 ? 0 : 1;
+# | }
+# | CEOF
+# | wget -q -O ext2-h.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/ext2-h.img?<PRESIGNED>'
+# | wget -q -O btrfs-h.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/btrfs-h.img?<PRESIGNED>'
+# | sha256sum sticky1008.c ext2-h.img btrfs-h.img
+# | gcc -Wall -o sticky1008 sticky1008.c || exit 1
+# | echo "=== BFS /tmp ==="
+# | ./sticky1008 /tmp; echo "rc=$?"
+# | echo "=== ramfs ==="
+# | mkdir -p /ram1008 && mount -t ramfs /ram1008 && df /ram1008 | tail -2
+# | ./sticky1008 /ram1008; echo "rc=$?"
+# | for fs in ext2 btrfs; do
+# | 	echo "=== $fs (diskimage) ==="
+# | 	out=$(diskimage register /boot/home/t1008/$fs-h.img); echo "$out"
+# | 	dev=$(echo "$out" | grep -o '/dev/[^ ]*' | head -1)
+# | 	[ -n "$dev" ] || { echo "no device"; continue; }
+# | 	mkdir -p /mnt-$fs && mount -t $fs "$dev" /mnt-$fs && df /mnt-$fs | tail -2
+# | 	./sticky1008 /mnt-$fs; echo "rc=$?"
+# | done
+# | listimage 1 | grep -E "file_systems/|/(bfs|ramfs|ext2|btrfs)$" || listimage 1 | grep -E " (bfs|ramfs|ext2|btrfs)"
+# ---- raw output ----
+Haiku ip-10-128-15-47.us-west-2.compu R1~beta6+development hrev59996 Nov  3 2026 15:08:39 arm64 other Haiku
+drwxrwxrwx 1 baron root 2048 Nov  3 23:13 /boot/system/cache/tmp
+lrwxrwxrwx 1 baron root   22 Nov  3 22:52 /tmp -> /boot/system/cache/tmp
+777 0:0 /boot/system/cache/tmp
+dd61af737970d2db549aa897f6fe9f9f8ccb32daeb5d7fcf713f8293b42a32c2  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  /boot/system/add-ons/kernel/file_systems/bfs
+2b3f84c187b37e50b89f356f97b24ee302390b1314c1903bdbd86acdaae7bb50  /boot/system/add-ons/kernel/file_systems/ramfs
+4f5f80cef34a666779289850c293e608b228f1639cf9823d17a8c7c404355e29  /boot/system/add-ons/kernel/file_systems/ext2
+dbf04867923594bce0e62a7d3074bae42c501fab0d14a38763eb13ccc03afbf0  /boot/system/add-ons/kernel/file_systems/btrfs
+791c6968e00bba80075241ba6618a4777409c8892f6596675c8bc92b14f8995b  /boot/system/servers/launch_daemon
+/boot/system/bin/useradd
+Validating checksum for DeBeOS...done.
+/boot/system/bin/gcc
+24b152e6263c869ea710bbdeb64ce06f294bb3821693225bfbd4f138cad2bdf7  sticky1008.c
+3a959b8e5cf38db28a6248adaffb104ce7b1489a585cc280c666c3dff6d576a8  ext2-h.img
+8a2c912c96ce9309f7bd6f84f4b76bfc184d7fb1a0302300d63537d880650b21  btrfs-h.img
+=== BFS /tmp ===
+base /tmp: mode 0777 owner 0:0
+dir S: mode 1777 owner 2003
+PASS dir=S actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=S actor=B(other-user)   op=create-own         got=OK        expected=OK       
+FAIL dir=S actor=B(other-user)   op=unlink-f           got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rename-f-away      got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rename-f-out       got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rename-own-over-f  got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rmdir-empty-de     got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rmdir-nonempty-dn  got=ENOTEMPTY expected=EPERM    
+PASS dir=S actor=C(dir-owner)    op=create-own         got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=S actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=S actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=S actor=root            op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+dir N: mode 0777 owner 2003
+PASS dir=N actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=N actor=B(other-user)   op=create-own         got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=N actor=C(dir-owner)    op=create-own         got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=N actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=N actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=root            op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+dir W: mode 0755 owner 0
+PASS dir=W actor=A(entry-owner)  op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-own-over-f  got=EACCES    expected=EACCES   
+FAIL dir=W actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=EACCES   
+FAIL dir=W actor=A(entry-owner)  op=rmdir-nonempty-dn  got=ENOTEMPTY expected=EACCES   
+PASS dir=W actor=B(other-user)   op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-own-over-f  got=EACCES    expected=EACCES   
+FAIL dir=W actor=B(other-user)   op=rmdir-empty-de     got=OK        expected=EACCES   
+FAIL dir=W actor=B(other-user)   op=rmdir-nonempty-dn  got=ENOTEMPTY expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-own-over-f  got=EACCES    expected=EACCES   
+FAIL dir=W actor=C(dir-owner)    op=rmdir-empty-de     got=OK        expected=EACCES   
+FAIL dir=W actor=C(dir-owner)    op=rmdir-nonempty-dn  got=ENOTEMPTY expected=EACCES   
+PASS dir=W actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=W actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=W actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=W actor=root            op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+SUMMARY rows=84 failures=12
+rc=1
+=== ramfs ===
+   Free Nodes: 0
+   Root Inode: 1
+base /ram1008: mode 0755 owner 0:0
+dir S: mode 1777 owner 2003
+PASS dir=S actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=S actor=B(other-user)   op=create-own         got=OK        expected=OK       
+FAIL dir=S actor=B(other-user)   op=unlink-f           got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rename-f-away      got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rename-f-out       got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rename-own-over-f  got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rmdir-empty-de     got=OK        expected=EPERM    
+FAIL dir=S actor=B(other-user)   op=rmdir-nonempty-dn  got=ENOTEMPTY expected=EPERM    
+PASS dir=S actor=C(dir-owner)    op=create-own         got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=S actor=C(dir-owner)    op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=S actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=S actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=S actor=root            op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+dir N: mode 0777 owner 2003
+PASS dir=N actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=A(entry-owner)  op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=N actor=B(other-user)   op=create-own         got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=B(other-user)   op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=N actor=C(dir-owner)    op=create-own         got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=C(dir-owner)    op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+PASS dir=N actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=N actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=N actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=N actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=N actor=root            op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+dir W: mode 0755 owner 0
+PASS dir=W actor=A(entry-owner)  op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rename-own-over-f  got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rmdir-empty-de     got=EACCES    expected=EACCES   
+PASS dir=W actor=A(entry-owner)  op=rmdir-nonempty-dn  got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rename-own-over-f  got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rmdir-empty-de     got=EACCES    expected=EACCES   
+PASS dir=W actor=B(other-user)   op=rmdir-nonempty-dn  got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=create-own         got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=unlink-f           got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-f-away      got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-f-out       got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rename-own-over-f  got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rmdir-empty-de     got=EACCES    expected=EACCES   
+PASS dir=W actor=C(dir-owner)    op=rmdir-nonempty-dn  got=EACCES    expected=EACCES   
+PASS dir=W actor=root            op=create-own         got=OK        expected=OK       
+PASS dir=W actor=root            op=unlink-f           got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-f-away      got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-f-out       got=OK        expected=OK       
+PASS dir=W actor=root            op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=W actor=root            op=rmdir-empty-de     got=OK        expected=OK       
+PASS dir=W actor=root            op=rmdir-nonempty-dn  got=ENOTEMPTY expected=ENOTEMPTY
+SUMMARY rows=84 failures=6
+rc=1
+=== ext2 (diskimage) ===
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
+base /mnt-ext2: mode 0755 owner 0:0
+dir S: mode 1777 owner 2003
+rc=2
+=== btrfs (diskimage) ===
+Registered file as disk device "/dev/disk/virtual/files/5/raw" with ID 5.
+base /mnt-btrfs: mode 0755 owner 0:0
+dir S: mode 1777 owner 2003
+rc=2
+ 1582 0xffff000002344000 0xffff000002370000     0          0 /boot/system/add-ons/kernel/file_systems/ramfs
+ 7085 0xffff00002811a000 0xffff00002813d000     0          0 /boot/system/add-ons/kernel/file_systems/ext2
+ 7195 0xffff00002813f000 0xffff000028169000     0          0 /boot/system/add-ons/kernel/file_systems/btrfs
+mount: No such file or directory
+setup: open(/mnt-ext2/sticky1008.796/S/f): Invalid Argument
+mount: No such file or directory
+setup: open(/mnt-btrfs/sticky1008.806/S/f): Invalid Argument

@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-candidate
+# instance: i-02a63662c037351d5   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical haiku.hpkg with the fix kernel/libroot/bfs/ramfs/ext2/btrfs for the candidate AMI
+# start: 20261103T231106Z   end: 20261103T231118Z   rc: 127
+# script sha256: 0b2951340124baa7d5d906337c2f71ff75dd91422e6736172df3784356cdcc9e
+# ---- script ----
+# | # Repack the "candidate" arm: canonical haiku.hpkg with fix/1008-sticky-tmp's kernel_arm64 +
+# | # libroot.so (#937 rule: the two together) and bfs/ramfs/ext2/btrfs, so a fresh launch of an
+# | # image of this box boots them (the boot loader preloads system/add-ons/kernel/file_systems).
+# | # launch_daemon stays canonical: this arm isolates the kernel/fs change. Method of #898/#933.
+# | set -e
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O 'kernel_arm64.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/kernel_arm64.fix?<PRESIGNED>'
+# | wget -q -O 'libroot.so.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/libroot.so.fix?<PRESIGNED>'
+# | wget -q -O 'bfs.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/bfs.fix?<PRESIGNED>'
+# | wget -q -O 'ramfs.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/ramfs.fix?<PRESIGNED>'
+# | wget -q -O 'ext2.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/ext2.fix?<PRESIGNED>'
+# | wget -q -O 'btrfs.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/btrfs.fix?<PRESIGNED>'
+# | cat > sums <<'SUMS'
+# | fbfdb66581737752b74bd3e5ca6e13f0068e5702df0bf6069e3afe5dae814a56  kernel_arm64.fix
+# | 2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.fix
+# | 5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  bfs.fix
+# | d6acb3318a46c7fbe0a6330a4575769cd3c263d2301c547c35a54ecc8577dc40  ramfs.fix
+# | d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  ext2.fix
+# | 28d2d8d20d54afe2f221dd323ad2e15095a5840a6d049dada04ccf035b97b2e7  btrfs.fix
+# | SUMS
+# | sha256sum -c sums
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/bfs $A/ramfs $A/ext2 $A/btrfs
+# | cat kernel_arm64.fix > x/kernel_arm64; cat libroot.so.fix > x/lib/libroot.so
+# | for m in bfs ramfs ext2 btrfs; do cat $m.fix > $A/$m; done
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/bfs $A/ramfs $A/ext2 $A/btrfs
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+/tmp/run-27577-272586.sh: line 7: wget: command not found
+failed to run commands: exit status 127

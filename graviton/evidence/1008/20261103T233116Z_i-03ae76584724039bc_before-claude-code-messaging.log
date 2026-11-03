@@ -1,0 +1,88 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-claude-code-messaging
+# instance: i-03ae76584724039bc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm: Claude Code cross-session messaging between two sessions (outside injection, then session A -> session B)
+# start: 20261103T233116Z   end: 20261103T233425Z   rc: 1
+# script sha256: 31b6b5bdbdc716bd050cf4579fab4df6e592d32e8fa7b748dab27ac73fa5e823
+# ---- script ----
+# | # Issue 1008: Claude Code 2.1.314 cross-session messaging, two interactive sessions in tmux
+# | # (Bedrock, instance-profile credentials). Session B listens on /tmp/cc-socks/<pid>.sock.
+# | #  step 1: an outside process injects a user message into B's socket;
+# | #  step 2: session A's Bash tool runs a node client that sends a message to B's socket.
+# | # Each message asks B to Write a file; the file's existence is the observable.
+# | export DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+# | ls -ld /boot/system/cache/tmp; claude --version
+# | cat > /boot/home/ccsend.js <<'JS'
+# | // ccsend.js <socket> <message-file>: send one user message line to a Claude Code session.
+# | const net = require('net'), fs = require('fs');
+# | const [sock, file] = process.argv.slice(2);
+# | const text = fs.readFileSync(file, 'utf8').trim();
+# | const c = net.connect(sock, () => c.end(JSON.stringify({type: 'user', message: {role: 'user', content: text}}) + '\n'));
+# | c.on('error', e => { console.error('ccsend error: ' + e.message); process.exit(1); });
+# | c.on('close', () => console.log('ccsend: sent to ' + sock));
+# | JS
+# | start() {	# start <label> <allow-json>
+# | 	H=/tmp/ws-home-$1; rm -rf $H; mkdir -p $H/.claude; W=/boot/system/cache/tmp/ws-$1; rm -rf $W; mkdir -p $W
+# | 	echo "{\"prefersReducedMotion\":true,\"theme\":\"dark\",\"permissions\":{\"allow\":$2}}" > $H/.claude/settings.json
+# | 	echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$W\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | 	tmux -L $1 kill-server 2>/dev/null
+# | 	tmux -L $1 new-session -d -s $1 -x 160 -y 50 "cd $W && env DISABLE_AUTOUPDATER=1 CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=$AWS_REGION ANTHROPIC_MODEL=$ANTHROPIC_MODEL HOME=$H TERM=xterm-256color claude"
+# | 	for i in $(seq 1 90); do tmux -L $1 capture-pane -t $1 -p | grep -q '^❯' && break; sleep 1; done; sleep 3
+# | }
+# | waitfile() { for i in $(seq 1 150); do [ -s "$1" ] && { echo "OK: $1 after ${i}s: $(cat $1)"; return 0; }; sleep 1; done; echo "FAIL: no $1 after 150s"; return 1; }
+# | pane() { echo "---- pane $1 ----"; tmux -L $1 capture-pane -t $1 -p -S -40 | grep -v '^ *$' | tail -25; }
+# | ls /tmp/cc-socks/ 2>&1 > /boot/home/socks.before
+# | start ccb '["Write","Read"]'
+# | SB=$(ls -t /tmp/cc-socks/*.sock 2>/dev/null | head -1); echo "session B socket: ${SB:-none}"; ls -la /tmp/cc-socks/ 2>&1
+# | pane ccb | grep -i "cross-session" && echo "B: cross-session warning PRESENT"
+# | rc=0
+# | echo "=== step 1: outside injection into B ==="
+# | echo "Use the Write tool to write the text pong-ext-1008 to the file ext.txt in the current directory. Then reply with only the word done." > /boot/home/msg-ext.txt
+# | if [ -n "$SB" ]; then node /boot/home/ccsend.js $SB /boot/home/msg-ext.txt; waitfile /boot/system/cache/tmp/ws-ccb/ext.txt || rc=1; else echo "FAIL: B has no socket"; rc=1; fi
+# | echo "=== step 2: session A sends to session B ==="
+# | echo "Use the Write tool to write the text pong-from-session-a to the file froma.txt in the current directory. Then reply with only the word done." > /boot/home/msg-a.txt
+# | start cca '["Bash(node:*)","Read"]'
+# | tmux -L cca send-keys -t cca -l "Use the Bash tool to run exactly this command and nothing else: node /boot/home/ccsend.js ${SB:-/tmp/cc-socks/none.sock} /boot/home/msg-a.txt   Then reply with only the word sent."; sleep 1; tmux -L cca send-keys -t cca Enter
+# | waitfile /boot/system/cache/tmp/ws-ccb/froma.txt || rc=1
+# | pane cca; pane ccb
+# | tmux -L cca kill-server; tmux -L ccb kill-server
+# | echo "messaging rc=$rc"; exit $rc
+# ---- raw output ----
+drwxrwxrwx 1 baron root 2048 Nov  3 23:31 /boot/system/cache/tmp
+2.1.314 (Claude Code)
+ls: cannot access '/tmp/cc-socks/': No such file or directory
+session B socket: none
+ls: cannot access '/tmp/cc-socks/': No such file or directory
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable without the sticky bit (owner 0:0, mode
+B: cross-session warning PRESENT
+=== step 1: outside injection into B ===
+FAIL: B has no socket
+=== step 2: session A sends to session B ===
+FAIL: no /boot/system/cache/tmp/ws-ccb/froma.txt after 150s
+---- pane cca ----
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/ws-cca
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable without the sticky bit (owner 0:0, mode
+  0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+❯ Use the Bash tool to run exactly this command and nothing else: node /boot/home/ccsend.js /tmp/cc-socks/none.sock /boot/home/msg-a.txt   Then reply with only
+  the word sent.
+  Thought for 1s, ran 1 shell command
+● The command failed with a connection error to the socket. The socket file doesn't exist or cannot be connected to.
+✻ Sautéed for 3s · done 11:31 PM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+---- pane ccb ----
+ ▐▛███▛█   Claude Code v2.1.314
+▝▜██████▀  Haiku 4.5 · Amazon Bedrock
+ ▝▝   ▝▝   /boot/system/cache/tmp/ws-ccb
+⚠ Cross-session messaging is off: its socket directory could not be set up: '/boot/system/cache/tmp' is world-writable without the sticky bit (owner 0:0, mode
+  0777) — chmod o-w /boot/system/cache/tmp (or chmod +t), or pass --messaging-socket-path · restart with --debug-file <path> to write a debug log explaining why
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏸ manual mode on · ? for shortcuts
+messaging rc=1
+failed to run commands: exit status 1

@@ -1,0 +1,74 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: crossbuild-launch
+# instance: i-03163f59f6dc9f7f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: start the detached oven-equivalent cross-build of fix/1008-sticky-tmp at e04f15ac7e
+# start: 20261103T223507Z   end: 20261103T223518Z   rc: 0
+# script sha256: c1fe2edbf002f34ebdd52b717f667e808a384b668dcaab5acfb597786dd9aae4
+# ---- script ----
+# | #!/bin/bash
+# | # Reproduces the oven CodeBuild cross-build (install, pre_build, build phases of
+# | # graviton/pipeline/buildspecs/cross-build.yml, verbatim) on an Ubuntu 24.04 arm64
+# | # EC2 instance, each command run the CodeBuild way (runphase.py), for branch
+# | # fix/1008-sticky-tmp. Method of #986 (graviton/evidence/986). post_build skipped:
+# | # it only writes caches back to S3. Env values are the haiku-oven-cross-build project's.
+# | # Runs detached; progress goes to /opt/xb.log, exit status to /opt/xb.rc.
+# | set -euo pipefail
+# | cat > /opt/runphase.py <<'PY'
+# | # runphase.py <buildspec> <phase> [start-index] [<phase>...]: run buildspec commands the
+# | # way CodeBuild does -- each command in its own bash, exported variables and the working
+# | # directory carried to the next command, shell options NOT carried. Stops at the first
+# | # command that exits non-zero. "phase:N" starts that phase at command N (a resume).
+# | import os, subprocess, sys, yaml
+# | spec = yaml.safe_load(open(sys.argv[1]))
+# | state = "/opt/cb-state.sh"
+# | if not os.path.exists(state):
+# |     open(state, "w").write("cd \"$CODEBUILD_SRC_DIR\"\n")
+# | for arg in sys.argv[2:]:
+# |     ph, _, start = arg.partition(":")
+# |     start = int(start or 0)
+# |     for i, cmd in enumerate(spec["phases"][ph]["commands"]):
+# |         if i < start:
+# |             continue
+# |         print(f"######## {ph}[{i}]: {cmd.splitlines()[0][:100]}", flush=True)
+# |         script = (f". {state} 2>/dev/null\n" + cmd + "\n__rc=$?\n"
+# |                   f"{{ declare -p | grep -vE '^declare -[a-zA-Z]*r' | grep -vE '^declare -[-a-zA-Z]* (BASH[A-Z_]*|FUNCNAME|GROUPS|DIRSTACK|PIPESTATUS|_|__rc)='; printf 'cd %q\\n' \"$PWD\"; }} > {state}.new\nexit $__rc\n")
+# |         rc = subprocess.call(["bash", "-c", script])
+# |         if os.path.exists(state + ".new"):
+# |             os.replace(state + ".new", state)
+# |         if rc != 0:
+# |             print(f"######## {ph}[{i}] FAILED rc={rc}", flush=True)
+# |             sys.exit(rc)
+# |     print(f"######## phase {ph} rc=0", flush=True)
+# | PY
+# | cat > /opt/xb.sh <<'XB'
+# | set -euo pipefail
+# | export DEBIAN_FRONTEND=noninteractive
+# | export AWS_DEFAULT_REGION=us-west-2 HAIKU_REVISION=hrev59996 HG_SSH_DIR=/opt/haiku/ssh
+# | export WORK_BUCKET=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | export IMPORT_PREFIX=import CACHE_PREFIX=cache
+# | export BUILDTOOLS_REPO=https://github.com/felipedbene/buildtools.git BUILDTOOLS_BRANCH=master
+# | export HAIKU_ON_EC2_REPO=https://github.com/felipedbene/haiku-on-ec2.git HAIKU_ON_EC2_BRANCH=main
+# | export ROOT_VOLUME_BYTES=21474836480 AMI_NAME_PREFIX=haiku-oven HG_BAKE_LANE=oven
+# | export GEN_SUBDIR=generated.arm64
+# | export CODEBUILD_SRC_DIR=/opt/src/haiku
+# | date -u +"start %Y%m%dT%H%M%SZ"
+# | if [ "${RESUME:-}" = "" ]; then
+# | 	apt-get update -qq && apt-get install -y -qq git python3-yaml > /dev/null
+# | 	rm -rf /usr/local/aws-cli /usr/local/bin/aws /usr/local/bin/aws_completer /tmp/aws /tmp/awscliv2.zip /opt/haiku /opt/src /opt/cb-state.sh /tmp/ct.env /tmp/ct.tar.zst
+# | 	mkdir -p /opt/src
+# | 	git clone -q --branch fix/1008-sticky-tmp https://github.com/felipedbene/Haiku-Graviton.git "$CODEBUILD_SRC_DIR"
+# | 	git -C "$CODEBUILD_SRC_DIR" log --oneline -8
+# | 	python3 -I /opt/runphase.py "$CODEBUILD_SRC_DIR/graviton/pipeline/buildspecs/cross-build.yml" install pre_build build
+# | else
+# | 	python3 -I /opt/runphase.py "$CODEBUILD_SRC_DIR/graviton/pipeline/buildspecs/cross-build.yml" "$RESUME"
+# | fi
+# | ls -la "$CODEBUILD_SRC_DIR/haiku-ec2.raw"
+# | sha256sum "$CODEBUILD_SRC_DIR/haiku-ec2.raw"
+# | date -u +"end %Y%m%dT%H%M%SZ"
+# | XB
+# | rm -f /opt/xb.rc /opt/xb.log
+# | nohup bash -c 'bash /opt/xb.sh > /opt/xb.log 2>&1; echo $? > /opt/xb.rc' > /dev/null 2>&1 &
+# | sleep 5; head -5 /opt/xb.log; echo launched
+# ---- raw output ----
+start 20261103T223510Z
+launched
