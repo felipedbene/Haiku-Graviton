@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-C-diag
+# instance: i-07cb8674ddb6eeb40   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T030316Z   end: 20261103T030322Z   rc: 0
+# script sha256: 8426c9ada4b1b604d9dcb1a68046b4d40198cc062a2f2ae518b87b6104beee28
+# ---- script ----
+# | node --version; ls -la /boot/system/bin/node* 2>&1 | head; catattr SYS:PACKAGE_FILE /boot/system/bin/node 2>&1
+# | for p in nodejs20-20.15.1-3 nodejs24-24.22.2-1; do echo "== $p"; package list /boot/system/packages/$p-arm64.hpkg 2>/dev/null | grep -E "bin/" | head -4; package list -i /boot/system/packages/$p-arm64.hpkg | grep -E "provides: cmd|requires: lib:libicu|conflicts"; done
+# | echo "== lit"; package list /boot/system/packages/lit-3.9.0-3-arm64.hpkg | grep -vE "/$" | head -6
+# | echo "== sonames"; ls /boot/system/lib | grep -E "libp11|libPoco[A-Z][a-z]+\.so|librtmp|libWebKitLegacy" | head -12
+# | echo "== green nmap baseline"; package list -i /boot/system/packages/nmap-7.94-2-arm64.hpkg | grep requires
+# ---- raw output ----
+v20.15.1
+-r-xr-xr-x 1 baron root 38089792 Nov  3 00:43 /boot/system/bin/node
+/boot/system/bin/node : string : nodejs20-20.15.1-3-arm64.hpkg
+== nodejs20-20.15.1-3
+	provides: cmd:corepack = 20.15.1 (compatible >= 20)
+	provides: cmd:node = 20.15.1 (compatible >= 20)
+	requires: lib:libicudata>=74.1
+	requires: lib:libicui18n>=74.1
+	requires: lib:libicuuc>=74.1
+== nodejs24-24.22.2-1
+	provides: cmd:node = 24.22.2 (compatible >= 24)
+	requires: lib:libicudata>=78.3
+	requires: lib:libicui18n>=78.3
+	requires: lib:libicuuc>=78.3
+== lit
+package-attributes:
+	name: lit
+	summary: Toolkit for developing, sharing, and running luvit/lua programs and libraries
+	description: Warning: lit is renamed to luvit to avoid conflict with LLVM's lit.
+Lit is a toolkit designed to make working in the new luvit 2.0 ecosystem easy and even fun.
+
+== sonames
+libPocoCrypto.so.94
+libPocoData.so.94
+libPocoEncodings.so.94
+libPocoFoundation.so.94
+libPocoNet.so.94
+libPocoPrometheus.so.94
+libPocoRedis.so.94
+libPocoUtil.so.94
+libPocoZip.so.94
+libWebKitLegacy.so.1
+libWebKitLegacy.so.1.10.0
+libp11-kit.so.0
+== green nmap baseline
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libpcap>=1.10.6
+	requires: lib:libpcre>=1.2.13
+	requires: lib:libssl>=3
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32

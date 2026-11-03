@@ -1,0 +1,63 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Z-provision-result
+# instance: i-0921a0c8126dc46c6   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000847Z   end: 20261103T000851Z   rc: 0
+# script sha256: 46bfe6001e7039111854c8a1ec6a05a4e9fd29ffdb299777e6dd931be9041e3f
+# ---- script ----
+# | tail -40 /boot/home/prov.log; grep -nE "overlay|FATAL|ERROR" /boot/home/prov.log | tail -15
+# ---- raw output ----
+provision: #136 filteredEnvironment patched
+provision: #136 Class 2: adding cmd:gzip/tar/unzip/which to haikuporter scriptletPrerequirements
+provision: #136 scriptletPrerequirements patched
+provision: #136 Class 8: defaulting CMAKE_BUILD_TYPE=Release in haikuporter cmake wrapper
+provision: #136 Class 8 cmake wrapper patched
+provision: #758: batching packageEntries' per-file dirname/mkdir/mv in haikuporter
+provision: #758 packageEntries batched
+provision: writing /boot/home/haikuports.conf
+provision: haikuports.conf: DOWNLOAD_MIRROR=https://sources.debene.dev (#172)
+provision: installing haikuporter wrapper -> /boot/home/config/non-packaged/bin/haikuporter
+provision: installing depclosure launcher -> /boot/home/config/non-packaged/bin/depclosure (src: /boot/home/depclosure.py)
+provision: installing haiku-package-closure launcher -> /boot/home/config/non-packaged/bin/haiku-package-closure (src: /boot/home/haiku-package-closure)
+provision: creating /boot/system/settings/fonts (haikuporter chroot copies it)
+provision: source-cache S3 client: NONE on this image (issue 728) -- the issue #162
+provision:   shared cache tier will be off; seed and upstream fetches are unaffected
+provision: installing source-cache helper -> /boot/home/config/non-packaged/bin/haiku-srccache-fetch (S3: off)
+provision: installing wget shim -> /boot/home/config/non-packaged/bin/wget (delegates to haiku-srccache-fetch)
+provision: installing curl shim -> /boot/home/config/non-packaged/bin/curl (delegates; real curl: /boot/system/bin/curl)
+
+provision: done. This box is a native arm64 package builder.
+  ports tree : /boot/home/haikuports
+  haikuporter: /boot/home/haikuporter
+  config     : /boot/home/haikuports.conf
+  seed dir   : /boot/home/seed  (drop upstream tarballs here to bypass a flaky fetch)
+  src cache  : off  (shared S3 tier via /boot/home/config/non-packaged/bin/haiku-srccache-fetch)
+  dl mirror  : https://sources.debene.dev  (haikuports.conf DOWNLOAD_MIRROR fallback, #172)
+  recipe overlay: /boot/home/haikuports-patches applied to the ports tree (#764)
+  chain plan : /boot/home/config/non-packaged/bin/depclosure, /boot/home/config/non-packaged/bin/haiku-package-closure
+               (launchers; source deployed to /boot/home by haiku-bake-builder)
+
+Compute a dependency-ordered build chain (no PATH/env setup needed):
+  /boot/home/config/non-packaged/bin/depclosure <port>...
+
+Build a port (build-requires are covered by --all-dependencies):
+  export PATH=/boot/home/config/non-packaged/bin:$PATH
+  cd /boot/home/haikuporter && python3.14 ./haikuporter --config=/boot/home/haikuports.conf -y --all-dependencies <port>
+
+Publish the resulting .hpkg to the DeBeOS repo from a Haiku host:
+  graviton/scripts/haiku-repo-add   (see its header for HG_* env)
+exit 0
+514:overlay-apply: updated /boot/home/haikuports/media-sound/waveedit/waveedit-1.1.recipe
+515:overlay-apply: updated /boot/home/haikuports/haiku-apps/windowtailor/windowtailor-0.3.recipe
+516:overlay-apply: updated /boot/home/haikuports/net-misc/wput/wput-0.6.2.recipe
+517:overlay-apply: updated /boot/home/haikuports/app-emulation/x16-emulator/x16_emulator-46.recipe
+518:overlay-apply: updated /boot/home/haikuports/media-libs/x264/x264-20220222.recipe
+519:overlay-apply: updated /boot/home/haikuports/media-libs/x265/x265-3.5.recipe
+520:overlay-apply: updated /boot/home/haikuports/media-gfx/xcftools/xcftools-1.0.7.recipe
+521:overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.7-0.7.0.recipe
+522:overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.8-0.8.0.recipe
+523:overlay-apply: updated /boot/home/haikuports/app-arch/zopfli/zopfli-1.0.3.recipe
+524:overlay-apply: SKIP zstd-1.5.6.recipe (stage-1 feature-capped; --stage1 to force)
+525:overlay-apply: SKIP zstd-1.5.7.recipe (stage-1 feature-capped; --stage1 to force)
+526:overlay-apply: 170 updated, 21 placed, 8 patchset(s), 4 stage-1 skipped, 0 unplaced
+527:provision: #764 overlay: 191 overlay recipe(s) verified byte-identical in /boot/home/haikuports
+558:  recipe overlay: /boot/home/haikuports-patches applied to the ports tree (#764)

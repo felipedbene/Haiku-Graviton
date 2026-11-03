@@ -1,0 +1,43 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X-tor-test
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000333Z   end: 20261103T000340Z   rc: 0
+# script sha256: 328b661135b0d2d271c036b2d83a666d24402dfccae348b5ad28d8d837302a49
+# ---- script ----
+# | ls -la /boot/home/haikuports/packages/.obsolete/ | grep -i tor; grep -aE "^(Ok|OK|FAIL|PASS|SKIP|ERROR|#)|tests? (passed|failed)|[0-9]+/[0-9]+ (TESTS|tests)|Summary" /boot/home/test-tor-0.4.8.12.log | tail -25; tail -8 /boot/home/test-tor-0.4.8.12.log
+# ---- raw output ----
+-rw-r--r-- 1 baron root 4529126 Nov  2 23:43 tor-0.4.8.12-2-arm64.hpkg
+-rw-r--r-- 1 baron root 3181637 Nov  2 23:43 tor_debuginfo-0.4.8.12-2-arm64.hpkg
+PASS: src/test/test_hs_ntor.sh
+PASS: src/test/test_ntor.sh
+PASS: src/test/test_rebind.sh
+PASS: src/test/test_include.sh
+FAIL: src/test/test_bt.sh
+PASS: src/test/test_key_expiration.sh
+PASS: src/test/test_zero_length_keys.sh
+PASS: src/test/unittest_part2.sh
+FAIL: src/test/unittest_part1.sh
+FAIL: src/test/unittest_part8.sh
+FAIL: src/test/unittest_part3.sh
+PASS: src/test/test_keygen.sh
+FAIL: src/test/unittest_part7.sh
+PASS: src/test/unittest_part5.sh
+PASS: src/test/unittest_part4.sh
+FAIL: src/test/test-slow
+PASS: src/test/test-timers
+PASS: src/test/unittest_part6.sh
+# TOTAL: 26
+# PASS:  17
+# SKIP:  1
+# XFAIL: 0
+# FAIL:  8
+# XPASS: 0
+# ERROR: 0
+----------------------------------------------------------------------
+net-vpn::tor-0.4.8.12
+	/boot/home/haikuports/net-vpn/tor/tor-0.4.8.12.recipe
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+TESTING net-vpn::tor-0.4.8.12
+----------------------------------------------------------------------
+Error: Test has failed - stopping.

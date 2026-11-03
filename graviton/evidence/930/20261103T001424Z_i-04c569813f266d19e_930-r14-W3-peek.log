@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W3-peek
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T001424Z   end: 20261103T001430Z   rc: 0
+# script sha256: 9d501cdc96547fcc0c2f36d9234e697445b6446a921ddd231ab06e53a3c03e8d
+# ---- script ----
+# | grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing|Failed to find" /boot/home/nb-haikuwebkit-1.10.0.out | tail -6; tail -c 300 /boot/home/nb-haikuwebkit-1.10.0.log 2>/dev/null
+# ---- raw output ----
+haikuwebkit-1.10.0: attempt 1 installing: cmd:ruby 
+haikuwebkit-1.10.0: FAILED, no missing-dep to install -- see /boot/home/nb-haikuwebkit-1.10.0.log
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+cached recipes ...
+----------------------------------------------------------------------
+haiku-libs::haikuwebkit-1.10.0
+	/boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

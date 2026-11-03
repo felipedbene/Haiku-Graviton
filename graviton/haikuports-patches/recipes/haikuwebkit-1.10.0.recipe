@@ -1,0 +1,141 @@
+SUMMARY="Open source web browser engine"
+DESCRIPTION="
+WebKit is an open source web browser engine. WebKit is also the name of the \
+Mac OS X system framework version of the engine that's used by Safari, \
+Dashboard, Mail, and many other OS X applications. WebKit's HTML and \
+JavaScript code began as a branch of the KHTML and KJS libraries from KDE."
+HOMEPAGE="https://www.webkit.org/"
+COPYRIGHT="1998-2026 Apple Inc., Google Inc., Sony, Samsung, Igalia, et al"
+LICENSE="GNU LGPL v2
+	GNU LGPL v2.1
+	MIT"
+# 3, not 2: a rebuild against openssl3 3.5.9-3 (issue 930), same source and
+# patches as stock HaikuPorts at 1d23c3a's haikuwebkit-1.10.0-2. 3.5.9-3 configures arm64 as
+# haiku-aarch64, which widens BN_ULONG in the public headers from 32 to 64 bits
+# under the same soname (lib:libcrypto = 3). This package libWebKitLegacy imports BN_sub_word,
+# so a build against the older headers passes its BN_ULONG argument as 32-bit.
+# -DUSE_LD_LLD=OFF: WebKit's OptionsCommon.cmake switches every link to -fuse-ld=lld
+# as soon as `gcc -fuse-ld=lld -Wl,--version` succeeds, and cmd:llvm_config >= 21 pulls
+# llvm21 -> llvm21_clang -> llvm21_lld into the build. lld has no Haiku target
+# ("ld.lld: error: unknown emulation: aarch64haiku"), so every CMake link probe fails
+# and configure stops at "Could NOT find Threads". Keep GNU ld, the linker the
+# Haiku toolchain targets. Linker choice only; no feature changes.
+# -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON: JavaScriptCore's ARM64Assembler::cacheFlush has no
+# Haiku branch (#error "The cacheFlush support is missing on this platform."), so the
+# ARM64 JIT does not build for Haiku. The published 1.10.0-2 is already a C_LOOP build
+# (its libJavaScriptCore.so.18 carries the CLoop interpreter, 62 cloop strings, no
+# assembler), so this reproduces the shipped configuration rather than cutting a
+# feature. A Haiku ARM64 JIT (clear_caches() for cacheFlush) is separate porting work.
+# -DENABLE_WEBASSEMBLY=OFF: WebKitFeatures.cmake rejects WebAssembly with C_LOOP
+# ("ENABLE_WEBASSEMBLY conflicts with ENABLE_C_LOOP"); WebAssembly needs a JIT tier, so
+# the shipped C_LOOP 1.10.0-2 cannot have had it either.
+REVISION="3"
+
+SOURCE_URI="https://codeberg.org/haiku/haikuwebkit/releases/download/HaikuWebKit-$portVersion/haikuwebkit-$portVersion.tar.gz"
+CHECKSUM_SHA256="5852128e3cba2b411e1a006a9c54cca74b96ca51fd9435c3cbb9b732d02fc556"
+# haikuwebkit-1.10.0-arm64.patchset: JavaScriptCore MachineContext accessors for Haiku
+# arm64 (struct vregs: sp, x[29], elr, x[1], x[19], x[4], as on Linux/FreeBSD ARM64);
+# without it JavaScriptCore stops at "#error Unknown Architecture" in MachineContext.h.
+PATCHES="haikuwebkit-$portVersion-arm64.patchset"
+SOURCE_DIR="haikuwebkit"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="?x86"
+
+PROVIDES="
+	haikuwebkit$secondaryArchSuffix = $portVersion
+	cmd:jsc
+	lib:libJavaScriptCore$secondaryArchSuffix = $portVersion compat >= 1
+	lib:libWebKitLegacy$secondaryArchSuffix = $portVersion
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libatomic$secondaryArchSuffix
+	lib:libavif$secondaryArchSuffix
+	lib:libcurl$secondaryArchSuffix
+	lib:libexecinfo$secondaryArchSuffix
+	lib:libgl$secondaryArchSuffix
+	lib:libicuuc$secondaryArchSuffix >= 74
+	lib:libgpg_error$secondaryArchSuffix
+	lib:libjpeg$secondaryArchSuffix
+	lib:liblcms2$secondaryArchSuffix
+	lib:libpng16$secondaryArchSuffix
+	lib:libpsl$secondaryArchSuffix
+	lib:libsqlite3$secondaryArchSuffix
+	lib:libssl$secondaryArchSuffix
+	lib:libwebp$secondaryArchSuffix
+	lib:libwoff2dec$secondaryArchSuffix
+	lib:libxml2$secondaryArchSuffix
+	lib:libxslt$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	haikuwebkit${secondaryArchSuffix}_devel = $portVersion
+	devel:libJavaScriptCore$secondaryArchSuffix = $portVersion
+	devel:libWebKitLegacy$secondaryArchSuffix = $portVersion
+	"
+REQUIRES_devel="
+	haikuwebkit$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	gcc${secondaryArchSuffix}_syslibs
+	gcc${secondaryArchSuffix}_syslibs_devel
+	devel:libavif$secondaryArchSuffix >= 16
+	devel:libcurl$secondaryArchSuffix
+	devel:libexecinfo$secondaryArchSuffix
+	devel:libgl$secondaryArchSuffix
+	devel:libicuuc$secondaryArchSuffix >= 74
+	devel:libjpeg$secondaryArchSuffix
+	devel:liblcms2$secondaryArchSuffix
+	devel:libpng16$secondaryArchSuffix
+	devel:libpsl$secondaryArchSuffix
+	devel:libsqlite3$secondaryArchSuffix
+	devel:libssl$secondaryArchSuffix >= 3
+	devel:libwebp$secondaryArchSuffix >= 7
+	devel:libwoff2dec$secondaryArchSuffix
+	devel:libxml2$secondaryArchSuffix
+	devel:libxslt$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+
+# Note: llvm_ar is the command needed from llvm, not llvm_config, but only llvm_config
+# has a version constraint in current llvm packages.
+BUILD_PREREQUIRES="
+	cmd:bison
+	cmd:cmake
+	cmd:flex
+	cmd:gcc$secondaryArchSuffix
+	cmd:gperf
+	cmd:llvm_config >= 21
+	cmd:m4
+	cmd:make
+	cmd:ninja
+	cmd:perl
+	cmd:pkg_config
+	cmd:python3
+	cmd:ruby
+	cmd:which
+	"
+
+BUILD()
+{
+	export DISABLE_ASLR=1
+	export PKG_CONFIG_LIBDIR="`finddir B_SYSTEM_DIRECTORY`/$relativeDevelopLibDir/pkgconfig"
+	Tools/Scripts/build-webkit --haiku --no-webkit2 --no-fatal-warnings --makeargs "$jobArgs" \
+		--cmakeargs="-DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_BUILD_TYPE=Release -DUSE_LD_LLD=OFF -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON -DENABLE_WEBASSEMBLY=OFF -DSHOULD_INSTALL_JS_SHELL=ON -DCMAKE_CXX_FLAGS='-ftrack-macro-expansion=0 --param ggc-min-expand=10'"
+}
+
+INSTALL()
+{
+	cd WebKitBuild/Release
+	ninja $jobArgs install
+
+	prepareInstalledDevelLibs libWebKitLegacy libJavaScriptCore
+
+	# devel package
+	packageEntries devel \
+		$developDir
+}

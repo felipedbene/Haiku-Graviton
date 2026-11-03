@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-llvm21-only
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T002155Z   end: 20261103T002208Z   rc: 0
+# script sha256: 3dbfdc4cafe79ecfa35df4e4467c8107f6e9b2dfdbcf622a86d57667c5b58780
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman uninstall llvm12 llvm12_libs 2>&1 | tail -1
+# | feed | pkgman install llvm21 2>&1 | grep -iE "install package|Done|llvm" | head -8
+# | ls /boot/system/packages | grep -i llvm; llvm-config --version
+# | for p in /boot/system/packages/llvm21*.hpkg; do echo "== $p"; package list -i $p | grep -E "provides: cmd:(ld|lld|ld\.lld)|requires:" | head -6; done
+# ---- raw output ----
+[system] Done.
+Validating checksum for DeBeOS...done.
+    install package llvm21_lld-21.1.8-2 from repository DeBeOS
+    install package llvm21_clang-21.1.8-2 from repository DeBeOS
+    install package llvm21-21.1.8-2 from repository DeBeOS
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Re-using download '/boot/system/packages/administrative/state_2026-11-03_00:10:34/llvm21_lld-21.1.8-2-arm64.hpkg' from previous transaction
+Validating checksum for http://packages.debene.dev/arm64/packages/llvm21_lld-21.1.8-2-arm64.hpkg...done.
+Re-using download '/boot/system/packages/administrative/state_2026-11-03_00:10:34/llvm21_clang-21.1.8-2-arm64.hpkg' from previous transaction
+Validating checksum for http://packages.debene.dev/arm64/packages/llvm21_clang-21.1.8-2-arm64.hpkg...done.
+llvm21-21.1.8-2-arm64.hpkg
+llvm21_clang-21.1.8-2-arm64.hpkg
+llvm21_libs-21.1.8-2-arm64.hpkg
+llvm21_lld-21.1.8-2-arm64.hpkg
+21.1.8
+== /boot/system/packages/llvm21-21.1.8-2-arm64.hpkg
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libclang_cpp>=21.1.8
+	requires: lib:libllvm>=21.1.8
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32
+== /boot/system/packages/llvm21_clang-21.1.8-2-arm64.hpkg
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: cmd:ld.lld>=21.1.8
+	requires: lib:libllvm>=21.1.8
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32
+== /boot/system/packages/llvm21_libs-21.1.8-2-arm64.hpkg
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32
+== /boot/system/packages/llvm21_lld-21.1.8-2-arm64.hpkg
+	provides: cmd:ld.lld = 21.1.8
+	provides: cmd:ld64.lld = 21.1.8
+	provides: cmd:lld = 21.1.8
+	provides: cmd:lld_link = 21.1.8
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libllvm>=21.1.8

@@ -1,0 +1,117 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-C-install
+# instance: i-07cb8674ddb6eeb40   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T030148Z   end: 20261103T030211Z   rc: 0
+# script sha256: 09a44e752ab98131ae763cbdacac4bea31005a07a988dc8536f832329bad2b9b
+# ---- script ----
+# | set -u
+# | feed() { i=0; while [ $i -lt 80 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | cd /boot/home/batch
+# | echo "== install all batch packages except openssh, plus claude_code from green, in ONE transaction"
+# | feed | pkgman install $(ls *.hpkg | grep -v '^openssh-') claude_code 2>&1 | grep -E "install package|upgrade package|uninstall|problem|Done|error|Error" | sed 's/^ *//' | sort | uniq -c | sort -rn | head -60
+# | echo "== versions now active"
+# | ls /boot/system/packages | grep -E "^(openssl3|libssh2|nodejs2[04]|libuv|brotli|haikuwebkit|libp11|libwebsockets|lit|luvi|net_ssleay|nmap|poco|rtmpdump|softhsm2|tor|u_boot_tools|claude_code|openssh)" | sort
+# ---- raw output ----
+== install all batch packages except openssh, plus claude_code from green, in ONE transaction
+      1 upgrade package openssl3_man-3.5.9-2 to 3.5.9-3 from local file
+      1 upgrade package openssl3-3.5.9-2 to 3.5.9-3 from local file
+      1 libgpg_error-1.61-2-arm64.hpkg [ KiB]
+      1 install package xz_utils-5.8.3-1 from repository DeBeOS
+      1 install package woff2-1.0.2-3 from repository DeBeOS
+      1 install package u_boot_tools-2026.07-2 from local file
+      1 install package tor_debuginfo-0.4.8.12-2 from local file
+      1 install package tor-0.4.8.12-2 from local file
+      1 install package sqlite-3.50.4.0-1 from repository DeBeOS
+      1 install package softhsm2_debuginfo-2.5.0-4 from local file
+      1 install package softhsm2-2.5.0-4 from local file
+      1 install package rtmpdump_tools-2.4_20161210-9 from local file
+      1 install package rtmpdump_devel-2.4_20161210-9 from local file
+      1 install package rtmpdump-2.4_20161210-9 from local file
+      1 install package ripgrep-15.2.0-1 from repository DeBeOS
+      1 install package readline-8.3.003-1 from repository DeBeOS
+      1 install package python3.14-3.14.7-1 from repository DeBeOS
+      1 install package python3.10-3.10.21-1 from repository DeBeOS
+      1 install package poco_devel-1.12.4-4 from local file
+      1 install package poco_debuginfo-1.12.4-4 from local file
+      1 install package poco-1.12.4-4 from local file
+      1 install package perl-5.42.2-1 from repository DeBeOS
+      1 install package p11_kit-0.25.5-2 from repository DeBeOS
+      1 install package openssl3_devel-3.5.9-3 from local file
+      1 install package openssl3_debuginfo-3.5.9-3 from local file
+      1 install package nodejs24_devel-24.22.2-1 from local file
+      1 install package nodejs24-24.22.2-1 from local file
+      1 install package nodejs20_devel-20.15.1-3 from local file
+      1 install package nodejs20-20.15.1-3 from local file
+      1 install package nmap-7.94-2 from local file
+      1 install package nghttp2-1.63.0-1 from repository DeBeOS
+      1 install package nettle-3.7.3-1 from repository DeBeOS
+      1 install package net_ssleay-1.94-3 from local file
+      1 install package nano-9.1-1 from repository DeBeOS
+      1 install package mandoc-1.14.6-1 from repository DeBeOS
+      1 install package luvi-2.15.0-2 from local file
+      1 install package luv_luajit-1.52.1_0-1 from repository DeBeOS
+      1 install package luajit-2.1.1727870382-1 from repository DeBeOS
+      1 install package lua-5.4.7-2 from repository DeBeOS
+      1 install package lit-3.9.0-3 from local file
+      1 install package libxslt-1.1.45-2 from repository DeBeOS
+      1 install package libxml2-2.15.3-1 from repository DeBeOS
+      1 install package libwebsockets_devel-4.3.3-2 from local file
+      1 install package libwebsockets-4.3.3-2 from local file
+      1 install package libwebp-1.6.0-3 from repository DeBeOS
+      1 install package libuv_devel-1.52.1-6 from local file
+      1 install package libuv_debuginfo-1.52.1-6 from local file
+      1 install package libuv-1.52.1-6 from local file
+      1 install package libunistring-1.3-1 from repository DeBeOS
+      1 install package libtasn1-4.19.0-1 from repository DeBeOS
+      1 install package libssh2_devel-1.11.1-2 from local file
+      1 install package libssh2-1.11.1-2 from local file
+      1 install package libpsl-0.21.5-2 from repository DeBeOS
+      1 install package libpcre2-10.45-1 from repository DeBeOS
+      1 install package libpcre-8.45-3 from repository DeBeOS
+      1 install package libpcap-1.10.6-1 from repository DeBeOS
+      1 install package libp11_devel-0.4.10-4 from local file
+      1 install package libp11_debuginfo-0.4.10-4 from local file
+      1 install package libp11-0.4.10-4 from local file
+      1 install package libidn2-2.0.5-4 from repository DeBeOS
+== versions now active
+brotli-1.2.1-2-arm64.hpkg
+brotli_devel-1.2.1-2-arm64.hpkg
+brotli_python3.14-1.2.1-2-arm64.hpkg
+brotli_python310-1.2.1-2-arm64.hpkg
+claude_code-2.1.314-2-arm64.hpkg
+haikuwebkit-1.10.0-3-arm64.hpkg
+haikuwebkit_devel-1.10.0-3-arm64.hpkg
+libp11-0.4.10-4-arm64.hpkg
+libp11_debuginfo-0.4.10-4-arm64.hpkg
+libp11_devel-0.4.10-4-arm64.hpkg
+libssh2-1.11.1-2-arm64.hpkg
+libssh2_devel-1.11.1-2-arm64.hpkg
+libuv-1.52.1-6-arm64.hpkg
+libuv_debuginfo-1.52.1-6-arm64.hpkg
+libuv_devel-1.52.1-6-arm64.hpkg
+libwebsockets-4.3.3-2-arm64.hpkg
+libwebsockets_devel-4.3.3-2-arm64.hpkg
+lit-3.9.0-3-arm64.hpkg
+luvi-2.15.0-2-arm64.hpkg
+net_ssleay-1.94-3-arm64.hpkg
+nmap-7.94-2-arm64.hpkg
+nodejs20-20.15.1-3-arm64.hpkg
+nodejs20_devel-20.15.1-3-arm64.hpkg
+nodejs24-24.22.2-1-arm64.hpkg
+nodejs24_devel-24.22.2-1-arm64.hpkg
+openssh_debeos-10.4p1-1-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_debuginfo-3.5.9-3-arm64.hpkg
+openssl3_devel-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-3-any.hpkg
+poco-1.12.4-4-arm64.hpkg
+poco_debuginfo-1.12.4-4-arm64.hpkg
+poco_devel-1.12.4-4-arm64.hpkg
+rtmpdump-2.4_20161210-9-arm64.hpkg
+rtmpdump_devel-2.4_20161210-9-arm64.hpkg
+rtmpdump_tools-2.4_20161210-9-arm64.hpkg
+softhsm2-2.5.0-4-arm64.hpkg
+softhsm2_debuginfo-2.5.0-4-arm64.hpkg
+tor-0.4.8.12-2-arm64.hpkg
+tor_debuginfo-0.4.8.12-2-arm64.hpkg
+u_boot_tools-2026.07-2-arm64.hpkg

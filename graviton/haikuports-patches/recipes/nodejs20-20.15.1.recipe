@@ -7,7 +7,12 @@ to be done, Node will sleep."
 HOMEPAGE="https://nodejs.org/"
 COPYRIGHT="2006-2019 The Node.js Foundation"
 LICENSE="BSD (2-clause)"
-REVISION="2"
+# 3, not 2: a rebuild against openssl3 3.5.9-3 (issue 930), same source and
+# patches as this overlay's own recipe (PR 386)'s nodejs20-20.15.1-2. 3.5.9-3 configures arm64 as
+# haiku-aarch64, which widens BN_ULONG in the public headers from 32 to 64 bits
+# under the same soname (lib:libcrypto = 3). This package imports BN_get_word, BN_set_word,
+# so a build against the older headers passes its BN_ULONG argument as 32-bit.
+REVISION="3"
 SOURCE_URI="https://nodejs.org/dist/v$portVersion/node-v$portVersion.tar.gz"
 CHECKSUM_SHA256="da228a0c27922f02001d9a781793696432096ab2da658eb77d7fc21693f4c5cb"
 SOURCE_DIR="node-v$portVersion"

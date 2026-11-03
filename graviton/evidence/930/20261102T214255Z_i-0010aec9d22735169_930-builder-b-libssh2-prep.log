@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-libssh2-prep
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T214255Z   end: 20261102T214302Z   rc: 0
+# script sha256: d65e915b24a8c359a448c83aa23a568c61a7099399386b8d2ace7c3ea72dc15c
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports; D=$HP/net-libs/libssh2
+# | cd $HP && git status --short net-libs/libssh2 && git log -1 --format=%H -- net-libs/libssh2
+# | sha256sum $D/libssh2-1.11.1.recipe $D/patches/libssh2-1.11.1.patchset
+# | cp /boot/home/stage/libssh2-1.11.1.recipe $D/ && sha256sum $D/libssh2-1.11.1.recipe && grep '^REVISION' $D/libssh2-1.11.1.recipe
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | for d in devel:libz cmd:aclocal cmd:autoconf cmd:automake cmd:libtoolize cmd:pkg_config; do echo "== $d"; feed | pkgman install $d 2>&1 | tail -1; done
+# | for c in aclocal autoconf automake libtoolize pkg-config gcc make; do printf '%s: ' $c; which $c || echo MISSING; done
+# ---- raw output ----
+1d23c3acf3003c17cc5d2aa57907cb2e6d13fd5b
+ac7a7c59273b4602ef022884032f6cb55ddea0ace27ea3100e17f8383d6801f3  /boot/home/haikuports/net-libs/libssh2/libssh2-1.11.1.recipe
+6fa94a82ea1a4029f31394422e6f8fbfb4d4e1a283fa5a02675f4284d47107c6  /boot/home/haikuports/net-libs/libssh2/patches/libssh2-1.11.1.patchset
+83a292061ddf520338fe4694adfb8166c489d968e4bff1cb452e0c269be4cf3c  /boot/home/haikuports/net-libs/libssh2/libssh2-1.11.1.recipe
+REVISION="2"
+== devel:libz
+[system] Done.
+== cmd:aclocal
+Validating checksum for DeBeOS...done.
+== cmd:autoconf
+Validating checksum for DeBeOS...done.
+== cmd:automake
+Validating checksum for DeBeOS...done.
+== cmd:libtoolize
+Validating checksum for DeBeOS...done.
+== cmd:pkg_config
+Validating checksum for DeBeOS...done.
+aclocal: /boot/system/bin/aclocal
+autoconf: /boot/system/bin/autoconf
+automake: /boot/system/bin/automake
+libtoolize: /boot/system/bin/libtoolize
+pkg-config: /boot/system/bin/pkg-config
+gcc: /boot/system/bin/gcc
+make: /boot/system/bin/make

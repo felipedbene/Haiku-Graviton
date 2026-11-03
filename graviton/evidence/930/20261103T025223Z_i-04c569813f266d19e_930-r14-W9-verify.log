@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W9-verify
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T025223Z   end: 20261103T025232Z   rc: 0
+# script sha256: 8956dfe67e870885e9c48702fd2027ead9afda4116fcd9549add1b1d3662765b
+# ---- script ----
+# | grep -aoE "haikuwebkit-1.10.0: (BUILD_OK.*|FAILED.*)" /boot/home/nb-haikuwebkit-1.10.0.out | head -1
+# | grep -aE "openssl3(_devel)?-3\.5\.9-[0-9]" /boot/home/nb-haikuwebkit-1.10.0.log | sort -u | head -3
+# | P=/boot/home/haikuports/packages/haikuwebkit-1.10.0-3-arm64.hpkg; sha256sum $P /boot/home/haikuports/packages/haikuwebkit_devel-1.10.0-3-arm64.hpkg
+# | cd /tmp && rm -rf hk && mkdir hk && package extract -C hk $P && ls hk/bin hk/lib | head
+# | strings -a hk/lib/libJavaScriptCore.so.18 | grep -cE "CLoop|cloop"
+# | readelf --dyn-syms hk/lib/libWebKitLegacy.so.1 | grep -E "BN_[a-z_]*word" | awk '{print $NF}' | sort -u
+# | J=$(ls hk/bin/jsc* 2>/dev/null | head -1); echo "jsc: $J"
+# | [ -n "$J" ] && LIBRARY_PATH=/tmp/hk/lib:$LIBRARY_PATH $J -e 'print([1,2,3].map(x=>x*x).join(","), JSON.stringify({a:Math.PI.toFixed(4)}), new Date(0).toISOString(), "δοκιμή".toUpperCase())'
+# ---- raw output ----
+haikuwebkit-1.10.0: BUILD_OK (attempt 1)
+	/boot/system/packages/openssl3-3.5.9-3-arm64.hpkg
+	/boot/system/packages/openssl3_devel-3.5.9-3-arm64.hpkg
+-- Found OpenSSL: /packages/openssl3-3.5.9-3/.self/develop/lib/libcrypto.so (found version "3.5.9")
+f490ae37c1f513643d1f924a7745d0ccc7466540693973ca7612220f483a5f36  /boot/home/haikuports/packages/haikuwebkit-1.10.0-3-arm64.hpkg
+b9758c15fa999c4068c60653fc9355f76f3c56b6d5645113c0b575c095fbc0a6  /boot/home/haikuports/packages/haikuwebkit_devel-1.10.0-3-arm64.hpkg
+hk/bin:
+jsc
+
+hk/lib:
+libJavaScriptCore.so.18
+libJavaScriptCore.so.18.7.4
+libWebKitLegacy.so.1
+libWebKitLegacy.so.1.10.0
+62
+jsc: hk/bin/jsc
+1,4,9 {"a":"3.1416"} 1970-01-01T00:00:00.000Z ΔΟΚΙΜΉ

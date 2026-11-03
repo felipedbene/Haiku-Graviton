@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X2-n20-tests
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T005155Z   end: 20261103T005201Z   rc: 0
+# script sha256: 6751e0bf3e546110e5c28b4c5b3dccb5d3ca5bbe8273e999cbfe44ace7221dd3
+# ---- script ----
+# | grep -aE "tests? (passed|failed)|# (pass|fail)|^\[.*\|.*\]|FAIL|ok [0-9]+|not ok" /boot/home/test-nodejs20-20.15.1.log | tail -15; tail -6 /boot/home/test-nodejs20-20.15.1.log
+# ---- raw output ----
+	/boot/home/haikuports/net-libs/nodejs/nodejs20-20.15.1.recipe
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+TESTING net-libs::nodejs20-20.15.1
+----------------------------------------------------------------------
+Error: Test has failed - stopping.

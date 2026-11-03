@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X-tor-fail
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000301Z   end: 20261103T000307Z   rc: 0
+# script sha256: 91693eceafef028e4d16cc40fc9051e193ed010f3eec9750473763d579d29bb3
+# ---- script ----
+# | grep -aE "error|Error|ERROR" /boot/home/nb-tor-0.4.8.12.log | grep -vE "Werror|-Wmissing|error-|errors?\.(c|h|o)|checking" | head -20; tail -25 /boot/home/nb-tor-0.4.8.12.log
+# ---- raw output ----
+mimeset: warning: application init failed (General system error); continuing without it.
+mimeset: warning: application init failed (General system error); continuing without it.
+waiting for build package tor-0.4.8.12-2 to be deactivated
+waiting for build package tor_debuginfo-0.4.8.12-2 to be deactivated
+cleaning chroot folder
+grabbing tor-0.4.8.12-2-arm64.hpkg and moving it to /boot/home/haikuports/packages/.obsolete/tor-0.4.8.12-2-arm64.hpkg
+grabbing tor_debuginfo-0.4.8.12-2-arm64.hpkg and moving it to /boot/home/haikuports/packages/.obsolete/tor_debuginfo-0.4.8.12-2-arm64.hpkg
+Checking if any dependency-infos need to be updated ...
+	updating dependency infos of tor-0.4.9.15
+Looking for stale dependency-infos ...
+	removing tor-0.4.8.12.DependencyInfo
+	removing tor_debuginfo-0.4.8.12.DependencyInfo
+	removing tor-0.4.8.12.DependencyInfoMarker
+Looking for stale cached recipes ...
+	removing tor-0.4.8.12-arm64
+Checking if any dependency-infos need to be updated ...
+	updating dependency infos of tor-0.4.8.12
+Looking for stale dependency-infos ...
+	removing tor-0.4.9.15.DependencyInfo
+	removing tor_debuginfo-0.4.9.15.DependencyInfo
+	removing tor-0.4.9.15.DependencyInfoMarker
+Looking for stale cached recipes ...
+	removing tor-0.4.9.15-arm64
+----------------------------------------------------------------------
+net-vpn::tor-0.4.8.12
+	/boot/home/haikuports/net-vpn/tor/tor-0.4.8.12.recipe
+----------------------------------------------------------------------

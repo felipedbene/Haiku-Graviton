@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-libssh2-build-start
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T215235Z   end: 20261102T215325Z   rc: 0
+# script sha256: 79c018b828d43b936e023a297632d13db89c911d481a835240148a37bb5ef32f
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports
+# | sha256sum $HP/net-libs/libssh2/libssh2-1.11.1.recipe; grep '^REVISION' $HP/net-libs/libssh2/libssh2-1.11.1.recipe
+# | cd $HP
+# | ( s=$(date +%s); haikuporter -y -j16 --test libssh2; echo "haikuporter exit $? wall=$(( $(date +%s) - s ))s" ) < /dev/null > /boot/home/ssh2.log 2>&1 &
+# | echo "started pid $!"; sleep 45; tail -5 /boot/home/ssh2.log
+# ---- raw output ----
+83a292061ddf520338fe4694adfb8166c489d968e4bff1cb452e0c269be4cf3c  /boot/home/haikuports/net-libs/libssh2/libssh2-1.11.1.recipe
+REVISION="2"
+started pid 166666
+Warning: Found old repository format - repopulating the repository ...

@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-O-keygen-ab
+# instance: i-0465f313995da1a3d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T015929Z   end: 20261103T015936Z   rc: 0
+# script sha256: c2d9d4e36edb5ded103975e4806a36b9f85aca09500ed42e5baca375bf1f2ee8
+# ---- script ----
+# | cd /tmp && rm -rf on og && mkdir on og
+# | package extract -C on /boot/home/haikuports/packages/.obsolete/openssh-10.4p1-2-arm64.hpkg
+# | curl -sf -o og.hpkg https://packages.debene.dev/arm64/packages/openssh-10.4p1-1-arm64.hpkg && package extract -C og og.hpkg
+# | W=/boot/home/haikuports/net-misc/openssh/work-10.4p1/sources/openssh-10.4p1/regress
+# | ls $W/rsa_ssh2.prv >/dev/null 2>&1 || { curl -sfL -o /tmp/rp https://raw.githubusercontent.com/openssh/openssh-portable/V_10_4_P1/regress/rsa_ssh2.prv; curl -sfL -o /tmp/ro https://raw.githubusercontent.com/openssh/openssh-portable/V_10_4_P1/regress/rsa_openssh.prv; W=/tmp; cp /tmp/rp $W/rsa_ssh2.prv; cp /tmp/ro $W/rsa_openssh.prv; }
+# | hostname; uname -n
+# | for v in og on; do echo "== $v: $(./$v/bin/ssh -V 2>&1)"; ./$v/bin/ssh-keygen -if $W/rsa_ssh2.prv > /tmp/$v.out 2>/tmp/$v.err; echo "rc=$? $(cat /tmp/$v.err)"; diff -q /tmp/$v.out $W/rsa_openssh.prv && echo "MATCH"; for t in rsa ecdsa ed25519; do ./$v/bin/ssh-keygen -q -t $t -N "" -f /tmp/k-$v-$t && echo "keygen $t ok"; done; done
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  2.80M 100  2.80M   0      0 11.22M      0                              0100  2.80M 100  2.80M   0      0 11.20M      0                              0100  2.80M 100  2.80M   0      0 11.17M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/openssh-10.4p1-1-arm64.hpkg (2943116 bytes)
+ip-10-128-7-29.us-west-2.compute.internal
+ip-10-128-7-29.us-west-2.comput
+== og: OpenSSH_10.4p1, OpenSSL 3.5.9 29 Sep 2026
+rc=0 
+MATCH
+keygen rsa ok
+keygen ecdsa ok
+keygen ed25519 ok
+== on: OpenSSH_10.4p1, OpenSSL 3.5.9 29 Sep 2026
+rc=0 
+MATCH
+keygen rsa ok
+keygen ecdsa ok
+keygen ed25519 ok

@@ -1,0 +1,37 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-O-pkg-check
+# instance: i-0465f313995da1a3d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T015950Z   end: 20261103T015956Z   rc: 0
+# script sha256: 323a1aae263f6aa219ec51276341973e649d6c5dbcc34868abec8f6153738eba
+# ---- script ----
+# | P=/boot/home/haikuports/packages/.obsolete/openssh-10.4p1-2-arm64.hpkg
+# | package list -i $P | grep -E "^\s+(name|version|requires|provides): " | head -40
+# | readelf --dyn-syms /tmp/on/bin/ssh-keygen | grep -oE "BN_[a-z_]*word@OPENSSL_3[.0-9]*" | sort -u
+# | grep -aE "openssl3(_devel)?-3\.5\.9" /boot/home/test-openssh-10.4p1.log | head -3
+# | sha256sum $P
+# ---- raw output ----
+	name: openssh
+	version: 10.4p1-2
+	provides: openssh = 10.4p1 (compatible >= 5)
+	provides: cmd:scp = 10.4p1 (compatible >= 5)
+	provides: cmd:sftp = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_add = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_agent = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_copy_id = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_keygen = 10.4p1 (compatible >= 5)
+	provides: cmd:ssh_keyscan = 10.4p1 (compatible >= 5)
+	provides: cmd:sshd = 10.4p1 (compatible >= 5)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: cmd:grep>=3.11
+	requires: cmd:login
+	requires: cmd:passwd
+	requires: cmd:sed>=4.9
+	requires: lib:libcrypto>=3
+	requires: lib:libedit>=0.0.72
+	requires: lib:libncurses>=6.6.0
+	requires: lib:libssl>=3
+	requires: lib:libz>=1.3.2
+	/boot/system/packages/openssl3-3.5.9-3-arm64.hpkg
+	/boot/system/packages/openssl3_devel-3.5.9-3-arm64.hpkg
+a94309945863402505809ada20cf0dcd793d16ca2da6dc3201090a2dd61de418  /boot/home/haikuports/packages/.obsolete/openssh-10.4p1-2-arm64.hpkg

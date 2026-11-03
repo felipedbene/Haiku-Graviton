@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W4-why
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T002136Z   end: 20261103T002142Z   rc: 1
+# script sha256: 737caf060cd61459dc07dd36dd348b73e85cc1e83f2f67fe742e01e821af360d
+# ---- script ----
+# | grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing" /boot/home/nb-haikuwebkit-1.10.0.out | tail -4; ls /boot/system/packages | grep -i llvm; grep -aE "unknown emulation|Could NOT|CMake Error" /boot/home/nb-haikuwebkit-1.10.0.log | head -3; package list -i /boot/system/packages/llvm21-21.1.8-2-arm64.hpkg 2>/dev/null | grep -E "requires:" ; f=$(find /boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0 -name CMakeConfigureLog.yaml 2>/dev/null | head -1); [ -n "$f" ] && grep -aE "error" "$f" | sort | uniq -c | sort -rn | head -4
+# ---- raw output ----
+haikuwebkit-1.10.0: attempt 1 installing: cmd:llvm_config >= 21 
+haikuwebkit-1.10.0: NO PROGRESS at attempt 2 -- installing the missing set left it unchanged.
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+llvm12-12.0.1-9-arm64.hpkg
+llvm12_libs-12.0.1-9-arm64.hpkg
+llvm21_libs-21.1.8-2-arm64.hpkg

@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-openssh-green-install
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T220016Z   end: 20261102T220022Z   rc: 2
+# script sha256: 3fa55cd33486437254a351d74c9a54eaa2f3b5dba8d56787bdae825e0b94484f
+# ---- script ----
+# | cd /boot/home/scan
+# | echo 'b902d39bd06dd200ee28e057b6eeba4f22cac4563844de2ddaa137fc50272b40  os.hpkg' | sha256sum -c - || exit 1
+# | cp os.hpkg /boot/home/openssh-10.4p1-1-arm64.hpkg
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install /boot/home/openssh-10.4p1-1-arm64.hpkg 2>&1 | grep -vE '^Continue' | tail -8
+# | echo; echo "rc=$?"
+# | sha256sum /boot/system/packages/openssh-10.4p1-1-arm64.hpkg
+# | ssh -V; readelf -dW /boot/system/bin/sshd | grep NEEDED
+# | ls -ld /packages/openssh-10.4p1-1/.self/data/openssh/empty
+# ---- raw output ----
+os.hpkg: OK
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** failed to commit transaction: Failed to change the package activation in packagefs: Name in use
+Validating checksum for DeBeOS...done.
+The following changes will be made:
+  in system:
+    upgrade package openssh-10.4p1-1 to 10.4p1-1 from local file
+
+rc=0
+659863a1d4bcfd761dfb0a900d816bf1c8835f82f1145ef54e294fc1b19b41ba  /boot/system/packages/openssh-10.4p1-1-arm64.hpkg
+OpenSSH_10.4p1, without OpenSSL
+ 0x0000000000000001 (NEEDED)             Shared library: [libnetwork.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libbsd.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libroot.so]
+ls: cannot access '/packages/openssh-10.4p1-1/.self/data/openssh/empty': No such file or directory

@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-drop-lld
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T001543Z   end: 20261103T001616Z   rc: 0
+# script sha256: f324760f0f6d1816ae0b7153c13319ee91ddc4b69807d6d7a226eb85f928c580
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman uninstall llvm21_lld llvm21_clang 2>&1 | tail -2
+# | ls /boot/system/packages | grep -i llvm21; ls -la /boot/system/bin/ld /boot/system/bin/ld.lld 2>&1 | head; ld --version | head -1
+# | rm -rf /boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+llvm21_libs-21.1.8-2-arm64.hpkg
+ls: cannot access '/boot/system/bin/ld.lld': No such file or directory
+-r-xr-xr-x 1 baron root 10764520 Aug 28 22:53 /boot/system/bin/ld
+GNU ld (GNU Binutils) 2.46.1

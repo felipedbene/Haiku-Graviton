@@ -1,0 +1,82 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Y-build-summary
+# instance: i-0406d3c82385e02eb   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T004842Z   end: 20261103T004848Z   rc: 0
+# script sha256: cbb33d7ce857b49c1a2715022693f5b50b7b754f64c988ec0c51752269486027
+# ---- script ----
+# | cat /boot/home/r14.log
+# | ls -la /boot/home/haikuports/packages/
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+=== softhsm2-2.5.0 build start 2026-11-02T23:28:18Z
+=== softhsm2-2.5.0 driver rc=1 2026-11-02T23:33:44Z
+    pkg: softhsm2-2.5.0-4-arm64.hpkg
+    pkg: softhsm2_debuginfo-2.5.0-4-arm64.hpkg
+[system] Done.
+=== softhsm2-2.5.0 test rc=1 2026-11-02T23:34:54Z
+=== libp11-0.4.10 build start 2026-11-02T23:34:54Z
+=== libp11-0.4.10 driver rc=1 2026-11-02T23:35:24Z
+    pkg: libp11-0.4.10-4-arm64.hpkg
+    pkg: libp11_debuginfo-0.4.10-4-arm64.hpkg
+    pkg: libp11_devel-0.4.10-4-arm64.hpkg
+=== libp11-0.4.10 test rc=1 2026-11-02T23:35:38Z
+=== luvi-2.15.0 build start 2026-11-02T23:35:38Z
+=== luvi-2.15.0 driver rc=1 2026-11-02T23:36:16Z
+    pkg: luvi-2.15.0-2-arm64.hpkg
+[system] Done.
+=== luvi-2.15.0 test rc=0 2026-11-02T23:36:27Z
+=== lit-3.9.0 build start 2026-11-02T23:36:27Z
+=== lit-3.9.0 driver rc=1 2026-11-02T23:36:37Z
+    pkg: lit-3.9.0-3-arm64.hpkg
+=== lit-3.9.0 test rc=1 2026-11-02T23:36:44Z
+=== libwebsockets-4.3.3 build start 2026-11-02T23:36:44Z
+=== libwebsockets-4.3.3 driver rc=1 2026-11-02T23:37:52Z
+    pkg: libwebsockets-4.3.3-2-arm64.hpkg
+    pkg: libwebsockets_devel-4.3.3-2-arm64.hpkg
+=== libwebsockets-4.3.3 no TEST()
+=== net_ssleay-1.94 build start 2026-11-02T23:37:52Z
+=== net_ssleay-1.94 driver rc=1 2026-11-02T23:38:16Z
+    pkg: net_ssleay-1.94-3-arm64.hpkg
+=== net_ssleay-1.94 test rc=1 2026-11-02T23:39:07Z
+=== poco-1.12.4 build start 2026-11-02T23:39:07Z
+=== poco-1.12.4 driver rc=1 2026-11-02T23:45:46Z
+    pkg: poco-1.12.4-4-arm64.hpkg
+    pkg: poco_debuginfo-1.12.4-4-arm64.hpkg
+    pkg: poco_devel-1.12.4-4-arm64.hpkg
+=== poco-1.12.4 test rc=1 2026-11-03T00:43:04Z
+=== rtmpdump-2.4_20161210 build start 2026-11-03T00:43:04Z
+=== rtmpdump-2.4_20161210 driver rc=1 2026-11-03T00:43:27Z
+=== rtmpdump-2.4_20161210 no TEST()
+=== u_boot_tools-2026.07 build start 2026-11-03T00:43:27Z
+=== u_boot_tools-2026.07 driver rc=1 2026-11-03T00:48:15Z
+=== u_boot_tools-2026.07 no TEST()
+ALLDONE
+total 38544
+drwxr-xr-x 1 baron root     2048 Nov  2 23:45 .
+drwxr-xr-x 1 baron root     7168 Nov  3 00:48 ..
+-rw-r--r-- 1 baron root    61643 Nov  2 23:35 libp11-0.4.10-4-arm64.hpkg
+-rw-r--r-- 1 baron root   146729 Nov  2 23:35 libp11_debuginfo-0.4.10-4-arm64.hpkg
+-rw-r--r-- 1 baron root     6229 Nov  2 23:35 libp11_devel-0.4.10-4-arm64.hpkg
+-rw-r--r-- 1 baron root   225818 Nov  2 23:37 libwebsockets-4.3.3-2-arm64.hpkg
+-rw-r--r-- 1 baron root   206419 Nov  2 23:37 libwebsockets_devel-4.3.3-2-arm64.hpkg
+-rw-r--r-- 1 baron root   478981 Nov  2 23:36 lit-3.9.0-3-arm64.hpkg
+-rw-r--r-- 1 baron root   252743 Nov  2 23:36 luvi-2.15.0-2-arm64.hpkg
+-rw-r--r-- 1 baron root   227937 Nov  2 23:38 net_ssleay-1.94-3-arm64.hpkg
+-rw-r--r-- 1 baron root  3756368 Nov  2 23:45 poco-1.12.4-4-arm64.hpkg
+-rw-r--r-- 1 baron root 25395109 Nov  2 23:45 poco_debuginfo-1.12.4-4-arm64.hpkg
+-rw-r--r-- 1 baron root   724955 Nov  2 23:45 poco_devel-1.12.4-4-arm64.hpkg
+-rw-r--r-- 1 baron root  4474104 Nov  2 23:33 softhsm2-2.5.0-4-arm64.hpkg
+-rw-r--r-- 1 baron root  3455574 Nov  2 23:33 softhsm2_debuginfo-2.5.0-4-arm64.hpkg
+2f7de84f359feaa4c384de55280e322a28185418dfd4a867838127fcc0e820ef  /boot/home/haikuports/packages/libp11-0.4.10-4-arm64.hpkg
+4ed9bc1b8e99cd0c49c9b2a014070605a7c845a9137b9160feffa8eaf4e23d12  /boot/home/haikuports/packages/libp11_debuginfo-0.4.10-4-arm64.hpkg
+204880127bf889be007667e89e65f48c736b891752d9e8cb205101f29720dd4c  /boot/home/haikuports/packages/libp11_devel-0.4.10-4-arm64.hpkg
+a7a9c5db8d374b0feaa716d2f91dc5b0873384874476d86f2034eca1109af5d5  /boot/home/haikuports/packages/libwebsockets-4.3.3-2-arm64.hpkg
+d3a89db88cf691cb691973a6331641aefec7e3bfffdd7e2420860893aeace58e  /boot/home/haikuports/packages/libwebsockets_devel-4.3.3-2-arm64.hpkg
+864fe626eab5fe8925f79877c92221e9822f6af84762573645296b922d278230  /boot/home/haikuports/packages/lit-3.9.0-3-arm64.hpkg
+595bb89ba5283e38b7bb0973e3a80f4df24acb0cf4d956b4f28714c75ec50476  /boot/home/haikuports/packages/luvi-2.15.0-2-arm64.hpkg
+343fa68e8aa1e967c56e432c607004fe49ca97b1c487dff27434bfb006faff8e  /boot/home/haikuports/packages/net_ssleay-1.94-3-arm64.hpkg
+8508c1a7017d4c668d5c3b97c6ffc16af32a9d2cf40fd0f92004bdb2ea35e413  /boot/home/haikuports/packages/poco-1.12.4-4-arm64.hpkg
+ff73a73346ece851a1ac092c4cd92caf1a7e110dc32eee753a01fb025252d741  /boot/home/haikuports/packages/poco_debuginfo-1.12.4-4-arm64.hpkg
+6ca0e30658e18f97eb8391aef1135400bbbf3d301700f50a8711e8b7205d0651  /boot/home/haikuports/packages/poco_devel-1.12.4-4-arm64.hpkg
+427a4ebf69b8547981d8a54eb308ecf533d01a50e86e269c52ab7b6ce3db9f17  /boot/home/haikuports/packages/softhsm2-2.5.0-4-arm64.hpkg
+862f7e825aaa5a85acd533bf0b36fe7410a9f69a4a1d4862d121be3c08eaf310  /boot/home/haikuports/packages/softhsm2_debuginfo-2.5.0-4-arm64.hpkg

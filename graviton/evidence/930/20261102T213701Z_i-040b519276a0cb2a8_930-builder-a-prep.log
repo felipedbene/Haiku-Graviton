@@ -1,0 +1,52 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-a-prep
+# instance: i-040b519276a0cb2a8   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T213701Z   end: 20261102T213705Z   rc: 0
+# script sha256: 73a836a0f08ff331d9e22fc8b4f3531b0e8b02d0a9877eb2ae95c6d2d8cccc2b
+# ---- script ----
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | HP=/boot/home/haikuports
+# | grep -E 'overlay|FATAL|WARN' /boot/home/prov.log | tail -8
+# | echo "== haikuporter:"; cd /boot/home/haikuporter && git log --oneline -1
+# | echo "== haikuports:"; cd $HP && git log -1 --format='%H %cI %s'
+# | echo "== openssl3 recipe/patchset in tree:"
+# | find $HP -name 'openssl3-3.5.9*' -not -path '*/work-*' | xargs sha256sum
+# | grep '^REVISION' $HP/dev-libs/openssl/openssl3-3.5.9.recipe
+# | echo "== libssh2 recipes in tree:"; find $HP -iname 'libssh2*' -not -path '*/work-*'
+# | echo "== installed ssl/ssh:"; pkgman search -i openssl 2>&1 | tail -4; pkgman search -i libssh2 2>&1 | tail -3
+# | echo "== host perl/readelf:"; which perl readelf objdump 2>&1
+# | ls /boot/system/settings/fonts >/dev/null && echo fonts-dir-ok
+# ---- raw output ----
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.7-0.7.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.8-0.8.0.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/zopfli/zopfli-1.0.3.recipe
+overlay-apply: SKIP zstd-1.5.6.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: SKIP zstd-1.5.7.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: 158 updated, 19 placed, 6 patchset(s), 4 stage-1 skipped, 0 unplaced
+provision: #764 overlay: 177 overlay recipe(s) verified byte-identical in /boot/home/haikuports
+  recipe overlay: /boot/home/haikuports-patches applied to the ports tree (#764)
+== haikuporter:
+faa3076 Don't do policy checks for source packages.
+== haikuports:
+1d23c3acf3003c17cc5d2aa57907cb2e6d13fd5b 2026-11-02T11:56:08+01:00 kirigami_addons_kf6, bump to version 1.16.0 (#15027)
+== openssl3 recipe/patchset in tree:
+7a85d7bf104ae8a1d026824f0fd519050f1bd57741812424bbcf61e2cb2396a3  /boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+cbd056d16991ad97b8069786219171884eba506db652b4599340d86d37b13717  /boot/home/haikuports/dev-libs/openssl/patches/openssl3-3.5.9.patchset
+REVISION="3"
+== libssh2 recipes in tree:
+/boot/home/haikuports/net-libs/libssh2
+/boot/home/haikuports/net-libs/libssh2/libssh2-1.11.1.recipe
+/boot/home/haikuports/net-libs/libssh2/patches/libssh2-1.11.1.patchset
+== installed ssl/ssh:
+Status  Name          Description                                                      
+---------------------------------------------------------------------------------------
+s       openssl3      Full-strength general purpose cryptography library (with SSL/TLS)
+s       openssl3_man  Manual pages for openssl 3.5.9                                   
+Status  Name     Description   
+-------------------------------
+s       libssh2  A SSH2 library
+== host perl/readelf:
+/boot/system/bin/perl
+/boot/system/bin/readelf
+/boot/system/bin/objdump
+fonts-dir-ok

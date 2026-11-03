@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Y-openssl3-install
+# instance: i-0406d3c82385e02eb   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T232807Z   end: 20261102T232813Z   rc: 0
+# script sha256: ad835defa6314dc34501df9cc22402e4eb8db58a24da3c40fd3b66a8f6dbad45
+# ---- script ----
+# | cd /boot/home/ossl
+# | echo "8b601a809c4857580305f4bbc8d4b7fa3c73e02a6c35694ef5834dfc07859d3d  openssl3_devel-3.5.9-3-arm64.hpkg" >> S
+# | echo "31505ec5b93ab676c5ab38f6308523df88b6afa790f35d2c8b813fb1433922ee  openssl3-3.5.9-3-arm64.hpkg" >> S
+# | sha256sum -c S || exit 9
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install /boot/home/ossl/openssl3-3.5.9-3-arm64.hpkg /boot/home/ossl/openssl3_devel-3.5.9-3-arm64.hpkg 2>&1 | tail -4
+# | cp /boot/home/ossl/*.hpkg /boot/home/haikuports/packages/ && ls /boot/home/haikuports/packages/
+# | ls /boot/system/packages | grep -i openssl3; openssl version -a | head -4
+# | grep -nE "define SIXTY_FOUR_BIT_LONG|define THIRTY_TWO_BIT" /boot/system/develop/headers/openssl/configuration.h
+# ---- raw output ----
+openssl3_devel-3.5.9-3-arm64.hpkg: OK
+openssl3-3.5.9-3-arm64.hpkg: OK
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : [system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_23:25:53"
+[system] Cleaning up ...
+[system] Done.
+cp: target '/boot/home/haikuports/packages/': No such file or directory
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_devel-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+built on: Mon Nov  2 21:42:40 2026 UTC
+platform: haiku-aarch64
+options:  bn(64,64)
+175:#  define SIXTY_FOUR_BIT_LONG

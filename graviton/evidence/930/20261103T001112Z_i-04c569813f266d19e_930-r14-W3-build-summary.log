@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W3-build-summary
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T001112Z   end: 20261103T001116Z   rc: 1
+# script sha256: cbb33d7ce857b49c1a2715022693f5b50b7b754f64c988ec0c51752269486027
+# ---- script ----
+# | cat /boot/home/r14.log
+# | ls -la /boot/home/haikuports/packages/
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+=== haikuwebkit-1.10.0 build start 2026-11-03T00:10:30Z
+=== haikuwebkit-1.10.0 driver rc=1 2026-11-03T00:11:07Z
+=== haikuwebkit-1.10.0 no TEST()
+ALLDONE
+total 16
+drwxr-xr-x 1 baron root 2048 Nov  2 23:33 .
+drwxr-xr-x 1 baron root 7168 Nov  3 00:11 ..
+sha256sum: '/boot/home/haikuports/packages/*.hpkg': No such file or directory

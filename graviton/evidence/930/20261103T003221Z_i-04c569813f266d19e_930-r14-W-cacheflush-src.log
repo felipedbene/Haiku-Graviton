@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-cacheflush-src
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003221Z   end: 20261103T003227Z   rc: 0
+# script sha256: 90803d8bb6cf79a15bb35aa19b38a63670bf5ad07d4f8fc0ae2a59ec3da8f91d
+# ---- script ----
+# | S=/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit; f=$S/Source/JavaScriptCore/assembler/ARM64Assembler.h; grep -n "cacheFlush" $f | head; n=$(grep -n "static void cacheFlush" $f | head -1 | cut -d: -f1); sed -n "${n},$((n+30))p" $f; grep -rn "OS(HAIKU)" $S/Source/JavaScriptCore/assembler/*.h | head
+# ---- raw output ----
+2632:        cacheFlush(from, sizeof(int));
+3871:        cacheFlush(where, sizeof(int));
+3890:        cacheFlush(where, sizeof(int));
+3896:        cacheFlush(where, memoryToFillWithNopsInBytes);
+3929:            cacheFlush(address, sizeof(int) * NUMBER_OF_ADDRESS_ENCODING_INSTRUCTIONS);
+3979:        cacheFlush(from, sizeof(int));
+3985:        cacheFlush(reinterpret_cast<int*>(from) - 1, sizeof(int));
+4021:    static void cacheFlush(void* code, size_t size)
+4047:#error "The cacheFlush support is missing on this platform."
+    static void cacheFlush(void* code, size_t size)
+    {
+#if OS(DARWIN)
+        sys_icache_invalidate(code, size);
+#elif OS(FUCHSIA)
+        zx_cache_flush(code, size, ZX_CACHE_FLUSH_INSN);
+#elif OS(LINUX)
+        size_t page = pageSize();
+        uintptr_t current = reinterpret_cast<uintptr_t>(code);
+        uintptr_t end = current + size;
+        uintptr_t firstPageEnd = (current & ~(page - 1)) + page;
+
+        if (end <= firstPageEnd) {
+            linuxPageFlush(current, end);
+            return;
+        }
+
+        linuxPageFlush(current, firstPageEnd);
+
+        for (current = firstPageEnd; current + page < end; current += page)
+            linuxPageFlush(current, current + page);
+
+        linuxPageFlush(current, end);
+#elif OS(WINDOWS)
+        FlushInstructionCache(GetCurrentProcess(), code, size);
+#else
+#error "The cacheFlush support is missing on this platform."
+#endif
+    }
+
+    // Assembler admin methods:

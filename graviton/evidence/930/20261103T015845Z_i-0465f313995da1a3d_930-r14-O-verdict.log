@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-O-verdict
+# instance: i-0465f313995da1a3d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T015845Z   end: 20261103T015851Z   rc: 0
+# script sha256: 242266fed39aaffda047a06691114d163fffa3efc2c9c30d5318d88e410f8f3c
+# ---- script ----
+# | grep -aoE "openssh-10.4p1: (BUILD_OK.*|FAILED.*|NO PROGRESS.*)" /boot/home/nb-openssh-10.4p1.out | head -2
+# | ls -la /boot/home/haikuports/packages/.obsolete/
+# | grep -aE "^(ok|not ok|PASS|FAIL|failed|passed)|tests? (passed|failed)|Error" /boot/home/test-openssh-10.4p1.log | tail -12
+# ---- raw output ----
+openssh-10.4p1: NO PROGRESS at attempt 5 -- installing the missing set left it unchanged.
+total 2874
+drwxr-xr-x 1 baron root    2048 Nov  3 01:56 .
+drwxr-xr-x 1 baron root    2048 Nov  3 01:54 ..
+-rw-r--r-- 1 baron root 2928019 Nov  3 01:56 openssh-10.4p1-2-arm64.hpkg
+	file-tests && echo all file-tests passed
+make[1]: *** [Makefile:170: t1] Error 1
+make: *** [Makefile:830: file-tests] Error 2
+Error: Test has failed - stopping.

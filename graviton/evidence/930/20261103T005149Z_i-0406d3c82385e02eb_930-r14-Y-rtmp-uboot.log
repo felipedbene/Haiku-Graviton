@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Y-rtmp-uboot
+# instance: i-0406d3c82385e02eb   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T005149Z   end: 20261103T005155Z   rc: 0
+# script sha256: 31e33ccc03ed558a49ff2da304aea667d6ace556c02ec6e0647ad22237d6d7e3
+# ---- script ----
+# | for p in rtmpdump-2.4_20161210 u_boot_tools-2026.07; do echo "== $p"; grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing|Failed to find" /boot/home/nb-$p.out | tail -3; grep -anE " error:|Error:" /boot/home/nb-$p.log | grep -v Werror | head -4; done
+# ---- raw output ----
+== rtmpdump-2.4_20161210
+rtmpdump-2.4_20161210: FAILED, no missing-dep to install -- see /boot/home/nb-rtmpdump-2.4_20161210.log
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+6:curl: (22) The requested URL returned error: 404
+11:curl: (22) The requested URL returned error: 404
+16:curl: (22) The requested URL returned error: 404
+24:curl: (22) The requested URL returned error: 403
+== u_boot_tools-2026.07
+u_boot_tools-2026.07: attempt 1 installing: devel:libgnutls 
+u_boot_tools-2026.07: FAILED, no missing-dep to install -- see /boot/home/nb-u_boot_tools-2026.07.log
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+83:Error: Build has failed - stopping.

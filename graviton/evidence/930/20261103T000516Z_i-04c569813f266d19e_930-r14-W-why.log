@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-why
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000516Z   end: 20261103T000522Z   rc: 1
+# script sha256: 72a6cc1aeb7a0c1722db4b49bdeef5f604d168e1732d62a6583a8d852b1a31af
+# ---- script ----
+# | f=/boot/home/nb-haikuwebkit-1.10.0.out; grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing|Failed to find|could not be resolved" $f | head -15; ls /boot/home/haikuports/packages | grep -i webkit
+# ---- raw output ----
+haikuwebkit-1.10.0: attempt 1 installing: gcc_syslibs_devel 
+haikuwebkit-1.10.0: attempt 2 installing: devel:libavif >= 16 
+haikuwebkit-1.10.0: attempt 3 installing: devel:libcurl 
+haikuwebkit-1.10.0: attempt 4 installing: devel:libexecinfo 
+haikuwebkit-1.10.0: attempt 5 installing: devel:libgl 
+haikuwebkit-1.10.0: attempt 6 installing: devel:libicuuc >= 74 
+haikuwebkit-1.10.0: NO PROGRESS at attempt 7 -- installing the missing set left it unchanged.
+      *** Failed to find a match for "devel:libicuuc >= 74": Name not found
+build-requires "devel:libicuuc >= 74" of package "haikuwebkit-1.10.0" could not be resolved
+Error: 	Reason: build-requires "devel:libicuuc >= 74" of package "haikuwebkit-1.10.0" could not be resolved
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====

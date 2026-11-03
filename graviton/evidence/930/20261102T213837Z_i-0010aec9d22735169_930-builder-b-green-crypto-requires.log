@@ -1,0 +1,128 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-green-crypto-requires
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T213837Z   end: 20261102T213842Z   rc: 0
+# script sha256: f7109d89bc7b8ce1cc710f3f2ed1a65f1d88e32f35aa257464b60bcc1eeedf27
+# ---- script ----
+# | cd /boot/home/scan
+# | grep -c '^package-attributes:' repo.txt
+# | awk '/^package-attributes:/{if(n!="")flush(); n="";v="";a="";r=""} 
+# |   /^\tname: /{n=$2} /^\tversion: /{v=$2} /^\tarchitecture: /{a=$2}
+# |   /^\trequires: /{ if ($0 ~ /lib:libcrypto|lib:libssl|openssl/) r=r" "$2 }
+# |   function flush(){ if(r!="") print n"-"v"-"a":"r }
+# |   END{flush()}' repo.txt | sort > crypto-req.txt
+# | wc -l crypto-req.txt; cat crypto-req.txt
+# ---- raw output ----
+3292
+111 crypto-req.txt
+apache-2.4.66-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+aria2-1.36.0-2-arm64: lib:libssl>=3
+axel-2.17.11-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+bind_utils-9.16.50-3-arm64: lib:libssl>=3
+bitchx-1.2.1-4-arm64: lib:libcrypto>=3 lib:libssl>=3
+borgbackup-1.4.5-1-arm64: lib:libcrypto>=3
+bzflag-2.4.26-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+capnproto-1.4.0-1-arm64: lib:libssl>=3
+cpr-1.14.2-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+curl-8.21.0-1-arm64: lib:libssl>=3
+cyrus_sasl-2.1.28-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+dma-0.14~git-3-arm64: lib:libcrypto>=3 lib:libssl>=3
+dovecot-2.3.21-1-arm64: lib:libssl>=3
+elinks-0.19.1-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+fossil-2.28-1-arm64: lib:libssl>=3
+git-2.54.0-1-arm64: lib:libssl>=3
+git_daemon-2.54.0-1-arm64: lib:libcrypto>=3
+gloox-1.0.28-4-arm64: lib:libcrypto>=3 lib:libssl>=3
+gsoap-2.8.135-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+haikuwebkit-1.10.0-2-arm64: lib:libssl>=3
+hiredis-1.3.0-1-arm64: lib:libssl>=3
+httrack-3.49.2-5-arm64: lib:libcrypto>=3 lib:libssl>=3
+icecast-2.5.0-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+irssi-1.4.5-5-arm64: lib:libssl>=3
+ixwebsocket-11.4.6-1-arm64: lib:libssl>=3
+kc-2.5.1-3-arm64: lib:libcrypto>=3
+krb5-1.20-3-arm64: lib:libssl>=3
+ladybird-0~git90998c5d-3-arm64: openssl3
+lagrange-1.17.6-1-arm64: lib:libssl>=3
+libarchive-3.7.9-2-arm64: lib:libcrypto>=3
+libarchive_tools-3.7.9-2-arm64: lib:libcrypto>=3
+libasr-1.0.2-7-arm64: lib:libssl>=3
+libetpan-1.9.4-3-arm64: lib:libssl>=3
+libevent-2.1.12-6-arm64: lib:libcrypto>=3 lib:libssl>=3
+libgit2_0.25-0.25.1-5-arm64: lib:libcrypto>=3
+libgit2_1.5-1.5.0-2-arm64: lib:libcrypto>=3
+libgit2_1.5_tools-1.5.0-2-arm64: lib:libcrypto>=3
+libgit2_1.8-1.8.4-2-arm64: lib:libcrypto>=3
+libgit2_1.8_tools-1.8.4-2-arm64: lib:libcrypto>=3
+libgit2_1.9-1.9.1-1-arm64: lib:libcrypto>=3
+libgit2_1.9_tools-1.9.1-1-arm64: lib:libcrypto>=3
+libircclient-1.8-6-arm64: lib:libssl>=3
+liblrdf-0.6.1-1-arm64: lib:libcrypto>=3
+libmicrohttpd-1.0.1-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+liboauth-1.0.3-3-arm64: lib:libcrypto>=3 lib:libssl>=3
+libp11-0.4.10-3-arm64: lib:libcrypto>=3
+libshout-2.4.5-2-arm64: lib:libssl>=3
+libsrtp2-2.5.0-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+libssh2-1.11.1-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+libtorrent-0.13.8-3-arm64: lib:libcrypto>=3
+libwebsockets-4.3.3-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+libzip-1.11.4-1-arm64: lib:libssl>=3
+links-2.30-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+lit-3.9.0-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+luvi-2.15.0-1-arm64: lib:libssl>=3
+lynx-2.8.9rel.1-3-arm64: lib:libssl>=3
+mc-4.8.32-2-arm64: lib:libssl>=3
+minizip_ng-4.0.7-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+mosh-1.3.2-7-arm64: lib:libcrypto>=3 lib:libssl>=3
+mosquitto-2.0.20-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+mupdf-1.20.3-3-arm64: lib:libcrypto>=3
+mupdf_tools-1.20.3-3-arm64: lib:libcrypto>=3
+neon-0.36.0-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+net_ssleay-1.94-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+netsurf-3.11-4-arm64: lib:libssl>=3
+nginx-1.23.2-2-arm64: lib:libssl>=3
+nmap-7.94-1-arm64: lib:libssl>=3
+nodejs20-20.15.1-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+nodejs24-24.21.0-3-arm64: lib:libcrypto>=3 lib:libssl>=3
+openldap-2.6.10-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+openldap2.4-2.4.48-5-arm64: lib:libcrypto>=3 lib:libssl>=3
+openldap_tools-2.6.10-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+openrct2-0.5.4-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+openssh-10.4p1-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+openssl3_debuginfo-3.5.9-2-arm64: openssl3==3.5.9
+openssl3_devel-3.5.9-2-arm64: openssl3==3.5.9
+openssl3_man-3.5.9-2-any: openssl3==3.5.9
+openssl_debuginfo-1.1.1w-2-arm64: openssl==1.1.1w
+openssl_devel-1.1.1w-2-arm64: openssl==1.1.1w
+openssl_man-1.1.1w-2-any: openssl==1.1.1w
+opusfile-0.12-4-arm64: lib:libssl>=3
+paperkey-1.6-2-arm64: lib:libcrypto>=3
+poco-1.12.4-3-arm64: lib:libcrypto>=3 lib:libssl>=3
+podofo-0.10.3-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+podofo_tools-0.10.3-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+pycurl_python310-7.45.2-8-arm64: lib:libcrypto>=3 lib:libssl>=3
+python3.10-3.10.21-1-arm64: lib:libssl>=3
+python3.11-3.11.16-1-arm64: lib:libssl>=3
+python3.12-3.12.14-1-arm64: lib:libssl>=3
+python3.14-3.14.7-1-arm64: lib:libssl>=3
+renga-1.28-3-arm64: lib:libcrypto>=3
+rsync-3.2.7-2-arm64: lib:libcrypto>=3
+rtmpdump-2.4_20161210-8-arm64: lib:libssl>=3
+rtmpdump_tools-2.4_20161210-8-arm64: lib:libcrypto>=3 lib:libssl>=3
+ruby-3.2.9-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+rust_bin-1.101.0~nightly_e9bbadf68-1-arm64: lib:libssl lib:libcrypto
+slack++-0-8-arm64: lib:libcrypto>=3 lib:libssl>=3
+softhsm2-2.5.0-3-arm64: lib:libssl>=3
+sqlcipher-4.4.2-3-arm64: lib:libcrypto>=3
+tdlib-0.0.20260718-2-arm64: lib:libcrypto>=3
+teeworlds-0.7.5-3-arm64: lib:libcrypto>=3 lib:libssl>=3
+tinyemu-2019.12.21-4-arm64: lib:libcrypto>=3
+tor-0.4.8.12-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+u_boot_tools-2026.07-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+ucommon-7.0.1-3-arm64: lib:libcrypto>=3 lib:libssl>=3
+unshield-1.5.1-2-arm64: lib:libcrypto>=3
+vorbis_tools-1.4.3-1-arm64: lib:libssl>=3
+wget-1.24.5-2-arm64: lib:libcrypto>=3 lib:libssl>=3
+xar-1.8.0.0~498-2-arm64: lib:libcrypto>=3
+xerces_c-3.3.0-1-arm64: lib:libcrypto>=3 lib:libssl>=3
+yara-4.4.0-2-arm64: lib:libcrypto>=3

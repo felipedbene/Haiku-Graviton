@@ -1,0 +1,10 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W9-progress2
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T023522Z   end: 20261103T023528Z   rc: 1
+# script sha256: 33cb5bc8e4b3618e366b10e4f1730297a276cf1209db83119bb8a4c233647f7d
+# ---- script ----
+# | grep -aE "^\[[0-9]+/[0-9]+\]" /boot/home/nb-haikuwebkit-1.10.0.log | tail -1; grep -acE "FAILED: " /boot/home/nb-haikuwebkit-1.10.0.log
+# ---- raw output ----
+[6851/7207] Building CXX object Source/WebCore/CMakeFiles/WebCore.dir/__/__/WebCore/DerivedSources/unified-sources/UnifiedSource-page-13.cpp.o
+0

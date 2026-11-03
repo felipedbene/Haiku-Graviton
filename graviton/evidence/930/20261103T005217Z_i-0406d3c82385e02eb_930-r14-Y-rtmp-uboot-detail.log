@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Y-rtmp-uboot-detail
+# instance: i-0406d3c82385e02eb   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T005217Z   end: 20261103T005223Z   rc: 0
+# script sha256: 63c766823e48df6e3c0e615cac8bcb48702fc8c7d45b55f870519ad775867be7
+# ---- script ----
+# | L=/boot/home/nb-rtmpdump-2.4_20161210.log; sed -n "1,30p" $L | grep -aE "http|Fetch|curl|404|403|SOURCE" | head -12; grep -E "^SOURCE_URI|SOURCE_FILENAME|CHECKSUM" /boot/home/haikuports/media-video/rtmpdump/rtmpdump-2.4_20161210.recipe; echo ====; L=/boot/home/nb-u_boot_tools-2026.07.log; grep -anE "error|Error|undefined|No such" $L | head -12; sed -n "70,83p" $L
+# ---- raw output ----
+Downloading: https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz ...
+curl: (22) The requested URL returned error: 404
+[srccache] FAIL https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz (upstream fetch failed or truncated; cached nothing)
+curl: (22) The requested URL returned error: 404
+[srccache] FAIL https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz (upstream fetch failed or truncated; cached nothing)
+curl: (22) The requested URL returned error: 404
+[srccache] FAIL https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz (upstream fetch failed or truncated; cached nothing)
+Warning: Unable to fetch source from https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz (error: Command '['wget', '--user-agent', 'HaikuPorter', '-c', '--tries=1', '--timeout=10', '--progress=dot:mega', '-O', '/boot/home/haikuports/media-video/rtmpdump/download/rtmpdump-2.4_p20161210.tar.gz', 'https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz']' returned non-zero exit status 1.), trying next location.
+Downloading: https://sources.debene.dev/rtmpdump/rtmpdump-2.4_p20161210.tar.gz ...
+curl: (22) The requested URL returned error: 403
+[srccache] FAIL https://sources.debene.dev/rtmpdump/rtmpdump-2.4_p20161210.tar.gz (upstream fetch failed or truncated; cached nothing)
+curl: (22) The requested URL returned error: 403
+SOURCE_URI="https://sources.voidlinux.org/rtmpdump-2.4.20161210/rtmpdump-2.4_p20161210.tar.gz"
+CHECKSUM_SHA256="d6da3b683f1045f02d94a81b0c583318dba021f69bdab970c5d5d73e8c38860f"
+====
+32:	/boot/system/packages/libgpg_error-1.61-2-arm64.hpkg
+33:	/boot/system/packages/libgpg_error_devel-1.61-2-arm64.hpkg
+71:make[1]: *** [scripts/Makefile.host:17: scripts/kconfig/zconf.tab.c] Error 16
+72:make: *** [Makefile:698: tools-only_defconfig] Error 2
+83:Error: Build has failed - stopping.
+runtime_loader: /boot/system/bin/bison: Unhandled pheader type in parse 0x6474e553
+make[1]: *** [scripts/Makefile.host:17: scripts/kconfig/zconf.tab.c] Error 16
+make: *** [Makefile:698: tools-only_defconfig] Error 2
+Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 2.
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/dev-embedded/u_boot_tools/work-2026.07 intact for inspection
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+dev-embedded::u_boot_tools-2026.07
+	/boot/home/haikuports/dev-embedded/u_boot_tools/u_boot_tools-2026.07.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W9-build-summary
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T024830Z   end: 20261103T024835Z   rc: 0
+# script sha256: cbb33d7ce857b49c1a2715022693f5b50b7b754f64c988ec0c51752269486027
+# ---- script ----
+# | cat /boot/home/r14.log
+# | ls -la /boot/home/haikuports/packages/
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+=== haikuwebkit-1.10.0 build start 2026-11-03T01:42:54Z
+=== haikuwebkit-1.10.0 driver rc=1 2026-11-03T02:48:09Z
+    pkg: haikuwebkit-1.10.0-3-arm64.hpkg
+    pkg: haikuwebkit_devel-1.10.0-3-arm64.hpkg
+=== haikuwebkit-1.10.0 no TEST()
+ALLDONE
+total 34524
+drwxr-xr-x 1 baron root     2048 Nov  3 02:48 .
+drwxr-xr-x 1 baron root     7168 Nov  3 02:48 ..
+-rw-r--r-- 1 baron root 35305644 Nov  3 02:48 haikuwebkit-1.10.0-3-arm64.hpkg
+-rw-r--r-- 1 baron root    23626 Nov  3 02:48 haikuwebkit_devel-1.10.0-3-arm64.hpkg
+f490ae37c1f513643d1f924a7745d0ccc7466540693973ca7612220f483a5f36  /boot/home/haikuports/packages/haikuwebkit-1.10.0-3-arm64.hpkg
+b9758c15fa999c4068c60653fc9355f76f3c56b6d5645113c0b575c095fbc0a6  /boot/home/haikuports/packages/haikuwebkit_devel-1.10.0-3-arm64.hpkg

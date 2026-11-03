@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-lld-why
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T002222Z   end: 20261103T002228Z   rc: 0
+# script sha256: d91309ba1caecf1dd19877b109ebfd1bdabb32e4d6a5eefb823a3930c0df81c4
+# ---- script ----
+# | W=/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0; c=$(find $W -name CMakeCache.txt 2>/dev/null | head -1); echo "cache: $c"; grep -E "USE_LD_|LD_LLD|fuse-ld|LINKER" "$c" | head; grep -rnE "USE_LD_LLD|fuse-ld=lld|LD_SUPPORTS" $W/sources/haikuwebkit/Source/cmake/*.cmake 2>/dev/null | head -8; grep -nE "cmake |-D[A-Z_]+=" /boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe | head -15
+# ---- raw output ----
+cache: 
+grep: : No such file or directory
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:31:    set(TRY_USE_LD_LLD ON)
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:33:CMAKE_DEPENDENT_OPTION(USE_LD_LLD "Use LLD linker" ON
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:34:                       "TRY_USE_LD_LLD;NOT WIN32" OFF)
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:35:if (USE_LD_LLD)
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:36:    execute_process(COMMAND ${CMAKE_C_COMPILER} -fuse-ld=lld -Wl,--version ERROR_QUIET OUTPUT_VARIABLE LD_VERSION)
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:38:        string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=lld")
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:39:        string(APPEND CMAKE_SHARED_LINKER_FLAGS " -fuse-ld=lld")
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/cmake/OptionsCommon.cmake:40:        string(APPEND CMAKE_MODULE_LINKER_FLAGS " -fuse-ld=lld")
+109:		--cmakeargs="-DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_BUILD_TYPE=Release -DSHOULD_INSTALL_JS_SHELL=ON -DCMAKE_CXX_FLAGS='-ftrack-macro-expansion=0 --param ggc-min-expand=10'"

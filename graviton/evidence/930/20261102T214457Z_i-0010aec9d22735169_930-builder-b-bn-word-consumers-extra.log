@@ -1,0 +1,63 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-bn-word-consumers-extra
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T214457Z   end: 20261102T214610Z   rc: 0
+# script sha256: 29f18323f4538939a95a2f643f97cf55fdabb7d3e797ea22d45d30fbba5b18fa
+# ---- script ----
+# | cd /boot/home/scan
+# | SYMS='BN_(set|get|add|sub|mul|div|mod)_word|BN_(abs_)?is_word|BN_num_bits_word|BN_mod_exp_mont_word|BN_consttime_swap'
+# | scan_tree() { # $1 label, $2 dir
+# | 	find "$2" -type f 2>/dev/null | while read o; do
+# | 		[ "$(head -c 4 "$o" | od -An -c | tr -d ' ')" = "177ELF" ] || continue
+# | 		readelf -dW "$o" 2>/dev/null | grep -q 'NEEDED.*libcrypto' && echo "NEEDED-libcrypto $1 ${o#$2/}"
+# | 		s=$(readelf --dyn-syms -W "$o" 2>/dev/null | awk '$7=="UND"{print $8}' | sed 's/@.*//' | grep -xE "$SYMS" | sort -u | tr '\n' ' ')
+# | 		[ -n "$s" ] && echo "HIT $1 ${o#$2/}: $s"
+# | 	done
+# | }
+# | echo "== slack++ (URL-encoded +):"
+# | curl -sSf -o slack.hpkg 'https://packages.debene.dev/arm64/packages/slack%2B%2B-0-8-arm64.hpkg' && sha256sum slack.hpkg && rm -rf xs && mkdir xs && package extract -C xs slack.hpkg && scan_tree slack++-0-8-arm64 xs; echo "slack rc=$?"
+# | echo "== tdlib contents (elf=0):"
+# | curl -sSf -o td.hpkg https://packages.debene.dev/arm64/packages/tdlib-0.0.20260718-2-arm64.hpkg && package list td.hpkg | grep -vE '/$' | awk '{print $NF}' | sed 's#.*/##' | sed 's/.*\.//' | sort | uniq -c | sort -rn | head -5
+# | echo "== installed system packages (activated, incl. base image):"
+# | ls /boot/system/packages | wc -l
+# | for t in /boot/system/lib /boot/system/bin /boot/system/add-ons /boot/system/servers /boot/system/apps /boot/system/preferences /boot/system/non-packaged /boot/home/config/non-packaged; do scan_tree "$t" "$t"; done
+# ---- raw output ----
+== slack++ (URL-encoded +):
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  76519 100  76519   0      0 481.4k      0                              0100  76519 100  76519   0      0 479.9k      0                              0100  76519 100  76519   0      0 477.9k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/slack%2B%2B-0-8-arm64.hpkg (76519 bytes)
+4c051158ab8f1c2f45a5452ede85566ced4e90eabcfbd4d86197f15f53da10f2  slack.hpkg
+NEEDED-libcrypto slack++-0-8-arm64 bin/slack++
+slack rc=1
+== tdlib contents (elf=0):
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 21.32M 100 21.32M   0      0 37.11M      0                              0100 21.32M 100 21.32M   0      0 37.10M      0                              0100 21.32M 100 21.32M   0      0 37.06M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/tdlib-0.0.20260718-2-arm64.hpkg (22363651 bytes)
+     44 -rw-r--r--
+     14 drwxr-xr-x
+     12 0)
+      2 gz
+      1 tdlib
+== installed system packages (activated, incl. base image):
+81
+NEEDED-libcrypto /boot/system/lib ossl-modules/legacy.so
+NEEDED-libcrypto /boot/system/lib libssl.so.3
+NEEDED-libcrypto /boot/system/lib engines-3/padlock.so
+NEEDED-libcrypto /boot/system/lib engines-3/loader_attic.so
+HIT /boot/system/lib engines-3/loader_attic.so: BN_set_word 
+NEEDED-libcrypto /boot/system/lib engines-3/capi.so
+NEEDED-libcrypto /boot/system/lib libbnetapi.so
+NEEDED-libcrypto /boot/system/lib libssh2.so.1.0.1
+HIT /boot/system/lib libssh2.so.1.0.1: BN_set_word 
+NEEDED-libcrypto /boot/system/lib libcurl.so.4.8.0
+NEEDED-libcrypto /boot/system/lib python3.14/lib-dynload/_ssl.cpython-314.so
+NEEDED-libcrypto /boot/system/lib python3.14/lib-dynload/_hashlib.cpython-314.so
+NEEDED-libcrypto /boot/system/lib git-core/git-imap-send
+NEEDED-libcrypto /boot/system/lib python3.10/lib-dynload/_hashlib.cpython-310.so
+NEEDED-libcrypto /boot/system/lib python3.10/lib-dynload/_ssl.cpython-310.so
+NEEDED-libcrypto /boot/system/bin openssl
+HIT /boot/system/bin openssl: BN_add_word BN_set_word 
+NEEDED-libcrypto /boot/system/bin curl
+NEEDED-libcrypto /boot/system/servers remote_broker

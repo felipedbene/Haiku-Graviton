@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-machinecontext
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T013950Z   end: 20261103T013956Z   rc: 0
+# script sha256: 62a7bf9fae34db8453480cb89b8b2af767d55e83539e5f45baf12d86e1680a3d
+# ---- script ----
+# | S=/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit
+# | f=$S/Source/JavaScriptCore/runtime/MachineContext.h; [ -f $f ] || f=$(find $S/Source -name MachineContext.h | head -1); echo $f
+# | grep -nE "OS\(HAIKU\)|CPU\(ARM64\)|CPU\(X86_64\)|#error|#if|#elif" $f | sed -n '1,40p'
+# | grep -rnE "HAVE_MACHINE_CONTEXT|MACHINE_CONTEXT" $S/Source/WTF/wtf/PlatformHave.h | head -5
+# ---- raw output ----
+/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/Source/JavaScriptCore/runtime/MachineContext.h
+44:#if OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
+54:#if !ENABLE(C_LOOP)
+59:#if HAVE(MACHINE_CONTEXT)
+61:#if !USE(PLATFORM_REGISTERS_WITH_PROFILE)
+63:#if !USE(DARWIN_REGISTER_MACROS)
+78:#if !ENABLE(C_LOOP)
+85:#if OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
+87:#if !USE(PLATFORM_REGISTERS_WITH_PROFILE) && !USE(DARWIN_REGISTER_MACROS)
+90:#if OS(DARWIN)
+92:#if CPU(X86_64)
+94:#elif CPU(PPC) || CPU(PPC64)
+96:#elif CPU(ARM_THUMB2) || CPU(ARM)
+99:#error Unknown Architecture
+102:#elif OS(WINDOWS)
+104:#if CPU(ARM)
+106:#elif CPU(ARM64)
+108:#elif CPU(X86)
+110:#elif CPU(X86_64)
+113:#error Unknown Architecture
+116:#elif HAVE(MACHINE_CONTEXT)
+125:#if USE(PLATFORM_REGISTERS_WITH_PROFILE)
+129:#elif USE(DARWIN_REGISTER_MACROS)
+145:#if HAVE(MACHINE_CONTEXT)
+147:#if !USE(PLATFORM_REGISTERS_WITH_PROFILE) && !USE(DARWIN_REGISTER_MACROS)
+150:#if OS(DARWIN)
+152:#elif OS(HAIKU)
+153:#if CPU(X86_64)
+156:#error Unknown Architecture
+158:#elif OS(FREEBSD)
+160:#if CPU(X86_64)
+162:#elif CPU(ARM)
+164:#elif CPU(ARM64)
+167:#error Unknown Architecture
+170:#elif OS(QNX)
+172:#if CPU(X86_64)
+174:#elif CPU(ARM64)
+177:#error Unknown Architecture
+180:#elif OS(NETBSD)
+182:#if CPU(X86_64)
+184:#elif CPU(ARM)
+241:#define HAVE_MACHINE_CONTEXT 1

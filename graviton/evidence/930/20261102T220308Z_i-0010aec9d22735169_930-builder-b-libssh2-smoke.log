@@ -1,0 +1,265 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-libssh2-smoke
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T220308Z   end: 20261102T220319Z   rc: 1
+# script sha256: 46657bff68b499ad0943637cde9adbf2c2f9b4b21382167adf91fc9630cb8cef
+# ---- script ----
+# | T=/boot/home/sshtest; K=$T/keys; SS=/boot/system/settings/ssh; cd $T
+# | fail=0; pass=0
+# | ck() { if [ "$1" -eq 0 ]; then pass=$((pass+1)); echo "RESULT PASS $2"; else fail=$((fail+1)); echo "RESULT FAIL $2 (rc=$1)"; fi; }
+# | fp() { ssh-keygen -lf "$1" | awk '{print $2}' | sed 's/^SHA256://'; }
+# | echo "== versions"; openssl version -a | sed -n '1p;4,5p'; ssh -V; curl -V | head -2; ls /boot/system/packages | grep -E 'libssh2|openssl3|openssh|curl'
+# | echo "== authorize test user keys for baron on :22 (instance sshd)"
+# | AK=/boot/home/config/settings/ssh/authorized_keys
+# | grep -qF "$(cat $K/user_ed25519.pub)" $AK || cat $K/user_ed25519.pub >> $AK
+# | # --- server :2299 = the instance's own sshd binary and its own host keys
+# | cat > $T/sshd_2299 <<EOC
+# | Port 2299
+# | ListenAddress 127.0.0.1
+# | HostKey $SS/ssh_host_rsa_key
+# | HostKey $SS/ssh_host_ecdsa_key
+# | HostKey $SS/ssh_host_ed25519_key
+# | KexAlgorithms curve25519-sha256,ecdh-sha2-nistp256,ecdh-sha2-nistp384,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group-exchange-sha256
+# | AuthorizedKeysFile $T/authorized_keys
+# | PasswordAuthentication no
+# | KbdInteractiveAuthentication no
+# | StrictModes no
+# | UseDNS no
+# | PidFile $T/sshd_2299.pid
+# | Subsystem sftp /boot/system/lib/openssh/sftp-server
+# | LogLevel DEBUG1
+# | EOC
+# | # --- server :2298 = same binary, host keys made by openssl 3.5.9-3 genpkey
+# | sed -e 's/^Port 2299/Port 2298/' -e "s#^HostKey $SS/ssh_host_rsa_key#HostKey $K/host_rsa#" -e "s#^HostKey $SS/ssh_host_ecdsa_key#HostKey $K/host_ecdsa384#" -e "/ssh_host_ed25519_key/d" -e 's/sshd_2299.pid/sshd_2298.pid/' $T/sshd_2299 > $T/sshd_2298
+# | for p in 2299 2298; do
+# | 	/boot/system/bin/sshd -t -f $T/sshd_$p; ck $? "sshd -t config :$p"
+# | 	( /boot/system/bin/sshd -D -e -f $T/sshd_$p ) < /dev/null > $T/sshd_$p.log 2>&1 &
+# | 	echo $! > $T/sshd_$p.mypid
+# | done
+# | sleep 3
+# | for p in 2299 2298; do echo "-- :$p pid $(cat $T/sshd_$p.mypid)"; grep -E "host key|Server listening" $T/sshd_$p.log; done
+# | RSA=$(fp $SS/ssh_host_rsa_key.pub); ECD=$(fp $SS/ssh_host_ecdsa_key.pub); ED=$(fp $SS/ssh_host_ed25519_key.pub)
+# | TRSA=$(tail -1 $K/host_rsa.fp | sed 's/^SHA256://'); TE384=$(tail -1 $K/host_ecdsa384.fp | sed 's/^SHA256://')
+# | echo "expected: sys-rsa $RSA sys-ecdsa $ECD sys-ed25519 $ED test-rsa $TRSA test-ecdsa384 $TE384"
+# | run() { # label port kex hostkey fp privkey
+# | 	echo "---- ssh2probe $1"
+# | 	./ssh2probe 127.0.0.1 $2 $3 $4 $5 baron - $6 'uname -m; echo probe-ok'; ck $? "$1"
+# | }
+# | run ":22 instance sshd curve25519/ed25519 user-ed25519" 22 curve25519-sha256 ssh-ed25519 $ED $K/user_ed25519
+# | run ":2299 dh-group14/rsa-sha2-512 user-rsa" 2299 diffie-hellman-group14-sha256 rsa-sha2-512 $RSA $K/user_rsa
+# | run ":2299 dh-group16/rsa-sha2-256 user-ecdsa" 2299 diffie-hellman-group16-sha512 rsa-sha2-256 $RSA $K/user_ecdsa
+# | run ":2299 dh-gex-sha256/ecdsa-p256 user-rsa" 2299 diffie-hellman-group-exchange-sha256 ecdsa-sha2-nistp256 $ECD $K/user_rsa
+# | run ":2299 ecdh-p256/ecdsa-p256 user-ed25519" 2299 ecdh-sha2-nistp256 ecdsa-sha2-nistp256 $ECD $K/user_ed25519
+# | run ":2299 ecdh-p384/rsa-sha2-512 user-ecdsa" 2299 ecdh-sha2-nistp384 rsa-sha2-512 $RSA $K/user_ecdsa
+# | run ":2299 curve25519/ed25519 user-rsa" 2299 curve25519-sha256 ssh-ed25519 $ED $K/user_rsa
+# | run ":2298 dh-group14/rsa-sha2-512 (openssl-made host key)" 2298 diffie-hellman-group14-sha256 rsa-sha2-512 $TRSA $K/user_rsa
+# | run ":2298 dh-gex/ecdsa-p384 (openssl-made host key)" 2298 diffie-hellman-group-exchange-sha256 ecdsa-sha2-nistp384 $TE384 $K/user_ecdsa
+# | echo "---- negative: wrong expected fingerprint must be rejected"
+# | ./ssh2probe 127.0.0.1 2299 diffie-hellman-group14-sha256 rsa-sha2-512 $ECD baron - $K/user_rsa true; r=$?
+# | [ $r -ne 0 ]; ck $? "negative host-key mismatch rejected (probe rc=$r)"
+# | echo "== curl (links $(readelf -dW /boot/system/bin/curl | grep -o 'libssh2[^]]*' | head -1)) sftp/scp"
+# | head -c 1048576 /dev/urandom > $T/payload; PS=$(sha256sum < $T/payload | cut -d' ' -f1); echo "payload sha256 $PS"
+# | cu() { # label url hostfp extra...
+# | 	l=$1; u=$2; h=$3; shift 3
+# | 	curl -sS --user baron: --key $K/user_ed25519 --pubkey $K/user_ed25519.pub --hostpubsha256 "$h=" "$@" "$u"
+# | }
+# | rm -f $T/dl*; cu "sftp :22" sftp://127.0.0.1:22/boot/home/sshtest/payload $ED -o $T/dl1; r=$?; [ $r -eq 0 ] && [ "$(sha256sum < $T/dl1 | cut -d' ' -f1)" = "$PS" ]; ck $? "curl sftp download :22 (curl rc=$r)"
+# | cu "scp :2299" scp://127.0.0.1:2299/boot/home/sshtest/payload $ED -o $T/dl2; r=$?; [ $r -eq 0 ] && [ "$(sha256sum < $T/dl2 | cut -d' ' -f1)" = "$PS" ]; ck $? "curl scp download :2299 (curl rc=$r)"
+# | cu "sftp up :2299" sftp://127.0.0.1:2299/boot/home/sshtest/up.bin $ED -T $T/payload; r=$?; [ $r -eq 0 ] && [ "$(sha256sum < $T/up.bin | cut -d' ' -f1)" = "$PS" ]; ck $? "curl sftp upload :2299 (curl rc=$r)"
+# | cu "sftp wrong-fp" sftp://127.0.0.1:2299/boot/home/sshtest/payload $RSA -o $T/dl3 2>&1; r=$?; [ $r -ne 0 ]; ck $? "curl rejects wrong --hostpubsha256 (curl rc=$r)"
+# | echo "== stop my test sshds (by my own PID)"
+# | for p in 2299 2298; do kill $(cat $T/sshd_$p.mypid) && echo "killed :$p pid $(cat $T/sshd_$p.mypid)"; done
+# | echo "== server-side kex lines"; grep -hE "kex: algorithm|kex: host key algorithm" $T/sshd_2299.log $T/sshd_2298.log | sort | uniq -c
+# | echo "SUMMARY pass=$pass fail=$fail"
+# | [ $fail -eq 0 ]
+# ---- raw output ----
+== versions
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+options:  bn(64,64)
+compiler: cc -fPIC -DL_ENDIAN -include ./os-dep/haiku.h -D_REENTRANT -Wa,--noexecstack -Wall -O2 -g -DOPENSSL_PIC -DOPENSSL_BUILDING_OPENSSL -DZLIB -DZSTD -DNDEBUG
+OpenSSH_10.4p1, OpenSSL 3.5.9 29 Sep 2026
+curl: try 'curl --help' or 'curl-8.21.0-1-arm64.hpkg
+libssh2-1.11.1-2-arm64.hpkg
+libssh2_devel-1.11.1-2-arm64.hpkg
+openssh-10.4p1-1-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_devel-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-3-any.hpkg
+== authorize test user keys for baron on :22 (instance sshd)
+curl --manual' for more information
+RESULT PASS sshd -t config :2299
+RESULT PASS sshd -t config :2298
+-- :2299 pid 217378
+Server listening on 127.0.0.1 port 2299.
+-- :2298 pid 217380
+Server listening on 127.0.0.1 port 2298.
+expected: sys-rsa T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA sys-ecdsa CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI sys-ed25519 i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0 test-rsa uJRfSjc2e8NwMaXDwodfIloSS7XP77Lc9M+5/6Pxm/8 test-ecdsa384 rP64anbGH8Tc6Y2RvsEGxQRooqO4cFYNOBGDlGpe1IE
+---- ssh2probe :22 instance sshd curve25519/ed25519 user-ed25519
+libssh2 1.11.1
+kex: curve25519-sha256
+hostkey: ssh-ed25519
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 6, blob 51 bytes, SHA256:i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0
+hostkey verified: matches expected SHA256:i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0
+userauth: ok (/boot/home/sshtest/keys/user_ed25519)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :22 instance sshd curve25519/ed25519 user-ed25519
+---- ssh2probe :2299 dh-group14/rsa-sha2-512 user-rsa
+libssh2 1.11.1
+kex: diffie-hellman-group14-sha256
+hostkey: rsa-sha2-512
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 1, blob 407 bytes, SHA256:T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA
+hostkey verified: matches expected SHA256:T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA
+userauth: ok (/boot/home/sshtest/keys/user_rsa)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2299 dh-group14/rsa-sha2-512 user-rsa
+---- ssh2probe :2299 dh-group16/rsa-sha2-256 user-ecdsa
+libssh2 1.11.1
+kex: diffie-hellman-group16-sha512
+hostkey: rsa-sha2-256
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 1, blob 407 bytes, SHA256:T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA
+hostkey verified: matches expected SHA256:T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA
+userauth: ok (/boot/home/sshtest/keys/user_ecdsa)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2299 dh-group16/rsa-sha2-256 user-ecdsa
+---- ssh2probe :2299 dh-gex-sha256/ecdsa-p256 user-rsa
+libssh2 1.11.1
+kex: diffie-hellman-group-exchange-sha256
+hostkey: ecdsa-sha2-nistp256
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 3, blob 104 bytes, SHA256:CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI
+hostkey verified: matches expected SHA256:CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI
+userauth: ok (/boot/home/sshtest/keys/user_rsa)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2299 dh-gex-sha256/ecdsa-p256 user-rsa
+---- ssh2probe :2299 ecdh-p256/ecdsa-p256 user-ed25519
+libssh2 1.11.1
+kex: ecdh-sha2-nistp256
+hostkey: ecdsa-sha2-nistp256
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 3, blob 104 bytes, SHA256:CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI
+hostkey verified: matches expected SHA256:CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI
+userauth: ok (/boot/home/sshtest/keys/user_ed25519)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2299 ecdh-p256/ecdsa-p256 user-ed25519
+---- ssh2probe :2299 ecdh-p384/rsa-sha2-512 user-ecdsa
+libssh2 1.11.1
+kex: ecdh-sha2-nistp384
+hostkey: rsa-sha2-512
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 1, blob 407 bytes, SHA256:T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA
+hostkey verified: matches expected SHA256:T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA
+userauth: ok (/boot/home/sshtest/keys/user_ecdsa)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2299 ecdh-p384/rsa-sha2-512 user-ecdsa
+---- ssh2probe :2299 curve25519/ed25519 user-rsa
+libssh2 1.11.1
+kex: curve25519-sha256
+hostkey: ssh-ed25519
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 6, blob 51 bytes, SHA256:i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0
+hostkey verified: matches expected SHA256:i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0
+userauth: ok (/boot/home/sshtest/keys/user_rsa)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2299 curve25519/ed25519 user-rsa
+---- ssh2probe :2298 dh-group14/rsa-sha2-512 (openssl-made host key)
+libssh2 1.11.1
+kex: diffie-hellman-group14-sha256
+hostkey: rsa-sha2-512
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 1, blob 407 bytes, SHA256:uJRfSjc2e8NwMaXDwodfIloSS7XP77Lc9M+5/6Pxm/8
+hostkey verified: matches expected SHA256:uJRfSjc2e8NwMaXDwodfIloSS7XP77Lc9M+5/6Pxm/8
+userauth: ok (/boot/home/sshtest/keys/user_rsa)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2298 dh-group14/rsa-sha2-512 (openssl-made host key)
+---- ssh2probe :2298 dh-gex/ecdsa-p384 (openssl-made host key)
+libssh2 1.11.1
+kex: diffie-hellman-group-exchange-sha256
+hostkey: ecdsa-sha2-nistp384
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 4, blob 136 bytes, SHA256:rP64anbGH8Tc6Y2RvsEGxQRooqO4cFYNOBGDlGpe1IE
+hostkey verified: matches expected SHA256:rP64anbGH8Tc6Y2RvsEGxQRooqO4cFYNOBGDlGpe1IE
+userauth: ok (/boot/home/sshtest/keys/user_ecdsa)
+arm64
+probe-ok
+remote exit status 0
+PASS
+RESULT PASS :2298 dh-gex/ecdsa-p384 (openssl-made host key)
+---- negative: wrong expected fingerprint must be rejected
+libssh2 1.11.1
+kex: diffie-hellman-group14-sha256
+hostkey: rsa-sha2-512
+cipher: chacha20-poly1305@openssh.com
+mac: hmac-sha2-256
+hostkey type 1, blob 407 bytes, SHA256:T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA
+FAIL host key mismatch: expected SHA256:CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI
+RESULT PASS negative host-key mismatch rejected (probe rc=1)
+== curl (links libssh2.so.1) sftp/scp
+payload sha256 86dac11f946e1c661823c336e5c693506b71f3929ee1f27e0914593efa3a2e14
+curl: Could not find a known_hosts file
+curl: (2) Failed initialization
+[srccache] FAIL sftp://127.0.0.1:22/boot/home/sshtest/payload (upstream fetch failed or truncated; cached nothing)
+RESULT FAIL curl sftp download :22 (curl rc=1) (rc=1)
+curl: Could not find a known_hosts file
+curl: (2) Failed initialization
+[srccache] FAIL scp://127.0.0.1:2299/boot/home/sshtest/payload (upstream fetch failed or truncated; cached nothing)
+RESULT FAIL curl scp download :2299 (curl rc=1) (rc=1)
+curl: Could not find a known_hosts file
+curl: (2) Failed initialization
+RESULT FAIL curl sftp upload :2299 (curl rc=1) (rc=1)
+[srccache] FAIL sftp://127.0.0.1:2299/boot/home/sshtest/up.bin (upstream fetch failed or truncated; cached nothing)
+curl: Could not find a known_hosts file
+curl: (2) Failed initialization
+[srccache] FAIL sftp://127.0.0.1:2299/boot/home/sshtest/payload (upstream fetch failed or truncated; cached nothing)
+RESULT PASS curl rejects wrong --hostpubsha256 (curl rc=1)
+== stop my test sshds (by my own PID)
+killed :2299 pid 217378
+killed :2298 pid 217380
+== server-side kex lines
+      1 debug1: kex: algorithm: curve25519-sha256 [preauth]
+      2 debug1: kex: algorithm: diffie-hellman-group-exchange-sha256 [preauth]
+      3 debug1: kex: algorithm: diffie-hellman-group14-sha256 [preauth]
+      1 debug1: kex: algorithm: diffie-hellman-group16-sha512 [preauth]
+      1 debug1: kex: algorithm: ecdh-sha2-nistp256 [preauth]
+      1 debug1: kex: algorithm: ecdh-sha2-nistp384 [preauth]
+      2 debug1: kex: host key algorithm: ecdsa-sha2-nistp256 [preauth]
+      1 debug1: kex: host key algorithm: ecdsa-sha2-nistp384 [preauth]
+      1 debug1: kex: host key algorithm: rsa-sha2-256 [preauth]
+      4 debug1: kex: host key algorithm: rsa-sha2-512 [preauth]
+      1 debug1: kex: host key algorithm: ssh-ed25519 [preauth]
+SUMMARY pass=13 fail=3

@@ -1,0 +1,61 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-C-functional
+# instance: i-07cb8674ddb6eeb40   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T030233Z   end: 20261103T030246Z   rc: 0
+# script sha256: 3f542249e51e03be89ca285babb2d7ef02305d9f40b2677e6f997fed539fe2a5
+# ---- script ----
+# | set -u
+# | t() { printf '%-28s ' "$1"; shift; out=$("$@" 2>&1); rc=$?; echo "rc=$rc $(echo "$out" | tr '\n' ' ' | cut -c1-150)"; }
+# | t "openssl version -a" sh -c 'openssl version -a | grep -E "^OpenSSL|platform|options"'
+# | t "openssl s_client" sh -c 'echo | openssl s_client -connect example.com:443 -servername example.com 2>&1 | grep -E "Verify return code|Protocol"'
+# | t "curl https" /boot/system/bin/curl -sS -o /dev/null -w "%{http_code} %{ssl_verify_result}" https://github.com
+# | t "node24 version/tls/cpus" node -e 'const https=require("https");console.log(process.version,process.versions.openssl,require("os").cpus().length,require("os").cpus()[0].times.user>0);https.get("https://example.com",r=>{console.log("https",r.statusCode,r.socket.authorized);r.resume()})'
+# | t "node24 Intl" node -e 'console.log(new Intl.DateTimeFormat("de-DE").format(new Date(0)))'
+# | t "node20 version/crypto" /boot/system/bin/node20 -e 'console.log(process.version,process.versions.openssl,require("crypto").createHash("sha256").update("x").digest("hex").slice(0,8))' 
+# | t "claude --version" claude --version
+# | t "claude -p (Bedrock)" sh -c 'timeout 120 claude -p "Reply with exactly: pong" < /dev/null'
+# | t "ssh-keygen ed25519" sh -c 'rm -f /tmp/k1 && ssh-keygen -q -t ed25519 -N "" -f /tmp/k1 && echo ok'
+# | t "sshd still openssh_debeos" sh -c 'catattr SYS:PACKAGE_FILE /boot/system/bin/sshd 2>/dev/null || ls -la /boot/system/bin/sshd'
+# | t "nmap localhost" sh -c 'nmap --version | head -1; nmap -Pn -p 22 127.0.0.1 | grep -E "22/tcp"'
+# | t "tor --version" sh -c 'tor --version | head -1; tor --verify-config -f /dev/null 2>&1 | tail -1'
+# | t "rtmpdump --help" sh -c 'rtmpdump --help 2>&1 | head -1'
+# | t "mkimage -V (u_boot)" mkimage -V
+# | t "softhsm2 init token" sh -c 'mkdir -p /tmp/sh && printf "directories.tokendir = /tmp/sh\n" > /tmp/sh.conf && SOFTHSM2_CONF=/tmp/sh.conf softhsm2-util --init-token --free --label t --pin 1234 --so-pin 5678 | tail -1'
+# | t "perl Net::SSLeay" perl -MNet::SSLeay -e 'print "Net::SSLeay ", $Net::SSLeay::VERSION, " ", Net::SSLeay::SSLeay_version(0), "\n"'
+# | t "luvi / lit" sh -c 'luvi --version | head -2 | tr "\n" " "; lit --version 2>&1 | head -1'
+# | t "jsc (haikuwebkit)" sh -c 'J=$(ls /boot/system/bin/jsc* 2>/dev/null | head -1); [ -n "$J" ] && $J -e "print([1,2,3].map(x=>x*2).join())" || echo "no jsc"'
+# | t "python brotli" python3.14 -c 'import brotli; print(brotli.decompress(brotli.compress(b"x"*100))==b"x"*100)'
+# | t "dlopen libs" python3.14 -c '
+# | import ctypes
+# | for l in ["libssh2.so.1","libwebsockets.so.19","libp11.so.3","libPocoCrypto.so.95","librtmp.so.1","libWebKitLegacy.so.1","libuv.so.1"]:
+# |     try: ctypes.CDLL(l); print(l,"ok",end="; ")
+# |     except OSError as e: print(l,"FAIL",e,end="; ")'
+# | echo "== green openssh vs openssh_debeos (expect the conflict)"
+# | feed() { i=0; while [ $i -lt 5 ]; do echo 2; done; }
+# | printf 'no\n' | pkgman install /boot/home/batch/openssh-10.4p1-2-arm64.hpkg 2>&1 | grep -iE "problem|conflict|openssh_debeos" | head -4
+# ---- raw output ----
+openssl version -a           rc=0 OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026) platform: haiku-aarch64 options:  bn(64,64) 
+openssl s_client             rc=0 Protocol: TLSv1.3 Verify return code: 0 (ok) 
+curl https                   rc=0 200 0 
+node24 version/tls/cpus      rc=1 [eval]:1 const https=require("https");console.log(process.version,process.versions.openssl,require("os").cpus().length,require("os").cpus()[0].times.u
+node24 Intl                  rc=134  <--- Last few GCs --->   <--- JS stacktrace --->  FATAL ERROR: DateTimePatternGeneratorCache::CreateGenerator Allocation failed - process out of memo
+node20 version/crypto        rc=127 /tmp/run-C-functional.sh: line 2: /boot/system/bin/node20: No such file or directory 
+claude --version             rc=1 file:///boot/system/lib/claude-code/lib/misc.mjs:4 import { zstdDecompressSync as zDecSync, zstdDecompress as zDec } from "node:zlib";                
+claude -p (Bedrock)          rc=1 file:///boot/system/lib/claude-code/lib/misc.mjs:4 import { zstdDecompressSync as zDecSync, zstdDecompress as zDec } from "node:zlib";                
+ssh-keygen ed25519           rc=0 ok 
+sshd still openssh_debeos    rc=0 /boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg 
+nmap localhost               rc=1 Nmap version 7.94 ( https://nmap.org ) route_dst_generic: Failed to obtain system routes: getsysroutes_dnet: route_open() failed 
+tor --version                rc=0 Tor version 0.4.8.12. Nov 03 03:02:41.061 [err] Reading config failed--see warnings above. 
+rtmpdump --help              rc=0 RTMPDump v2.4 
+mkimage -V (u_boot)          rc=0 mkimage version 2026.07 
+softhsm2 init token          rc=0 The token has been initialized and is reassigned to slot 1554399580 
+perl Net::SSLeay             rc=0 Net::SSLeay 1.94 OpenSSL 3.5.9 29 Sep 2026 
+luvi / lit                   rc=0 luvi 2.15.0 rex: 10.45 2025-02-05 sh: line 1: lit: command not found 
+jsc (haikuwebkit)            rc=0 2,4,6 
+python brotli                rc=0 True 
+dlopen libs                  rc=0 libssh2.so.1 ok; libwebsockets.so.19 ok; libp11.so.3 FAIL No such file or directory; libPocoCrypto.so.95 FAIL No such file or directory; librtmp.so.1 
+== green openssh vs openssh_debeos (expect the conflict)
+Encountered problems:
+problem 1: package openssh_debeos-10.4p1-1 conflicts with openssh provided by openssh-10.4p1-2
+    - allow deinstallation of openssh_debeos-10.4p1-1
+Please select a solution, skip the problem for now or quit.

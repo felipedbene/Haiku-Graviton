@@ -1,0 +1,82 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-machinecontext2
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T014007Z   end: 20261103T014013Z   rc: 0
+# script sha256: 16d77efc7f79b8e500349e10eff0190e34c3ef2bbbb88701ab743f20e7413df1
+# ---- script ----
+# | S=/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit
+# | f=$S/Source/JavaScriptCore/runtime/MachineContext.h
+# | sed -n '145,170p;270,300p' $f
+# | grep -nE "OS\(HAIKU\)" $f | head -20
+# | grep -nB3 -A3 "define HAVE_MACHINE_CONTEXT 1" $S/Source/WTF/wtf/PlatformHave.h
+# ---- raw output ----
+#if HAVE(MACHINE_CONTEXT)
+
+#if !USE(PLATFORM_REGISTERS_WITH_PROFILE) && !USE(DARWIN_REGISTER_MACROS)
+static inline void*& stackPointerImpl(mcontext_t& machineContext)
+{
+#if OS(DARWIN)
+    return stackPointerImpl(machineContext->__ss);
+#elif OS(HAIKU)
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>(machineContext.rsp);
+#else
+#error Unknown Architecture
+#endif
+#elif OS(FREEBSD)
+
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.mc_rsp);
+#elif CPU(ARM)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.__gregs[_REG_SP]);
+#elif CPU(ARM64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.mc_gpregs.gp_sp);
+#else
+#error Unknown Architecture
+#endif
+
+#elif OS(QNX)
+}
+#endif // OS(WINDOWS) || HAVE(MACHINE_CONTEXT)
+
+
+#if HAVE(MACHINE_CONTEXT)
+
+#if !USE(PLATFORM_REGISTERS_WITH_PROFILE)
+static inline void*& framePointerImpl(mcontext_t& machineContext)
+{
+#if OS(DARWIN)
+    return framePointerImpl(machineContext->__ss);
+#elif OS(HAIKU)
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>(machineContext.rbp);
+#else
+#error Unknown Architecture
+#endif
+#elif OS(FREEBSD)
+
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.mc_rbp);
+#elif CPU(ARM)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.__gregs[_REG_FP]);
+#elif CPU(ARM64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.mc_gpregs.gp_x[29]);
+#else
+#error Unknown Architecture
+#endif
+
+#elif OS(NETBSD)
+
+152:#elif OS(HAIKU)
+281:#elif OS(HAIKU)
+441:#elif OS(HAIKU)
+617:#elif OS(HAIKU)
+680:#elif OS(HAIKU)
+802:#elif OS(HAIKU)
+238-#endif
+239-
+240-#if OS(DARWIN) || OS(FUCHSIA) || ((OS(FREEBSD) || OS(HAIKU) || OS(NETBSD) || OS(OPENBSD) || OS(LINUX) || OS(HURD) || OS(QNX)) && (CPU(X86_64) || CPU(ARM) || CPU(ARM64) || CPU(RISCV64)))
+241:#define HAVE_MACHINE_CONTEXT 1
+242-#endif
+243-
+244-#if OS(DARWIN) || OS(HAIKU) || ((OS(LINUX) || OS(HURD)) && defined(__GLIBC__) && !defined(__UCLIBC__) && !CPU(MIPS))

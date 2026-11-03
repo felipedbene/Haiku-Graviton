@@ -1,0 +1,76 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-libssh2-smoke-curl
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T220352Z   end: 20261102T220400Z   rc: 1
+# script sha256: 2f6bdd532d613686a81381e896a2d8e1d7f52b6638e706603ec98c6fb790ac6a
+# ---- script ----
+# | T=/boot/home/sshtest; K=$T/keys; SS=/boot/system/settings/ssh; cd $T
+# | C=/boot/system/bin/curl
+# | fail=0; pass=0
+# | ck() { if [ "$1" -eq 0 ]; then pass=$((pass+1)); echo "RESULT PASS $2"; else fail=$((fail+1)); echo "RESULT FAIL $2 (rc=$1)"; fi; }
+# | fp() { ssh-keygen -lf "$1" | awk '{print $2}' | sed 's/^SHA256://'; }
+# | $C -V | head -1; readelf -dW $C | grep NEEDED | grep -E 'ssh2|curl'; readelf -dW /boot/system/lib/libcurl.so.4.8.0 | grep -E 'NEEDED.*(ssh2|crypto)'
+# | for p in 2299; do
+# | 	( /boot/system/bin/sshd -D -e -f $T/sshd_$p ) < /dev/null > $T/sshd_$p.curl.log 2>&1 &
+# | 	echo $! > $T/sshd_$p.mypid
+# | done
+# | sleep 3; grep "Server listening" $T/sshd_2299.curl.log
+# | mkdir -p /boot/home/.ssh
+# | { echo "127.0.0.1 $(cut -d' ' -f1,2 $SS/ssh_host_ed25519_key.pub)"; echo "[127.0.0.1]:2299 $(cut -d' ' -f1,2 $SS/ssh_host_ed25519_key.pub)"; } > /boot/home/.ssh/known_hosts
+# | cat /boot/home/.ssh/known_hosts
+# | ED=$(fp $SS/ssh_host_ed25519_key.pub); RSA=$(fp $SS/ssh_host_rsa_key.pub)
+# | PS=$(sha256sum < $T/payload | cut -d' ' -f1); echo "payload sha256 $PS"
+# | cu() { u=$1; h=$2; shift 2; $C -sS --user baron: --key $K/user_ed25519 --pubkey $K/user_ed25519.pub --hostpubsha256 "$h=" "$@" "$u"; }
+# | rm -f $T/dl* $T/up.bin
+# | cu sftp://127.0.0.1:22/boot/home/sshtest/payload $ED -o $T/dl1; r=$?; [ $r -eq 0 ] && [ "$(sha256sum < $T/dl1 | cut -d' ' -f1)" = "$PS" ]; ck $? "curl sftp download, instance sshd :22 (curl rc=$r)"
+# | cu scp://127.0.0.1:22/boot/home/sshtest/payload $ED -o $T/dl2; r=$?; [ $r -eq 0 ] && [ "$(sha256sum < $T/dl2 | cut -d' ' -f1)" = "$PS" ]; ck $? "curl scp download, instance sshd :22 (curl rc=$r)"
+# | cu sftp://127.0.0.1:2299/boot/home/sshtest/up.bin $ED -T $T/payload; r=$?; [ $r -eq 0 ] && [ "$(sha256sum < $T/up.bin | cut -d' ' -f1)" = "$PS" ]; ck $? "curl sftp upload, :2299 (curl rc=$r)"
+# | cu scp://127.0.0.1:2299/boot/home/sshtest/payload $ED -o $T/dl3; r=$?; [ $r -eq 0 ] && [ "$(sha256sum < $T/dl3 | cut -d' ' -f1)" = "$PS" ]; ck $? "curl scp download, :2299 (curl rc=$r)"
+# | echo "-- negative: correct known_hosts, wrong --hostpubsha256"
+# | cu sftp://127.0.0.1:22/boot/home/sshtest/payload $RSA -o $T/dl4; r=$?; [ $r -ne 0 ] && [ ! -s $T/dl4 ]; ck $? "curl rejects wrong --hostpubsha256 (curl rc=$r)"
+# | echo "-- negative: known_hosts entry for a different key"
+# | echo "127.0.0.1 $(cut -d' ' -f1,2 $SS/ssh_host_ecdsa_key.pub)" > /boot/home/.ssh/known_hosts
+# | $C -sS --user baron: --key $K/user_ed25519 --pubkey $K/user_ed25519.pub sftp://127.0.0.1:22/boot/home/sshtest/payload -o $T/dl5; r=$?; [ $r -ne 0 ] && [ ! -s $T/dl5 ]; ck $? "curl rejects a known_hosts mismatch (curl rc=$r)"
+# | rm -f /boot/home/.ssh/known_hosts
+# | kill $(cat $T/sshd_2299.mypid) && echo "killed :2299 pid $(cat $T/sshd_2299.mypid)"
+# | echo "SUMMARY pass=$pass fail=$fail"
+# | [ $fail -eq 0 ]
+# ---- raw output ----
+curl 8.21.0 (aarch64-unknown-haiku) libcurl/8.21.0 OpenSSL/3.5.9 zlib/1.3.2 libpsl/0.21.5 libssh2/1.11.1 nghttp2/1.63.0
+ 0x0000000000000001 (NEEDED)             Shared library: [libcurl.so.4]
+ 0x0000000000000001 (NEEDED)             Shared library: [libssh2.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libssh2.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcrypto.so.3]
+Server listening on 127.0.0.1 port 2299.
+127.0.0.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAZeTNcSFn6deOXX3y99GRDcRfHSPPpmHJnltPltJJCh
+[127.0.0.1]:2299 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAZeTNcSFn6deOXX3y99GRDcRfHSPPpmHJnltPltJJCh
+payload sha256 86dac11f946e1c661823c336e5c693506b71f3929ee1f27e0914593efa3a2e14
+RESULT PASS curl sftp download, instance sshd :22 (curl rc=0)
+RESULT PASS curl scp download, instance sshd :22 (curl rc=0)
+curl: (60) Denied establishing sshRESULT FAIL curl sftp upload, :2299 (curl rc=60) (rc=1)
+ session: mismatch SHA256 fingerprint. Remote CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI= is not equal to i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0=
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the webpage mentioned above.
+curl: (60) Denied establishing ssh session: mismRESULT FAIL curl scp download, :2299 (curl rc=60) (rc=1)
+-- negative: correct known_hosts, wrong --hostpubsha256
+atch SHA256 fingerprint. Remote CFBRVVsLWYlZ0S+sHVMA6lvv65HpJUQglUi9JZ1+akI= is not equal to i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0=
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the webpage mentioned above.
+curl: (60) Denied establishing ssh session: mismatch SHA256 fRESULT PASS curl rejects wrong --hostpubsha256 (curl rc=60)
+-- negative: known_hosts entry for a different key
+ingerprint. Remote i3/pw6WcanjYisEvDgxIo3RR2bhF2jkCOCdwjsw0VF0= is not equal to T9XWDzeupCjWuqixZWbzzdTml85ZL4pwbcKGXQxzpVA=
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the webpage mentioned above.
+curl: (2) Failure establishing ssh session: -5, Unable to exchange encryption keys
+RESULT PASS curl rejects a known_hosts mismatch (curl rc=2)
+killed :2299 pid 217514
+SUMMARY pass=4 fail=2

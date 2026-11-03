@@ -1,0 +1,50 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W3-fail
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T001458Z   end: 20261103T001505Z   rc: 0
+# script sha256: 2160e4dda7b6900ef6f0215844f88f264a0c8f10f142679b682a217d5103e839
+# ---- script ----
+# | L=/boot/home/nb-haikuwebkit-1.10.0.log; grep -anE "error:|Error|FAILED|CMake Error|fatal" $L | grep -v Werror | head -20; tail -40 $L
+# ---- raw output ----
+378:CMake Error at /boot/system/data/cmake/Modules/FindPackageHandleStandardArgs.cmake:227 (message):
+399:Error: Build has failed - stopping.
+-- Performing Test INT128_IS_USABLE
+-- Performing Test INT128_IS_USABLE - Failed
+-- Found ICU: /boot/system/develop/headers (found version "74.1") found components: data i18n uc
+-- Found JPEG: /boot/system/develop/lib/libjpeg.so (found version "62")
+-- Found LibXml2: /packages/libxml2-2.15.3-1/.self/develop/lib/libxml2.so (found suitable version "2.15.3", minimum required is "2.8.0")
+-- Found LibXslt: /packages/libxslt-1.1.45-2/.self/develop/lib/libxslt.so (found suitable version "1.1.45", minimum required is "1.1.7")
+-- Found OpenGLES2: /packages/libglvnd-1.7.0-4/.self/develop/lib/libGLESv2.so (found version "3.2")
+-- Found ZLIB: /boot/system/develop/lib/libz.so (found version "1.3.2")
+-- Found PNG: /boot/system/develop/lib/libpng.so (found version "1.6.53")
+-- Found SQLite3: /packages/sqlite-3.50.4.0-1/.self/develop/lib/libsqlite3.so (found version "3.50.4")
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Failed
+-- Looking for pthread_create in pthreads
+-- Looking for pthread_create in pthreads - not found
+-- Looking for pthread_create in pthread
+-- Looking for pthread_create in pthread - not found
+-- Check if compiler accepts -pthread
+-- Check if compiler accepts -pthread - no
+CMake Error at /boot/system/data/cmake/Modules/FindPackageHandleStandardArgs.cmake:227 (message):
+  Could NOT find Threads (missing: Threads_FOUND)
+Call Stack (most recent call first):
+  /boot/system/data/cmake/Modules/FindPackageHandleStandardArgs.cmake:591 (_FPHSA_FAILURE_MESSAGE)
+  /boot/system/data/cmake/Modules/FindThreads.cmake:226 (find_package_handle_standard_args)
+  Source/cmake/OptionsHaiku.cmake:47 (find_package)
+  Source/cmake/WebKitCommon.cmake:318 (include)
+  CMakeLists.txt:22 (include)
+
+
+-- Configuring incomplete, errors occurred!
+Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 1.
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0 intact for inspection
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+haiku-libs::haikuwebkit-1.10.0
+	/boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X-build-summary
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T234505Z   end: 20261102T234510Z   rc: 0
+# script sha256: cbb33d7ce857b49c1a2715022693f5b50b7b754f64c988ec0c51752269486027
+# ---- script ----
+# | cat /boot/home/r14.log
+# | ls -la /boot/home/haikuports/packages/
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+=== nodejs20-20.15.1 build start 2026-11-02T23:33:05Z
+=== nodejs20-20.15.1 driver rc=1 2026-11-02T23:38:12Z
+=== nodejs20-20.15.1 test rc=1 2026-11-02T23:38:19Z
+=== nmap-7.94 build start 2026-11-02T23:38:19Z
+=== nmap-7.94 driver rc=1 2026-11-02T23:41:19Z
+    pkg: nmap-7.94-2-arm64.hpkg
+=== nmap-7.94 no TEST()
+=== tor-0.4.8.12 build start 2026-11-02T23:41:19Z
+=== tor-0.4.8.12 driver rc=1 2026-11-02T23:43:53Z
+=== tor-0.4.8.12 test rc=1 2026-11-02T23:44:36Z
+ALLDONE
+total 7112
+drwxr-xr-x 1 baron root    2048 Nov  2 23:41 .
+drwxr-xr-x 1 baron root    7168 Nov  2 23:43 ..
+drwxr-xr-x 1 baron root    2048 Nov  2 23:43 .obsolete
+-rw-r--r-- 1 baron root 7257684 Nov  2 23:41 nmap-7.94-2-arm64.hpkg
+2b568497f8b25e0cb3ee25990cdc6dcc63cee667733c7be9d1b8ebd5c1b83ad8  /boot/home/haikuports/packages/nmap-7.94-2-arm64.hpkg

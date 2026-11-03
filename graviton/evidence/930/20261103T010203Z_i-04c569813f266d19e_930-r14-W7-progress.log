@@ -1,0 +1,9 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W7-progress
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T010203Z   end: 20261103T010209Z   rc: 0
+# script sha256: 0b0ee19df3e41e2632b950e5c743f14aeab03bb568c3a959b1d74c193418eeda
+# ---- script ----
+# | grep -aE "^\[[0-9]+/[0-9]+\]" /boot/home/nb-haikuwebkit-1.10.0.log | tail -1; grep -aE "CMake Error|FAILED:" /boot/home/nb-haikuwebkit-1.10.0.log | head -3
+# ---- raw output ----
+CMake Error at Source/cmake/WebKitFeatures.cmake:383 (message):

@@ -1,0 +1,59 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-builder-b-green-index
+# instance: i-0010aec9d22735169   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T213818Z   end: 20261102T213823Z   rc: 0
+# script sha256: 21fb3fb08e88febe3e23dbbf983795eec2b68d49fd58a07d0eca79cb6fae67cd
+# ---- script ----
+# | mkdir -p /boot/home/scan && cd /boot/home/scan
+# | curl -sSf -o repo https://packages.debene.dev/arm64/repo || exit 1
+# | sha256sum repo
+# | package_repo list -v repo > repo.txt 2>&1; echo "package_repo rc=$?"; wc -l repo.txt
+# | sed -n '1,40p' repo.txt
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 806.7k 100 806.7k   0      0  3.21M      0                              0100 806.7k 100 806.7k   0      0  3.20M      0                              0100 806.7k 100 806.7k   0      0  3.19M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/repo (826119 bytes)
+0e5fba70faec53d8f03ddb7588f09b19e0cf58f69718daaf859df902f3c7046b  repo
+package_repo rc=0
+80899 repo.txt
+repository-info:
+	name: DeBeOS
+	summary: DeBeOS package repository (arm64)
+	base-url: http://packages.debene.dev/arm64
+	identifier: http://packages.debene.dev/arm64
+	vendor: DeBeOS
+	priority: 1
+	architecture: arm64
+packages:
+package-attributes:
+	name: 0ad_data
+	summary: O A.D. - Game Data
+	description: Data for the game 0 A.D.
+	vendor: DeBeOS
+	packager: DeBeOS <packages@debene.dev>
+	architecture: any
+	version: 0.28.0-1
+	copyright: Wildfire Games
+	license: 0ADLicense
+	URL: https://play0ad.com/
+	source URL: https://releases.wildfiregames.com/0ad-0.28.0-unix-data.tar.xz
+	source URL: https://ports-mirror.haiku-os.org/0ad_data/0ad-0.28.0-unix-data.tar.xz
+	provides: 0ad_data = 0.28.0
+	checksum: 6b03963319ad07f0bdc7efba75b9669db1bcf191f98dbb26f95de52d0903e4ca
+package-attributes:
+	name: 2048
+	summary: The tile-matching game 2048
+	description: The goal of this popular and tile-matching game is to get to tile 2048.
+Use your arrow keys to move the tiles.
+When two tiles with the same number touch, they merge into one!
+	vendor: DeBeOS
+	packager: DeBeOS <packages@debene.dev>
+	architecture: arm64
+	version: 1.1.1-1
+	copyright: 2015 Markus Himmel
+	copyright: 2016-2021 HaikuArchives Team
+	license: MIT
+	URL: https://github.com/HaikuArchives/Haiku2048
+	source URL: https://github.com/HaikuArchives/Haiku2048/archive/1.1.1.zip
+	source URL: https://ports-mirror.haiku-os.org/2048/1.1.1.zip

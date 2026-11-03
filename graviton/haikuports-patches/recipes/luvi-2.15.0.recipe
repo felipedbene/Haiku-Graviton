@@ -1,0 +1,118 @@
+SUMMARY="A project in-between luv and luvit"
+DESCRIPTION="luvi is a project in-between luv and luvit.
+The goal of this is to make building luvit and derivatives much easier."
+HOMEPAGE="https://github.com/luvit/luvi"
+COPYRIGHT="2012 The Luvit Authors
+	Portions of this software were based on Node.js, \
+	Joyent, Inc. and other Node contributors.
+	"
+LICENSE="Apache v2"
+# 2, not 1: a rebuild against openssl3 3.5.9-3 (issue 930), same source and
+# patches as stock HaikuPorts at 1d23c3a's luvi-2.15.0-1. 3.5.9-3 configures arm64 as
+# haiku-aarch64, which widens BN_ULONG in the public headers from 32 to 64 bits
+# under the same soname (lib:libcrypto = 3). This package imports BN_set_word,
+# so a build against the older headers passes its BN_ULONG argument as 32-bit.
+REVISION="2"
+SOURCE_URI="$HOMEPAGE/archive/refs/tags/v$portVersion.tar.gz"
+CHECKSUM_SHA256="54b3a77781dad81abafeef5d972123798900d5498852d0667eacd8358cbb0f8d"
+SOURCE_FILENAME="luvi-$portVersion.tar.gz"
+SOURCE_DIR="luvi-$portVersion"
+srcGitRev_2="55bbd00e53890e50e05018907140f4f3d3e234f4"
+SOURCE_URI_2="https://github.com/luvit/lpeg/archive/$srcGitRev_2.tar.gz"
+CHECKSUM_SHA256_2="63f8b88357361f72b04b2096b2e3540825c5c1ba226fb659cb8cc59783a134b7"
+SOURCE_FILENAME_2="lpeg-$srcGitRev_2.tar.gz"
+SOURCE_DIR_2="lpeg-$srcGitRev_2"
+srcGitRev_3="9aa5e7e9ca47da1bd0e023dfa0b1b2d43aa358f3"
+SOURCE_URI_3="https://github.com/rrthomas/lrexlib/archive/$srcGitRev_3.tar.gz"
+CHECKSUM_SHA256_3="c2c028549e4f634ec3c81c591f4bdafcad0e3a9a98a933b6bab76af709c3b444"
+SOURCE_FILENAME_3="lrexlib-$srcGitRev_3.tar.gz"
+SOURCE_DIR_3="lrexlib-$srcGitRev_3"
+version_4="0.11.0-2"
+SOURCE_URI_4="https://github.com/zhaozg/lua-openssl/releases/download/$version_4/openssl-$version_4.tar.gz"
+CHECKSUM_SHA256_4="61d7450c53afe11ba1936a3916df68a454476a05a753f3b2c8332f981883ea34"
+SOURCE_FILENAME_4="openssl-$version_4.tar.gz"
+SOURCE_DIR_4="openssl-$version_4"
+srcGitRev_5="bf7a1f0a5aa1deae9cab2d73b5ef9edec41b877c"
+SOURCE_URI_5="https://github.com/richgel999/miniz/archive/$srcGitRev_5.tar.gz"
+CHECKSUM_SHA256_5="d8ae3141fb67d280587224dcb80f02f4d39ab42aafe46e8e0c4b8bb6a810b542"
+SOURCE_FILENAME_5="miniz-$srcGitRev_5.tar.gz"
+SOURCE_DIR_5="miniz-$srcGitRev_5"
+srcGitRev_6="79f6934306367e700050de9614eab9ac01bd4d6f"
+SOURCE_URI_6="https://github.com/luvit/luv/archive/$srcGitRev_6.tar.gz"
+CHECKSUM_SHA256_6="0f6f9d33ccf8278d0d288f8f90ba5633efe376c3c8cd0fb05a85f1fc7f1a0db1"
+SOURCE_FILENAME_6="luv-$srcGitRev_6.tar.gz"
+SOURCE_DIR_6="luv-$srcGitRev_6"
+PATCHES="luvi-$portVersion.patchset"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+PROVIDES="
+	luvi$secondaryArchSuffix = $portVersion
+	cmd:luvi
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	luv_luajit${secondaryArchSuffix}
+	lib:libluajit_5.1$secondaryArchSuffix
+	lib:libpcre2_8$secondaryArchSuffix
+	lib:libssl$secondaryArchSuffix
+	lib:libuv$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	luv_luajit${secondaryArchSuffix}_devel
+	devel:libluajit_5.1$secondaryArchSuffix
+	devel:libpcre2_8$secondaryArchSuffix
+	devel:libssl$secondaryArchSuffix
+	devel:libuv$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc$secondaryArchSuffix
+	cmd:make
+	cmd:install
+	cmd:cmake
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	rm -df deps/lpeg deps/lrexlib deps/lua-openssl deps/miniz deps/luv $sourceDir6/deps/libuv
+	ln -sf $sourceDir2 deps/lpeg
+	ln -sf $sourceDir3 deps/lrexlib
+	ln -sf $sourceDir4 deps/lua-openssl
+	ln -sf $sourceDir5 deps/miniz
+	ln -sf $sourceDir6 deps/luv
+	ln -sf $sourceDir4/deps/compat-5.3 deps/luv/deps/lua-compat-5.3
+
+	echo $portVersion > VERSION
+
+	cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=Release \
+		-DWITH_LUA_ENGINE=LuaJIT \
+		-DLUA_BUILD_TYPE=System \
+		-DWITH_AMALG=ON \
+		-DWithOpenSSLASM=ON \
+		-DWithOpenSSL=ON \
+		-DWithPCRE2=ON \
+		-DWithLPEG=ON \
+		-DWithZLIB=OFF \
+		-DWithSharedOpenSSL=ON \
+		-DWithSharedPCRE2=ON \
+		-DWithSharedLPEG=ON \
+		-DWithSharedZLIB=ON \
+		-DWITH_SHARED_LIBUV=ON \
+		-DWithSharedLibluv=ON
+	make -C build $jobArgs
+}
+
+INSTALL()
+{
+	mkdir -p $prefix/bin
+	install -m 0755 build/luvi $prefix/bin
+}
+
+TEST()
+{
+	make test
+}

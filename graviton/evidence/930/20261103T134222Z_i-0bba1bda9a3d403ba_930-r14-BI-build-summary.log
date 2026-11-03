@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-BI-build-summary
+# instance: i-0bba1bda9a3d403ba   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T134222Z   end: 20261103T134227Z   rc: 0
+# script sha256: cbb33d7ce857b49c1a2715022693f5b50b7b754f64c988ec0c51752269486027
+# ---- script ----
+# | cat /boot/home/r14.log
+# | ls -la /boot/home/haikuports/packages/
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+=== bison-3.8.2 build start 2026-11-03T13:37:46Z
+=== bison-3.8.2 driver rc=1 2026-11-03T13:42:09Z
+    pkg: bison-3.8.2-1-arm64.hpkg
+    pkg: bison_debuginfo-3.8.2-1-arm64.hpkg
+=== bison-3.8.2 test rc=1 2026-11-03T13:42:11Z
+ALLDONE
+total 1320
+drwxr-xr-x 1 baron root   2048 Nov  3 13:42 .
+drwxr-xr-x 1 baron root   7168 Nov  3 13:42 ..
+-rw-r--r-- 1 baron root 737916 Nov  3 13:42 bison-3.8.2-1-arm64.hpkg
+-rw-r--r-- 1 baron root 591832 Nov  3 13:42 bison_debuginfo-3.8.2-1-arm64.hpkg
+51026e4a205aea69568a5f4263b2dad523124b70fc606129a4205367747400da  /boot/home/haikuports/packages/bison-3.8.2-1-arm64.hpkg
+f9dd42659b902170da0e9babe2e03b18ebbdebf6117a7b48e16233d5e3f72042  /boot/home/haikuports/packages/bison_debuginfo-3.8.2-1-arm64.hpkg

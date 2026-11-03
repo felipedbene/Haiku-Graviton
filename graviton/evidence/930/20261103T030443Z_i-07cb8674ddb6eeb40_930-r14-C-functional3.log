@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-C-functional3
+# instance: i-07cb8674ddb6eeb40   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T030443Z   end: 20261103T030459Z   rc: 0
+# script sha256: 3f0c443ddb745ebe3384d14678d7bcb222da0795e2ded93c95cae88717d91dff
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 40 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | echo "== claude -p via Bedrock"; cd /tmp && CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 timeout 180 claude -p "Reply with exactly: pong" < /dev/null; echo "rc=$?"
+# | echo "== nmap 7.94-2 (batch), installed:"; nmap -Pn -p 22 127.0.0.1 2>&1 | tail -4
+# | feed | pkgman install /tmp/gn.hpkg 2>&1 | grep -iE "package nmap|Done" | head -2
+# | echo "== nmap 7.94-1 (green), installed:"; ls /boot/system/packages | grep nmap; nmap -Pn -p 22 127.0.0.1 2>&1 | tail -4
+# | feed | pkgman install /boot/home/batch/nmap-7.94-2-arm64.hpkg 2>&1 | grep -iE "package nmap|Done" | head -2; ls /boot/system/packages | grep nmap
+# | echo "== lit -2 vs -3 file lists"; /boot/system/bin/curl -sf -o /tmp/lit2.hpkg https://packages.debene.dev/arm64/packages/lit-3.9.0-2-arm64.hpkg
+# | package list /tmp/lit2.hpkg | grep -E "^\s+[^ ]" | grep -vE "^\s+(name|version|summary|description|URL|source URL|copyright|license|vendor|packager|architecture|provides|requires|flags|install-path|checksum|  )" | awk '{print $NF}' | sort > /tmp/l2; package list /boot/system/packages/lit-3.9.0-3-arm64.hpkg | grep -E "^\s+[^ ]" | grep -vE "^\s+(name|version|summary|description|URL|source URL|copyright|license|vendor|packager|architecture|provides|requires|flags|install-path|checksum|  )" | awk '{print $NF}' | sort > /tmp/l3; diff /tmp/l2 /tmp/l3 && echo "lit file lists identical ($(wc -l < /tmp/l3) entries)"; package list -i /boot/system/packages/lit-3.9.0-3-arm64.hpkg | grep -E "provides:"
+# | python3.14 -c 'import ctypes; ctypes.CDLL("librtmp.1.so"); print("librtmp.1.so ok")'
+# ---- raw output ----
+== claude -p via Bedrock
+pong
+rc=0
+== nmap 7.94-2 (batch), installed:
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-03 03:04 GMT
+route_dst_generic: Failed to obtain system routes: getsysroutes_dnet: route_open() failed
+Validating checksum for DeBeOS...done.
+    upgrade package nmap-7.94-2 to 7.94-1 from local file
+== nmap 7.94-1 (green), installed:
+nmap-7.94-1-arm64.hpkg
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-03 03:04 GMT
+route_dst_generic: Failed to obtain system routes: getsysroutes_dnet: route_open() failed
+Validating checksum for DeBeOS...done.
+    upgrade package nmap-7.94-1 to 7.94-2 from local file
+nmap-7.94-2-arm64.hpkg
+== lit -2 vs -3 file lists
+/tmp/run-C-functional3.sh: line 8: diff: command not found
+	provides: lit = 3.9.0
+	provides: cmd:lulit = 3.9.0
+librtmp.1.so ok

@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X2-n20-test-detail
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T011323Z   end: 20261103T011330Z   rc: 0
+# script sha256: 878e07e4b3173944b2088a78387537f0de13ed245bacbbd5556c7ce886726859
+# ---- script ----
+# | L=/boot/home/test-nodejs20-20.15.1.log; wc -l $L
+# | grep -aE "^=== release|^Path: |^not ok" $L | head -40
+# | tail -25 $L | cut -c1-200
+# ---- raw output ----
+241 /boot/home/test-nodejs20-20.15.1.log
+installing /sources/node-v20.15.1/out/Release/addons_headers/include/node/cppgc/internal/persistent-node.h
+installing /sources/node-v20.15.1/out/Release/addons_headers/include/node/cppgc/internal/pointer-policies.h
+installing /sources/node-v20.15.1/out/Release/addons_headers/include/node/cppgc/internal/write-barrier.h
+installing /sources/node-v20.15.1/out/Release/addons_headers/include/node/libplatform/libplatform-export.h
+installing /sources/node-v20.15.1/out/Release/addons_headers/include/node/libplatform/libplatform.h
+installing /sources/node-v20.15.1/out/Release/addons_headers/include/node/libplatform/v8-tracing.h
+npm error Internal error. Icu error.
+
+npm error A complete log of this run can be found in: /boot/home/.npm/_logs/2026-11-03T00_44_59_714Z-debug-0.log
+make[1]: *** [Makefile:748: tools/doc/node_modules] Error 1
+make: *** [Makefile:341: test-only] Error 2
+Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 2.
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/net-libs/nodejs/work-20.15.1 intact for inspection
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+net-libs::nodejs20-20.15.1
+	/boot/home/haikuports/net-libs/nodejs/nodejs20-20.15.1.recipe
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+TESTING net-libs::nodejs20-20.15.1
+----------------------------------------------------------------------
+Error: Test has failed - stopping.

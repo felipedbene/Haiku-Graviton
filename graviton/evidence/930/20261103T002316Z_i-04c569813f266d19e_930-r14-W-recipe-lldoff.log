@@ -1,0 +1,10 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-recipe-lldoff
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T002316Z   end: 20261103T002350Z   rc: 0
+# script sha256: 26f74732f70ffb633fd31d9b093337a83d83569155290db044302cca879bedd5
+# ---- script ----
+# | D=/boot/home/haikuports/haiku-libs/haikuwebkit; cp /boot/home/stage/haikuwebkit-1.10.0.recipe $D/ && echo "701cdcf6846e45c2d005c3b02a5ea7bb9fe1db08a39a2ae015905999be9218c3  $D/haikuwebkit-1.10.0.recipe" | sha256sum -c && grep -c USE_LD_LLD=OFF $D/haikuwebkit-1.10.0.recipe; rm -rf $D/work-1.10.0
+# ---- raw output ----
+/boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe: OK
+2

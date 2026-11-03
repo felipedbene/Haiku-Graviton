@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Y-progress
+# instance: i-0406d3c82385e02eb   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003529Z   end: 20261103T003535Z   rc: 0
+# script sha256: 448b29f2b741c28c02b6575c9c57d097980038ccb723a04a83ea54f496d9bef5
+# ---- script ----
+# | tail -3 /boot/home/r14.log; ls -t /boot/home/nb-*.out | head -1 | xargs tail -c 600; ps | grep -E "haikuporter|make|gcc|cc1" | grep -v grep | head -5
+# ---- raw output ----
+    pkg: poco-1.12.4-4-arm64.hpkg
+    pkg: poco_debuginfo-1.12.4-4-arm64.hpkg
+    pkg: poco_devel-1.12.4-4-arm64.hpkg
+thing can be
+  uploaded (issue 728). The image ships amazon-ssm-agent, which has
+  no 's3' verbs, and the interim debeos-ssm-agent is gone. Built
+  packages are still in /boot/home/haikuports/packages -- they are NOT in the pool.
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  poco-1.12.4 =====
+      The build results above are valid. Do not re-queue these as failed builds -- fix the upload path and re-harvest from /boot/home/haikuports/packages.
+mirror-store skipped: no S3 client on this image (issue 728)
+===== nativebuild done 2026-11-02T23:45:46Z rc=1 =====
+/boot/system/bin/python3.14 /boot/home/haikuporter/haikuporter  70046        1    0    0 
+/boot/system/bin/python3.14 /boot/home/haikuporter/haikuporter  70200        1    0    0 
+/boot/system/bin/make -C build -j16 test ARGS=--rerun-failed -- 70251        1    0    0 
+/packages/poco-1.12.4-4/cmd~cmake/bin/ctest --rerun-failed --ou 70253        1    0    0 
