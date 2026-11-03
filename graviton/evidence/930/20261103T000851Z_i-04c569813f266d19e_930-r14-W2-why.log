@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W2-why
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000851Z   end: 20261103T000857Z   rc: 0
+# script sha256: 701cc12bf88935a8c5e17b1fddedac7afe745768153425b70ec53bad53ecd2ec
+# ---- script ----
+# | grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing|Failed to find|could not be resolved" /boot/home/nb-haikuwebkit-1.10.0.out | head -15
+# ---- raw output ----
+haikuwebkit-1.10.0: attempt 1 installing: devel:libjpeg 
+haikuwebkit-1.10.0: attempt 2 installing: devel:liblcms2 
+haikuwebkit-1.10.0: attempt 3 installing: devel:libpng16 
+haikuwebkit-1.10.0: attempt 4 installing: devel:libpsl 
+haikuwebkit-1.10.0: attempt 5 installing: devel:libsqlite3 
+haikuwebkit-1.10.0: attempt 6 installing: devel:libwoff2dec 
+haikuwebkit-1.10.0: attempt 7 installing: devel:libxml2 
+haikuwebkit-1.10.0: attempt 8 installing: devel:libxslt 
+haikuwebkit-1.10.0: attempt 9 installing: cmd:gperf 
+haikuwebkit-1.10.0: attempt 10 installing: cmd:llvm_config >= 21 
+haikuwebkit-1.10.0: NO PROGRESS at attempt 11 -- installing the missing set left it unchanged.
+      *** Failed to find a match for "cmd:llvm_config >= 21": Name not found
+build-prerequires "cmd:llvm_config >= 21" of package "haikuwebkit-1.10.0" could not be resolved
+Error: 	Reason: build-prerequires "cmd:llvm_config >= 21" of package "haikuwebkit-1.10.0" could not be resolved
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====

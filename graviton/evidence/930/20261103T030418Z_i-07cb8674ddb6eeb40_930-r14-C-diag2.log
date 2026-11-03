@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-C-diag2
+# instance: i-07cb8674ddb6eeb40   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T030418Z   end: 20261103T030425Z   rc: 0
+# script sha256: 179071d9b9196be19c1a113a9e684fa312f623eaf82082108734a07cab8ee0c6
+# ---- script ----
+# | echo "== nmap green 7.94-1:"; /tmp/gn/bin/nmap -Pn -p 22 127.0.0.1 2>&1 | tail -6
+# | echo "== nmap batch 7.94-2:"; nmap -Pn -p 22 127.0.0.1 2>&1 | tail -6
+# | echo "== lit files:"; package list /boot/system/packages/lit-3.9.0-3-arm64.hpkg | grep -E "bin/|lit" | grep -v "^\s*description" | head -6
+# | echo "== librtmp:"; ls /boot/system/lib | grep -i rtmp
+# ---- raw output ----
+== nmap green 7.94-1:
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-03 03:04 GMT
+Unable to find nmap-services!  Resorting to /etc/services
+Unable to open /etc/services for reading service information: No such file or directory (-2147459069)
+== nmap batch 7.94-2:
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-03 03:04 GMT
+route_dst_generic: Failed to obtain system routes: getsysroutes_dnet: route_open() failed
+== lit files:
+	name: lit
+* Lit powers the central repository at wss://lit.luvit.io/.
+	URL: https://github.com/luvit/lit
+	source URL: https://github.com/luvit/lit/archive/refs/tags/3.9.0.tar.gz
+	source URL: https://sources.debene.dev/lit/3.9.0.tar.gz
+	source URL: https://sources.debene.dev/lit/00bd21b8cc3a2e233276f5a70b57ca7347fdf520.tar.gz
+== librtmp:
+librtmp.1.so

@@ -1,0 +1,22 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-llvm21
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000921Z   end: 20261103T000942Z   rc: 0
+# script sha256: a1a26bc78c55eba2c4dc6a7008801520cf03f392e8b863b1602040d4e9ab6cd8
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install llvm21 llvm21_clang llvm21_libs llvm21_lld 2>&1 | tail -2
+# | ls /boot/system/packages | grep -i llvm21
+# | which llvm-config; llvm-config --version 2>&1; ls /boot/system/bin | grep -i llvm.config
+# | package list -i /boot/system/packages/llvm21-21.1.8-2-arm64.hpkg | grep -iE "provides:.*config"
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+llvm21-21.1.8-2-arm64.hpkg
+llvm21_clang-21.1.8-2-arm64.hpkg
+llvm21_libs-21.1.8-2-arm64.hpkg
+llvm21_lld-21.1.8-2-arm64.hpkg
+/boot/system/bin/llvm-config
+21.1.8
+llvm-config
+	provides: cmd:llvm_config = 21.1.8 (compatible >= 21)

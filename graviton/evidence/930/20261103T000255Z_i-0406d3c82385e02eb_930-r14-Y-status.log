@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Y-status
+# instance: i-0406d3c82385e02eb   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000255Z   end: 20261103T000301Z   rc: 0
+# script sha256: 7f9aef99494a56a35c2e10a7f112025984bc01d1bd3a01b3476d908f1ad072ca
+# ---- script ----
+# | for f in /boot/home/nb-*.out; do printf "%s: " "$(basename $f .out)"; grep -aoE "[a-z0-9_.-]+: (BUILD_OK.*|FAILED.*|NO PROGRESS.*)" $f | head -1; done; ls /boot/home/haikuports/packages/ | grep -v openssl3
+# ---- raw output ----
+nb-libp11-0.4.10: libp11-0.4.10: BUILD_OK (attempt 1)
+nb-libwebsockets-4.3.3: libwebsockets-4.3.3: BUILD_OK (attempt 2)
+nb-lit-3.9.0: lit-3.9.0: BUILD_OK (attempt 1)
+nb-luvi-2.15.0: luvi-2.15.0: BUILD_OK (attempt 5)
+nb-net_ssleay-1.94: net_ssleay-1.94: BUILD_OK (attempt 1)
+nb-poco-1.12.4: poco-1.12.4: BUILD_OK (attempt 3)
+nb-softhsm2-2.5.0: softhsm2-2.5.0: BUILD_OK (attempt 3)
+libp11-0.4.10-4-arm64.hpkg
+libp11_debuginfo-0.4.10-4-arm64.hpkg
+libp11_devel-0.4.10-4-arm64.hpkg
+libwebsockets-4.3.3-2-arm64.hpkg
+libwebsockets_devel-4.3.3-2-arm64.hpkg
+lit-3.9.0-3-arm64.hpkg
+luvi-2.15.0-2-arm64.hpkg
+net_ssleay-1.94-3-arm64.hpkg
+poco-1.12.4-4-arm64.hpkg
+poco_debuginfo-1.12.4-4-arm64.hpkg
+poco_devel-1.12.4-4-arm64.hpkg
+softhsm2-2.5.0-4-arm64.hpkg
+softhsm2_debuginfo-2.5.0-4-arm64.hpkg

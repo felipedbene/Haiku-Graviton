@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W9-progress
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T015319Z   end: 20261103T015325Z   rc: 0
+# script sha256: 8aa80c9fce792fed990efaa680e093971195aae4434c3ab65d9d231c92d81757
+# ---- script ----
+# | grep -aE "patching file|Applying|MachineContext" /boot/home/nb-haikuwebkit-1.10.0.log | head -4; grep -aE "^\[[0-9]+/[0-9]+\]" /boot/home/nb-haikuwebkit-1.10.0.log | tail -1
+# ---- raw output ----
+Applying patchset "/boot/home/haikuports/haiku-libs/haikuwebkit/patches/haikuwebkit-1.10.0-arm64.patchset" ...
+Applying: JavaScriptCore: MachineContext accessors for Haiku arm64
+[1512/7207] Generating ../../JavaScriptCore/PrivateHeaders/JavaScriptCore/MachineContext.h
+[6174/7207] Building CXX object Source/WebCore/CMakeFiles/WebCore.dir/cmake_pch.hxx.gch

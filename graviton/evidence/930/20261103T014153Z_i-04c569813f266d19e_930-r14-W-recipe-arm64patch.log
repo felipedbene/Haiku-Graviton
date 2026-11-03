@@ -1,0 +1,10 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-recipe-arm64patch
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T014153Z   end: 20261103T014248Z   rc: 0
+# script sha256: ac4db8f9716b1a14dafbf9831e2ee64fc6243b517c7cdc61e593b33639efe307
+# ---- script ----
+# | D=/boot/home/haikuports/haiku-libs/haikuwebkit; mkdir -p $D/patches; cp /boot/home/stage/haikuwebkit-1.10.0.recipe $D/ && cp /boot/home/stage/haikuwebkit-1.10.0-arm64.patchset $D/patches/ && printf '%s  %s\n%s  %s\n' 46a4c59c6c140f1401eb7aeb64fd42e721d9588483e1128fa1bac857ce52fb13 $D/haikuwebkit-1.10.0.recipe 1c06f2e9b1d47a88ae5a61d360233f13dee53e9e2cb820927f5b07010d32d27f $D/patches/haikuwebkit-1.10.0-arm64.patchset | sha256sum -c && rm -rf $D/work-1.10.0
+# ---- raw output ----
+/boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe: OK
+/boot/home/haikuports/haiku-libs/haikuwebkit/patches/haikuwebkit-1.10.0-arm64.patchset: OK

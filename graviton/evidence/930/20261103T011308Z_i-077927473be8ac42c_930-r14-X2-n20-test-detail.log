@@ -1,0 +1,8 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X2-n20-test-detail
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T011308Z   end: 20261103T011314Z   rc: 2
+# script sha256: 8b3aa815cae5eb062ca3ecb5ab42734f95afe9c285d6a54943f238f23fb56f65
+# ---- script ----
+# | L=/boot/home/test-nodejs20-20.15.1.log; wc -l $L; grep -aE "^not ok|^=== release|^\[[0-9:]+\|# ---- raw output ----
+/tmp/run-X2-n20-test-detail.sh: line 1: unexpected EOF while looking for matching `"'

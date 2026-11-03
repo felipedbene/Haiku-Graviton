@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-machinecontext-patch
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T014058Z   end: 20261103T014105Z   rc: 0
+# script sha256: 5258ce47d0e705c75102753c76c781d3d096c504a6d224d7ac76b1a2ef516f7a
+# ---- script ----
+# | S=/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit
+# | cd $S && git log --oneline -2 | cat
+# | python3.14 - Source/JavaScriptCore/runtime/MachineContext.h <<'PY'
+# | import sys
+# | p=sys.argv[1]; L=open(p).read().split("\n"); out=[]; i=0; done=0
+# | m={"machineContext.rsp)":"machineContext.sp)","machineContext.rbp)":"machineContext.x[29])","machineContext.rip)":"machineContext.elr)",
+# |    "machineContext.rsi)":"machineContext.x[1])","machineContext.rbx)":"machineContext.x[19])","machineContext.r8)":"machineContext.x[4])"}
+# | while i < len(L):
+# |     out.append(L[i])
+# |     if L[i].strip()=="#elif OS(HAIKU)":
+# |         j=i+1
+# |         while "#elif CPU(X86_64)" not in L[j] and "#if CPU(X86_64)" not in L[j]: out.append(L[j]); j+=1
+# |         out.append(L[j]); ret=L[j+1]; out.append(ret)
+# |         key=[k for k in m if k in ret]; assert len(key)==1, ret
+# |         out.append("#elif CPU(ARM64)"); out.append(ret.replace(key[0], m[key[0]])); done+=1
+# |         i=j+2; continue
+# |     i+=1
+# | assert done==6, done
+# | open(p,"w").write("\n".join(out))
+# | print("patched", done)
+# | PY
+# | git diff --stat; git -c user.name="DeBeOS" -c user.email="packages@debene.dev" commit -q -am "JavaScriptCore: MachineContext accessors for Haiku arm64
+# | 
+# | Haiku's arm64 mcontext_t (struct vregs, headers/posix/arch/arm64/signal.h)
+# | has x[30], lr, sp, elr, spsr. Map the six accessors the same way the Linux
+# | and FreeBSD ARM64 branches do: sp, x[29] (frame pointer), elr (pc), x[1],
+# | x[19] and x[4]." && git format-patch -1 --stdout > /boot/home/stage/haikuwebkit-1.10.0-arm64.patchset && wc -l /boot/home/stage/haikuwebkit-1.10.0-arm64.patchset && git diff HEAD~1 | grep -E "^[+-]" | grep -v "^+++\|^---"
+# ---- raw output ----
+44f89d84 import
+patched 6
+ Source/JavaScriptCore/runtime/MachineContext.h | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+74 /boot/home/stage/haikuwebkit-1.10.0-arm64.patchset
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>(machineContext.sp);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>(machineContext.x[29]);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.elr);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.x[1]);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.x[19]);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.x[4]);

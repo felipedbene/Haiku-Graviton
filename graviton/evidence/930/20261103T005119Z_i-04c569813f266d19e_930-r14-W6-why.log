@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W6-why
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T005119Z   end: 20261103T005125Z   rc: 0
+# script sha256: 1cd95d5c977b55461d30abc04e9b8fc0bd64a2d387a3a3822cc472c36db10bc3
+# ---- script ----
+# | grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing|Failed to find" /boot/home/nb-haikuwebkit-1.10.0.out | tail -4; L=/boot/home/nb-haikuwebkit-1.10.0.log; grep -anE "error:|CMake Error|Error:" $L | grep -v Werror | head -6
+# ---- raw output ----
+haikuwebkit-1.10.0: FAILED, no missing-dep to install -- see /boot/home/nb-haikuwebkit-1.10.0.log
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+382:CMake Error at Source/cmake/WebKitFeatures.cmake:383 (message):
+405:Error: Build has failed - stopping.

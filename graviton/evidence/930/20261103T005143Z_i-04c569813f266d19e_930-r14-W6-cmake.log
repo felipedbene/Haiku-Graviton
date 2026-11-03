@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W6-cmake
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T005143Z   end: 20261103T005149Z   rc: 0
+# script sha256: 34bf5519c59218f5388321ae71a310b3990aa74ec2d8d652b259d04d7f5f7191
+# ---- script ----
+# | L=/boot/home/nb-haikuwebkit-1.10.0.log; sed -n "380,392p" $L
+# ---- raw output ----
+-- Disabling ENABLE_WEBASSEMBLY_OMGJIT since ENABLE_FTL_JIT is disabled.
+-- Disabling USE_SKIA_ENCODERS since USE_SKIA is disabled.
+CMake Error at Source/cmake/WebKitFeatures.cmake:383 (message):
+  ENABLE_WEBASSEMBLY conflicts with ENABLE_C_LOOP.  You must disable one or
+  the other.
+Call Stack (most recent call first):
+  Source/cmake/WebKitFeatures.cmake:391 (_WEBKIT_OPTION_ENFORCE_CONFLICTS)
+  Source/cmake/WebKitFeatures.cmake:469 (_WEBKIT_OPTION_ENFORCE_ALL_CONFLICTS)
+  Source/cmake/OptionsHaiku.cmake:99 (WEBKIT_OPTION_END)
+  Source/cmake/WebKitCommon.cmake:318 (include)
+  CMakeLists.txt:22 (include)
+
+

@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W3-cmakelog
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T001522Z   end: 20261103T001528Z   rc: 0
+# script sha256: 0e26830495b2430f8f307c9a9c67239a31fa64dc884d2e15ca2fea0bed6e80e6
+# ---- script ----
+# | W=/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0; f=$(find $W -name CMakeConfigureLog.yaml 2>/dev/null | head -1); echo "log: $f"; grep -aE "error|undefined reference|cannot find|ld\.lld|not found" "$f" | sort | uniq -c | sort -rn | head -12; grep -nE "CC=|CXX=|clang|gcc|LDFLAGS|fuse-ld|COMPILER" /boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe | head -15
+# ---- raw output ----
+log: /boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit/WebKitBuild/Release/CMakeFiles/CMakeConfigureLog.yaml
+     31       CMAKE_C_FLAGS: "-fdiagnostics-color=always -Wextra -Wall -pipe -fmax-errors=20 -Wno-stringop-overflow -Wno-expansion-to-defined -fno-unswitch-loops -Wno-maybe-uninitialized -Wno-psabi -Wno-misleading-indentation -Wundef -Wpointer-arith -Wmissing-format-attribute -Wformat-security -Wcast-align -Wno-tautological-compare -fdebug-types-section -fno-omit-frame-pointer -fno-strict-aliasing -fno-exceptions"
+     25         collect2: error: ld returned 1 exit status
+     24         ld.lld: error: unknown emulation: aarch64haiku
+      9       CMAKE_CXX_FLAGS: "-fdiagnostics-color=always -Wextra -Wall -pipe -fmax-errors=20 -Wno-dangling-pointer -Wno-invalid-offsetof -Wno-odr -Wno-stringop-overread -Wno-stringop-overflow -Wno-nonnull -Wno-array-bounds -Wno-expansion-to-defined -Wno-noexcept-type -fno-unswitch-loops -Wno-subobject-linkage -Wno-maybe-uninitialized -Wno-psabi -Wno-misleading-indentation -Wundef -Wpointer-arith -Wmissing-format-attribute -Wformat-security -Wcast-align -Wno-tautological-compare -fasynchronous-unwind-tables -fdebug-types-section -fno-omit-frame-pointer -ftrack-macro-expansion=0 --param ggc-min-expand=10 -fno-strict-aliasing -fno-exceptions -fno-rtti -fcoroutines"
+      5       CMAKE_C_FLAGS: "-pipe -fmax-errors=20 -Wno-stringop-overflow -Wno-expansion-to-defined -fno-unswitch-loops -Wno-maybe-uninitialized -Wno-psabi -Wno-misleading-indentation -Wundef -Wpointer-arith -Wmissing-format-attribute -Wformat-security -Wcast-align -Wno-tautological-compare -fdebug-types-section -fno-omit-frame-pointer -fno-strict-aliasing -fno-exceptions"
+      5       CMAKE_CXX_FLAGS: "-pipe -fmax-errors=20 -Wno-dangling-pointer -Wno-invalid-offsetof -Wno-odr -Wno-stringop-overread -Wno-stringop-overflow -Wno-nonnull -Wno-array-bounds -Wno-expansion-to-defined -Wno-noexcept-type -fno-unswitch-loops -Wno-subobject-linkage -Wno-maybe-uninitialized -Wno-psabi -Wno-misleading-indentation -Wundef -Wpointer-arith -Wmissing-format-attribute -Wformat-security -Wcast-align -Wno-tautological-compare -fasynchronous-unwind-tables -fdebug-types-section -fno-omit-frame-pointer -ftrack-macro-expansion=0 --param ggc-min-expand=10 -fno-strict-aliasing -fno-exceptions -fno-rtti -fcoroutines"
+      2       CMAKE_C_FLAGS: "-Wextra -Wall -pipe -fmax-errors=20 -Wno-stringop-overflow -Wno-expansion-to-defined -fno-unswitch-loops -Wno-maybe-uninitialized -Wno-psabi -Wno-misleading-indentation -Wundef -Wpointer-arith -Wmissing-format-attribute -Wformat-security -Wcast-align -Wno-tautological-compare -fdebug-types-section -fno-omit-frame-pointer -fno-strict-aliasing -fno-exceptions"
+      2       CMAKE_CXX_FLAGS: "-Wextra -Wall -pipe -fmax-errors=20 -Wno-dangling-pointer -Wno-invalid-offsetof -Wno-odr -Wno-stringop-overread -Wno-stringop-overflow -Wno-nonnull -Wno-array-bounds -Wno-expansion-to-defined -Wno-noexcept-type -fno-unswitch-loops -Wno-subobject-linkage -Wno-maybe-uninitialized -Wno-psabi -Wno-misleading-indentation -Wundef -Wpointer-arith -Wmissing-format-attribute -Wformat-security -Wcast-align -Wno-tautological-compare -fasynchronous-unwind-tables -fdebug-types-section -fno-omit-frame-pointer -ftrack-macro-expansion=0 --param ggc-min-expand=10 -fno-strict-aliasing -fno-exceptions -fno-rtti -fcoroutines"
+      1       variable: "C_COMPILER_SUPPORTS_-fmax-errors__20"
+      1       variable: "C_COMPILER_SUPPORTS_-Werror__undefined-internal"
+      1       variable: "C_COMPILER_SUPPORTS_-Werror__undefined-inline"
+      1       variable: "CXX_COMPILER_SUPPORTS_-fmax-errors__20"
+23:ARCHITECTURES="all !x86_gcc2"
+65:	gcc${secondaryArchSuffix}_syslibs
+66:	gcc${secondaryArchSuffix}_syslibs_devel
+91:	cmd:gcc$secondaryArchSuffix

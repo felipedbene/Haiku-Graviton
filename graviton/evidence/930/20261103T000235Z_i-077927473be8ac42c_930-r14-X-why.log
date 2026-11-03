@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X-why
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T000235Z   end: 20261103T000241Z   rc: 0
+# script sha256: 743592179115a6e30951ba84067787efac8263582c219fcadd3eb929967aebe0
+# ---- script ----
+# | for f in /boot/home/nb-*.out; do echo "##### $f"; grep -aE "BUILD_OK|FAILED|gave up|Error|error:|unresolv|not found|missing|cannot" $f | head -12; tail -5 $f; done
+# ---- raw output ----
+##### /boot/home/nb-nmap-7.94.out
+nmap-7.94: BUILD_OK (attempt 4)
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  nmap-7.94 =====
+  packages are still in /boot/home/haikuports/packages -- they are NOT in the pool.
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  nmap-7.94 =====
+      The build results above are valid. Do not re-queue these as failed builds -- fix the upload path and re-harvest from /boot/home/haikuports/packages.
+mirror-store skipped: no S3 client on this image (issue 728)
+===== nativebuild done 2026-11-02T23:41:19Z rc=1 =====
+##### /boot/home/nb-nodejs20-20.15.1.out
+nodejs20-20.15.1: NO PROGRESS at attempt 5 -- installing the missing set left it unchanged.
+  unresolved requirement set, one per line, as haikuporter reported it:
+      *** Failed to find a match for "devel:libicudata >= 74": Name not found
+Error: unable to resolve required packages for build for nodejs20-20.15.1
+Error: 	dependency-infos:
+Error: 		/boot/home/haikuports/repository/nodejs20-20.15.1.DependencyInfo
+Error: 		/boot/home/haikuports/repository/nodejs20_devel-20.15.1.DependencyInfo
+Error: 	repositories:
+Error: 		['/boot/home/haikuports/packages', '/boot/system/packages']
+Error: 	Reason: build-requires "devel:libicudata >= 74" of package "nodejs20-20.15.1" could not be resolved
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+  no 's3' verbs, and the interim debeos-ssm-agent is gone. Built
+  packages are still in /boot/home/haikuports/packages -- they are NOT in the pool.
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+      The build results above are valid. Do not re-queue these as failed builds -- fix the upload path and re-harvest from /boot/home/haikuports/packages.
+===== nativebuild done 2026-11-02T23:38:12Z rc=1 =====
+##### /boot/home/nb-tor-0.4.8.12.out
+tor-0.4.8.12: FAILED, no missing-dep to install -- see /boot/home/nb-tor-0.4.8.12.log
+autoreconf: running: automake --add-missing --copy --force-missing
+configure: Libcap was not found. Capabilities will not be usable.
+configure: Transparent proxy support enabled, but missing headers.
+checking whether the compiler accepts -Wmissing-field-initializers... yes
+checking whether the compiler accepts -Wmissing-format-attribute... yes
+checking whether the compiler accepts -Wmissing-noreturn... yes
+checking whether the compiler accepts -Wmissing-selector-name... no
+checking whether the compiler accepts -Wmissing-sysroot... no
+checking whether the compiler accepts -Wmissing-variable-declarations... no
+checking whether the compiler accepts -Wtypename-missing... no
+510:checking whether the compiler accepts -Wmissing-field-initializers... yes
+  no 's3' verbs, and the interim debeos-ssm-agent is gone. Built
+  packages are still in /boot/home/haikuports/packages -- they are NOT in the pool.
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+      The build results above are valid. Do not re-queue these as failed builds -- fix the upload path and re-harvest from /boot/home/haikuports/packages.
+===== nativebuild done 2026-11-02T23:43:53Z rc=1 =====

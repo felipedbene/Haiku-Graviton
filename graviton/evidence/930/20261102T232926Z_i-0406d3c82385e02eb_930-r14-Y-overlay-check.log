@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Y-overlay-check
+# instance: i-0406d3c82385e02eb   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T232926Z   end: 20261102T232933Z   rc: 0
+# script sha256: 3beb199027c5773d2f030f8cd5a4decf3744b9a607fc69799b37538019bbaa37
+# ---- script ----
+# | grep -n "^REVISION" /boot/home/haikuports/dev-libs/softhsm/softhsm2-2.5.0.recipe /boot/home/haikuports/net-vpn/tor/tor-0.4.8.12.recipe 2>&1; ls /boot/home/haikuports/net-vpn/tor/ /boot/home/haikuports/net-vpn/tor/patches; cat /boot/home/r14.log | tail -5
+# ---- raw output ----
+/boot/home/haikuports/dev-libs/softhsm/softhsm2-2.5.0.recipe:15:REVISION="4"
+/boot/home/haikuports/net-vpn/tor/tor-0.4.8.12.recipe:20:REVISION="2"
+/boot/home/haikuports/net-vpn/tor/:
+licenses
+patches
+tor-0.4.8.12.recipe
+tor-0.4.9.15.recipe
+
+/boot/home/haikuports/net-vpn/tor/patches:
+disable_tests_that_hang.diff
+tor-0.4.8.12.patchset
+tor-0.4.9.15.patchset
+=== softhsm2-2.5.0 build start 2026-11-02T23:28:18Z

@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X-build-start
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261102T233302Z   end: 20261102T233311Z   rc: 0
+# script sha256: 9be203821267caa3d37dd9adb8faff6f1c51b691e388d5382ce66b0e1784dfc1
+# ---- script ----
+# | ( sh /boot/home/stage/build.sh > /boot/home/r14.log 2>&1 ) < /dev/null > /dev/null 2>&1 &
+# | echo started; sleep 5; cat /boot/home/r14.log
+# ---- raw output ----
+started
+=== nodejs20-20.15.1 build start 2026-11-02T23:33:05Z

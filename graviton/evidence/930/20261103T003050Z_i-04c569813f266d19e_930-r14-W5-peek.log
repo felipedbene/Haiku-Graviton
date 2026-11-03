@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W5-peek
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003050Z   end: 20261103T003056Z   rc: 0
+# script sha256: 2d48707c7492ab5f25d53537c3ecea2b0755f4c8f2191a6c3258716fe4088c52
+# ---- script ----
+# | grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing" /boot/home/nb-haikuwebkit-1.10.0.out | tail -3; tail -c 400 /boot/home/nb-haikuwebkit-1.10.0.log
+# ---- raw output ----
+4492:FAILED: [code=1] Source/JavaScriptCore/CMakeFiles/LLIntSettingsExtractor.dir/llint/LLIntSettingsExtractor.cpp.o 
+FAILED: [code=1] Source/JavaScriptCore/CMakeFiles/LLIntSettingsExtractor.dir/llint/LLIntSettingsExtractor.cpp.o 
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+ing dependency infos of haikuwebkit-1.10.0
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+haiku-libs::haikuwebkit-1.10.0
+	/boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

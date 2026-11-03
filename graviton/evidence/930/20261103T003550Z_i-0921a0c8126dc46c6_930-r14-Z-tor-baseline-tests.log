@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-Z-tor-baseline-tests
+# instance: i-0921a0c8126dc46c6   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003550Z   end: 20261103T003556Z   rc: 0
+# script sha256: 2d599ca3b3577c53586b2b3f7960d8bce545d4dbbfaf2a4b9f2b479dc53a40fe
+# ---- script ----
+# | ls /boot/system/packages | grep -i openssl3; grep -aE "^(PASS|FAIL|SKIP|ERROR|XFAIL): |^# (TOTAL|PASS|SKIP|FAIL|ERROR)" /boot/home/test-tor-0.4.8.12.log | sort | uniq
+# ---- raw output ----
+openssl3-3.5.9-2-arm64.hpkg
+openssl3_devel-3.5.9-2-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg
+# ERROR: 0
+# FAIL:  8
+# PASS:  17
+# SKIP:  1
+# TOTAL: 26
+FAIL: scripts/maint/practracker/test_practracker.sh
+FAIL: src/test/test-slow
+FAIL: src/test/test_bt.sh
+FAIL: src/test/test_switch_id.sh
+FAIL: src/test/unittest_part1.sh
+FAIL: src/test/unittest_part3.sh
+FAIL: src/test/unittest_part7.sh
+FAIL: src/test/unittest_part8.sh
+PASS: scripts/maint/checkSpaceTest.sh
+PASS: scripts/maint/run_check_subsystem_order.sh
+PASS: src/test/test-memwipe
+PASS: src/test/test-timers
+PASS: src/test/test_cmdline.sh
+PASS: src/test/test_hs_ntor.sh
+PASS: src/test/test_include.sh
+PASS: src/test/test_key_expiration.sh
+PASS: src/test/test_keygen.sh
+PASS: src/test/test_ntor.sh
+PASS: src/test/test_parseconf.sh
+PASS: src/test/test_rebind.sh
+PASS: src/test/test_zero_length_keys.sh
+PASS: src/test/unittest_part2.sh
+PASS: src/test/unittest_part4.sh
+PASS: src/test/unittest_part5.sh
+PASS: src/test/unittest_part6.sh
+SKIP: src/test/fuzz_static_testcases.sh

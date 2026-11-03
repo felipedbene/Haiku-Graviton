@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X2-why
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T005112Z   end: 20261103T005119Z   rc: 0
+# script sha256: 0cae631d82ee8faf3b44c3f6036cf97f6af840ab447bd3f7bf3f031ae2074207
+# ---- script ----
+# | grep -aE "BUILD_OK|FAILED|NO PROGRESS|installing|Failed to find" /boot/home/nb-nodejs20-20.15.1.out | tail -4; L=/boot/home/nb-nodejs20-20.15.1.log; grep -anE " error:|Error:" $L | grep -v Werror | head -6
+# ---- raw output ----
+nodejs20-20.15.1: attempt 1 installing: devel:libnghttp2 
+nodejs20-20.15.1: attempt 2 installing: devel:libuv 
+nodejs20-20.15.1: BUILD_OK (attempt 3)
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  nodejs20-20.15.1 =====

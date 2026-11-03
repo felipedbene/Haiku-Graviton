@@ -1,0 +1,81 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-machinecontext3
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T014028Z   end: 20261103T014035Z   rc: 0
+# script sha256: ca5a4cc56490baef4ec6cabc4d4e0898ab981fbd40511cc93ba3e2c2bbf88af4
+# ---- script ----
+# | S=/boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0/sources/haikuwebkit
+# | f=$S/Source/JavaScriptCore/runtime/MachineContext.h
+# | for n in $(grep -n "OS(HAIKU)" $f | cut -d: -f1); do echo "----- HAIKU@$n"; sed -n "$((n)),$((n+6))p" $f; m=$(awk -v s=$n 'NR>s && /OS\(LINUX\)/ {print NR; exit}' $f); echo "----- LINUX@$m"; sed -n "$m,$((m+14))p" $f | grep -nE "ARM64|regs|sp|pc|#elif CPU|#if CPU" | grep -A1 "ARM64" | head -3; done
+# | cd $S && git status --short 2>/dev/null | head -3; ls -d .git 2>/dev/null
+# ---- raw output ----
+----- HAIKU@152
+#elif OS(HAIKU)
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>(machineContext.rsp);
+#else
+#error Unknown Architecture
+#endif
+#elif OS(FREEBSD)
+----- LINUX@192
+7:#elif CPU(ARM64)
+8:    return reinterpret_cast<void*&>((uintptr_t&) machineContext.sp);
+----- HAIKU@281
+#elif OS(HAIKU)
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>(machineContext.rbp);
+#else
+#error Unknown Architecture
+#endif
+#elif OS(FREEBSD)
+----- LINUX@311
+8:#elif CPU(ARM64)
+9:    return reinterpret_cast<void*&>((uintptr_t&) machineContext.regs[29]);
+----- HAIKU@441
+#elif OS(HAIKU)
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.rip);
+#else
+#error Unknown Architecture
+#endif
+#elif OS(FREEBSD)
+----- LINUX@471
+8:#elif CPU(ARM64)
+9:    return reinterpret_cast<void*&>((uintptr_t&) machineContext.pc);
+----- HAIKU@617
+#elif OS(HAIKU)
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.rsi);
+#else
+#error Unknown Architecture
+#endif
+#elif OS(FREEBSD)
+----- LINUX@647
+8:#elif CPU(ARM64)
+9:    return reinterpret_cast<void*&>((uintptr_t&) machineContext.regs[1]);
+----- HAIKU@680
+#elif OS(HAIKU)
+#if CPU(X86)
+#error Unsupported Architecture
+#elif CPU(X86_64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.rbx);
+#else
+#error Unknown Architecture
+----- LINUX@712
+8:#elif CPU(ARM64)
+9:    return reinterpret_cast<void*>((uintptr_t) machineContext.regs[19]);
+----- HAIKU@802
+#elif OS(HAIKU)
+#if CPU(X86_64)
+    return reinterpret_cast<void*&>((uintptr_t&) machineContext.r8);
+#else
+#error Unknown Architecture
+#endif
+#elif OS(FREEBSD)
+----- LINUX@832
+8:#elif CPU(ARM64)
+9:    return reinterpret_cast<void*&>((uintptr_t&) machineContext.regs[4]);
+?? .clangd
+?? Source/JavaScriptCore/inspector/scripts/codegen/__pycache__/
+?? Source/JavaScriptCore/wasm/__pycache__/
+.git

@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-R-build-summary
+# instance: i-0152696134c543b6a   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T013733Z   end: 20261103T013737Z   rc: 0
+# script sha256: cbb33d7ce857b49c1a2715022693f5b50b7b754f64c988ec0c51752269486027
+# ---- script ----
+# | cat /boot/home/r14.log
+# | ls -la /boot/home/haikuports/packages/
+# | sha256sum /boot/home/haikuports/packages/*.hpkg
+# ---- raw output ----
+=== rtmpdump-2.4_20161210 build start 2026-11-03T01:34:04Z
+=== rtmpdump-2.4_20161210 driver rc=1 2026-11-03T01:37:30Z
+    pkg: rtmpdump-2.4_20161210-9-arm64.hpkg
+    pkg: rtmpdump_devel-2.4_20161210-9-arm64.hpkg
+    pkg: rtmpdump_tools-2.4_20161210-9-arm64.hpkg
+=== rtmpdump-2.4_20161210 no TEST()
+ALLDONE
+total 186
+drwxr-xr-x 1 baron root  2048 Nov  3 01:37 .
+drwxr-xr-x 1 baron root  7168 Nov  3 01:37 ..
+-rw-r--r-- 1 baron root 53239 Nov  3 01:37 rtmpdump-2.4_20161210-9-arm64.hpkg
+-rw-r--r-- 1 baron root 60603 Nov  3 01:37 rtmpdump_devel-2.4_20161210-9-arm64.hpkg
+-rw-r--r-- 1 baron root 51377 Nov  3 01:37 rtmpdump_tools-2.4_20161210-9-arm64.hpkg
+bb7ad5a58f3cbf2b145ea3dd3c8be870a3081f316316f408ea88d1058857afae  /boot/home/haikuports/packages/rtmpdump-2.4_20161210-9-arm64.hpkg
+c0e52a02089cc88f92f8b3dd186807060df0d028d9d20dea68d489995c11d7b3  /boot/home/haikuports/packages/rtmpdump_devel-2.4_20161210-9-arm64.hpkg
+feb395dec5165b4e28b82d184c146e69d105c2665163b0e6f23e9bf47a5436b6  /boot/home/haikuports/packages/rtmpdump_tools-2.4_20161210-9-arm64.hpkg

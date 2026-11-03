@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W5-err
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003114Z   end: 20261103T003120Z   rc: 0
+# script sha256: 1f893bbc1130a00cc8cf966907f08bff8ffcbc69f6e202acb0ae269a12e2491f
+# ---- script ----
+# | L=/boot/home/nb-haikuwebkit-1.10.0.log; n=$(grep -an "FAILED: \[code=1\]" $L | head -1 | cut -d: -f1); sed -n "$((n)),$((n+40))p" $L | grep -vE "^\s*$" | cut -c1-300 | head -40
+# ---- raw output ----
+FAILED: [code=1] Source/JavaScriptCore/CMakeFiles/LLIntSettingsExtractor.dir/llint/LLIntSettingsExtractor.cpp.o 
+/boot/system/bin/c++ -DBUILDING_HAIKU__=1 -DBUILDING_LLIntSettingsExtractor -DBUILDING_WEBKIT=1 -DBUILDING_WITH_CMAKE=1 -DDATA_DIR=\"/packages/haikuwebkit-1.10.0-3/.self/data/WebKit\" -DHAIKU_WEBKIT_VERSION=\"1.10.0\" -DHAVE_CONFIG_H=1 -DPAS_BMALLOC=1 -DUSE_3D_GRAPHICS=0 -D_DEFAULT_SOURCE -D_GLIBCXX
+In file included from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/MacroAssemblerARM64.h:32,
+                 from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/MacroAssembler.h:47,
+                 from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/GPRInfo.h:28,
+                 from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/VMEntryRecord.h:28,
+                 from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/Interpreter.h:35,
+                 from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/VM.h:41,
+                 from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/CallFrame.h:31,
+                 from /sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/WasmCallee.h:32,
+                 from /sources/haikuwebkit/Source/JavaScriptCore/llint/InPlaceInterpreter.h:33,
+                 from /sources/haikuwebkit/Source/JavaScriptCore/llint/LLIntOfflineAsmConfig.h:28,
+                 from /sources/haikuwebkit/Source/JavaScriptCore/llint/LLIntSettingsExtractor.cpp:28:
+/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/ARM64Assembler.h:4047:2: error: #error "The cacheFlush support is missing on this platform."
+ 4047 | #error "The cacheFlush support is missing on this platform."
+      |  ^~~~~
+/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/ARM64Assembler.h: In static member function 'static void JSC::ARM64Assembler::cacheFlush(void*, size_t)':
+/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/ARM64Assembler.h:4021:34: warning: unused parameter 'code' [-Wunused-parameter]
+ 4021 |     static void cacheFlush(void* code, size_t size)
+      |                            ~~~~~~^~~~
+/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/ARM64Assembler.h:4021:47: warning: unused parameter 'size' [-Wunused-parameter]
+ 4021 |     static void cacheFlush(void* code, size_t size)
+      |                                        ~~~~~~~^~~~
+[3079/7207] Generating ../../WebCore/PrivateHeaders/WebCore/CurlCacheEntry.h
+ninja: build stopped: subcommand failed.
+Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 1.
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/haiku-libs/haikuwebkit/work-1.10.0 intact for inspection
+Checking if any dependency-infos need to be updated ...
+	updating dependency infos of haikuwebkit-1.10.0
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+haiku-libs::haikuwebkit-1.10.0
+	/boot/home/haikuports/haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

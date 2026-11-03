@@ -1,0 +1,50 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-X2-n20-icu-smoke
+# instance: i-077927473be8ac42c   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T011346Z   end: 20261103T011354Z   rc: 0
+# script sha256: 762a1b1e489bea012bea208a37a3b62116df48454c49c6d8ff3db4036d577895
+# ---- script ----
+# | cd /tmp; rm -rf n3 n2; mkdir n3 n2
+# | package extract -C n3 /boot/home/haikuports/packages/nodejs20-20.15.1-3-arm64.hpkg
+# | curl -sf -o n2.hpkg https://packages.debene.dev/arm64/packages/nodejs20-20.15.1-2-arm64.hpkg && package extract -C n2 n2.hpkg
+# | for v in n2 n3; do echo "== $v"; N=/tmp/$v/bin/node; $N --version; $N -p 'process.versions.icu + " " + process.versions.unicode + " " + process.versions.openssl'; $N -e 'try{console.log(new Intl.DateTimeFormat("en-US").format(new Date(0)), "|", "ß".localeCompare("ss","de"), "|", new Intl.NumberFormat("de-DE").format(1234.5))}catch(e){console.log("INTL FAIL", e.message)}'; $N -e 'console.log(require("crypto").createHash("sha256").update("x").digest("hex").slice(0,12), require("crypto").getCiphers().length)'; done
+# | ls /boot/system/packages | grep -iE "icu|nodejs"
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 11.52M 100 11.52M   0      0 24.37M      0                              0100 11.52M 100 11.52M   0      0 24.36M      0                              0100 11.52M 100 11.52M   0      0 24.33M      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/nodejs20-20.15.1-2-arm64.hpkg (12083858 bytes)
+== n2
+v20.15.1
+74.1 15.1 3.5.7
+
+<--- Last few GCs --->
+
+
+<--- JS stacktrace --->
+
+FATAL ERROR: DateTimePatternGeneratorCache::CreateGenerator Allocation failed - process out of memory
+----- Native stack trace -----
+
+Abort
+/tmp/run-X2-n20-icu-smoke.sh: line 4: 109870 Abort                      $N -e 'try{console.log(new Intl.DateTimeFormat("en-US").format(new Date(0)), "|", "ß".localeCompare("ss","de"), "|", new Intl.NumberFormat("de-DE").format(1234.5))}catch(e){console.log("INTL FAIL", e.message)}'
+2d711642b726 130
+== n3
+v20.15.1
+74.1 15.1 3.5.9
+
+<--- Last few GCs --->
+
+
+<--- JS stacktrace --->
+
+FATAL ERROR: DateTimePatternGeneratorCache::CreateGenerator Allocation failed - process out of memory
+----- Native stack trace -----
+
+Abort
+/tmp/run-X2-n20-icu-smoke.sh: line 4: 109894 Abort                      $N -e 'try{console.log(new Intl.DateTimeFormat("en-US").format(new Date(0)), "|", "ß".localeCompare("ss","de"), "|", new Intl.NumberFormat("de-DE").format(1234.5))}catch(e){console.log("INTL FAIL", e.message)}'
+2d711642b726 130
+icu66-66.1-3-arm64.hpkg
+icu66_devel-66.1-3-arm64.hpkg
+icu74-74.1_bootstrap-1-arm64.hpkg
+icu74_devel-74.1_bootstrap-1-arm64.hpkg

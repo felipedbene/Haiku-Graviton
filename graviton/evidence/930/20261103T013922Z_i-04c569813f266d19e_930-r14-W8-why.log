@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W8-why
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T013922Z   end: 20261103T013928Z   rc: 0
+# script sha256: 7a646fd4acddf97879fa4e242e20c4956d2dcd50976cd71b5409a05d7397567a
+# ---- script ----
+# | L=/boot/home/nb-haikuwebkit-1.10.0.log
+# | grep -aE "^\[[0-9]+/[0-9]+\]" $L | tail -1
+# | grep -anE "FAILED: |error: |Error [0-9]|No space|Killed|out of memory|virtual memory exhausted" $L | grep -v Werror | head -12
+# | df -k /boot | tail -1
+# ---- raw output ----
+[6317/7207] Building CXX object Source/JavaScriptCore/CMakeFiles/JavaScriptCore.dir/__/__/JavaScriptCore/DerivedSources/unified-sources/UnifiedSource-runtime-23.cpp.o
+8426:FAILED: [code=1] Source/JavaScriptCore/CMakeFiles/JavaScriptCore.dir/__/__/JavaScriptCore/DerivedSources/unified-sources/UnifiedSource-heap-5.cpp.o 
+8430:/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/MachineContext.h:156:2: error: #error Unknown Architecture
+8433:/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/MachineContext.h:285:2: error: #error Unknown Architecture
+8436:/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/MachineContext.h:445:2: error: #error Unknown Architecture
+8439:/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/MachineContext.h:621:2: error: #error Unknown Architecture
+8442:/sources/haikuwebkit/WebKitBuild/Release/JavaScriptCore/PrivateHeaders/JavaScriptCore/MachineContext.h:686:2: error: #error Unknown Architecture
+   Root Inode: 524288

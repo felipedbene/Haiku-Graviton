@@ -1,0 +1,34 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-W-green-jit-check
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T003247Z   end: 20261103T003305Z   rc: 1
+# script sha256: 88883432e055a8c8e0b1bc59b6de921123ded28d1420bbce7a75f607a24482b6
+# ---- script ----
+# | cd /tmp && rm -rf gw && mkdir gw && curl -sf -o hw.hpkg https://packages.debene.dev/arm64/packages/haikuwebkit-1.10.0-2-arm64.hpkg && package extract -C gw hw.hpkg && ls gw/lib/ | head; for l in gw/lib/libJavaScriptCore.so* gw/lib/libWebKitLegacy.so*; do [ -f "$l" ] || continue; echo "== $l"; strings -a "$l" | grep -cE "CLoop|cloop"; strings -a "$l" | grep -m3 -E "llint_.*_cloop|CLoop::execute|JITCode|ARM64Assembler|baselineJIT|DFG"; nm -D --defined-only "$l" 2>/dev/null | grep -cE "JSC3JIT|JSC3DFG|cacheFlush"; done
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0 49 37.57M  49 18.60M   0      0 13.76M      0   00:02   00:01   00:01 14.38M100 37.57M 100 37.57M   0      0 23.51M      0   00:01   00:01         14.38M100 37.57M 100 37.57M   0      0 23.51M      0   00:01   00:01         14.38M100 37.57M 100 37.57M   0      0 23.50M      0   00:01   00:01         14.38M
+[srccache] MISS https://packages.debene.dev/arm64/packages/haikuwebkit-1.10.0-2-arm64.hpkg (39398589 bytes)
+libJavaScriptCore.so.18
+libJavaScriptCore.so.18.7.4
+libWebKitLegacy.so.1
+libWebKitLegacy.so.1.10.0
+== gw/lib/libJavaScriptCore.so.18
+62
+_ZN3JSC19numberOfDFGCompilesEPK15OpaqueJSContextPK13OpaqueJSValue
+_ZN3JSC19numberOfDFGCompilesENS_7JSValueE
+_ZN3WTF13printInternalERNS_11PrintStreamEN3JSC3DFG15CapabilityLevelE
+5
+== gw/lib/libJavaScriptCore.so.18.7.4
+62
+_ZN3JSC19numberOfDFGCompilesEPK15OpaqueJSContextPK13OpaqueJSValue
+_ZN3JSC19numberOfDFGCompilesENS_7JSValueE
+_ZN3WTF13printInternalERNS_11PrintStreamEN3JSC3DFG15CapabilityLevelE
+5
+== gw/lib/libWebKitLegacy.so.1
+0
+0
+== gw/lib/libWebKitLegacy.so.1.10.0
+0
+0

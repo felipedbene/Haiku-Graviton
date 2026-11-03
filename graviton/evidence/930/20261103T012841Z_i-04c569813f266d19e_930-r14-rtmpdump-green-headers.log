@@ -1,0 +1,16 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-rtmpdump-green-headers
+# instance: i-04c569813f266d19e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261103T012841Z   end: 20261103T012848Z   rc: 0
+# script sha256: 2cf142f0060f9cee8514c086a0ec46e5109c452a14031480d9db2b110a59e738
+# ---- script ----
+# | cd /tmp && rm -rf rd && mkdir rd && curl -sf -o rd.hpkg https://packages.debene.dev/arm64/packages/rtmpdump_devel-2.4_20161210-8-arm64.hpkg && package extract -C rd rd.hpkg && for f in $(find rd -name "*.h" | sort); do echo "$(sha256sum $f | cut -c1-16) $(basename $f)"; done
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  67117 100  67117   0      0 435.0k      0                              0100  67117 100  67117   0      0 433.5k      0                              0100  67117 100  67117   0      0 431.6k      0                              0
+[srccache] MISS https://packages.debene.dev/arm64/packages/rtmpdump_devel-2.4_20161210-8-arm64.hpkg (67117 bytes)
+a42eab041b8988e9 amf.h
+5ebaaab65010e4c6 http.h
+0e55d0a324895100 log.h
+fc540545083b6cd6 rtmp.h
