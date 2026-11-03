@@ -20,6 +20,12 @@ LICENSE="GNU LGPL v2
 # ("ld.lld: error: unknown emulation: aarch64haiku"), so every CMake link probe fails
 # and configure stops at "Could NOT find Threads". Keep GNU ld, the linker the
 # Haiku toolchain targets. Linker choice only; no feature changes.
+# -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON: JavaScriptCore's ARM64Assembler::cacheFlush has no
+# Haiku branch (#error "The cacheFlush support is missing on this platform."), so the
+# ARM64 JIT does not build for Haiku. The published 1.10.0-2 is already a C_LOOP build
+# (its libJavaScriptCore.so.18 carries the CLoop interpreter, 62 cloop strings, no
+# assembler), so this reproduces the shipped configuration rather than cutting a
+# feature. A Haiku ARM64 JIT (clear_caches() for cacheFlush) is separate porting work.
 REVISION="3"
 
 SOURCE_URI="https://codeberg.org/haiku/haikuwebkit/releases/download/HaikuWebKit-$portVersion/haikuwebkit-$portVersion.tar.gz"
@@ -112,7 +118,7 @@ BUILD()
 	export DISABLE_ASLR=1
 	export PKG_CONFIG_LIBDIR="`finddir B_SYSTEM_DIRECTORY`/$relativeDevelopLibDir/pkgconfig"
 	Tools/Scripts/build-webkit --haiku --no-webkit2 --no-fatal-warnings --makeargs "$jobArgs" \
-		--cmakeargs="-DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_BUILD_TYPE=Release -DUSE_LD_LLD=OFF -DSHOULD_INSTALL_JS_SHELL=ON -DCMAKE_CXX_FLAGS='-ftrack-macro-expansion=0 --param ggc-min-expand=10'"
+		--cmakeargs="-DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_BUILD_TYPE=Release -DUSE_LD_LLD=OFF -DENABLE_JIT=OFF -DENABLE_C_LOOP=ON -DSHOULD_INSTALL_JS_SHELL=ON -DCMAKE_CXX_FLAGS='-ftrack-macro-expansion=0 --param ggc-min-expand=10'"
 }
 
 INSTALL()
