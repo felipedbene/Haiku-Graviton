@@ -9,6 +9,7 @@ Linux reference `i-0a14e8aca787249b7` (Ubuntu arm64, stock Bun 1.4.4, Node 24.22
 
 | Area | Result | Evidence |
 |---|---|---|
+| nodejs24 **24.22.2-1** (issue 954), against openssl3 3.5.9-3 + brotli 1.2.1-2 | built natively, **staged, not published**; h2coalesce954 0/20 (was 20/20), many-writes-and-destroy 0 hung / 5120 (was 46 / 2560); suites 4582/23 + 119/2, every change attributed; Claude Code acceptance unchanged | section "2026-11-03 — nodejs24 24.22.2-1" below |
 | nodejs24 24.21.0 built natively (full ICU 78.3) | built, **not published** | `20261031T043619Z_i-0e7bed4928e0f7bf7_nodejs24-harvest-teaminfo.log` |
 | Node acceptance on Haiku (Intl, zstd, execve, workers, TLS) | 21/23 pass; `fs.watch` ENOSYS ×2 | `20261031T113433Z_i-0e7bed4928e0f7bf7_node24-accept-haiku-v2.log` |
 | node-gyp N-API addon on Haiku | builds + loads (`add(2,40) = 42`) with `CC=gcc CXX=g++` | `20261031T135458Z_i-0e7bed4928e0f7bf7_node24-gyp-addon-cxx.log` |
@@ -174,6 +175,128 @@ Per-test diff: `20261102T080118Z_workstation_fe7-node-suites-vs-7036360701.log`.
   - `worker-init-failure`: FAIL -> TIMEOUT. PR 921 lets `ulimit -n 128` work, so the test now runs and hangs (0/2 alone; a direct run hit the 60 s cap). That is open **#918**; commented there.
   - `parallel/test-os` stays FAIL with a new cause. PR 925 cleared the priority assertion at `test-os.js:92`, and it now fails at `:104`, `os.cpus().length > 0`. `os.cpus()` is `[]`, but the kernel reports 16 CPUs and 16 CORE topology nodes (`075855Z…fe7-cpu-topology-probe`). The HaikuPorts patchset comments out the body of `GetCPUInfo` (`src/node_os.cc`), so this is a nodejs24 packaging defect and the image is fine. That is open **#917**; commented there.
 - **Still failing, unchanged:** 42 others. #873 ×19, class (c) ×9, #882 ×5 (incl. `fs-promises`), #899 ×2 (`dgram-connect-send-empty-*`), nghttp2 packaging ×2, and one each for #929 (`fs-stat-date`), #871 (`http-writable-true-after-close`), uid 0 (`process-euid-egid`), `setproctitle` and `worker-memory`.
+
+## 2026-11-03 — nodejs24 24.22.2-1 (issue 954), fresh image 4ef344f5fa
+
+Upgrades the nodejs24 port from 24.21.0-3 to **24.22.2-1**. As of 2026-11-02, 24.22.2 (released
+2026-10-27) is the newest 24.22.x on nodejs.org. Upstream fixed the http2 hang behind #954 in
+24.22.0 (nodejs/node PRs 66016 and 63249). The image is the trunk bake `ami-0714f26bbe99a9bfb` (4ef344f5fa,
+now `canonical=true`), the same image as the section below. The staged build was **compiled against
+openssl3 3.5.9-3** (PR 983, `bn(64,64)`, staged at `openssl359r3/`, not yet in green) and
+**tested with 3.5.9-3 installed**. Evidence names below drop the `_i-…_node2422-` part.
+Instances: builder `i-066dc28d2cbad4d38` (c7g.8xlarge, 100 GiB), "before" box `i-026c80afb9d541163`,
+baseline box `i-0ca2654bea9e3130b`, final box `i-08822cbd7be76701c` (c8g.4xlarge, 60 GiB, all three).
+Linux arm64 controls: `i-0fa1104eea75865c6`, `i-02fbec148c76653db`, `i-07e75f6fd31c11c0e`. All are
+tagged `Project=haiku-graviton`, `auto-stop=no`, and all have been terminated.
+
+**Source.** The 24.22.2 tarball sha256 `b2f5443a…` matches `SHASUMS256.txt`. That file's signature
+verifies against key `5BE8A3F6…B168D356` (Antoine du Hamel), which is listed in nodejs/release-keys
+`keys.list` (`180603Z_workstation…source-verify`). After the build succeeded, the tarball was mirrored to
+`sources.debene.dev/nodejs/` the #172 way, and the copy read back matches the same sha256
+(`223740Z_workstation…source-mirror`). 24.21.0 was never mirrored; that URL still returns 403.
+
+**Patchsets** (PATCHES.md K5, `181220Z_workstation…patchset-rebase`). Every hunk was carried over
+unchanged, none was dropped, and none was reworked:
+- **HaikuPorts `nodejs-24.21.0.patchset` → `nodejs-24.22.2.patchset`.** It has 6 commits and 30 files.
+  They apply cleanly with `git am` and also with a 3-way rebase, which gives an identical tree. Seven
+  hunks only moved: `common.gypi` 1–6 (+3/+3/+3/+6/+6/+14 lines) and the x86_64 `openssl.gypi` (+3).
+  Regenerated with `git format-patch`, the patchset now applies with no offset, and the only lines
+  that differ from the old one are `From`/`index`/`@@`. Upstream changed 7 of the patched files
+  between the two releases, each away from the patched lines; V8 is still 13.6.233.17.
+- **DeBeOS `nodejs-24.21.0-debeos.patchset` → `nodejs-24.22.2-debeos.patchset`.** It has 4 patches.
+  On top of the rebased HaikuPorts set they apply byte-for-byte, with no offset. The only change is
+  that three "Applies on top of" lines now name the new file.
+- `patch -p1` on Haiku applied the pair the same way: 30 + 4 files, rc 0, with no
+  offset/fuzz lines (`003903Z…final-node-src-prepare`).
+
+**Build** (haikuporter on the builder, libuv 1.52.1-5 from green):
+1. **Attempt 1** stopped at `src/node_zlib.cc:2153`: `BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH` was
+   not declared (`202117Z…build1-failure`). Node 24.22.0 exposes that brotli error code with the
+   CVE-2026-111497 fix, and only brotli **1.2.1** has it. Green serves 1.2.0, which is vulnerable;
+   that is filed as **#985**. HaikuPorts' own `brotli-1.2.1.recipe` built unmodified as
+   brotli/_devel/_python310/_python3.14 1.2.1-2 (`202300Z…brotli121-build`). The nodejs24 recipe
+   now requires `lib:libbrotli{dec,enc} >= 1.2.1`.
+2. **Attempt 2**, built against openssl3 3.5.9-2: `exit 0` (`222920Z…build2-result-baseline-ossl2`).
+   It is kept only as an engineering baseline and is not staged.
+3. **Attempt 3**, built after installing the sha-checked `openssl359r3/` set (`223011Z…builder-start3-ossl3`):
+   `configuration.h` has `SIXTY_FOUR_BIT_LONG`, and the haikuporter chroot lists
+   `openssl3-3.5.9-3`/`openssl3_devel-3.5.9-3`. Result `exit 0`. The packaged node reports openssl
+   3.5.9, brotli 1.2.1, nghttp2 1.63.0 and libuv 1.52.1. `listimage` shows it loading
+   `/boot/system/lib/libcrypto.so.3`, sha256 `3bc4c731…`; the 3.5.9-2 box had `66a6050f…`.
+   RSA sign/verify, DH and `checkPrime` pass (`003626Z…build3-ossl3-result-and-stage`).
+
+**#954 on the final build** (`004015Z…final-954`). The "before" column is the same image with green
+nodejs24 24.21.0-3 (`182356Z…954-before`):
+
+| Check | 24.21.0-3 (before) | 24.22.2-1, openssl 3.5.9-2 (baseline) | **24.22.2-1, openssl 3.5.9-3 (staged)** |
+|---|---|---|---|
+| `h2coalesce954.mjs coalesced` ×20 | **20/20 server never closes** | 0/20 | **0/20** |
+| `h2coalesce954.mjs separate` ×20 (control) | 0/20 | 0/20 | 0/20 |
+| `test-http2-many-writes-and-destroy`, `hang954.py` 8-way, 30 s deadline | **46 hung / 2560** (12+11+12+11), all fin-wait2/close-wait like #954 | 0 / 5120 | **0 hung, 0 nonzero / 5120**; max completed run 0.53 s |
+
+**Node suites, 24.22.2 tree** (the recipe's tarball and both patchsets,
+`003903Z…final-node-src-prepare`). Run as `: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap`,
+stdin a pipe, full plans (`004249Z…final-full-suites`):
+
+| Suite | 4ef344f5fa rev 3 (RESULTS, below) | same image, 24.21.0-3 (control) | **24.22.2-1 (staged)** |
+|---|---|---|---|
+| parallel | plan 1..4507: 4487 ok (323 skip) / 20 not ok (0 timeout) | 4487 ok (323 skip) / 20 not ok (1 timeout) | **plan 1..4605: 4582 ok (333 skip) / 23 not ok (1 timeout)**, 498 s |
+| sequential | 1..120: 118 / 2 | 118 / 2 | **1..121: 119 / 2**, 119 s |
+
+24.22.2 adds 99 test files: 98 in parallel and 1 in sequential, which accounts for the plan growth.
+There are 10 more skips (323 → 333). Neither the rev-3 run nor the control kept per-test skip lists,
+so those 10 are not attributed one by one; the final run's skip list, each with its reason, is in
+`005406Z…final-residual-changed-tests`. Per-test diff:
+`20261103T012324Z_workstation_node2422-suites-vs-4ef-rev3.log`. Attribution, against the 4ef rev-3 run:
+- **1 went from fail to pass:** `child-process-spawnsync-args`. It was the one-off `spawnSync pwd
+  EPIPE` in the rev-3 run, 1 failure in 43, and is not attributed to anything.
+- **1 went from pass to fail: `http2-sensitive-headers`.** It fails 5/5 here and passes on 24.21.0.
+  The cause is the system nghttp2 1.63.0, not DeBeOS: on Linux, one 24.22.2 `--shared-nghttp2`
+  build fails 0/10 with nghttp2 1.63.0 loaded and passes 10/10 with 1.70.0 loaded
+  (`225046Z…linux-shared-nghttp2-ab`). Filed as **#991**, together with the two older
+  `misbehaving-flow-control` failures of the same cause.
+- **`net-connect-abort-controller` TIMEOUT.** It passes 10/10 alone and hangs 4/48 under `--repeat 48`.
+  It also timed out on the same image with 24.21.0-3 (control), and Linux gives 48/48. This is
+  **#946**, which was fixed after this image; commented there.
+- **2 new tests fail:**
+  - `fs-rmSync-special-char-additional-error`: uid 0. As root, `rmSync` succeeds and the cleanup
+    `chmod` then hits ENOENT. Linux root gives the same 0/5, and a normal Linux user passes 5/5
+    (`224915Z…linux-two-tests`). Same class as `process-euid-egid`.
+  - `perf-hooks-sliding-window-histogram`: intermittent, about 5% (1/1 suite, 1/10 and 2/40 alone,
+    2/48 under load). Linux passes 296/296. `uv_hrtime()` is monotonic on Haiku: 0 backward steps in
+    2.4 G reads (`010139Z…hrtime-sliding-window-probe`). The cause is not established; filed as **#997**.
+- **22 still fail, unchanged:** the same list as the rev-3 run.
+- **Baseline (openssl 3.5.9-2) vs staged (3.5.9-3):** the same failures, apart from the
+  intermittent `sliding-window-histogram` and the #946 timeout, plus 1 more skip. The baseline's
+  per-test skip list was not kept, so that skip is not attributed.
+
+**Claude Code acceptance, staged build** (claude_code 2.1.314-2 from green; install
+`003812Z…final-install`). These are the 4ef344f5fa scripts unchanged, with fresh presigned URLs:
+
+| Check | 4ef344f5fa (24.21.0-2) | **24.22.2-1 + openssl 3.5.9-3** | Evidence (`20261103T…`) |
+|---|---|---|---|
+| Node acceptance (Intl, zstd, execve, workers, TLS, fs.watch) | 23/23 | **23/23 ALL PASS**: undici 7.30.1, ICU 78.3; fs.watch delivers `rename`/`change` | `010257Z…final-node24-accept` |
+| node-gyp addon (`haiku_devel` + `binutils`) | 42 | `add(2,40) = 42` | `010322Z…final-node24-gyp-addon-cxx` |
+| `--version`, `doctor`, `cc-teaminfo`, vectors | pass | pass (`haiku-arm64`, `Search: OK`, `check-vectors: ALL PASS`) | `010355Z…final-claude-accept` |
+| `claude -p` via Bedrock | `pong`, 7 s | `pong`, rc 0, 9 s; `is_error:false` | `010534Z…final-bedrock-headless-smoke` |
+| Headless Read/Grep/Bash | correct | `aurora-7\|src/a.js,src/deep/b.js\|Haiku` | `010604Z…final-bedrock-headless-tools` |
+| Grep tool vs rg | 0.469 s / 0.150 s | 0.445 s / rg median 0.148 s, same 3 files, hooks fire | `010634Z…final-bedrock-grep-timing` |
+| Interactive TUI: edit, bash, resize, /compact | pass | pass: edit on disk, `bash-ok-Haiku`, both reflows, same /compact behaviour | `010705Z…final-bedrock-tui-session` |
+| `/compact` + recall ×5 | 5/5 | **5/5** (12–22 s) | `010853Z…final-compact-haiku-x5` |
+| FileChanged through `libuv_fs_event` (fs.watch) | fired 2×, `delivers` | fired 2×, `delivers`; vectors pass | `011154Z…final-uninstall-claude`, `011207Z…final-enduser-fresh-install-3` |
+| Ctrl-C, `-p` with no credentials | identical | identical (only the session id differs) | `011416Z…final-tui-ctrlc-and-headless` |
+| Worker scenarios | 13/13 | 13/13 | `011500Z…final-compat-scenarios-on-haiku` |
+| Bun.spawn / Bun.net vs Bun | 188/24/2/0/4; 35/6/1 | identical: spawn 188 / 24 / 2 / **0** / 4; net 35 / 6 / 1 (Node's Response defaults). Run over SSH, as at 4ef. The same script over SSM gives 1 spawn mismatch, `env spread`, because SSM runs with `HOME` unset; the scenario prints `$HOME` (`compat/test/spawn-diff-step.sh:5`) | `022350Z…final-scen-haiku-node-v2-ssh` (SSM run: `011532Z…final-scen-haiku-node-v2`) |
+| TUI snapshots vs Linux | 60/64, 33/33 | 60/64 (same 4 keycap snapshots), 33/33; all 64 snapshots byte-identical to the 4ef344f5fa capture | `011634Z…final-tui-capture-B-haiku`, `012248Z_workstation_node2422-tui-compare` |
+| 30-min working soak | 123/123, 4–6 s, RSS 419 → 582 MB | **123/123**, 4–7 s (110 at 4–5 s), one process throughout, RSS 426 → 561 MB | `012215Z…final-working-soak-v3-haiku` |
+| 30-min idle soak | 324 → 184 MB | alive, 12 threads, 314 → 187 MB, flat at the end | `015256Z…final-tui-soak-30min` |
+
+**Staged, not published:** `s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/node2422/` holds
+nodejs24 and nodejs24_devel 24.22.2-1, and brotli, brotli_devel, brotli_python310 and
+brotli_python3.14 1.2.1-2, with `SHA256SUMS`. The set was re-downloaded and verified on the
+workstation (`003704Z_workstation…staged-set-check`). It needs openssl3 3.5.9-3 from
+`openssl359r3/` in the same publish: the package only requires `lib:libcrypto >= 3`, so pkgman
+cannot stop it from being paired with 3.5.9-2.
 
 ## 2026-11-02 — fresh trunk image 4ef344f5fa
 

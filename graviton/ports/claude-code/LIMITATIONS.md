@@ -222,7 +222,9 @@ unix socket in a temp dir; the checker names each accepted difference as KNOWN).
 - **Version-sensitive internals:** the dispatch handler wrapper relies on Node's
   fetch handing dispatchers a legacy-API handler (`onHeaders(status, rawHeaders, …)`),
   true of undici 7.x. Node 24.21.0 (the Haiku build) must bundle undici 7.x too
-  (`build-tree.sh` checks the major); not yet run on Haiku.
+  (`build-tree.sh` checks the major); not yet run on Haiku. Node 24.22.2 bundles undici
+  7.30.1, the same version the compat layer pins (`process.versions.undici` in
+  `evidence/*_node2422-*node24-accept.log`).
 
 ### Global `Worker`
 - **Uncaught-error message:** Bun's `ErrorEvent.message` embeds a formatted source excerpt
@@ -562,3 +564,29 @@ don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
   format change and a rework of the query/index model.
 - **Decision (owner, 2026-11-02):** keep `EPERM`, as on FAT and exFAT. No format change. The
   affected tests stay failing honestly; they are not skipped or weakened.
+
+### nodejs24 links system nghttp2 1.63.0, older than the 1.70.0 Node bundles (#991)
+- **What:** nodejs24 is built `--shared-nghttp2` against the repo's nghttp2 1.63.0. Node 24
+  bundles nghttp2 1.70.0. Three http2 suite tests fail because of the difference:
+  `http2-misbehaving-flow-control` and `-paused` (since 24.21.0), and, new with 24.22.2,
+  `http2-sensitive-headers`. That one dies with `ERR_INTERNAL_ASSERTION` in
+  `JSStreamSocket.doWrite` while running http2 over an in-process `duplexPair()`.
+- **Why:** library version, not the platform. On Linux arm64, a single Node 24.22.2
+  `--shared-nghttp2` build fails the test 0/10 with nghttp2 1.63.0 loaded. Loaded with
+  1.70.0 (built from Node's own `deps/nghttp2`), it passes 10/10
+  (`evidence/20261102T225046Z_i-02fbec148c76653db_node2422-linux-shared-nghttp2-ab.log`).
+- **Effect on Claude Code:** none measured. Claude Code's model traffic is HTTPS/1.1 through
+  undici (C21/C22), and no acceptance check uses `node:http2`. A user program that runs
+  `node:http2` over a JS stream (`duplexPair`, a JS-wrapped TLS socket) can hit the
+  assertion.
+- **Fix would need:** an nghttp2 >= 1.70.0 recipe (HaikuPorts has only 1.63.0), then a
+  nodejs24 rebuild against it.
+
+### nodejs24 24.22.x needs brotli >= 1.2.1 (#985)
+- **What:** Node 24.22.0 exposes `zlib.constants.BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH`,
+  which first ships in brotli 1.2.1, the release that fixes CVE-2026-111497. Against green's
+  brotli 1.2.0, `src/node_zlib.cc` does not compile
+  (`evidence/20261102T202117Z_i-066dc28d2cbad4d38_node2422-build1-failure.log`).
+- **Effect:** the 24.22.2 recipe requires `lib:libbrotli{dec,enc} >= 1.2.1`. It can only be
+  published together with brotli 1.2.1-2, built unmodified from HaikuPorts' recipe and staged
+  beside it. That is not a limit of the port, but it ties two publishes together.
