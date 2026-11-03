@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: builder-stage-libuv-r6
+# instance: i-0348fbac1e6a4d7d3   region: us-west-2
+# ssm command: 09f1acdb-4cdf-4c89-8162-c2b832c58dab (agent status: Success)
+# start: 20261102T220559Z   end: 20261102T220609Z   rc: 0   log bytes: 433
+# script sha256: ffb640ded561f56bf2584ab7e644c9bef8f64f17da82cdb36490772edbcb4369
+# ---- script ----
+# | set -u
+# | cd /boot/home/haikuports/packages || exit 1
+# | sha256sum libuv-1.52.1-6-arm64.hpkg libuv_devel-1.52.1-6-arm64.hpkg libuv_debuginfo-1.52.1-6-arm64.hpkg > /tmp/SHA256SUMS || exit 1
+# | cat /tmp/SHA256SUMS
+# | curl -sSf -T libuv-1.52.1-6-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/libuv-1.52.1-6-arm64.hpkg?<PRESIGNED>' && echo uploaded libuv-1.52.1-6-arm64.hpkg || exit 1
+# | curl -sSf -T libuv_devel-1.52.1-6-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/libuv_devel-1.52.1-6-arm64.hpkg?<PRESIGNED>' && echo uploaded libuv_devel-1.52.1-6-arm64.hpkg || exit 1
+# | curl -sSf -T libuv_debuginfo-1.52.1-6-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/libuv_debuginfo-1.52.1-6-arm64.hpkg?<PRESIGNED>' && echo uploaded libuv_debuginfo-1.52.1-6-arm64.hpkg || exit 1
+# | curl -sSf -T /tmp/SHA256SUMS 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/SHA256SUMS?<PRESIGNED>' && echo uploaded SHA256SUMS || exit 1
+# ---- raw output ----
+7c444663fbcd47bd0be5fb0d50af12951df89d477e7b27849e5710c3c12fe123  libuv-1.52.1-6-arm64.hpkg
+13a5fe48daede1e192c969029da2c7abb40e237d45060b17325376b294125333  libuv_devel-1.52.1-6-arm64.hpkg
+ba7cbc0baeac67d7723b4d28592b12b35a508f94f214db462bf5f77df7d5ae5d  libuv_debuginfo-1.52.1-6-arm64.hpkg
+uploaded libuv-1.52.1-6-arm64.hpkg
+uploaded libuv_devel-1.52.1-6-arm64.hpkg
+uploaded libuv_debuginfo-1.52.1-6-arm64.hpkg
+uploaded SHA256SUMS

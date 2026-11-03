@@ -1,0 +1,554 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: builder-provision
+# instance: i-0348fbac1e6a4d7d3   region: us-west-2
+# ssm command: f5425f91-9555-4e67-8708-8ad8b0f2be96 (agent status: detached)
+# start: 20261102T214011Z   end: 20261102T214209Z   rc: 1   log bytes: 41819
+# script sha256: 876ce3492e3404d3c9a9f870f40a7886616e677aa5b8dd26923770ef1208b60d
+# ---- script ----
+# | set -u
+# | uname -a; df -k /boot | tail -1
+# | feed() { for i in $(seq 60); do echo 1; done; echo yes; }
+# | feed | pkgman install curl 2>&1 | tail -3
+# | cd /boot/home || exit 1
+# | /boot/system/bin/curl -sSf -o haiku-provision-native-builder 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/agent-939/haiku-provision-native-builder?<PRESIGNED>' || exit 1
+# | echo "afbea5ab12ddaba1ef965ac55fda662053c065c5fbe302082f6f13b590104a4b  haiku-provision-native-builder" | sha256sum -c - || exit 1
+# | sh ./haiku-provision-native-builder; rc=$?
+# | echo "provision rc=$rc"
+# | exit $rc
+# ---- raw output ----
+Haiku ip-10-128-12-126.us-west-2.comp R1~beta6+development hrev59996 Nov  2 2026 14:49:36 arm64 other Haiku
+   Root Inode: 524288
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_21:40:13"
+[system] Cleaning up ...
+[system] Done.
+haiku-provision-native-builder: OK
+provision: refreshing the package repo
+provision: installing toolchain: gcc binutils make m4 patch gawk diffutils bison flex 	python3.14 autoconf automake libtool perl gettext gettext_libintl 	coreutils haiku_devel curl git gzip tar unzip which dos2unix xz_utils libxml2 	cmake ninja meson pkgconf texinfo
+P¶|ÔÆ repochecksum-1 []
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+Validating checksum for DeBeOS...done.
+The following changes will be made:
+  in system:
+    install package gcc-13.3.0_2026_03_29_bootstrap-1 from repository DeBeOS
+    install package binutils-2.41_2026_03_10_bootstrap-2 from repository DeBeOS
+    install package make-4.4.1_bootstrap-1 from repository DeBeOS
+    install package m4-1.4.19_bootstrap-1 from repository DeBeOS
+    install package patch-2.7.6-2 from repository DeBeOS
+    install package diffutils-3.12-1 from repository DeBeOS
+    install package perl-5.42.2-1 from repository DeBeOS
+    install package haiku_devel-r1~beta6_hrev59996-1 from repository DeBeOS
+    install package gzip-1.14-1 from repository DeBeOS
+    install package tar-1.35-2 from repository DeBeOS
+    install package which-2.21-6 from repository DeBeOS
+    install package dos2unix-7.5.1-1 from repository DeBeOS
+    install package xz_utils-5.8.3-1 from repository DeBeOS
+    install package libxml2-2.15.3-1 from repository DeBeOS
+    install package ninja-1.13.2-3 from repository DeBeOS
+    install package pkgconf-1.5.3-2 from repository DeBeOS
+    install package bzip2-1.0.8-3 from repository DeBeOS
+    install package expat-2.8.2-1 from repository DeBeOS
+    install package libedit-20230828_3.1-1 from repository DeBeOS
+    install package libffi-3.4.6-1 from repository DeBeOS
+    install package libtool_libltdl-2.5.4-1 from repository DeBeOS
+    install package mandoc-1.14.6-1 from repository DeBeOS
+    install package nano-9.1-1 from repository DeBeOS
+    install package libuv-1.52.1-5 from repository DeBeOS
+    install package rhash-1.4.6-2 from repository DeBeOS
+    install package file_data-5.43-2 from repository DeBeOS
+    install package readline-8.3.003-1 from repository DeBeOS
+    install package flex-2.6.4-4 from repository DeBeOS
+    install package bison-3.8.2_bootstrap-1 from repository DeBeOS
+    install package texinfo-7.2-1 from repository DeBeOS
+    install package automake-1.18.1-1 from repository DeBeOS
+    install package autoconf-2.72-1 from repository DeBeOS
+    install package gettext-1.0-1 from repository DeBeOS
+    install package unzip-6.10c23-6 from repository DeBeOS
+    install package libpcre2-10.45-1 from repository DeBeOS
+    install package cmake-4.1.6-1 from repository DeBeOS
+    install package file-5.43-2 from repository DeBeOS
+    install package sqlite-3.50.4.0-1 from repository DeBeOS
+    install package libtool-2.5.4-1 from repository DeBeOS
+    install package git-2.54.0-1 from repository DeBeOS
+    install package python3.14-3.14.7-1 from repository DeBeOS
+    install package meson-1.11.1-2 from repository DeBeOS
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) :        gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg...done.
+       binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg...done.
+       make-4.4.1_bootstrap-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/make-4.4.1_bootstrap-1-arm64.hpkg...done.
+       m4-1.4.19_bootstrap-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/m4-1.4.19_bootstrap-1-arm64.hpkg...done.
+       patch-2.7.6-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/patch-2.7.6-2-arm64.hpkg...done.
+       diffutils-3.12-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/diffutils-3.12-1-arm64.hpkg...done.
+       perl-5.42.2-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/perl-5.42.2-1-arm64.hpkg...done.
+       haiku_devel-r1~beta6_hrev59996-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/haiku_devel-r1~beta6_hrev59996-1-arm64.hpkg...done.
+       gzip-1.14-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/gzip-1.14-1-arm64.hpkg...done.
+       tar-1.35-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/tar-1.35-2-arm64.hpkg...done.
+       which-2.21-6-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/which-2.21-6-arm64.hpkg...done.
+       dos2unix-7.5.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/dos2unix-7.5.1-1-arm64.hpkg...done.
+       xz_utils-5.8.3-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/xz_utils-5.8.3-1-arm64.hpkg...done.
+       libxml2-2.15.3-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libxml2-2.15.3-1-arm64.hpkg...done.
+       ninja-1.13.2-3-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/ninja-1.13.2-3-arm64.hpkg...done.
+       pkgconf-1.5.3-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/pkgconf-1.5.3-2-arm64.hpkg...done.
+       bzip2-1.0.8-3-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/bzip2-1.0.8-3-arm64.hpkg...done.
+       expat-2.8.2-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/expat-2.8.2-1-arm64.hpkg...done.
+       libedit-20230828_3.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libedit-20230828_3.1-1-arm64.hpkg...done.
+       libffi-3.4.6-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libffi-3.4.6-1-arm64.hpkg...done.
+       libtool_libltdl-2.5.4-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libtool_libltdl-2.5.4-1-arm64.hpkg...done.
+       mandoc-1.14.6-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/mandoc-1.14.6-1-arm64.hpkg...done.
+       nano-9.1-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/nano-9.1-1-arm64.hpkg...done.
+       libuv-1.52.1-5-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libuv-1.52.1-5-arm64.hpkg...done.
+       rhash-1.4.6-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/rhash-1.4.6-2-arm64.hpkg...done.
+       file_data-5.43-2-any.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/file_data-5.43-2-any.hpkg...done.
+       readline-8.3.003-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/readline-8.3.003-1-arm64.hpkg...done.
+       flex-2.6.4-4-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/flex-2.6.4-4-arm64.hpkg...done.
+       bison-3.8.2_bootstrap-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/bison-3.8.2_bootstrap-1-arm64.hpkg...done.
+       texinfo-7.2-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/texinfo-7.2-1-arm64.hpkg...done.
+       automake-1.18.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/automake-1.18.1-1-arm64.hpkg...done.
+       autoconf-2.72-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/autoconf-2.72-1-arm64.hpkg...done.
+       gettext-1.0-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/gettext-1.0-1-arm64.hpkg...done.
+       unzip-6.10c23-6-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/unzip-6.10c23-6-arm64.hpkg...done.
+       libpcre2-10.45-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libpcre2-10.45-1-arm64.hpkg...done.
+       cmake-4.1.6-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/cmake-4.1.6-1-arm64.hpkg...done.
+       file-5.43-2-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/file-5.43-2-arm64.hpkg...done.
+       sqlite-3.50.4.0-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/sqlite-3.50.4.0-1-arm64.hpkg...done.
+       libtool-2.5.4-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libtool-2.5.4-1-arm64.hpkg...done.
+       git-2.54.0-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/git-2.54.0-1-arm64.hpkg...done.
+       python3.14-3.14.7-1-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/python3.14-3.14.7-1-arm64.hpkg...done.
+       meson-1.11.1-2-any.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/meson-1.11.1-2-any.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_21:40:13-1"
+[system] Cleaning up ...
+[system] Done.
+provision: generator tier on PATH: cmake ninja meson pkg-config makeinfo (ok)
+provision: makeinfo runs on a real document (ok)
+provision: superseding the bootstrap coreutils with the pool's (issue 748)
+ À† óÏ repochecksum-1 []
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+*** please enter 'yes' or 'no'
+Validating checksum for DeBeOS...done.
+The following changes will be made:
+  in system:
+    upgrade package coreutils-9.9_bootstrap-1 to 9.11-2 from repository DeBeOS
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) :  p‡ óÏ coreutils-9.11-2-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/coreutils-9.11-2-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-02_21:40:26"
+[system] Cleaning up ...
+[system] Done.
+provision: uname -p: arm64 (ok)
+provision: python3.14 zlib: ok
+provision: #136 Class 24: installing source-acquisition clients (tolerant): mercurial subversion breezy lha cvs
+provision: #136 Class 24: mercurial installed (or already present)
+provision: #136 Class 24: subversion NOT available in the pool (skipped; a port needing it stays a Class-20 publish task -- not fatal to provisioning)
+provision: #136 Class 24: breezy NOT available in the pool (skipped; a port needing it stays a Class-20 publish task -- not fatal to provisioning)
+provision: #136 Class 24: lha installed (or already present)
+provision: #136 Class 24: cvs NOT available in the pool (skipped; a port needing it stays a Class-20 publish task -- not fatal to provisioning)
+provision: python3 -> python3.14 symlink: /boot/home/config/non-packaged/bin/python3
+provision: #171 overlay: gnu/sched.h+crypt.h already C89-safe; skipping
+provision: #329 overlay: neither AUXV_OVERLAY_URL nor AUXV_OVERLAY_S3 set; skipping
+provision: cloning ports tree (shallow) -> /boot/home/haikuports
+Cloning into '/boot/home/haikuports'...
+Updating files:  10% (764/7213)Updating files:  11% (794/7213)Updating files:  12% (866/7213)Updating files:  13% (938/7213)Updating files:  14% (1010/7213)Updating files:  15% (1082/7213)Updating files:  16% (1155/7213)Updating files:  17% (1227/7213)Updating files:  17% (1294/7213)Updating files:  18% (1299/7213)Updating files:  19% (1371/7213)Updating files:  20% (1443/7213)Updating files:  21% (1515/7213)Updating files:  22% (1587/7213)Updating files:  23% (1659/7213)Updating files:  24% (1732/7213)Updating files:  24% (1735/7213)Updating files:  25% (1804/7213)Updating files:  26% (1876/7213)Updating files:  27% (1948/7213)Updating files:  28% (2020/7213)Updating files:  29% (2092/7213)Updating files:  30% (2164/7213)Updating files:  31% (2237/7213)Updating files:  32% (2309/7213)Updating files:  33% (2381/7213)Updating files:  34% (2453/7213)Updating files:  35% (2525/7213)Updating files:  36% (2597/7213)Updating files:  37% (2669/7213)Updating files:  37% (2670/7213)Updating files:  38% (2741/7213)Updating files:  39% (2814/7213)Updating files:  40% (2886/7213)Updating files:  41% (2958/7213)Updating files:  42% (3030/7213)Updating files:  43% (3102/7213)Updating files:  44% (3174/7213)Updating files:  45% (3246/7213)Updating files:  46% (3318/7213)Updating files:  46% (3367/7213)Updating files:  47% (3391/7213)Updating files:  48% (3463/7213)Updating files:  49% (3535/7213)Updating files:  50% (3607/7213)Updating files:  51% (3679/7213)Updating files:  52% (3751/7213)Updating files:  53% (3823/7213)Updating files:  54% (3896/7213)Updating files:  54% (3951/7213)Updating files:  55% (3968/7213)Updating files:  56% (4040/7213)Updating files:  57% (4112/7213)Updating files:  58% (4184/7213)Updating files:  59% (4256/7213)Updating files:  60% (4328/7213)Updating files:  61% (4400/7213)Updating files:  62% (4473/7213)Updating files:  63% (4545/7213)Updating files:  63% (4560/7213)Updating files:  64% (4617/7213)Updating files:  65% (4689/7213)Updating files:  66% (4761/7213)Updating files:  67% (4833/7213)Updating files:  68% (4905/7213)Updating files:  69% (4977/7213)Updating files:  70% (5050/7213)Updating files:  71% (5122/7213)Updating files:  72% (5194/7213)Updating files:  72% (5213/7213)Updating files:  73% (5266/7213)Updating files:  74% (5338/7213)Updating files:  74% (5393/7213)Updating files:  75% (5410/7213)Updating files:  76% (5482/7213)Updating files:  77% (5555/7213)Updating files:  78% (5627/7213)Updating files:  79% (5699/7213)Updating files:  80% (5771/7213)Updating files:  81% (5843/7213)Updating files:  82% (5915/7213)Updating files:  83% (5987/7213)Updating files:  84% (6059/7213)Updating files:  85% (6132/7213)Updating files:  86% (6204/7213)Updating files:  87% (6276/7213)Updating files:  88% (6348/7213)Updating files:  88% (6395/7213)Updating files:  89% (6420/7213)Updating files:  89% (6454/7213)Updating files:  90% (6492/7213)Updating files:  91% (6564/7213)Updating files:  92% (6636/7213)Updating files:  93% (6709/7213)Updating files:  94% (6781/7213)Updating files:  95% (6853/7213)Updating files:  96% (6925/7213)Updating files:  97% (6997/7213)Updating files:  98% (7069/7213)Updating files:  98% (7072/7213)Updating files:  99% (7141/7213)Updating files: 100% (7213/7213)Updating files: 100% (7213/7213), done.
+provision: #764 overlay: fetching from https://github.com/felipedbene/Haiku-Graviton.git (graviton)
+Cloning into '/boot/home/.overlay-src'...
+provision: #764 overlay: fetched -> /boot/home/haikuports-patches
+provision: #764 overlay: applying /boot/home/haikuports-patches -> /boot/home/haikuports (no --stage1)
+overlay-apply: updated /boot/home/haikuports/app-text/aiksaurus/aiksaurus-1.2.2~git.recipe
+overlay-apply: created /boot/home/haikuports/media-libs/aom/aom-3.12.1.recipe (new port)
+overlay-apply: updated /boot/home/haikuports/dev-util/astyle/astyle-3.4.8.recipe
+overlay-apply: updated /boot/home/haikuports/games-emulation/atari++/atari++-1.81.recipe
+overlay-apply: SKIP autoconf-2.72.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: updated /boot/home/haikuports/dev-build/autoconf/autoconf2.71-2.71.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/autotrace/autotrace-0.40.0_20230301.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/axel/axel-2.17.11.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/bebuilder/bebuilder-0.5.2~git.recipe
+overlay-apply: updated /boot/home/haikuports/net-dns/bind_utils/bind_utils-9.16.50.recipe
+overlay-apply: updated /boot/home/haikuports/games-puzzle/blobwars/blobwars-2.00.recipe
+overlay-apply: updated /boot/home/haikuports/app-benchmarks/bonnie++/bonnie++-2.00a.recipe
+overlay-apply: updated /boot/home/haikuports/app-office/calcurse/calcurse-4.8.0.recipe
+overlay-apply: SKIP cmake-4.1.6.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: updated /boot/home/haikuports/haiku-apps/cmake_haiku/cmake_haiku-git.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/convmv/convmv-2.05.recipe
+overlay-apply: placed /boot/home/haikuports/sys-apps/coreutils/coreutils-9.11.recipe (new version)
+overlay-apply: placed /boot/home/haikuports/net-misc/curl/curl-8.21.0.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/www-client/ddgr/ddgr-2.3~git.recipe
+overlay-apply: updated /boot/home/haikuports/app-mobilephone/dfu-util/dfu_util-0.9.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-misc/digiclock/digiclock-1.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/dmtx-utils/dmtx_utils-0.7.6.recipe
+overlay-apply: updated /boot/home/haikuports/sys-fs/dosfstools/dosfstools-4.1.recipe
+overlay-apply: updated /boot/home/haikuports/net-mail/dovecot/dovecot-2.3.21.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/draco/draco-1.5.6.recipe
+overlay-apply: updated /boot/home/haikuports/app-i18n/enca/enca-1.19.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/epoll_shim/epoll_shim-0.0.20230411.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/erlang/erlang-20.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-shells/es/es-0.9.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-tcltk/expect/expect-5.45.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/farmhash/farmhash-1.2~git.recipe
+overlay-apply: placed /boot/home/haikuports/media-video/ffmpeg/ffmpeg7-7.1.recipe (new ffmpeg version series)
+overlay-apply: placed /boot/home/haikuports/media-video/ffmpeg/ffmpeg_x264-8.1.2.recipe (flavor of ffmpeg)
+overlay-apply:   + /boot/home/haikuports/media-video/ffmpeg/patches/ffmpeg_x264-8.1.2.patchset
+overlay-apply: updated /boot/home/haikuports/media-libs/fontconfig/fontconfig-2.18.2.recipe
+overlay-apply: updated /boot/home/haikuports/games-arcade/freegish/freegish-1.0~20170110.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/freeimage/freeimage-3.18.0.recipe
+overlay-apply: updated /boot/home/haikuports/sys-fs/fswatch/fswatch-1.14.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/ftgl/ftgl-2.1.5.recipe
+overlay-apply: updated /boot/home/haikuports/sys-devel/gettext/gettext-1.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/gflags/gflags-2.2.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-util/global/global-6.6.3.recipe
+overlay-apply: updated /boot/home/haikuports/games-board/gnugo/gnugo-3.8.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/gophernicus/gophernicus-2.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/sys-block/gpart/gpart-0.3~git.recipe
+overlay-apply: placed /boot/home/haikuports/media-gfx/graphicsmagick/graphicsmagick-1.3.40.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/sci-visualization/gri/gri-2.12.23.recipe
+overlay-apply: updated /boot/home/haikuports/sys-devel/haiku-format/haiku_format-22.1.0.recipe
+overlay-apply: placed /boot/home/haikuports/media-libs/harfbuzz/harfbuzz-14.2.0.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/app-editors/hteditor/hteditor-2.1.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-python/html5lib/html5lib-1.1.recipe
+overlay-apply: placed /boot/home/haikuports/dev-libs/icu/icu67-67.1.recipe (new icu version series)
+overlay-apply: placed /boot/home/haikuports/dev-libs/icu/icu78-78.3.recipe (new icu version series)
+overlay-apply: updated /boot/home/haikuports/dev-libs/irrxml/irrxml-1.2.recipe
+overlay-apply: updated /boot/home/haikuports/sys-devel/jam/jam-2.5_2021_10_29.recipe
+overlay-apply: updated /boot/home/haikuports/dev-util/keystone/keystone-0.9.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/kona/kona-20190226.recipe
+overlay-apply: created /boot/home/haikuports/sys-cluster/kubectl/kubectl-1.37.1.recipe (new port)
+overlay-apply:   + /boot/home/haikuports/sys-cluster/kubectl/patches/kubectl-1.37.1.patchset
+overlay-apply: updated /boot/home/haikuports/app-misc/lcdproc/lcdproc-0.5.9.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/lensfun/lensfun-0.3.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libavif/libavif-0.9.3.recipe
+overlay-apply:   + /boot/home/haikuports/media-libs/libavif/patches/libavif-0.9.3.patchset
+overlay-apply: updated /boot/home/haikuports/media-libs/libavif/libavif1.0-1.4.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libcddb/libcddb-1.3.2.recipe
+overlay-apply: placed /boot/home/haikuports/app-emulation/libdsk/libdsk-1.5.22.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/media-libs/libexif/libexif-0.6.22.recipe
+overlay-apply: placed /boot/home/haikuports/dev-vcs/libfossil/libfossil-2026.09.13.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/media-libs/libfpx/libfpx-1.3.1.10.recipe
+overlay-apply: updated /boot/home/haikuports/dev-games/libggz/libggz-0.99.5.recipe
+overlay-apply: placed /boot/home/haikuports/dev-libs/libgit2/libgit2_1.9-1.9.1.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/app-i18n/libhangul/libhangul-0.1.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libjpeg-turbo/libjpeg_turbo-3.1.4.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libjxl/libjxl-0.6.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libmcrypt/libmcrypt-2.5.8.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libmetalink/libmetalink-0.1.3.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libmirage/libmirage-3.2.3.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libmtp/libmtp-1.1.22.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/libnpupnp/libnpupnp-5.0.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libplacebo/libplacebo-7.351.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libpng/libpng16-1.6.53.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libsdl2/libsdl2-2.32.10.recipe
+overlay-apply: updated /boot/home/haikuports/sci-libs/libsigrokdecode/libsigrokdecode-0.5.3.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/libspectrum/libspectrum-1.4.4.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libsquish/libsquish-1.15.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/libsrtp/libsrtp-1.5.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libtomcrypt/libtomcrypt-1.18.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libtommath/libtommath-1.2.0.recipe
+overlay-apply: placed /boot/home/haikuports/dev-libs/libtommath/libtommath-1.3.0.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/dev-build/libtool/libtool-2.5.4.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/libtorrent/libtorrent-0.13.8.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libvpx/libvpx1.16-1.16.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libvterm/libvterm-0.0.681.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libxml2/libxml2-2.15.3.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libxo/libxo-1.6.0.recipe
+overlay-apply: updated /boot/home/haikuports/sys-libs/linenoise/linenoise-1.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/llama-cpp/llama_cpp-b4889.recipe
+overlay-apply:   + /boot/home/haikuports/dev-cpp/llama-cpp/patches/llama_cpp-b4889.patchset
+overlay-apply: placed /boot/home/haikuports/dev-cpp/llama-cpp/llama_cpp_g3-b4889.recipe (flavor of llama_cpp)
+overlay-apply:   + /boot/home/haikuports/dev-cpp/llama-cpp/patches/llama_cpp_g3-b4889.patchset
+overlay-apply: updated /boot/home/haikuports/sys-devel/llvm/llvm21-21.1.8.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/lnlauncher/lnlauncher-1.1.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-misc/mdate/mdate-1.7.0.3.recipe
+overlay-apply: updated /boot/home/haikuports/sys-libs/mesa/mesa-25.3.6.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/mimetic/mimetic-0.9.8.recipe
+overlay-apply: updated /boot/home/haikuports/net-dialup/minicom/minicom-2.7.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-crypt/minisign/minisign-0.11.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/mkdepend/mkdepend-1.7.recipe
+overlay-apply: updated /boot/home/haikuports/app-shells/mksh/mksh-59c.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/mm_common/mm_common-1.0.6.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/mosh/mosh-1.3.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-sound/mpc/musicpc-0.34.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/nesalizer/nesalizer-1.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/games-roguelike/nethack/nethack-3.6.2.recipe
+overlay-apply: updated /boot/home/haikuports/net-analyzer/netperf/netperf-2.7.0.recipe
+overlay-apply: updated /boot/home/haikuports/games-puzzle/neverball/neverball-1.6.1~20190808.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/nodejs/nodejs20-20.15.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/openal/openal-1.21.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-i18n/opencc/opencc-1.1.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+overlay-apply:   + /boot/home/haikuports/dev-libs/openssl/patches/openssl3-3.5.9.patchset
+overlay-apply: updated /boot/home/haikuports/dev-python/pbr/pbr-5.5.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/perl/perl-5.42.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/pkcs11-helper/pkcs11_helper-1.30.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/png2ico/png2ico-2002.12.08.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/polyclipping/polyclipping-6.4.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/portsmf/portsmf-239.recipe
+overlay-apply: updated /boot/home/haikuports/sci-libs/primesieve/primesieve-7.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/pystring/pystring-1.1.4.recipe
+overlay-apply: updated /boot/home/haikuports/app-editors/qemacs/qemacs-0.4.1~pre20170225.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/qhull/qhull-8.0.2.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/quicklaunch/quicklaunch-1.9.recipe
+overlay-apply: updated /boot/home/haikuports/dev-games/recastnavigation/recastnavigation-1.6.0.recipe
+overlay-apply: updated /boot/home/haikuports/net-irc/rhapsody_irc/rhapsody_irc-0.28b.recipe
+overlay-apply: updated /boot/home/haikuports/dev-util/robin-map/robin_map-0.6.3.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/rpcsvc-proto/rpcsvc_proto-1.4.3.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-misc/rssavers/rssavers-0.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/ruby/ruby-3.2.9.recipe
+overlay-apply: updated /boot/home/haikuports/games-roguelike/sais/sais-1.6.3~git.recipe
+overlay-apply: placed /boot/home/haikuports/haiku-apps/samedi/samedi-1.1.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/media-gfx/sane_backends/sane_backends-1.3.1.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/sawteeth/sawteeth-1.4.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-misc/screen/screen-4.99.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl2_image/sdl2_image-2.8.12.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl2_sound/sdl2_sound-2.0.1~06112022.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl_gfx/sdl_gfx-2.0.26.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl_net/sdl_net-1.2.8.recipe
+overlay-apply: updated /boot/home/haikuports/games-arcade/sdlscavenger/sdlscavenger-145.4.recipe
+overlay-apply: updated /boot/home/haikuports/games-fps/serious_sam/serious_sam-1.10~git.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/sharutils/sharutils-4.15.2.recipe
+overlay-apply: created /boot/home/haikuports/dev-libs/simde/simde-0.8.2.recipe (new port)
+overlay-apply: placed /boot/home/haikuports/dev-libs/simdjson/simdjson-5.0.2.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/net-im/slack++/slack++-0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/squirrel/squirrel-3.2.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/sum_it/sum_it-0.2beta.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-games/superfreecell/superfreecell-0.1.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-games/surgescript/surgescript-0.5.5.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/svt-av1/svt_av13-3.0.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/tar/tar-1.35.recipe
+overlay-apply: updated /boot/home/haikuports/games-action/teeworlds/teeworlds-0.7.5.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/tesseract/tesseract-3.05.02.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/texlive/texlive-2026.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/htmltidy/tidy-5.8.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/tk/tk-8.6.10.recipe
+overlay-apply: placed /boot/home/haikuports/app-misc/tmux/tmux-3.7c.recipe (new version)
+overlay-apply: updated /boot/home/haikuports/net-ftp/tnftp/tnftp-20151004.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lua/toluapp/toluapp-1.0.93.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/tweeny/tweeny-3.2.0.recipe
+overlay-apply: updated /boot/home/haikuports/app-i18n/uchardet/uchardet-0.0.7.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/unarr/unarr-1.0.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/unshield/unshield-1.5.1.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/uploadit/uploadit-1.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/vc/vc-1.4.3.recipe
+overlay-apply: updated /boot/home/haikuports/sci-libs/vmaf/vmaf-1.5.1.recipe
+overlay-apply: updated /boot/home/haikuports/games-arcade/vvvvvv/vvvvvv-2.3.6.recipe
+overlay-apply: updated /boot/home/haikuports/media-sound/waveedit/waveedit-1.1.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/windowtailor/windowtailor-0.3.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/wput/wput-0.6.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/x16-emulator/x16_emulator-46.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/x264/x264-20220222.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/x265/x265-3.5.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/xcftools/xcftools-1.0.7.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.7-0.7.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.8-0.8.0.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/zopfli/zopfli-1.0.3.recipe
+overlay-apply: SKIP zstd-1.5.6.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: SKIP zstd-1.5.7.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: 158 updated, 19 placed, 6 patchset(s), 4 stage-1 skipped, 0 unplaced
+provision: #764 overlay: 177 overlay recipe(s) verified byte-identical in /boot/home/haikuports
+provision: cloning haikuporter -> /boot/home/haikuporter
+Cloning into '/boot/home/haikuporter'...
+provision: #47: defaulting CMAKE_POLICY_VERSION_MINIMUM=3.5 in haikuporter cmakeDirArgs
+provision: #47 cmakeDirArgs patched
+provision: #136: seeding CMAKE_POLICY_VERSION_MINIMUM=3.5 in haikuporter filteredEnvironment
+provision: #136 filteredEnvironment patched
+provision: #136 Class 2: adding cmd:gzip/tar/unzip/which to haikuporter scriptletPrerequirements
+provision: #136 scriptletPrerequirements patched
+provision: #136 Class 8: defaulting CMAKE_BUILD_TYPE=Release in haikuporter cmake wrapper
+provision: #136 Class 8 cmake wrapper patched
+provision: #758: batching packageEntries' per-file dirname/mkdir/mv in haikuporter
+provision: FATAL #758: packageEntries anchor B appears 0 times in /boot/home/haikuporter/HaikuPorter/ShellScriptlets.py, expected once -- haikuporter changed, re-check the patch
+provision rc=1

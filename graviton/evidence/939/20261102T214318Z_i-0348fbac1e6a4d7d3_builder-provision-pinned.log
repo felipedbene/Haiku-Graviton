@@ -1,0 +1,309 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: builder-provision-pinned
+# instance: i-0348fbac1e6a4d7d3   region: us-west-2
+# ssm command: d165e0bc-b518-417c-9c5a-f7b45a1fac95 (agent status: detached)
+# start: 20261102T214318Z   end: 20261102T214424Z   rc: 0   log bytes: 23346
+# script sha256: 6cb5fa4dd078d0c845fa6ec807c9e5641c47efb53e0d228514a1131479611715
+# ---- script ----
+# | set -u
+# | # Second attempt: origin/graviton's provisioner (haikuporter pinned, #866). The first
+# | # attempt used an older copy that cloned haikuporter HEAD and stopped at the #758 anchor.
+# | cd /boot/home || exit 1
+# | rm -rf /boot/home/haikuporter
+# | /boot/system/bin/curl -sSf -o haiku-provision-native-builder 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/agent-939/haiku-provision-native-builder-trunk?<PRESIGNED>' || exit 1
+# | echo "daf7d327574e48ea75ca8fe879a49e7faffcb681770255149a398b4f1c76fea9  haiku-provision-native-builder" | sha256sum -c - || exit 1
+# | sh ./haiku-provision-native-builder; rc=$?
+# | echo "provision rc=$rc"
+# | exit $rc
+# ---- raw output ----
+haiku-provision-native-builder: OK
+provision: refreshing the package repo
+provision: installing toolchain: gcc binutils make m4 patch gawk diffutils bison flex 	python3.14 autoconf automake libtool perl gettext gettext_libintl 	coreutils haiku_devel curl git gzip tar unzip which dos2unix xz_utils libxml2 	cmake ninja meson pkgconf texinfo
+P†0Y repochecksum-1 []
+m4-1.4.19_bootstrap-1 from repository system is already installed.
+git-2.54.0-1 from repository system is already installed.
+gettext-1.0-1 from repository system is already installed.
+flex-2.6.4-4 from repository system is already installed.
+libtool-2.5.4-1 from repository system is already installed.
+texinfo-7.2-1 from repository system is already installed.
+make-4.4.1_bootstrap-1 from repository system is already installed.
+autoconf-2.72-1 from repository system is already installed.
+cmake-4.1.6-1 from repository system is already installed.
+xz_utils-5.8.3-1 from repository system is already installed.
+gcc-13.3.0_2026_03_29_bootstrap-1 from repository system is already installed.
+perl-5.42.2-1 from repository system is already installed.
+unzip-6.10c23-6 from repository system is already installed.
+bison-3.8.2_bootstrap-1 from repository system is already installed.
+haiku_devel-r1~beta6_hrev59996-1 from repository system is already installed.
+meson-1.11.1-2 from repository system is already installed.
+tar-1.35-2 from repository system is already installed.
+python3.14-3.14.7-1 from repository system is already installed.
+pkgconf-1.5.3-2 from repository system is already installed.
+diffutils-3.12-1 from repository system is already installed.
+ninja-1.13.2-3 from repository system is already installed.
+which-2.21-6 from repository system is already installed.
+curl-8.21.0-1 from repository system is already installed.
+dos2unix-7.5.1-1 from repository system is already installed.
+gawk-3.1.8_bootstrap-2 from repository system is already installed.
+binutils-2.41_2026_03_10_bootstrap-2 from repository system is already installed.
+patch-2.7.6-2 from repository system is already installed.
+gettext_libintl-1.0-1 from repository system is already installed.
+automake-1.18.1-1 from repository system is already installed.
+coreutils-9.11-2 from repository system is already installed.
+gzip-1.14-1 from repository system is already installed.
+libxml2-2.15.3-1 from repository system is already installed.
+Nothing to do.
+Validating checksum for DeBeOS...done.
+provision: generator tier on PATH: cmake ninja meson pkg-config makeinfo (ok)
+provision: makeinfo runs on a real document (ok)
+provision: superseding the bootstrap coreutils with the pool's (issue 748)
+À¦8ª repochecksum-1 []
+Nothing to do.
+Validating checksum for DeBeOS...done.
+provision: uname -p: arm64 (ok)
+provision: python3.14 zlib: ok
+provision: #136 Class 24: installing source-acquisition clients (tolerant): mercurial subversion breezy lha cvs
+provision: #136 Class 24: mercurial installed (or already present)
+provision: #136 Class 24: subversion NOT available in the pool (skipped; a port needing it stays a Class-20 publish task -- not fatal to provisioning)
+provision: #136 Class 24: breezy NOT available in the pool (skipped; a port needing it stays a Class-20 publish task -- not fatal to provisioning)
+provision: #136 Class 24: lha installed (or already present)
+provision: #136 Class 24: cvs NOT available in the pool (skipped; a port needing it stays a Class-20 publish task -- not fatal to provisioning)
+provision: python3 -> python3.14 symlink: /boot/home/config/non-packaged/bin/python3
+provision: #171 overlay: gnu/sched.h+crypt.h already C89-safe; skipping
+provision: #329 overlay: neither AUXV_OVERLAY_URL nor AUXV_OVERLAY_S3 set; skipping
+provision: ports tree already present: /boot/home/haikuports
+provision: #764 overlay: using /boot/home/haikuports-patches (already on this box)
+provision: #764 overlay: applying /boot/home/haikuports-patches -> /boot/home/haikuports (no --stage1)
+overlay-apply: updated /boot/home/haikuports/app-text/aiksaurus/aiksaurus-1.2.2~git.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/aom/aom-3.12.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-util/astyle/astyle-3.4.8.recipe
+overlay-apply: updated /boot/home/haikuports/games-emulation/atari++/atari++-1.81.recipe
+overlay-apply: SKIP autoconf-2.72.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: updated /boot/home/haikuports/dev-build/autoconf/autoconf2.71-2.71.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/autotrace/autotrace-0.40.0_20230301.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/axel/axel-2.17.11.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/bebuilder/bebuilder-0.5.2~git.recipe
+overlay-apply: updated /boot/home/haikuports/net-dns/bind_utils/bind_utils-9.16.50.recipe
+overlay-apply: updated /boot/home/haikuports/games-puzzle/blobwars/blobwars-2.00.recipe
+overlay-apply: updated /boot/home/haikuports/app-benchmarks/bonnie++/bonnie++-2.00a.recipe
+overlay-apply: updated /boot/home/haikuports/app-office/calcurse/calcurse-4.8.0.recipe
+overlay-apply: SKIP cmake-4.1.6.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: updated /boot/home/haikuports/haiku-apps/cmake_haiku/cmake_haiku-git.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/convmv/convmv-2.05.recipe
+overlay-apply: updated /boot/home/haikuports/sys-apps/coreutils/coreutils-9.11.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/curl/curl-8.21.0.recipe
+overlay-apply: updated /boot/home/haikuports/www-client/ddgr/ddgr-2.3~git.recipe
+overlay-apply: updated /boot/home/haikuports/app-mobilephone/dfu-util/dfu_util-0.9.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-misc/digiclock/digiclock-1.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/dmtx-utils/dmtx_utils-0.7.6.recipe
+overlay-apply: updated /boot/home/haikuports/sys-fs/dosfstools/dosfstools-4.1.recipe
+overlay-apply: updated /boot/home/haikuports/net-mail/dovecot/dovecot-2.3.21.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/draco/draco-1.5.6.recipe
+overlay-apply: updated /boot/home/haikuports/app-i18n/enca/enca-1.19.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/epoll_shim/epoll_shim-0.0.20230411.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/erlang/erlang-20.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-shells/es/es-0.9.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-tcltk/expect/expect-5.45.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/farmhash/farmhash-1.2~git.recipe
+overlay-apply: updated /boot/home/haikuports/media-video/ffmpeg/ffmpeg7-7.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-video/ffmpeg/ffmpeg_x264-8.1.2.recipe
+overlay-apply:   + /boot/home/haikuports/media-video/ffmpeg/patches/ffmpeg_x264-8.1.2.patchset
+overlay-apply: updated /boot/home/haikuports/media-libs/fontconfig/fontconfig-2.18.2.recipe
+overlay-apply: updated /boot/home/haikuports/games-arcade/freegish/freegish-1.0~20170110.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/freeimage/freeimage-3.18.0.recipe
+overlay-apply: updated /boot/home/haikuports/sys-fs/fswatch/fswatch-1.14.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/ftgl/ftgl-2.1.5.recipe
+overlay-apply: updated /boot/home/haikuports/sys-devel/gettext/gettext-1.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/gflags/gflags-2.2.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-util/global/global-6.6.3.recipe
+overlay-apply: updated /boot/home/haikuports/games-board/gnugo/gnugo-3.8.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/gophernicus/gophernicus-2.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/sys-block/gpart/gpart-0.3~git.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/graphicsmagick/graphicsmagick-1.3.40.recipe
+overlay-apply: updated /boot/home/haikuports/sci-visualization/gri/gri-2.12.23.recipe
+overlay-apply: updated /boot/home/haikuports/sys-devel/haiku-format/haiku_format-22.1.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/harfbuzz/harfbuzz-14.2.0.recipe
+overlay-apply: updated /boot/home/haikuports/app-editors/hteditor/hteditor-2.1.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-python/html5lib/html5lib-1.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/icu/icu67-67.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/icu/icu78-78.3.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/irrxml/irrxml-1.2.recipe
+overlay-apply: updated /boot/home/haikuports/sys-devel/jam/jam-2.5_2021_10_29.recipe
+overlay-apply: updated /boot/home/haikuports/dev-util/keystone/keystone-0.9.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/kona/kona-20190226.recipe
+overlay-apply: updated /boot/home/haikuports/sys-cluster/kubectl/kubectl-1.37.1.recipe
+overlay-apply:   + /boot/home/haikuports/sys-cluster/kubectl/patches/kubectl-1.37.1.patchset
+overlay-apply: updated /boot/home/haikuports/app-misc/lcdproc/lcdproc-0.5.9.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/lensfun/lensfun-0.3.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libavif/libavif-0.9.3.recipe
+overlay-apply:   + /boot/home/haikuports/media-libs/libavif/patches/libavif-0.9.3.patchset
+overlay-apply: updated /boot/home/haikuports/media-libs/libavif/libavif1.0-1.4.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libcddb/libcddb-1.3.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/libdsk/libdsk-1.5.22.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libexif/libexif-0.6.22.recipe
+overlay-apply: updated /boot/home/haikuports/dev-vcs/libfossil/libfossil-2026.09.13.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libfpx/libfpx-1.3.1.10.recipe
+overlay-apply: updated /boot/home/haikuports/dev-games/libggz/libggz-0.99.5.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libgit2/libgit2_1.9-1.9.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-i18n/libhangul/libhangul-0.1.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libjpeg-turbo/libjpeg_turbo-3.1.4.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libjxl/libjxl-0.6.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libmcrypt/libmcrypt-2.5.8.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libmetalink/libmetalink-0.1.3.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libmirage/libmirage-3.2.3.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libmtp/libmtp-1.1.22.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/libnpupnp/libnpupnp-5.0.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libplacebo/libplacebo-7.351.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libpng/libpng16-1.6.53.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libsdl2/libsdl2-2.32.10.recipe
+overlay-apply: updated /boot/home/haikuports/sci-libs/libsigrokdecode/libsigrokdecode-0.5.3.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/libspectrum/libspectrum-1.4.4.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libsquish/libsquish-1.15.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/libsrtp/libsrtp-1.5.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libtomcrypt/libtomcrypt-1.18.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libtommath/libtommath-1.2.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libtommath/libtommath-1.3.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-build/libtool/libtool-2.5.4.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/libtorrent/libtorrent-0.13.8.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/libvpx/libvpx1.16-1.16.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libvterm/libvterm-0.0.681.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libxml2/libxml2-2.15.3.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/libxo/libxo-1.6.0.recipe
+overlay-apply: updated /boot/home/haikuports/sys-libs/linenoise/linenoise-1.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/llama-cpp/llama_cpp-b4889.recipe
+overlay-apply:   + /boot/home/haikuports/dev-cpp/llama-cpp/patches/llama_cpp-b4889.patchset
+overlay-apply: updated /boot/home/haikuports/dev-cpp/llama-cpp/llama_cpp_g3-b4889.recipe
+overlay-apply:   + /boot/home/haikuports/dev-cpp/llama-cpp/patches/llama_cpp_g3-b4889.patchset
+overlay-apply: updated /boot/home/haikuports/sys-devel/llvm/llvm21-21.1.8.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/lnlauncher/lnlauncher-1.1.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-misc/mdate/mdate-1.7.0.3.recipe
+overlay-apply: updated /boot/home/haikuports/sys-libs/mesa/mesa-25.3.6.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/mimetic/mimetic-0.9.8.recipe
+overlay-apply: updated /boot/home/haikuports/net-dialup/minicom/minicom-2.7.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-crypt/minisign/minisign-0.11.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/mkdepend/mkdepend-1.7.recipe
+overlay-apply: updated /boot/home/haikuports/app-shells/mksh/mksh-59c.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/mm_common/mm_common-1.0.6.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/mosh/mosh-1.3.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-sound/mpc/musicpc-0.34.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/nesalizer/nesalizer-1.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/games-roguelike/nethack/nethack-3.6.2.recipe
+overlay-apply: updated /boot/home/haikuports/net-analyzer/netperf/netperf-2.7.0.recipe
+overlay-apply: updated /boot/home/haikuports/games-puzzle/neverball/neverball-1.6.1~20190808.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/nodejs/nodejs20-20.15.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/openal/openal-1.21.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-i18n/opencc/opencc-1.1.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/openssl/openssl3-3.5.9.recipe
+overlay-apply:   + /boot/home/haikuports/dev-libs/openssl/patches/openssl3-3.5.9.patchset
+overlay-apply: updated /boot/home/haikuports/dev-python/pbr/pbr-5.5.1.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/perl/perl-5.42.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/pkcs11-helper/pkcs11_helper-1.30.0.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/png2ico/png2ico-2002.12.08.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/polyclipping/polyclipping-6.4.2.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/portsmf/portsmf-239.recipe
+overlay-apply: updated /boot/home/haikuports/sci-libs/primesieve/primesieve-7.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/pystring/pystring-1.1.4.recipe
+overlay-apply: updated /boot/home/haikuports/app-editors/qemacs/qemacs-0.4.1~pre20170225.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/qhull/qhull-8.0.2.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/quicklaunch/quicklaunch-1.9.recipe
+overlay-apply: updated /boot/home/haikuports/dev-games/recastnavigation/recastnavigation-1.6.0.recipe
+overlay-apply: updated /boot/home/haikuports/net-irc/rhapsody_irc/rhapsody_irc-0.28b.recipe
+overlay-apply: updated /boot/home/haikuports/dev-util/robin-map/robin_map-0.6.3.recipe
+overlay-apply: updated /boot/home/haikuports/net-libs/rpcsvc-proto/rpcsvc_proto-1.4.3.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-misc/rssavers/rssavers-0.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/ruby/ruby-3.2.9.recipe
+overlay-apply: updated /boot/home/haikuports/games-roguelike/sais/sais-1.6.3~git.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/samedi/samedi-1.1.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/sane_backends/sane_backends-1.3.1.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/sawteeth/sawteeth-1.4.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-misc/screen/screen-4.99.0~git.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl2_image/sdl2_image-2.8.12.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl2_sound/sdl2_sound-2.0.1~06112022.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl_gfx/sdl_gfx-2.0.26.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/sdl_net/sdl_net-1.2.8.recipe
+overlay-apply: updated /boot/home/haikuports/games-arcade/sdlscavenger/sdlscavenger-145.4.recipe
+overlay-apply: updated /boot/home/haikuports/games-fps/serious_sam/serious_sam-1.10~git.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/sharutils/sharutils-4.15.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/simde/simde-0.8.2.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/simdjson/simdjson-5.0.2.recipe
+overlay-apply: updated /boot/home/haikuports/net-im/slack++/slack++-0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/squirrel/squirrel-3.2.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/sum_it/sum_it-0.2beta.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-games/superfreecell/superfreecell-0.1.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-games/surgescript/surgescript-0.5.5.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/svt-av1/svt_av13-3.0.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/tar/tar-1.35.recipe
+overlay-apply: updated /boot/home/haikuports/games-action/teeworlds/teeworlds-0.7.5.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/tesseract/tesseract-3.05.02.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/texlive/texlive-2026.recipe
+overlay-apply: updated /boot/home/haikuports/app-text/htmltidy/tidy-5.8.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lang/tk/tk-8.6.10.recipe
+overlay-apply: updated /boot/home/haikuports/app-misc/tmux/tmux-3.7c.recipe
+overlay-apply: updated /boot/home/haikuports/net-ftp/tnftp/tnftp-20151004.recipe
+overlay-apply: updated /boot/home/haikuports/dev-lua/toluapp/toluapp-1.0.93.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/tweeny/tweeny-3.2.0.recipe
+overlay-apply: updated /boot/home/haikuports/app-i18n/uchardet/uchardet-0.0.7.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/unarr/unarr-1.0.1.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/unshield/unshield-1.5.1.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/uploadit/uploadit-1.4.recipe
+overlay-apply: updated /boot/home/haikuports/dev-libs/vc/vc-1.4.3.recipe
+overlay-apply: updated /boot/home/haikuports/sci-libs/vmaf/vmaf-1.5.1.recipe
+overlay-apply: updated /boot/home/haikuports/games-arcade/vvvvvv/vvvvvv-2.3.6.recipe
+overlay-apply: updated /boot/home/haikuports/media-sound/waveedit/waveedit-1.1.recipe
+overlay-apply: updated /boot/home/haikuports/haiku-apps/windowtailor/windowtailor-0.3.recipe
+overlay-apply: updated /boot/home/haikuports/net-misc/wput/wput-0.6.2.recipe
+overlay-apply: updated /boot/home/haikuports/app-emulation/x16-emulator/x16_emulator-46.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/x264/x264-20220222.recipe
+overlay-apply: updated /boot/home/haikuports/media-libs/x265/x265-3.5.recipe
+overlay-apply: updated /boot/home/haikuports/media-gfx/xcftools/xcftools-1.0.7.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.7-0.7.0.recipe
+overlay-apply: updated /boot/home/haikuports/dev-cpp/yaml_cpp/yaml_cpp0.8-0.8.0.recipe
+overlay-apply: updated /boot/home/haikuports/app-arch/zopfli/zopfli-1.0.3.recipe
+overlay-apply: SKIP zstd-1.5.6.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: SKIP zstd-1.5.7.recipe (stage-1 feature-capped; --stage1 to force)
+overlay-apply: 177 updated, 0 placed, 6 patchset(s), 4 stage-1 skipped, 0 unplaced
+provision: #764 overlay: 177 overlay recipe(s) verified byte-identical in /boot/home/haikuports
+provision: cloning haikuporter @ faa30769682fb85970846190ae8f4dbc99327d3a -> /boot/home/haikuporter
+provision: #47: defaulting CMAKE_POLICY_VERSION_MINIMUM=3.5 in haikuporter cmakeDirArgs
+provision: #47 cmakeDirArgs patched
+provision: #136: seeding CMAKE_POLICY_VERSION_MINIMUM=3.5 in haikuporter filteredEnvironment
+provision: #136 filteredEnvironment patched
+provision: #136 Class 2: adding cmd:gzip/tar/unzip/which to haikuporter scriptletPrerequirements
+provision: #136 scriptletPrerequirements patched
+provision: #136 Class 8: defaulting CMAKE_BUILD_TYPE=Release in haikuporter cmake wrapper
+provision: #136 Class 8 cmake wrapper patched
+provision: #758: batching packageEntries' per-file dirname/mkdir/mv in haikuporter
+provision: #758 packageEntries batched
+provision: writing /boot/home/haikuports.conf
+provision: installing haikuporter wrapper -> /boot/home/config/non-packaged/bin/haikuporter
+provision: installing depclosure launcher -> /boot/home/config/non-packaged/bin/depclosure (src: /boot/home/depclosure.py)
+provision: installing haiku-package-closure launcher -> /boot/home/config/non-packaged/bin/haiku-package-closure (src: /boot/home/haiku-package-closure)
+provision: creating /boot/system/settings/fonts (haikuporter chroot copies it)
+provision: source-cache S3 client: NONE on this image (issue 728) -- the issue #162
+provision:   shared cache tier will be off; seed and upstream fetches are unaffected
+provision: installing source-cache helper -> /boot/home/config/non-packaged/bin/haiku-srccache-fetch (S3: off)
+provision: installing wget shim -> /boot/home/config/non-packaged/bin/wget (delegates to haiku-srccache-fetch)
+provision: installing curl shim -> /boot/home/config/non-packaged/bin/curl (delegates; real curl: /boot/system/bin/curl)
+provision: NOTE: add /boot/home/config/non-packaged/bin to PATH (login shells do; export it for non-login)
+
+provision: done. This box is a native arm64 package builder.
+  ports tree : /boot/home/haikuports
+  haikuporter: /boot/home/haikuporter
+  config     : /boot/home/haikuports.conf
+  seed dir   : /boot/home/seed  (drop upstream tarballs here to bypass a flaky fetch)
+  src cache  : off  (shared S3 tier via /boot/home/config/non-packaged/bin/haiku-srccache-fetch)
+  dl mirror  : off  (haikuports.conf DOWNLOAD_MIRROR fallback, #172)
+  recipe overlay: /boot/home/haikuports-patches applied to the ports tree (#764)
+  chain plan : /boot/home/config/non-packaged/bin/depclosure, /boot/home/config/non-packaged/bin/haiku-package-closure
+               (launchers; source deployed to /boot/home by haiku-bake-builder)
+
+Compute a dependency-ordered build chain (no PATH/env setup needed):
+  /boot/home/config/non-packaged/bin/depclosure <port>...
+
+Build a port (build-requires are covered by --all-dependencies):
+  export PATH=/boot/home/config/non-packaged/bin:$PATH
+  cd /boot/home/haikuporter && python3.14 ./haikuporter --config=/boot/home/haikuports.conf -y --all-dependencies <port>
+
+Publish the resulting .hpkg to the DeBeOS repo from a Haiku host:
+  graviton/scripts/haiku-repo-add   (see its header for HG_* env)
+provision rc=0

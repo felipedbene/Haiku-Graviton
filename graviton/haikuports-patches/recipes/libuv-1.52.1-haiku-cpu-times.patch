@@ -1,0 +1,96 @@
+From: DeBeOS <noreply@debeos>
+Subject: [PATCH] unix,haiku: report per-CPU busy and idle time in uv_cpu_info()
+
+uv_cpu_info() on Haiku left every cpu_times field at zero, so anything that
+derives CPU usage from os.cpus()[i].times divided 0 by 0. The kernel does
+keep per-CPU busy time: get_cpu_info() returns each CPU's active_time, the
+user plus kernel time of the non-idle threads it ran, in microseconds since
+boot. It keeps no user/sys/irq split per CPU.
+
+Report active_time as user and the rest of the time since boot as idle,
+converted to milliseconds, with idle clamped at zero. nice, sys and irq stay
+zero. Putting the only busy figure in user follows src/unix/os390.c, which
+has the same problem on z/OS; deriving idle from the uptime is new here.
+Because active_time only grows at a reschedule, idle can step back by up to
+a quantum between two close samples, and interrupt time on an idle CPU
+counts as idle.
+---
+ src/unix/haiku.c | 52 +++++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 45 insertions(+), 7 deletions(-)
+
+diff --git a/src/unix/haiku.c b/src/unix/haiku.c
+index 587ed42..c731995 100644
+--- a/src/unix/haiku.c
++++ b/src/unix/haiku.c
+@@ -200,7 +200,10 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+   uint64_t cpuspeed;
+   uint32 cpumodel;
+   const char* model;
+-  uv_cpu_info_t* cpu_info;
++  cpu_info* cpus;
++  bigtime_t uptime;
++  bigtime_t active;
++  uv_cpu_info_t* info;  /* not cpu_info: <OS.h> declares that type */
+ 
+   if (cpu_infos == NULL || count == NULL)
+     return UV_EINVAL;
+@@ -235,18 +238,53 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+   if (status != B_OK)
+     return UV__ERR(status);
+ 
++  cpus = uv__malloc(system.cpu_count * sizeof(*cpus));
++  if (cpus == NULL)
++    return UV_ENOMEM;
++
++  status = get_cpu_info(0, system.cpu_count, cpus);
++  if (status != B_OK) {
++    uv__free(cpus);
++    return UV__ERR(status);
++  }
++
++  /* Read after the active times, so that no CPU's active time is newer than
++   * the uptime it is subtracted from. Both are in microseconds since boot. */
++  uptime = system_time();
++
+   *cpu_infos = uv__calloc(system.cpu_count, sizeof(**cpu_infos));
+-  if (*cpu_infos == NULL)
++  if (*cpu_infos == NULL) {
++    uv__free(cpus);
+     return UV_ENOMEM;
++  }
+ 
+-  /* CPU times stay zero (DeBeOS issue 939). */
++  /* Haiku keeps one busy figure per CPU: when the scheduler switches a
++   * non-idle thread out, it adds that thread's user and kernel time to the
++   * CPU's active_time, which get_cpu_info() returns. No user/sys/irq split is
++   * kept per CPU, so there is none to report. src/unix/os390.c is in the same
++   * position, with only an aggregate busy figure from z/OS, and puts it all
++   * in user; do the same, and leave nice, sys and irq at zero. idle is the
++   * rest of the time since boot, clamped so it is never negative.
++   *
++   * Two consequences of deriving idle this way: interrupt time taken while a
++   * CPU runs its idle thread counts as idle, and because active_time grows
++   * only at a reschedule, the part of the current quantum a thread has run is
++   * idle until then, so idle can step back by up to a quantum between two
++   * close samples. libuv reports milliseconds; active_time and system_time()
++   * are microseconds. */
+   model = uv__haiku_cpu_model(cpumodel);
+-  cpu_info = *cpu_infos;
++  info = *cpu_infos;
+   for (i = 0; i < (int)system.cpu_count; i++) {
+-    cpu_info->model = uv__strdup(model);
+-    cpu_info->speed = (int)(cpuspeed / 1000000);
+-    cpu_info++;
++    info->model = uv__strdup(model);
++    info->speed = (int)(cpuspeed / 1000000);
++    active = cpus[i].active_time > 0 ? cpus[i].active_time : 0;
++    if (active > uptime)
++      active = uptime;
++    info->cpu_times.user = (uint64_t)active / 1000;
++    info->cpu_times.idle = (uint64_t)(uptime - active) / 1000;
++    info++;
+   }
++  uv__free(cpus);
+   *count = system.cpu_count;
+ 
+   return 0;

@@ -1,0 +1,147 @@
+# evidence: linux-control
+# instance: i-0973e2bccd0df351a   region: us-west-2
+# ssm command: f0bec8ff-975b-4119-9222-099cf69b2035 (agent status: Success)
+# start: 20261102T214107Z   end: 20261102T214135Z   rc: 0   log bytes: 4236
+# script sha256: d0a7c615d3d9bdda60685c941a1462b11d83ad8945c12655a04bb74abb25b67d
+# ---- script ----
+# | set -eu
+# | uname -a; nproc
+# | curl -s -H "X-aws-ec2-metadata-token: $(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')" http://169.254.169.254/latest/meta-data/instance-type; echo
+# | mkdir -p /tmp/l939 && cd /tmp/l939
+# | curl -sSfLO https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.xz
+# | curl -sSfL https://nodejs.org/dist/v24.21.0/SHASUMS256.txt | grep ' node-v24.21.0-linux-arm64.tar.xz$' | sha256sum -c -
+# | tar xf node-v24.21.0-linux-arm64.tar.xz
+# | export PATH=/tmp/l939/node-v24.21.0-linux-arm64/bin:$PATH
+# | node --version; node -p 'process.versions.uv'
+# | cat > snapshot.js <<'JS'
+# | // snapshot.js: per-CPU times from os.cpus() against os.uptime().
+# | 'use strict';
+# | const os = require('os');
+# | const up = os.uptime();
+# | const cpus = os.cpus();
+# | console.log(`uptime ${up} s, cpus ${cpus.length}, model ${cpus[0] && cpus[0].model}, speed ${cpus[0] && cpus[0].speed}`);
+# | console.log(JSON.stringify(cpus.map(c => c.times)));
+# | cpus.forEach((c, i) => {
+# | 	const t = c.times;
+# | 	const all = t.user + t.nice + t.sys + t.idle + t.irq;
+# | 	console.log(`  cpu ${i}: user ${t.user} nice ${t.nice} sys ${t.sys} idle ${t.idle} irq ${t.irq}; sum ${all} ms = ${(all / 1000).toFixed(1)} s vs uptime ${up} s (${up ? (100 * all / 1000 / up).toFixed(1) : 'n/a'}%)`);
+# | });
+# | JS
+# | cat > cputimes.js <<'JS'
+# | // cputimes.js <busy-processes> <seconds>: os.cpus() times before and after
+# | // <busy-processes> child processes each spin for <seconds>, spread by the
+# | // scheduler. Prints per-CPU deltas and totals against the wall clock.
+# | 'use strict';
+# | const os = require('os');
+# | const { spawn } = require('child_process');
+# | const n = Number(process.argv[2]), secs = Number(process.argv[3]);
+# | const keys = ['user', 'nice', 'sys', 'idle', 'irq'];
+# | const snap = () => ({ t: process.hrtime.bigint(), cpus: os.cpus().map(c => c.times) });
+# | const a = snap();
+# | const kids = [];
+# | for (let i = 0; i < n; i++)
+# | 	kids.push(spawn(process.execPath, ['-e',
+# | 		`const e = Date.now() + ${secs * 1000}; let x = 0; while (Date.now() < e) x++;`],
+# | 		{ stdio: 'ignore' }));
+# | Promise.all(kids.map(k => new Promise((res, rej) => {
+# | 	k.on('error', rej);
+# | 	k.on('exit', (code, sig) => code === 0 ? res() : rej(new Error(`child exit ${code} ${sig}`)));
+# | }))).then(() => {
+# | 	const b = snap();
+# | 	const wall = Number(b.t - a.t) / 1e6;
+# | 	const tot = Object.fromEntries(keys.map(k => [k, 0]));
+# | 	console.log(`busy processes ${n} x ${secs} s, wall ${wall.toFixed(0)} ms, cpus ${b.cpus.length}`);
+# | 	b.cpus.forEach((c, i) => {
+# | 		const d = Object.fromEntries(keys.map(k => [k, c[k] - a.cpus[i][k]]));
+# | 		keys.forEach(k => { tot[k] += d[k]; });
+# | 		const all = keys.reduce((s, k) => s + d[k], 0);
+# | 		console.log(`  cpu ${i}: d.user ${d.user} d.sys ${d.sys} d.idle ${d.idle} (sum ${all} ms, ${(100 * all / wall).toFixed(1)}% of wall)`);
+# | 	});
+# | 	const busy = tot.user + tot.nice + tot.sys + tot.irq;
+# | 	const all = busy + tot.idle;
+# | 	console.log(`  total: user ${tot.user} nice ${tot.nice} sys ${tot.sys} idle ${tot.idle} irq ${tot.irq} ms`);
+# | 	console.log(`  busy ${busy} ms vs expected ${n * secs * 1000} ms (${(100 * busy / (n * secs * 1000)).toFixed(1)}%)`);
+# | 	console.log(`  user+nice+sys+idle+irq ${all} ms vs cpus x wall ${(b.cpus.length * wall).toFixed(0)} ms (${(100 * all / (b.cpus.length * wall)).toFixed(1)}%)`);
+# | 	console.log(`  busy fraction ${(100 * busy / all).toFixed(1)}% vs expected ${(100 * n / b.cpus.length).toFixed(1)}%`);
+# | }).catch(e => { console.error(e); process.exit(1); });
+# | JS
+# | sha256sum snapshot.js cputimes.js
+# | echo "== /proc/uptime"; cat /proc/uptime
+# | echo "== /proc/stat cpu lines (USER_HZ $(getconf CLK_TCK))"; grep '^cpu' /proc/stat
+# | echo "== LINUX: os.cpus() times"
+# | node -p 'os.cpus().map(c=>c.times)'
+# | node snapshot.js
+# | echo "== LINUX: 4 busy processes x 10 s"
+# | node cputimes.js 4 10
+# | echo "== LINUX: 8 busy processes x 10 s"
+# | node cputimes.js 8 10
+# ---- raw output ----
+Linux ip-10-128-15-224 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+8
+c7g.2xlarge
+node-v24.21.0-linux-arm64.tar.xz: OK
+v24.21.0
+1.52.1
+2f85aa3fc2a300cebff5ac69ef3244c1d6307e2454f5414c8c77949345469339  snapshot.js
+494d54f240cf272449751102cc2f67b47c8132602531b621971b91efcf06fac9  cputimes.js
+== /proc/uptime
+195.85 1544.50
+== /proc/stat cpu lines (USER_HZ 100)
+cpu  1174 0 542 154452 410 0 2 0 0 0
+cpu0 228 0 103 19162 38 0 0 0 0 0
+cpu1 42 0 37 19443 54 0 0 0 0 0
+cpu2 95 0 43 19414 27 0 0 0 0 0
+cpu3 41 0 88 19420 24 0 0 0 0 0
+cpu4 475 0 50 19021 34 0 0 0 0 0
+cpu5 90 0 62 19385 43 0 0 0 0 0
+cpu6 90 0 73 19295 114 0 0 0 0 0
+cpu7 110 0 84 19308 73 0 0 0 0 0
+== LINUX: os.cpus() times
+[
+  { user: 2280, nice: 0, sys: 1030, idle: 191640, irq: 0 },
+  { user: 420, nice: 0, sys: 370, idle: 194450, irq: 0 },
+  { user: 950, nice: 0, sys: 430, idle: 194160, irq: 0 },
+  { user: 410, nice: 0, sys: 880, idle: 194220, irq: 0 },
+  { user: 4750, nice: 0, sys: 500, idle: 190230, irq: 0 },
+  { user: 910, nice: 0, sys: 620, idle: 193850, irq: 0 },
+  { user: 910, nice: 0, sys: 730, idle: 192970, irq: 0 },
+  { user: 1100, nice: 0, sys: 840, idle: 193100, irq: 0 }
+]
+uptime 195.9 s, cpus 8, model unknown, speed 0
+[{"user":2280,"nice":0,"sys":1030,"idle":191670,"irq":0},{"user":420,"nice":0,"sys":370,"idle":194470,"irq":0},{"user":950,"nice":0,"sys":430,"idle":194190,"irq":0},{"user":430,"nice":0,"sys":890,"idle":194230,"irq":0},{"user":4750,"nice":0,"sys":500,"idle":190260,"irq":0},{"user":910,"nice":0,"sys":630,"idle":193870,"irq":0},{"user":910,"nice":0,"sys":730,"idle":193000,"irq":0},{"user":1100,"nice":0,"sys":840,"idle":193130,"irq":0}]
+  cpu 0: user 2280 nice 0 sys 1030 idle 191670 irq 0; sum 194980 ms = 195.0 s vs uptime 195.9 s (99.5%)
+  cpu 1: user 420 nice 0 sys 370 idle 194470 irq 0; sum 195260 ms = 195.3 s vs uptime 195.9 s (99.7%)
+  cpu 2: user 950 nice 0 sys 430 idle 194190 irq 0; sum 195570 ms = 195.6 s vs uptime 195.9 s (99.8%)
+  cpu 3: user 430 nice 0 sys 890 idle 194230 irq 0; sum 195550 ms = 195.6 s vs uptime 195.9 s (99.8%)
+  cpu 4: user 4750 nice 0 sys 500 idle 190260 irq 0; sum 195510 ms = 195.5 s vs uptime 195.9 s (99.8%)
+  cpu 5: user 910 nice 0 sys 630 idle 193870 irq 0; sum 195410 ms = 195.4 s vs uptime 195.9 s (99.7%)
+  cpu 6: user 910 nice 0 sys 730 idle 193000 irq 0; sum 194640 ms = 194.6 s vs uptime 195.9 s (99.4%)
+  cpu 7: user 1100 nice 0 sys 840 idle 193130 irq 0; sum 195070 ms = 195.1 s vs uptime 195.9 s (99.6%)
+== LINUX: 4 busy processes x 10 s
+busy processes 4 x 10 s, wall 10031 ms, cpus 8
+  cpu 0: d.user 0 d.sys 20 d.idle 9990 (sum 10010 ms, 99.8% of wall)
+  cpu 1: d.user 620 d.sys 0 d.idle 9400 (sum 10020 ms, 99.9% of wall)
+  cpu 2: d.user 10 d.sys 20 d.idle 9930 (sum 9960 ms, 99.3% of wall)
+  cpu 3: d.user 10010 d.sys 20 d.idle 10 (sum 10040 ms, 100.1% of wall)
+  cpu 4: d.user 9980 d.sys 20 d.idle 10 (sum 10010 ms, 99.8% of wall)
+  cpu 5: d.user 40 d.sys 30 d.idle 9830 (sum 9900 ms, 98.7% of wall)
+  cpu 6: d.user 9380 d.sys 10 d.idle 630 (sum 10020 ms, 99.9% of wall)
+  cpu 7: d.user 10010 d.sys 10 d.idle 0 (sum 10020 ms, 99.9% of wall)
+  total: user 40050 nice 0 sys 130 idle 39800 irq 0 ms
+  busy 40180 ms vs expected 40000 ms (100.5%)
+  user+nice+sys+idle+irq 79980 ms vs cpus x wall 80248 ms (99.7%)
+  busy fraction 50.2% vs expected 50.0%
+== LINUX: 8 busy processes x 10 s
+busy processes 8 x 10 s, wall 10042 ms, cpus 8
+  cpu 0: d.user 10020 d.sys 20 d.idle 10 (sum 10050 ms, 100.1% of wall)
+  cpu 1: d.user 10020 d.sys 20 d.idle 10 (sum 10050 ms, 100.1% of wall)
+  cpu 2: d.user 10010 d.sys 20 d.idle 10 (sum 10040 ms, 100.0% of wall)
+  cpu 3: d.user 10010 d.sys 20 d.idle 10 (sum 10040 ms, 100.0% of wall)
+  cpu 4: d.user 10010 d.sys 20 d.idle 20 (sum 10050 ms, 100.1% of wall)
+  cpu 5: d.user 10010 d.sys 20 d.idle 10 (sum 10040 ms, 100.0% of wall)
+  cpu 6: d.user 10020 d.sys 10 d.idle 20 (sum 10050 ms, 100.1% of wall)
+  cpu 7: d.user 10010 d.sys 10 d.idle 20 (sum 10040 ms, 100.0% of wall)
+  total: user 80110 nice 0 sys 140 idle 110 irq 0 ms
+  busy 80250 ms vs expected 80000 ms (100.3%)
+  user+nice+sys+idle+irq 80360 ms vs cpus x wall 80337 ms (100.0%)
+  busy fraction 99.9% vs expected 100.0%

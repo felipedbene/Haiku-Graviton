@@ -1,0 +1,111 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: builder-libuv6-build
+# instance: i-0348fbac1e6a4d7d3   region: us-west-2
+# ssm command: ea8a901d-6154-4376-9a82-eff600f05b8e (agent status: Success)
+# start: 20261102T220129Z   end: 20261102T220514Z   rc: 0   log bytes: 5692
+# script sha256: 70234e270148e3251673a602b7bde772e2d410fc2f4f1b7c2ecc01420527cc4f
+# ---- script ----
+# | set -u
+# | export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# | U=/boot/home/haikuports/dev-libs/libuv
+# | rm -rf /tmp/uvst && mkdir /tmp/uvst && cd /tmp/uvst || exit 1
+# | curl -sSf -o r6.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/agent-939/libuv-r6-recipe.tgz?<PRESIGNED>' || exit 1
+# | tar xzf r6.tgz || exit 1
+# | cat > sums <<'S'
+# | 06fe9f74fa7136dc755dfd587627f7dddbb15966380051f20ada3263ff15f179  libuv-1.52.1.recipe
+# | 933f6dbb7f113129be6093c2f1827458190984eb17f51cdde401e599518561c8  libuv-1.52.1.patchset
+# | 4d26000185b22c3b04f338823d9a4546dfbdb1fb70fc71dbffb2ef39af064c34  libuv-1.52.1-haiku-cpu-model.patch
+# | 30173b293d1fb7d8cf9c3046a2067c1ed76dc21e09bab961a5ae36af54fde956  libuv-1.52.1-haiku-cpu-times.patch
+# | cc1f35ace98e420eefe1e67752e3ad0a7930aea5c4aa59bb33ff783f479e3b33  libuv-1.52.1-haiku-getrusage-thread.patch
+# | 31a8268cb3f439b7fbf97471b69aeb87b4da080fd4de6acbf52dfbe2648b973e  libuv-1.52.1-haiku-proctitle.patch
+# | S
+# | sha256sum -c sums || exit 1
+# | echo "== ports tree libuv before staging"; ls $U $U/patches; grep -n REVISION $U/*.recipe
+# | rm -rf $U && mkdir -p $U/patches || exit 1
+# | cp libuv-1.52.1.recipe $U/ && cp libuv-1.52.1.patchset libuv-1.52.1-haiku-*.patch $U/patches/ || exit 1
+# | (cd $U && sha256sum libuv-1.52.1.recipe patches/*)
+# | grep -n 'REVISION\|cpu-times' $U/libuv-1.52.1.recipe
+# | rm -f /boot/home/haikuports/packages/libuv*-1.52.1-6-*.hpkg
+# | cd /boot/home/haikuports && : | python3.14 /boot/home/haikuporter/haikuporter --config=/boot/home/haikuports.conf -y -j8 libuv > /boot/home/uv6.log 2>&1; rc=$?; echo "haikuporter exit $rc"
+# | grep -a -n "Applying patch\|warning:.*haiku.c\|error:" /boot/home/uv6.log | head -20
+# | tail -8 /boot/home/uv6.log
+# | [ $rc -eq 0 ] || exit $rc
+# | cd /boot/home/haikuports/packages && ls -l libuv*-1.52.1-6-*.hpkg && sha256sum libuv*-1.52.1-6-*.hpkg
+# | for p in libuv*-1.52.1-6-*.hpkg; do echo "== $p"; package list -i $p 2>&1 | grep -E "^\s*(name|version|provides|requires)" ; done
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100  16269 100  16269   0      0 155.8k      0                              0100  16269 100  16269   0      0 155.4k      0                              0100  16269 100  16269   0      0 155.0k      0                              0
+[srccache] MISS https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/agent-939/libuv-r6-recipe.tgz?<PRESIGNED> (16269 bytes)
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+libuv-1.52.1.recipe: OK
+libuv-1.52.1.patchset: OK
+libuv-1.52.1-haiku-cpu-model.patch: OK
+libuv-1.52.1-haiku-cpu-times.patch: OK
+libuv-1.52.1-haiku-getrusage-thread.patch: OK
+libuv-1.52.1-haiku-proctitle.patch: OK
+== ports tree libuv before staging
+/boot/home/haikuports/dev-libs/libuv:
+libuv-1.52.1.recipe
+patches
+work-1.52.1
+
+/boot/home/haikuports/dev-libs/libuv/patches:
+libuv-1.52.1-haiku-cpu-model.patch
+libuv-1.52.1-haiku-cpu-times.patch
+libuv-1.52.1-haiku-getrusage-thread.patch
+libuv-1.52.1-haiku-proctitle.patch
+libuv-1.52.1.patchset
+11:REVISION="6"
+06fe9f74fa7136dc755dfd587627f7dddbb15966380051f20ada3263ff15f179  libuv-1.52.1.recipe
+4d26000185b22c3b04f338823d9a4546dfbdb1fb70fc71dbffb2ef39af064c34  patches/libuv-1.52.1-haiku-cpu-model.patch
+30173b293d1fb7d8cf9c3046a2067c1ed76dc21e09bab961a5ae36af54fde956  patches/libuv-1.52.1-haiku-cpu-times.patch
+cc1f35ace98e420eefe1e67752e3ad0a7930aea5c4aa59bb33ff783f479e3b33  patches/libuv-1.52.1-haiku-getrusage-thread.patch
+31a8268cb3f439b7fbf97471b69aeb87b4da080fd4de6acbf52dfbe2648b973e  patches/libuv-1.52.1-haiku-proctitle.patch
+933f6dbb7f113129be6093c2f1827458190984eb17f51cdde401e599518561c8  patches/libuv-1.52.1.patchset
+11:REVISION="6"
+21:	libuv-$portVersion-haiku-cpu-times.patch"
+haikuporter exit 0
+2560:Applying patchset "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1.patchset" ...
+2565:Applying patch "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1-haiku-proctitle.patch" ...
+2566:Applying patch "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1-haiku-getrusage-thread.patch" ...
+2567:Applying patch "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1-haiku-cpu-model.patch" ...
+2568:Applying patch "/boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1-haiku-cpu-times.patch" ...
+	removing yab-1.8.2-arm64
+	removing yt_dlp_ejs-0.8.0-arm64
+	removing z26-2.16.00s-arm64
+	removing zaz-1.0.0-arm64
+----------------------------------------------------------------------
+dev-libs::libuv-1.52.1
+	/boot/home/haikuports/dev-libs/libuv/libuv-1.52.1.recipe
+----------------------------------------------------------------------
+-rw-r--r-- 1 baron root  74971 Nov  2 22:04 libuv-1.52.1-6-arm64.hpkg
+-rw-r--r-- 1 baron root 213031 Nov  2 22:05 libuv_debuginfo-1.52.1-6-arm64.hpkg
+-rw-r--r-- 1 baron root  21824 Nov  2 22:05 libuv_devel-1.52.1-6-arm64.hpkg
+7c444663fbcd47bd0be5fb0d50af12951df89d477e7b27849e5710c3c12fe123  libuv-1.52.1-6-arm64.hpkg
+ba7cbc0baeac67d7723b4d28592b12b35a508f94f214db462bf5f77df7d5ae5d  libuv_debuginfo-1.52.1-6-arm64.hpkg
+13a5fe48daede1e192c969029da2c7abb40e237d45060b17325376b294125333  libuv_devel-1.52.1-6-arm64.hpkg
+== libuv-1.52.1-6-arm64.hpkg
+	name: libuv
+	version: 1.52.1-6
+	provides: libuv = 1.52.1
+	provides: lib:libuv = 1.0.0 (compatible >= 1)
+	provides: libuv_fs_event = 1.52.1
+	requires: haiku>=r1~beta6_hrev59996-1
+== libuv_debuginfo-1.52.1-6-arm64.hpkg
+	name: libuv_debuginfo
+	version: 1.52.1-6
+	provides: libuv_debuginfo = 1.52.1
+	provides: debuginfo:libuv.so.1.0.0(libuv) = 1.52.1
+	requires: libuv==1.52.1
+== libuv_devel-1.52.1-6-arm64.hpkg
+	name: libuv_devel
+	version: 1.52.1-6
+	provides: libuv_devel = 1.52.1
+	provides: devel:libuv = 1.0.0 (compatible >= 1)
+	requires: libuv==1.52.1

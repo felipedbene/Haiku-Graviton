@@ -1,0 +1,165 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: haiku-after
+# instance: i-0cc1f61b996d26c0e   region: us-west-2
+# ssm command: 4521dadf-10b2-4103-bf19-62cd7474b69a (agent status: Success)
+# start: 20261102T220640Z   end: 20261102T220731Z   rc: 0   log bytes: 6352
+# script sha256: 8e3d4d7eba658f3740ff3d947608abe209b0f5b6a12fd2fd8f3567ebfb85e16d
+# ---- script ----
+# | set -u
+# | export PATH=/boot/home/config/non-packaged/bin:$PATH
+# | feed() { for i in $(seq 60); do echo 1; done; echo yes; }
+# | cd /boot/home/l939 || exit 1
+# | echo "== fetch the staged rev 6 set (s3 libuv-r6/) and check it against SHA256SUMS"
+# | rm -rf r6 && mkdir r6 && cd r6 || exit 1
+# | curl -sSf -o libuv-1.52.1-6-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/libuv-1.52.1-6-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSf -o libuv_devel-1.52.1-6-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/libuv_devel-1.52.1-6-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSf -o libuv_debuginfo-1.52.1-6-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/libuv_debuginfo-1.52.1-6-arm64.hpkg?<PRESIGNED>' || exit 1
+# | curl -sSf -o SHA256SUMS 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/libuv-r6/SHA256SUMS?<PRESIGNED>' || exit 1
+# | sha256sum -c SHA256SUMS || exit 1
+# | echo "== install libuv rev 6 (main package; node links lib:libuv)"
+# | feed | pkgman install /boot/home/l939/r6/libuv-1.52.1-6-arm64.hpkg > /tmp/pk-uv6.log 2>&1; echo "pkgman rc=$?"; tail -2 /tmp/pk-uv6.log
+# | pkgman search -i -D nodejs24 2>&1 | tail -1; pkgman search -i -D libuv 2>&1 | tail -2
+# | cd /boot/home/l939 || exit 1
+# | cat > sampler.js <<'JS'
+# | // sampler.js <busy-processes> <seconds> <interval-ms>: sample os.cpus() every
+# | // <interval-ms> while <busy-processes> children spin; count per-CPU samples
+# | // where idle went backwards or the busy share of the interval left [0, 100%].
+# | 'use strict';
+# | const os = require('os');
+# | const { spawn } = require('child_process');
+# | const n = Number(process.argv[2]), secs = Number(process.argv[3]), iv = Number(process.argv[4]);
+# | const kids = [];
+# | for (let i = 0; i < n; i++)
+# | 	kids.push(spawn(process.execPath, ['-e',
+# | 		`const e = Date.now() + ${secs * 1000}; let x = 0; while (Date.now() < e) x++;`],
+# | 		{ stdio: 'ignore' }));
+# | let prev = os.cpus().map(c => c.times), samples = 0, back = 0, maxBack = 0, over = 0, maxShare = 0;
+# | const timer = setInterval(() => {
+# | 	const cur = os.cpus().map(c => c.times);
+# | 	cur.forEach((t, i) => {
+# | 		const p = prev[i];
+# | 		const dIdle = t.idle - p.idle;
+# | 		const dBusy = (t.user + t.nice + t.sys + t.irq) - (p.user + p.nice + p.sys + p.irq);
+# | 		const dAll = dIdle + dBusy;
+# | 		samples++;
+# | 		if (dIdle < 0) { back++; maxBack = Math.max(maxBack, -dIdle); }
+# | 		const share = dAll > 0 ? dBusy / dAll : 0;
+# | 		if (share > 1 || share < 0) over++;
+# | 		maxShare = Math.max(maxShare, share);
+# | 	});
+# | 	prev = cur;
+# | }, iv);
+# | Promise.all(kids.map(k => new Promise((res, rej) => {
+# | 	k.on('error', rej);
+# | 	k.on('exit', (code, sig) => code === 0 ? res() : rej(new Error(`child exit ${code} ${sig}`)));
+# | }))).then(() => {
+# | 	clearInterval(timer);
+# | 	console.log(`sampler: ${n} busy x ${secs} s, every ${iv} ms: ${samples} per-CPU samples, idle went back in ${back} (max ${maxBack} ms), busy share outside [0,1] in ${over}, max busy share ${(100 * maxShare).toFixed(1)}%`);
+# | }).catch(e => { console.error(e); process.exit(1); });
+# | JS
+# | sha256sum snapshot.js cputimes.js sampler.js
+# | echo "== AFTER: os.cpus() times"
+# | node -p 'os.cpus().map(c=>c.times)'
+# | node snapshot.js || exit 1
+# | echo "== AFTER: 4 busy processes x 10 s"
+# | node cputimes.js 4 10 || exit 1
+# | echo "== AFTER: 8 busy processes x 10 s"
+# | node cputimes.js 8 10 || exit 1
+# | echo "== AFTER: idle monotonicity, 4 busy x 10 s sampled every 100 ms and every 1000 ms"
+# | node sampler.js 4 10 100 || exit 1
+# | node sampler.js 4 10 1000 || exit 1
+# | node snapshot.js || exit 1
+# | cd node-v24.21.0 || exit 1
+# | echo "== AFTER: parallel/test-os*"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -p tap -v 'parallel/test-os*' > /tmp/os-after.tap 2>&1; echo "test.py rc=$?"
+# | grep -E "^(ok|not ok)|^1\.\." /tmp/os-after.tap
+# | grep -c "^ok" /tmp/os-after.tap
+# ---- raw output ----
+== fetch the staged rev 6 set (s3 libuv-r6/) and check it against SHA256SUMS
+libuv-1.52.1-6-arm64.hpkg: OK
+libuv_devel-1.52.1-6-arm64.hpkg: OK
+libuv_debuginfo-1.52.1-6-arm64.hpkg: OK
+== install libuv rev 6 (main package; node links lib:libuv)
+pkgman rc=0
+[system] Cleaning up ...
+[system] Done.
+<system>    nodejs24  24.21.0-3  arm64
+----------------------------------
+<system>    libuv  1.52.1-6  arm64
+2f85aa3fc2a300cebff5ac69ef3244c1d6307e2454f5414c8c77949345469339  snapshot.js
+494d54f240cf272449751102cc2f67b47c8132602531b621971b91efcf06fac9  cputimes.js
+cf24410882696dd16738a74aa10169b75a0715ef0a8e5b151508e7264934dd12  sampler.js
+== AFTER: os.cpus() times
+[
+  { user: 22800, nice: 0, sys: 0, idle: 1741167, irq: 0 },
+  { user: 23430, nice: 0, sys: 0, idle: 1740537, irq: 0 },
+  { user: 22802, nice: 0, sys: 0, idle: 1741165, irq: 0 },
+  { user: 12996, nice: 0, sys: 0, idle: 1750971, irq: 0 },
+  { user: 14293, nice: 0, sys: 0, idle: 1749674, irq: 0 },
+  { user: 12400, nice: 0, sys: 0, idle: 1751567, irq: 0 },
+  { user: 13977, nice: 0, sys: 0, idle: 1749990, irq: 0 },
+  { user: 29296, nice: 0, sys: 0, idle: 1734671, irq: 0 }
+]
+uptime 1764.024604 s, cpus 8, model unknown, speed 2597
+[{"user":22801,"nice":0,"sys":0,"idle":1741222,"irq":0},{"user":23430,"nice":0,"sys":0,"idle":1740593,"irq":0},{"user":22802,"nice":0,"sys":0,"idle":1741221,"irq":0},{"user":12996,"nice":0,"sys":0,"idle":1751028,"irq":0},{"user":14306,"nice":0,"sys":0,"idle":1749718,"irq":0},{"user":12445,"nice":0,"sys":0,"idle":1751578,"irq":0},{"user":13977,"nice":0,"sys":0,"idle":1750046,"irq":0},{"user":29296,"nice":0,"sys":0,"idle":1734727,"irq":0}]
+  cpu 0: user 22801 nice 0 sys 0 idle 1741222 irq 0; sum 1764023 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+  cpu 1: user 23430 nice 0 sys 0 idle 1740593 irq 0; sum 1764023 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+  cpu 2: user 22802 nice 0 sys 0 idle 1741221 irq 0; sum 1764023 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+  cpu 3: user 12996 nice 0 sys 0 idle 1751028 irq 0; sum 1764024 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+  cpu 4: user 14306 nice 0 sys 0 idle 1749718 irq 0; sum 1764024 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+  cpu 5: user 12445 nice 0 sys 0 idle 1751578 irq 0; sum 1764023 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+  cpu 6: user 13977 nice 0 sys 0 idle 1750046 irq 0; sum 1764023 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+  cpu 7: user 29296 nice 0 sys 0 idle 1734727 irq 0; sum 1764023 ms = 1764.0 s vs uptime 1764.024604 s (100.0%)
+== AFTER: 4 busy processes x 10 s
+busy processes 4 x 10 s, wall 10089 ms, cpus 8
+  cpu 0: d.user 52 d.sys 0 d.idle 10037 (sum 10089 ms, 100.0% of wall)
+  cpu 1: d.user 10055 d.sys 0 d.idle 34 (sum 10089 ms, 100.0% of wall)
+  cpu 2: d.user 30 d.sys 0 d.idle 10059 (sum 10089 ms, 100.0% of wall)
+  cpu 3: d.user 13 d.sys 0 d.idle 10076 (sum 10089 ms, 100.0% of wall)
+  cpu 4: d.user 10039 d.sys 0 d.idle 51 (sum 10090 ms, 100.0% of wall)
+  cpu 5: d.user 81 d.sys 0 d.idle 10008 (sum 10089 ms, 100.0% of wall)
+  cpu 6: d.user 10054 d.sys 0 d.idle 35 (sum 10089 ms, 100.0% of wall)
+  cpu 7: d.user 10041 d.sys 0 d.idle 48 (sum 10089 ms, 100.0% of wall)
+  total: user 40365 nice 0 sys 0 idle 40348 irq 0 ms
+  busy 40365 ms vs expected 40000 ms (100.9%)
+  user+nice+sys+idle+irq 80713 ms vs cpus x wall 80714 ms (100.0%)
+  busy fraction 50.0% vs expected 50.0%
+== AFTER: 8 busy processes x 10 s
+busy processes 8 x 10 s, wall 10223 ms, cpus 8
+  cpu 0: d.user 10007 d.sys 0 d.idle 216 (sum 10223 ms, 100.0% of wall)
+  cpu 1: d.user 10034 d.sys 0 d.idle 190 (sum 10224 ms, 100.0% of wall)
+  cpu 2: d.user 10012 d.sys 0 d.idle 211 (sum 10223 ms, 100.0% of wall)
+  cpu 3: d.user 10101 d.sys 0 d.idle 123 (sum 10224 ms, 100.0% of wall)
+  cpu 4: d.user 10058 d.sys 0 d.idle 165 (sum 10223 ms, 100.0% of wall)
+  cpu 5: d.user 10060 d.sys 0 d.idle 163 (sum 10223 ms, 100.0% of wall)
+  cpu 6: d.user 9972 d.sys 0 d.idle 252 (sum 10224 ms, 100.0% of wall)
+  cpu 7: d.user 9977 d.sys 0 d.idle 247 (sum 10224 ms, 100.0% of wall)
+  total: user 80221 nice 0 sys 0 idle 1567 irq 0 ms
+  busy 80221 ms vs expected 80000 ms (100.3%)
+  user+nice+sys+idle+irq 81788 ms vs cpus x wall 81787 ms (100.0%)
+  busy fraction 98.1% vs expected 100.0%
+== AFTER: idle monotonicity, 4 busy x 10 s sampled every 100 ms and every 1000 ms
+sampler: 4 busy x 10 s, every 100 ms: 800 per-CPU samples, idle went back in 190 (max 4 ms), busy share outside [0,1] in 190, max busy share 104.0%
+sampler: 4 busy x 10 s, every 1000 ms: 80 per-CPU samples, idle went back in 25 (max 3 ms), busy share outside [0,1] in 25, max busy share 100.3%
+uptime 1804.789602 s, cpus 8, model unknown, speed 2597
+[{"user":42954,"nice":0,"sys":0,"idle":1761835,"irq":0},{"user":43726,"nice":0,"sys":0,"idle":1761063,"irq":0},{"user":32944,"nice":0,"sys":0,"idle":1771845,"irq":0},{"user":33197,"nice":0,"sys":0,"idle":1771591,"irq":0},{"user":54515,"nice":0,"sys":0,"idle":1750274,"irq":0},{"user":32731,"nice":0,"sys":0,"idle":1772058,"irq":0},{"user":44078,"nice":0,"sys":0,"idle":1760710,"irq":0},{"user":69520,"nice":0,"sys":0,"idle":1735268,"irq":0}]
+  cpu 0: user 42954 nice 0 sys 0 idle 1761835 irq 0; sum 1804789 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+  cpu 1: user 43726 nice 0 sys 0 idle 1761063 irq 0; sum 1804789 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+  cpu 2: user 32944 nice 0 sys 0 idle 1771845 irq 0; sum 1804789 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+  cpu 3: user 33197 nice 0 sys 0 idle 1771591 irq 0; sum 1804788 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+  cpu 4: user 54515 nice 0 sys 0 idle 1750274 irq 0; sum 1804789 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+  cpu 5: user 32731 nice 0 sys 0 idle 1772058 irq 0; sum 1804789 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+  cpu 6: user 44078 nice 0 sys 0 idle 1760710 irq 0; sum 1804788 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+  cpu 7: user 69520 nice 0 sys 0 idle 1735268 irq 0; sum 1804788 ms = 1804.8 s vs uptime 1804.789602 s (100.0%)
+== AFTER: parallel/test-os*
+test.py rc=0
+1..8
+ok 1 parallel/test-os
+ok 2 parallel/test-os-eol
+ok 3 parallel/test-os-checked-function
+ok 4 parallel/test-os-constants-signals
+ok 5 parallel/test-os-process-priority
+ok 6 parallel/test-os-fast
+ok 7 parallel/test-os-homedir-no-envvar
+ok 8 parallel/test-os-userinfo-handles-getter-errors
+8
