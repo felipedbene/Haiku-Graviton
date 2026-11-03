@@ -1,0 +1,84 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-uboot
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T013915Z   end: 20261103T013944Z   rc: 0
+# script sha256: 93a99074f476075ccaf098a2399853c3f34c566d6964c79def16597086254b76
+# ---- script ----
+# | # Stock arm: the u_boot_tools-2026.07 (overlay REVISION 2) haikuporter run.
+# | cat /boot/home/r996/hp-before.log
+# | echo "== haikuporter log: build-package list and the failure"
+# | L=/boot/home/r996/haikuporter-before.log
+# | wc -l $L
+# | grep -nE "^Building|build-package|openssl3|bison" $L | head -40
+# | grep -nE "Unhandled pheader|Error|error:|\*\*\*" $L | head -20
+# | tail -25 $L
+# ---- raw output ----
+start 20261103T013118Z
+Haiku ip-10-128-7-225.us-west-2.compu R1~beta6+development hrev59996 Nov  3 2026 00:41:16 arm64 arm64 Haiku
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  /boot/system/runtime_loader
+bison-3.8.2_bootstrap-1-arm64.hpkg
+gnutls-3.8.9-1-arm64.hpkg
+gnutls_devel-3.8.9-1-arm64.hpkg
+haiku-r1~beta6_hrev59996-1-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_devel-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-3-any.hpkg
+12:REVISION="2"
+haikuporter rc=1
+end 20261103T013836Z
+DONE
+== haikuporter log: build-package list and the failure
+4341 /boot/home/r996/haikuporter-before.log
+352:	updating dependency infos of bison-3.8.2
+2564:	/boot/system/packages/bison-3.8.2_bootstrap-1-arm64.hpkg
+2601:	/boot/system/packages/openssl3-3.5.9-3-arm64.hpkg
+2602:	/boot/system/packages/openssl3_devel-3.5.9-3-arm64.hpkg
+2620:Building ...
+2624:runtime_loader: /boot/system/bin/bison: Unhandled pheader type in count 0x6474e553
+2625:runtime_loader: /boot/system/bin/bison: Unhandled pheader type in parse 0x6474e553
+2862:	updating dependency infos of openssl3-3.5.9
+9:	Error: package 2cdt-2016.10.16 cannot be built for architecture arm64
+11:	Error: No match found for license unknown
+12:	Error: Valid license filenames included with Haiku are:
+13:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+14:	Error: (in /boot/home/haikuports/sci-physics/2dphysicsdemo/2dphysicsdemo-22.5.98.recipe)
+54:	Error: package aesaddon-0.3.1 cannot be built for architecture arm64
+60:	Error: package aika-0.0.4 cannot be built for architecture arm64
+95:	Error: package amc-1.14.0 cannot be built for architecture arm64
+109:	Error: No match found for license Unknown
+110:	Error: Valid license filenames included with Haiku are:
+111:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+112:	Error: (in /boot/home/haikuports/haiku-apps/animator/animator-1.0.recipe)
+162:	Error: package arm_none_eabi_gdb-7.7 cannot be built for architecture arm64
+232:	Error: package auralillusion-4.0 cannot be built for architecture arm64
+282:	Error: package basiliskii-1.0.0 cannot be built for architecture arm64
+311:	Error: package belife-1.0.0 cannot be built for architecture arm64
+320:	Error: package beostilink-0~git cannot be built for architecture arm64
+323:	Error: No match found for license Unknown
+324:	Error: Valid license filenames included with Haiku are:
+325:	Error: Anti-Grain Geometry, Apache v2, Apache-2.0, Artistic, Artistic v2.0, BSD (2-clause), BSD (3-clause), BSD (4-clause), Be Sample Code License, Bitstream Charter, CDDL v1, CMake, CQuantizer, Curl, DEC, Flex, FreeType, GNU GPL font exception, GNU GPL v1, GNU GPL v2, GNU GPL v3, GNU LGPL v2, GNU LGPL v2.1, GNU LGPL v3, ICU, IJG, ISC, Info-ZIP, Intel (2xxx firmware), Intel (ACPICA), JasPer v2, LibJPEG, LibPNG, MAPM, MIT, MIT (no promotion), MPL v1.1, MPL v2.0, Marvell (firmware), NewOS, OpenGroup, OpenSSH, OpenSSL, PCRE, Public Domain, Python, SIL Open Font License v1.1, SQLite, Zlib, bzip2, lha, libpsl
+	removing tuxracer-0.61-arm64
+	removing uade-2.13-arm64
+	removing unlzx-1.1-arm64
+	removing uqm-0.7.0-arm64
+	removing urllib3-2.8.0-arm64
+	removing vcdgear-1.1-arm64
+	removing virtualbelive-20140718-arm64
+	removing virtualbox_guest_additions-6.1.26-arm64
+	removing vmware_addons-1.2.2-arm64
+	removing vncviewer-3.3.1r6-arm64
+	removing waterfox-6.7.6-arm64
+	removing waveview-1.0-arm64
+	removing wings-1.5.3-arm64
+	removing wonderbrush3-3.0.0~git-arm64
+	removing xamos-0.29-arm64
+	removing xpmtranslator-1.1.1~git-arm64
+	removing yab-1.8.2-arm64
+	removing yt_dlp_ejs-0.8.0-arm64
+	removing z26-2.16.00s-arm64
+	removing zaz-1.0.0-arm64
+----------------------------------------------------------------------
+dev-embedded::u_boot_tools-2026.07
+	/boot/home/haikuports/dev-embedded/u_boot_tools/u_boot_tools-2026.07.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

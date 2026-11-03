@@ -1,0 +1,54 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: bison-package-identity
+# instance: i-0049c2ef2e2645f37   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T013339Z   end: 20261103T013351Z   rc: 1
+# script sha256: b9d50b7ea89003b69100203139ebcb790bcf3f26515af50f634317235828e624
+# ---- script ----
+# | # Candidate: what is green's bison-3.8.2_bootstrap-1 package, exactly?
+# | P=/boot/system/packages/bison-3.8.2_bootstrap-1-arm64.hpkg
+# | sha256sum $P
+# | package list -i $P 2>&1 | head -30
+# | readelf -hW /boot/system/bin/bison | grep -E 'Class|OS/ABI|Machine|Type'
+# | readelf -nW /boot/system/bin/bison | grep -iE 'ABI tag|OS:|Build ID|feature' | head -4
+# | strings -a /boot/system/bin/bison | grep -iE 'GCC: |glibc|GLIBC_2' | sort -u | head -6
+# | package list $P | grep -E '^\s+(bin|lib)' | head; package list $P | awk '{print $NF}' | grep -E '^(bin|lib)/' | head -20
+# ---- raw output ----
+df814bbb16ba37317d2f045dc3cdf187edea1e6ccc71eedb788b099917ad27ed  /boot/system/packages/bison-3.8.2_bootstrap-1-arm64.hpkg
+package-attributes:
+	name: bison
+	summary: A yacc-compatible parser generator
+	description: Bison is a general-purpose parser generator that converts an annotated context-free grammar into an LALR(1) or GLR parser for that grammar. Once you are proficient with Bison, you can use it to develop a wide range of language parsers, from those used in simple desk calculators to complex programming languages.
+
+Bison is upward compatible with Yacc: all properly-written Yacc grammars ought to work with Bison with no change. Anyone familiar with Yacc should be able to use Bison with little trouble. You need to be fluent in C or C++ programming in order to use Bison.
+	vendor: DeBeOS
+	packager: DeBeOS <packages@debene.dev>
+	architecture: arm64
+	version: 3.8.2_bootstrap-1
+	copyright: 1992-2018 Free Software Foundation, Inc.
+	license: GNU GPL v3
+	URL: http://www.gnu.org/software/bison/bison.html
+	source URL: https://ftpmirror.gnu.org/bison/bison-3.8.2.tar.xz
+	source URL: https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz
+	source URL: https://ports-mirror.haiku-os.org/bison/bison-3.8.2.tar.xz
+	provides: bison = 3.8.2 (compatible >= 2)
+	provides: cmd:bison = 3.8.2 (compatible >= 2)
+	provides: cmd:yacc
+	provides: devel:liby = 3.8.2 (compatible >= 2)
+	requires: haiku
+	requires: cmd:m4
+  Class:                             ELF64
+  OS/ABI:                            UNIX - System V
+  Type:                              DYN (Position-Independent Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  GNU                  0x00000020	NT_GNU_PROPERTY_TYPE_0	      Properties: x86 feature: IBT, SHSTK, x86 ISA needed: x86-64-baseline
+  GNU                  0x00000014	NT_GNU_BUILD_ID (unique build ID bitstring)	    Build ID: 0ec8321f6ad79bbf055befa518ab219779f1b9ee
+  GNU                  0x00000010	NT_GNU_ABI_TAG (ABI version tag)	    OS: Linux, ABI: 3.2.0
+GCC: (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+GLIBC_2.14
+GLIBC_2.15
+GLIBC_2.17
+GLIBC_2.2.5
+GLIBC_2.26
+  lib                                    0  2026-09-16 17:04:38  drwxrwxr-x
+    liby.a                           11766  2026-04-21 01:44:53  -rw-r--r--
+failed to run commands: exit status 1

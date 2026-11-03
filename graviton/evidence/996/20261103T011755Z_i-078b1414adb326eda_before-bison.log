@@ -1,0 +1,59 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-bison
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T011755Z   end: 20261103T011806Z   rc: 0
+# script sha256: 2cc5873a86089b4b2aa33c1c1da848bcbe8f51e39a13451d46b0d7d60b61c7ab
+# ---- script ----
+# | # Install bison from green (the DeBeOS repo) on the stock image, then try it.
+# | set -x
+# | df -h /boot
+# | for t in readelf gcc objcopy bison; do command -v $t; done
+# | pkgman install -y bison 2>&1 | tail -5
+# | ls /boot/system/packages/ | grep -i bison
+# | command -v bison
+# | readelf -lW /boot/system/bin/bison | grep -E 'Type|GNU_PROPERTY|LOAD|0x6474e553'
+# | /boot/system/bin/bison --version; echo "bison rc=$?"
+# ---- raw output ----
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:   60.0 GiB (31438839 blocks)
+  Used Blocks:   15.1 GiB (7927282 blocks)
+  Free Blocks:   44.8 GiB (23511557 blocks)
+      Usage %:   25.2 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288
+Validating checksum for http://packages.debene.dev/arm64/packages/bison-3.8.2_bootstrap-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-03_01:17:58"
+[system] Cleaning up ...
+[system] Done.
+bison-3.8.2_bootstrap-1-arm64.hpkg
+/boot/system/bin/bison
+bison rc=16
++ df -h /boot
++ for t in readelf gcc objcopy bison
++ command -v readelf
++ for t in readelf gcc objcopy bison
++ command -v gcc
++ for t in readelf gcc objcopy bison
++ command -v objcopy
++ for t in readelf gcc objcopy bison
++ command -v bison
++ pkgman install -y bison
++ tail -5
++ ls /boot/system/packages/
++ grep -i bison
++ command -v bison
++ readelf -lW /boot/system/bin/bison
+/tmp/run-77908-b62dc5.sh: line 8: readelf: command not found
++ grep -E 'Type|GNU_PROPERTY|LOAD|0x6474e553'
++ /boot/system/bin/bison --version
++ echo 'bison rc=16'

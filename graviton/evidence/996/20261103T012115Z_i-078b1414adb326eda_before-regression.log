@@ -1,0 +1,84 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-regression
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T012115Z   end: 20261103T012132Z   rc: 0
+# script sha256: 1447ea2f8baf9d841d4e24f1a9127b62b993671142c37b5b2667ecc6f951debb
+# ---- script ----
+# | # Stock image: install the regression sample, run it, and histogram the
+# | # program-header types of every ELF file under /boot/system (all installed
+# | # packages), listing any file with a type the runtime_loader refuses.
+# | 
+# | 
+# | pkgman install -y nodejs24 python3.14 2>&1 | tail -2
+# | ls /boot/system/packages | grep -iE '^(nodejs|python3|openssh|gcc|binutils)' 
+# | for c in "node --version" "python3.14 --version" "gcc --version" "ssh -V" "ld --version"; do
+# | 	echo "== $c"; $c 2>&1 | head -1; echo "rc=$?"
+# | done
+# | python3.14 -I - <<'PY'
+# | import os, struct, collections
+# | known = {0:"NULL",1:"LOAD",2:"DYNAMIC",3:"INTERP",4:"NOTE",5:"SHLIB",6:"PHDR",7:"TLS",
+# | 	0x6474e550:"GNU_EH_FRAME",0x6474e551:"GNU_STACK",0x6474e552:"GNU_RELRO",
+# | 	0x6474e553:"GNU_PROPERTY",0x70000001:"ARM_UNWIND",0x70000003:"RISCV_ATTRIBUTES"}
+# | handled_before = set(known) - {0x6474e553}
+# | hist = collections.Counter(); files = 0; bad = collections.defaultdict(list)
+# | for root, dirs, names in os.walk("/boot/system"):
+# | 	for n in names:
+# | 		p = os.path.join(root, n)
+# | 		if os.path.islink(p) or not os.path.isfile(p): continue
+# | 		try:
+# | 			with open(p, "rb") as f:
+# | 				h = f.read(64)
+# | 				if len(h) < 64 or h[:4] != b"\x7fELF" or h[4] != 2: continue
+# | 				phoff, = struct.unpack_from("<Q", h, 32)
+# | 				phentsize, phnum = struct.unpack_from("<HH", h, 54)
+# | 				f.seek(phoff); ph = f.read(phentsize * phnum)
+# | 		except OSError: continue
+# | 		files += 1
+# | 		for i in range(phnum):
+# | 			t, = struct.unpack_from("<I", ph, i * phentsize)
+# | 			hist[t] += 1
+# | 			if t not in handled_before: bad[t].append(p)
+# | print("ELF64 files scanned:", files)
+# | for t, c in sorted(hist.items()):
+# | 	print("  0x%08x %-18s %6d" % (t, known.get(t, "UNKNOWN"), c))
+# | for t, ps in sorted(bad.items()):
+# | 	print("refused-by-stock type 0x%08x in %d files, e.g.:" % (t, len(ps)))
+# | 	for p in ps[:15]: print("   ", p)
+# | PY
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg
+gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+nodejs24-24.21.0-3-arm64.hpkg
+openssh_debeos-10.4p1-1-arm64.hpkg
+python3.14-3.14.7-1-arm64.hpkg
+== node --version
+v24.21.0
+rc=0
+== python3.14 --version
+Python 3.14.7
+rc=0
+== gcc --version
+gcc (2026_03_29) 13.3.0
+rc=0
+== ssh -V
+OpenSSH_10.4p1, without OpenSSL
+rc=0
+== ld --version
+GNU ld (GNU Binutils) 2.46.1
+rc=0
+ELF64 files scanned: 707
+  0x00000001 LOAD                 1406
+  0x00000002 DYNAMIC               698
+  0x00000003 INTERP                  9
+  0x00000004 NOTE                   18
+  0x00000006 PHDR                    9
+  0x00000007 TLS                    26
+  0x6474e550 GNU_EH_FRAME          290
+  0x6474e551 GNU_STACK              17
+  0x6474e552 GNU_RELRO              15
+  0x6474e553 GNU_PROPERTY            1
+refused-by-stock type 0x6474e553 in 1 files, e.g.:
+    /boot/system/bin/bison

@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-probe
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T011734Z   end: 20261103T011746Z   rc: 1
+# script sha256: 9314d04656ec0f33b93cea52bb4e260aae283f87fd2b803fbb5b35a09a7dbf89
+# ---- script ----
+# | # What is this instance running? Base image identity before any change.
+# | uname -a
+# | ls /boot/system/packages/ | grep -E '^haiku-|^bison|^openssl' 
+# | sha256sum /boot/system/runtime_loader /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); sha256sum "$P"
+# | pkgman list-repos 2>&1 | head; ls /boot/system/settings/package-repositories/ 2>&1
+# | df -k /boot | tail -1
+# | which readelf gcc objcopy 2>&1
+# | command -v bison && bison --version
+# ---- raw output ----
+Haiku ip-10-128-7-225.us-west-2.compu R1~beta6+development hrev59996 Nov  3 2026 00:41:16 arm64 other Haiku
+haiku-r1~beta6_hrev59996-1-arm64.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg
+4d79ff379ad608eec9964ebea4bfdaef582d6b9bccfd61753bf24b516e6f48da  /boot/system/runtime_loader
+4025cac278ea3ec3303b2924c2f2503d21a9c786235e1e46cd578f6dc79c62f5  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+195f99bfbcae352cff52059665571ebedd111f616509f94734b3fcb4005ac4f7  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+        DeBeOS
+		base-url:  http://packages.debene.dev/arm64
+		identifier: http://packages.debene.dev/arm64
+		priority:  1
+DeBeOS
+   Root Inode: 524288
+/tmp/run-77670-136a0a.sh: line 8: which: command not found
+failed to run commands: exit status 1

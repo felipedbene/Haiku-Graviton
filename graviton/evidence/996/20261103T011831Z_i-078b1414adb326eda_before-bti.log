@@ -1,0 +1,82 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-bti
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T011831Z   end: 20261103T011841Z   rc: 0
+# script sha256: 0060ad1e61b18b7bb0efa24c81b9259edcf674ac0f3a3e3ce1a8ebd1a8502da0
+# ---- script ----
+# | # Stock image: the exact bison failure, then a minimal C program carrying a
+# | # GNU property note (BTI+PAC, via -mbranch-protection=standard and
+# | # -z force-bti), and a control built without it.
+# | echo "== bison --version (stderr merged)"
+# | /boot/system/bin/bison --version 2>&1; echo "bison rc=$?"
+# | grep -i "pheader" /var/log/syslog | tail -3
+# | pkgman install -y gcc binutils 2>&1 | tail -2
+# | command -v gcc readelf
+# | gcc --version | head -1; ld --version | head -1
+# | mkdir -p /boot/home/r996 && cd /boot/home/r996
+# | cat > hello.c <<'C'
+# | #include <stdio.h>
+# | int main(void) { puts("hello from a PT_GNU_PROPERTY image"); return 0; }
+# | C
+# | gcc -O2 -mbranch-protection=standard -Wl,-z,force-bti -o hello_prop hello.c; echo "cc prop rc=$?"
+# | gcc -O2 -o hello_plain hello.c; echo "cc plain rc=$?"
+# | for b in hello_prop hello_plain; do
+# | 	echo "== $b"; sha256sum $b
+# | 	readelf -lW $b | grep -E 'GNU_PROPERTY|LOOS|0x6474e553' || echo "(no PT_GNU_PROPERTY)"
+# | 	readelf -nW $b | grep -A2 -i 'property' | head -4
+# | 	./$b 2>&1; echo "$b rc=$?"
+# | done
+# | echo "== bison headers"; readelf -lW /boot/system/bin/bison | grep -E '^ +[A-Z]' 
+# ---- raw output ----
+== bison --version (stderr merged)
+bison rc=16
+KERN: runtime_loader: /boot/system/bin/bison: Unhandled pheader type in parse 0x6474e553
+KERN: runtime_loader: /boot/system/bin/bison: Unhandled pheader type in count 0x6474e553
+KERN: runtime_loader: /boot/system/bin/bison: Unhandled pheader type in parse 0x6474e553
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/gcc
+/boot/system/bin/readelf
+gcc (2026_03_29) 13.3.0
+GNU ld (GNU Binutils) 2.46.1
+cc prop rc=1
+cc plain rc=1
+== hello_prop
+(no PT_GNU_PROPERTY)
+/tmp/run-78391-49e239.sh: line 21: ./hello_prop: No such file or directory
+hello_prop rc=127
+== hello_plain
+(no PT_GNU_PROPERTY)
+/tmp/run-78391-49e239.sh: line 21: ./hello_plain: No such file or directory
+hello_plain rc=127
+== bison headers
+  Type           Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
+  PHDR           0x000040 0x0000000000000040 0x0000000000000040 0x0002d8 0x0002d8 R   0x8
+  INTERP         0x000318 0x0000000000000318 0x0000000000000318 0x00001c 0x00001c R   0x1
+  LOAD           0x000000 0x0000000000000000 0x0000000000000000 0x006b28 0x006b28 R   0x1000
+  LOAD           0x007000 0x0000000000007000 0x0000000000007000 0x05f021 0x05f021 R E 0x1000
+  LOAD           0x067000 0x0000000000067000 0x0000000000067000 0x01ca98 0x01ca98 R   0x1000
+  LOAD           0x084570 0x0000000000084570 0x0000000000084570 0x002528 0x006958 RW  0x1000
+  DYNAMIC        0x0859c0 0x00000000000859c0 0x00000000000859c0 0x0001f0 0x0001f0 RW  0x8
+  NOTE           0x000338 0x0000000000000338 0x0000000000000338 0x000030 0x000030 R   0x8
+  NOTE           0x000368 0x0000000000000368 0x0000000000000368 0x000044 0x000044 R   0x4
+  GNU_PROPERTY   0x000338 0x0000000000000338 0x0000000000000338 0x000030 0x000030 R   0x8
+  GNU_EH_FRAME   0x073d64 0x0000000000073d64 0x0000000000073d64 0x002684 0x002684 R   0x4
+  GNU_STACK      0x000000 0x0000000000000000 0x0000000000000000 0x000000 0x000000 RW  0x10
+  GNU_RELRO      0x084570 0x0000000000084570 0x0000000000084570 0x001a90 0x001a90 R   0x1
+ Section to Segment mapping:
+  Segment Sections...
+hello.c:1:10: fatal error: stdio.h: No such file or directory
+    1 | #include <stdio.h>
+      |          ^~~~~~~~~
+compilation terminated.
+hello.c:1:10: fatal error: stdio.h: No such file or directory
+    1 | #include <stdio.h>
+      |          ^~~~~~~~~
+compilation terminated.
+sha256sum: hello_prop: No such file or directory
+readelf: Error: 'hello_prop': No such file
+readelf: Error: 'hello_prop': No such file
+sha256sum: hello_plain: No such file or directory
+readelf: Error: 'hello_plain': No such file
+readelf: Error: 'hello_plain': No such file

@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-bison-diag
+# instance: i-0049c2ef2e2645f37   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T013310Z   end: 20261103T013321Z   rc: 0
+# script sha256: 0cdbec087350d5f9777a7ac6b3d102592e981c0e6516dc4804322aaba6fc7db3
+# ---- script ----
+# | # Candidate: why does bison still exit 16? Loader messages, its NEEDED libs, and
+# | # whether each one is present.
+# | /boot/system/bin/bison --version; echo "rc=$?"
+# | grep -iE "bison|runtime_loader" /var/log/syslog | tail -8
+# | readelf -dW /boot/system/bin/bison | grep -E 'NEEDED|RPATH|RUNPATH'
+# | readelf -lW /boot/system/bin/bison | grep -A1 INTERP | tail -1
+# | for l in $(readelf -dW /boot/system/bin/bison | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'); do
+# | 	printf '%s: ' $l; ls /boot/system/lib/$l 2>/dev/null || echo MISSING
+# | done
+# | pkgman search -i bison 2>&1 | tail -3
+# | package list /boot/system/packages/bison-*.hpkg | grep -iE 'requires|lib:' | head
+# ---- raw output ----
+rc=16
+KERN: runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+KERN: runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+KERN: unknown: [43791844:   101] package "bison-3.8.2_bootstrap-1-arm64.hpkg" activated
+KERN: runtime_loader: /boot/system/bin/bison: Troubles handling dynamic section
+KERN: package_daemon: [43986582:   101] KERN: Volume::_PackagesEntryCreated("bison-3.8.2_bootstrap-1-arm64.hpkg")
+KERN: runtime_loader: /boot/system/bin/bison: Troubles handling dynamic section
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+      [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+libc.so.6: MISSING
+Status  Name   Description                       
+-------------------------------------------------
+s       bison  A yacc-compatible parser generator
+	requires: haiku
+	requires: cmd:m4

@@ -1,0 +1,70 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: green-bootstrap-elf-scan
+# instance: i-078b1414adb326eda   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T014634Z   end: 20261103T014714Z   rc: 0
+# script sha256: 74a17e5204187458289b217b00809863e8014ce69e036745253b3493827bae4b
+# ---- script ----
+# | # Which green (DeBeOS repo) packages ship ELF files that are not AArch64 Haiku
+# | # objects? Download every *_bootstrap package (the class bison belongs to) plus
+# | # a control sample, extract, and classify each ELF by e_machine and interpreter.
+# | cd /boot/home && rm -rf gscan && mkdir gscan && cd gscan
+# | pkgman search -a -D > s.txt 2>&1
+# | awk '$1=="DeBeOS" && $3 ~ /_bootstrap/ {print $2"-"$3"-"$4".hpkg"}' s.txt | sort -u > boot.txt
+# | awk '$1=="DeBeOS" && $2 ~ /^(m4|flex|make|gawk|diffutils|curl|git|nodejs24|python3.14)$/ {print $2"-"$3"-"$4".hpkg"}' s.txt | sort -u > ctrl.txt
+# | wc -l boot.txt ctrl.txt
+# | for f in $(cat boot.txt ctrl.txt); do
+# | 	curl -sSf -o "$f" "http://packages.debene.dev/arm64/packages/$f" || echo "FETCH-FAIL $f"
+# | done
+# | python3.14 -I - <<'PY'
+# | import os, struct, subprocess, collections
+# | M = {183: "AArch64", 62: "X86-64", 3: "i386", 40: "ARM", 243: "RISC-V"}
+# | res = {}
+# | for f in sorted(os.listdir(".")):
+# | 	if not f.endswith(".hpkg"): continue
+# | 	d = "x_" + f; os.makedirs(d, exist_ok=True)
+# | 	if subprocess.run(["package", "extract", "-C", d, f], capture_output=True).returncode:
+# | 		print("EXTRACT-FAIL", f); continue
+# | 	cnt = collections.Counter(); bad = []
+# | 	for root, _, names in os.walk(d):
+# | 		for n in names:
+# | 			p = os.path.join(root, n)
+# | 			if os.path.islink(p) or not os.path.isfile(p): continue
+# | 			with open(p, "rb") as fh: h = fh.read(64)
+# | 			if h[:4] != b"\x7fELF" or len(h) < 20: continue
+# | 			m, = struct.unpack_from("<H", h, 18)
+# | 			cnt[M.get(m, str(m))] += 1
+# | 			if m != 183: bad.append(os.path.relpath(p, d))
+# | 	res[f] = (cnt, bad)
+# | 	print("%-55s %s%s" % (f, dict(cnt) or "(no ELF)", ("  NON-AARCH64: " + ", ".join(bad[:6])) if bad else ""))
+# | nb = [f for f, (c, b) in res.items() if b]
+# | print("packages scanned: %d, with non-AArch64 ELF: %d -> %s" % (len(res), len(nb), nb))
+# | PY
+# | cd /boot/home && rm -rf gscan
+# ---- raw output ----
+ 16 boot.txt
+  9 ctrl.txt
+ 25 total
+bash-5.3_bootstrap-1-arm64.hpkg                         {'AArch64': 1}
+binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg         {'AArch64': 15}
+bison-3.8.2_bootstrap-1-arm64.hpkg                      {'X86-64': 1}  NON-AARCH64: bin/bison
+curl-8.21.0-1-arm64.hpkg                                {'AArch64': 2}
+diffutils-3.12-1-arm64.hpkg                             {'AArch64': 4}
+findutils-4.9.0_bootstrap-1-arm64.hpkg                  {'AArch64': 4}
+flex-2.6.4-4-arm64.hpkg                                 {'AArch64': 1}
+gawk-5.3.0-1-arm64.hpkg                                 {'AArch64': 15}
+gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg            {'AArch64': 31}
+gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg    {'AArch64': 5}
+gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg (no ELF)
+git-2.54.0-1-arm64.hpkg                                 {'AArch64': 8}
+grep-3.11_bootstrap-1-arm64.hpkg                        {'AArch64': 1}
+icu74-74.1_bootstrap-1-arm64.hpkg                       {'AArch64': 4}
+icu74_devel-74.1_bootstrap-1-arm64.hpkg                 (no ELF)
+less-668_bootstrap-1-arm64.hpkg                         {'AArch64': 3}
+m4-1.4.19_bootstrap-1-arm64.hpkg                        {'AArch64': 1}
+make-4.4.1_bootstrap-1-arm64.hpkg                       {'AArch64': 1}
+nodejs24-24.21.0-3-arm64.hpkg                           {'AArch64': 1}
+noto-20170202_bootstrap-7-any.hpkg                      (no ELF)
+python3.14-3.14.7-1-arm64.hpkg                          {'AArch64': 75}
+sed-4.9_bootstrap-1-arm64.hpkg                          {'AArch64': 1}
+zlib_source-1.2.13_bootstrap-1-source.hpkg              (no ELF)
+packages scanned: 23, with non-AArch64 ELF: 1 -> ['bison-3.8.2_bootstrap-1-arm64.hpkg']

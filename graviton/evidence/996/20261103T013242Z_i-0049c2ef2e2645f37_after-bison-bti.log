@@ -1,0 +1,67 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-bison-bti
+# instance: i-0049c2ef2e2645f37   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261103T013242Z   end: 20261103T013300Z   rc: 1
+# script sha256: d9332fde25a22e5eee191f36db5a20e7c831e5d29624cc86b49cd073b9e34468
+# ---- script ----
+# | # Candidate image (ami-054805233554d9a03): identity, then the same steps as the
+# | # stock arm -- install bison from green, run it; build the BTI-noted program and
+# | # its control with the same toolchain; run both.
+# | uname -a
+# | sha256sum /boot/system/runtime_loader /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | sha256sum /boot/system/packages/haiku-r1*-arm64.hpkg
+# | pkgman install -y bison 2>&1 | tail -1
+# | ls /boot/system/packages/ | grep -i bison
+# | echo "== bison --version (stderr merged)"
+# | /boot/system/bin/bison --version 2>&1; echo "bison rc=$?"
+# | echo "== bison actually generating a parser"
+# | mkdir -p /boot/home/r996 && cd /boot/home/r996
+# | printf '%%%%\ns: "a" ;\n%%%%\n' > t.y && /boot/system/bin/bison -o t.tab.c t.y 2>&1; echo "bison gen rc=$?"; ls -l t.tab.c
+# | pkgman install -y gcc binutils haiku_devel 2>&1 | tail -1
+# | gcc --version | head -1; ld --version | head -1
+# | cat > hello.c <<'C'
+# | #include <stdio.h>
+# | int main(void) { puts("hello from a PT_GNU_PROPERTY image"); return 0; }
+# | C
+# | gcc -O2 -mbranch-protection=standard -Wl,-z,force-bti -o hello_prop hello.c 2>/dev/null; echo "cc prop rc=$?"
+# | gcc -O2 -o hello_plain hello.c; echo "cc plain rc=$?"
+# | for b in hello_prop hello_plain; do
+# | 	echo "== $b"; sha256sum $b
+# | 	readelf -lW $b | grep -E 'GNU_PROPERTY' || echo "(no PT_GNU_PROPERTY)"
+# | 	readelf -nW $b | grep -iE 'AArch64 feature' | head -2
+# | 	./$b 2>&1; echo "$b rc=$?"
+# | done
+# | echo "== runtime_loader complaints in syslog (expect none)"
+# | grep -cE "Unhandled pheader" /var/log/syslog
+# ---- raw output ----
+Haiku ip-10-128-14-35.us-west-2.compu R1~beta6+development hrev59996 Nov  3 2026 00:41:16 arm64 other Haiku
+7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  /boot/system/runtime_loader
+31a7773ce540c5f5efe78fb85f833b5e796c4ff59f60aa2861f7faa021972351  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+bca390f26e689fdfa07a7411435f40aa5011b313186bc2394d60ee72e3d3ac5f  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+[system] Done.
+bison-3.8.2_bootstrap-1-arm64.hpkg
+== bison --version (stderr merged)
+bison rc=16
+== bison actually generating a parser
+bison gen rc=16
+[system] Done.
+gcc (2026_03_29) 13.3.0
+GNU ld (GNU Binutils) 2.46.1
+cc prop rc=0
+cc plain rc=0
+== hello_prop
+9e25324f618bc2a43c4c18ec7d744ee9ff2156452c8d980dcd360c360a5da53b  hello_prop
+  GNU_PROPERTY   0x020048 0x0000000000020048 0x0000000000020048 0x000020 0x000020 R   0x8
+  GNU                  0x00000010	NT_GNU_PROPERTY_TYPE_0	      Properties: AArch64 feature: BTI
+hello from a PT_GNU_PROPERTY image
+hello_prop rc=0
+== hello_plain
+ecf785d5844edbdd05f212cb00d9c8f7c4d7d8b91abaf482d62b2bbb66991c13  hello_plain
+(no PT_GNU_PROPERTY)
+hello from a PT_GNU_PROPERTY image
+hello_plain rc=0
+== runtime_loader complaints in syslog (expect none)
+0
+ls: cannot access 't.tab.c': No such file or directory
+failed to run commands: exit status 1
