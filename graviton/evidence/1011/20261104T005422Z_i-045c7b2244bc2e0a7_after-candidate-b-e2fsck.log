@@ -1,0 +1,55 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-b-e2fsck
+# instance: i-045c7b2244bc2e0a7   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: e2fsck -fn on Linux of the #1011 candidate b images after its Haiku run
+# start: 20261104T005422Z   end: 20261104T005439Z   rc: 0
+# script sha256: 2634c4c3e38a3eadb66ae7326316676869c055846118fd20e5643bfe63801159
+# ---- script ----
+# | # e2fsck -fn (read-only, forced) of an arm's ext2 images after its Haiku run, fetched from S3.
+# | ARM=c1011b
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/fs1011/after
+# | mkdir -p /opt/after && cd /opt/after
+# | for i in ext2-1011 ext2-stk; do
+# | 	aws s3 cp --quiet $B/$ARM-$i.img $ARM-$i.img || exit 1
+# | 	sha256sum $ARM-$i.img
+# | 	echo "=== e2fsck -fn $ARM-$i.img ==="; e2fsck -fn $ARM-$i.img > $ARM-$i.fsck 2>&1; echo "e2fsck rc=$?"
+# | 	echo "lines: $(wc -l < $ARM-$i.fsck)  'Unattached inode': $(grep -c 'Unattached inode' $ARM-$i.fsck)  'Unconnected directory': $(grep -c 'Unconnected directory' $ARM-$i.fsck)  'ref count is': $(grep -c 'ref count is' $ARM-$i.fsck)"
+# | 	head -40 $ARM-$i.fsck; echo "[...]"; tail -6 $ARM-$i.fsck
+# | done
+# ---- raw output ----
+c4f867a6c43e19e2a6491298d428522ed0fa62604555be96b6b1439ad1171a91  c1011b-ext2-1011.img
+=== e2fsck -fn c1011b-ext2-1011.img ===
+e2fsck rc=0
+lines: 7  'Unattached inode': 0  'Unconnected directory': 0  'ref count is': 0
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+c1011b-ext2-1011.img: 24/65536 files (0.0% non-contiguous), 4153/65536 blocks
+[...]
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+c1011b-ext2-1011.img: 24/65536 files (0.0% non-contiguous), 4153/65536 blocks
+63ed0124722c8bf07f78cd0e1df0ac24313bdb7bfd677bf85a78ad8656f1bcca  c1011b-ext2-stk.img
+=== e2fsck -fn c1011b-ext2-stk.img ===
+e2fsck rc=0
+lines: 7  'Unattached inode': 0  'Unconnected directory': 0  'ref count is': 0
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+c1011b-ext2-stk.img: 39/65536 files (0.0% non-contiguous), 4151/65536 blocks
+[...]
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+c1011b-ext2-stk.img: 39/65536 files (0.0% non-contiguous), 4151/65536 blocks

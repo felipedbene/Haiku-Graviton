@@ -1046,6 +1046,16 @@ ext2_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 				: B_NOT_A_DIRECTORY;
 		}
 
+		// replacing a directory is only allowed if it is empty
+		if (existent->IsDirectory()) {
+			bool isEmpty;
+			status = existent->IsEmpty(isEmpty);
+			if (status != B_OK)
+				return status;
+			if (!isEmpty)
+				return B_DIRECTORY_NOT_EMPTY;
+		}
+
 		// TODO: Perhaps we have to revert this in case of error?
 		status = newIterator->ChangeEntry(transaction, oldID, fileType);
 		if (status != B_OK)
@@ -1054,6 +1064,16 @@ ext2_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 		status = existent->Unlink(transaction);
 		if (status != B_OK)
 			ERROR("Error while unlinking existing destination\n");
+
+		// The replaced directory's ".." held a link on its parent. A
+		// directory moved in from elsewhere gets that link back below.
+		if (existent->IsDirectory()) {
+			status = newDirectory->Unlink(transaction);
+			if (status != B_OK) {
+				ERROR("Error while decrementing hardlink count on the "
+					"destination folder\n");
+			}
+		}
 
 		entry_cache_remove(volume->ID(), newDirectory->ID(), newName);
 
@@ -1394,6 +1414,9 @@ ext2_remove_dir(fs_volume* _volume, fs_vnode* _directory, const char* name)
 	if (status != B_OK)
 		return status;
 
+	ObjectDeleter<DirectoryIterator> directoryIteratorDeleter(
+		directoryIterator);
+
 	ino_t id;
 	status = directoryIterator->FindEntry(name, &id);
 	if (status != B_OK)
@@ -1411,6 +1434,15 @@ ext2_remove_dir(fs_volume* _volume, fs_vnode* _directory, const char* name)
 		(uid_t)directory->Node().UserID(), (uid_t)inode->Node().UserID());
 	if (status != B_OK)
 		return status;
+
+	// Inode::Unlink() would remove a directory that still holds files, as
+	// those do not add to its link count
+	bool isEmpty;
+	status = inode->IsEmpty(isEmpty);
+	if (status != B_OK)
+		return status;
+	if (!isEmpty)
+		return B_DIRECTORY_NOT_EMPTY;
 
 	status = inode->Unlink(transaction);
 	if (status != B_OK)

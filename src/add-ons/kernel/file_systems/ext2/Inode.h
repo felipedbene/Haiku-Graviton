@@ -99,6 +99,7 @@ public:
 			status_t	InitDirectory(Transaction& transaction, Inode* parent);
 
 			status_t	Unlink(Transaction& transaction);
+			status_t	IsEmpty(bool& _isEmpty);
 
 	static	status_t	Create(Transaction& transaction, Inode* parent,
 							const char* name, int32 mode, int openMode,

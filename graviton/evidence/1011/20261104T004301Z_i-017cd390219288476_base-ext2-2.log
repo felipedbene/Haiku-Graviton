@@ -1,0 +1,106 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-ext2-2
+# instance: i-017cd390219288476   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: trunk-baseline arm: updated ext2rmdir1011 + full sticky1008 ext2 matrix on fresh images, unmount, upload
+# start: 20261104T004301Z   end: 20261104T004516Z   rc: 0
+# script sha256: ad3cf555bb4aebc6cdc2f989f93ed802921910057ac6edd59ac71965563cc240
+# ---- script ----
+# | # Issue 1011, arm "base2": on the images registered by the setup command (a later SSM command,
+# | # per #1013's register+mount ENOENT), mount ext2-1011.img and run ext2rmdir1011 with the
+# | # Linux-created htree directory /lbig; mount ext2-stk.img and run the FULL sticky1008 matrix
+# | # (no -x). Unmount both, and upload them so e2fsck -fn runs on Linux.
+# | cd /boot/home/t1011b || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2 ext2rmdir1011 sticky1008
+# | diskimage list
+# | dev() { diskimage list | awk -v f="/boot/home/t1011b/$1" '$2 == f { print "/dev/disk/virtual/files/" $1 "/raw" }' | tail -1; }
+# | D1=$(dev ext2-1011.img); D2=$(dev ext2-stk.img); echo "ext2-1011.img -> $D1   ext2-stk.img -> $D2"
+# | mkdir -p m1 m2
+# | mount -t ext2 $D1 /boot/home/t1011b/m1 || exit 1
+# | mount -t ext2 $D2 /boot/home/t1011b/m2 || exit 1
+# | df /boot/home/t1011b/m1 | grep -E "Mounted|Device|File System"
+# | echo "--- loaded ext2 image (preloaded = name without a path)"; listimage 1 | grep -E "ext2"
+# | echo "=== ext2rmdir1011 ==="; ./ext2rmdir1011 /boot/home/t1011b/m1 /boot/home/t1011b/m1/lbig; echo "ext2rmdir1011 rc=$?"
+# | echo "=== sticky1008 full ext2 matrix (no -x) ==="; ./sticky1008 /boot/home/t1011b/m2 > stk.out 2>&1; echo "sticky1008 rc=$?"
+# | grep -E "FAIL|setup|SUMMARY" stk.out | head -20; grep -c PASS stk.out
+# | sync
+# | unmount /boot/home/t1011b/m1; echo "unmount m1 rc=$?"
+# | unmount /boot/home/t1011b/m2; echo "unmount m2 rc=$?"
+# | sha256sum ext2-1011.img ext2-stk.img
+# | curl -sS -o /dev/null -w "upload ext2-1011 http=%{http_code}\n" -T ext2-1011.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/fs1011/after/base2-ext2-1011.img?<PRESIGNED>'
+# | curl -sS -o /dev/null -w "upload ext2-stk http=%{http_code}\n" -T ext2-stk.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/fs1011/after/base2-ext2-stk.img?<PRESIGNED>'
+# ---- raw output ----
+a9173dbaa0584b102e22a8f56d7134c5c6d51f23634ec2d0b02045985bf13105  /boot/system/kernel_arm64
+d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  /boot/system/add-ons/kernel/file_systems/ext2
+fcb123a61157beb788a351b3047e3b14aa6190046f5ed043018884a21b9b4d78  ext2rmdir1011
+185b151c19f6d14f0a34a0e911cf57a649a3a3b8289096a13f6c7f9362090e50  sticky1008
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1011/ext2-1011.img     /dev/disk/virtual/files/3/raw
+     4  /boot/home/t1011/ext2-stk.img      /dev/disk/virtual/files/4/raw
+     5  /boot/home/t1011b/ext2-1011.img    /dev/disk/virtual/files/5/raw
+     6  /boot/home/t1011b/ext2-stk.img     /dev/disk/virtual/files/6/raw
+ext2-1011.img -> /dev/disk/virtual/files/5/raw   ext2-stk.img -> /dev/disk/virtual/files/6/raw
+   Device No.: 10
+   Mounted at: /boot/home/t1011b/m1
+  File System: ext2
+       Device: /dev/disk/virtual/files/5/raw
+--- loaded ext2 image (preloaded = name without a path)
+ 3746 0xffff0000dcb01000 0xffff0000dcb24000     0          0 /boot/system/add-ons/kernel/file_systems/ext2
+=== ext2rmdir1011 ===
+base /boot/home/t1011b/m1/t1011.601
+FAIL rmdir(dir holding one file)                  got=OK         expected=ENOTEMPTY
+FAIL its file still reachable                     got=ENOENT     expected=OK
+FAIL its file still listed                        got=EIO        expected=OK
+FAIL unlink(onefile/inner)                        got=ENOENT     expected=OK
+FAIL rmdir(dir whose file was unlinked)           got=ENOENT     expected=OK
+PASS rmdir(empty dir)                             got=OK         expected=OK
+PASS empty dir gone                               got=ENOENT     expected=ENOENT
+FAIL rmdir(dir holding a subdir)                  got=OK         expected=ENOTEMPTY
+FAIL its subdir still reachable                   got=ENOENT     expected=OK
+FAIL rename(A, B holding a file)                  got=OK         expected=ENOTEMPTY
+FAIL A still there                                got=ENOENT     expected=OK
+FAIL B/x still there                              got=ENOENT     expected=OK
+FAIL rename(A, Bsub holding a subdir)             got=ENOENT     expected=ENOTEMPTY
+PASS Bsub/s still there                           got=OK         expected=OK
+FAIL rename(A, C empty)                           got=ENOENT     expected=OK
+PASS A gone after rename                          got=ENOENT     expected=ENOENT
+FAIL C/a present after rename                     got=ENOENT     expected=OK
+links of /boot/home/t1011b/m1/t1011.601: 6 (2 + 3 subdirectories expected)
+FAIL base links after rename over a dir           got=EINVAL     expected=OK
+PASS rename(X, P/Q empty) across dirs             got=OK         expected=OK
+PASS P/Q/x present after rename                   got=OK         expected=OK
+links of /boot/home/t1011b/m1/t1011.601/P: 4 (2 + 1 subdirectories expected)
+FAIL P links after cross-dir rename over a dir    got=EINVAL     expected=OK
+links of /boot/home/t1011b/m1/t1011.601: 7 (2 + 4 subdirectories expected)
+FAIL base links after cross-dir rename over a dir got=EINVAL     expected=OK
+FAIL rmdir(regular file)                          got=OK         expected=ENOTDIR
+FAIL regular file still there                     got=ENOENT     expected=OK
+big: 2000 files, directory size 135168 bytes
+PASS big dir spans more than one 4 KiB block      got=OK         expected=OK
+FAIL rmdir(big dir)                               got=OK         expected=ENOTEMPTY
+FAIL big dir still lists every file               got=EIO        expected=OK
+FAIL unlink all but the last file                 got=EIO        expected=OK
+FAIL rmdir(big dir, one file left)                got=ENOENT     expected=ENOTEMPTY
+FAIL last file still reachable                    got=ENOENT     expected=OK
+FAIL unlink the last file                         got=ENOENT     expected=OK
+FAIL rmdir(big dir, now empty)                    got=ENOENT     expected=OK
+PASS big dir gone                                 got=ENOENT     expected=ENOENT
+links of /boot/home/t1011b/m1/t1011.601: 6 (2 + 4 subdirectories expected)
+PASS base links at the end                        got=OK         expected=OK
+populated dir /boot/home/t1011b/m1/lbig: size 135168, 3000 entries
+FAIL rmdir(populated dir)                         got=OK         expected=ENOTEMPTY
+FAIL populated dir still listable after rmdir     got=EIO        expected=OK
+36 rows, 28 failures
+ext2rmdir1011 rc=1
+=== sticky1008 full ext2 matrix (no -x) ===
+sticky1008 rc=2
+setup: open(/boot/home/t1011b/m2/sticky1008.611/S/dn/inner): File or Directory already exists
+FAIL dir=S actor=A(entry-owner)  op=rmdir-nonempty-dn  got=OK        expected=ENOTEMPTY
+6
+unmount m1 rc=1
+unmount m2 rc=0
+a13b08d915b57249d94422ac067f208aa25cfe418b0317a9b8ccf55a04c10392  ext2-1011.img
+d66f9de11efec16b7c5c253a2bda973e7aea172d164bc95b939a954ae9e4ee97  ext2-stk.img
+upload ext2-1011 http=200
+upload ext2-stk http=200
+unmount: unmounting failed: Device/File/Resource busy

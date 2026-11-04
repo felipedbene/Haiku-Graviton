@@ -468,6 +468,49 @@ Inode::Unlink(Transaction& transaction)
 }
 
 
+/*!	Sets \a _isEmpty to whether this directory holds no entries other than
+	"." and "..". Only subdirectories add to a directory's link count, so the
+	link count cannot answer this on its own.
+*/
+status_t
+Inode::IsEmpty(bool& _isEmpty)
+{
+	if (!IsDirectory())
+		return B_NOT_A_DIRECTORY;
+
+	DirectoryIterator iterator(this);
+	status_t status = iterator.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	char name[EXT2_NAME_LENGTH + 1];
+	while (true) {
+		size_t nameLength = sizeof(name);
+		ino_t id;
+		name[0] = '\0';
+		status = iterator.GetNext(name, &nameLength, &id);
+		if (status == B_ENTRY_NOT_FOUND)
+			break;
+		if (status != B_OK)
+			return status;
+
+		if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+			_isEmpty = false;
+			return B_OK;
+		}
+
+		status = iterator.Next();
+		if (status == B_ENTRY_NOT_FOUND)
+			break;
+		if (status != B_OK)
+			return status;
+	}
+
+	_isEmpty = true;
+	return B_OK;
+}
+
+
 /*static*/ status_t
 Inode::Create(Transaction& transaction, Inode* parent, const char* name,
 	int32 mode, int openMode, uint8 type, bool* _created, ino_t* _id,
