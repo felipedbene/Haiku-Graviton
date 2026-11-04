@@ -1083,6 +1083,7 @@ copy_metadata(net_buffer* destination, const net_buffer* source)
 
 	destination->offset = source->offset;
 	destination->protocol = source->protocol;
+	destination->hop_limit = source->hop_limit;
 	destination->type = source->type;
 }
 
@@ -1130,6 +1131,7 @@ create_buffer(size_t headerSpace)
 	buffer->interface_address = NULL;
 	buffer->offset = 0;
 	buffer->msg_flags = 0;
+	buffer->hop_limit = 0;
 	buffer->buffer_flags = 0;
 	buffer->size = 0;
 	// Zero means "never enqueued on a receive FIFO", which the queue
