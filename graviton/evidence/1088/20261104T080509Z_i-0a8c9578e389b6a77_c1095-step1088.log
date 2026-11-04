@@ -1,0 +1,91 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1095-step1088
+# instance: i-0a8c9578e389b6a77   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1095, step 1088
+# start: 20261104T080509Z   end: 20261104T080522Z   rc: 0
+# script sha256: 6a5bc5e43163cbab56ac2a4aeea4cdd75fd0223d6f0b489da05020185fc7b67b
+# ---- script ----
+# | # step 2 (#1088), arm c1095: on x4k, read the Linux-fallocated fa (16 MiB, over stale data:
+# | # must read as zeros), then write 64 KiB into it at 1 MiB, and 256 KiB into fb at 0.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1 2>/dev/null
+# | dd if=/dev/urandom of=/boot/home/c256k bs=65536 count=4 2>/dev/null
+# | echo "c64k md5 $(md5sum < /boot/home/c64k)"; echo "c256k md5 $(md5sum < /boot/home/c256k)"
+# | mount -t ext2 $DD/0 /ex4k || exit 1
+# | cd /ex4k && ls -ls
+# | echo "fa read md5 $(md5sum < fa)   (16 MiB of zeros: 2c7ab85a893283e98c931e9511add182)"
+# | dd if=/boot/home/c64k of=fa bs=65536 seek=16 conv=notrunc 2>&1 | tail -1; echo "fa write rc=$?"
+# | dd if=/boot/home/c256k of=fb bs=65536 conv=notrunc 2>&1 | tail -1; echo "fb write rc=$?"
+# | sync; ls -ls fa fb; cd /
+# | unmount /ex4k; echo "unmount x4k rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-7-221.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+ec1ed53ec3373cc5b8bc9237d2f750edbbe1ef30bf69f9d5adfe030516f7d617  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw 
+c64k md5 5d5402d319eaa43030f11f4606a6e0ea  -
+c256k md5 88ae539a851121d666d641d84359d6dc  -
+total 251920
+ 16384 -rw-rw-rw- 1 baron root  16777216 Nov  4 07:40 fa
+  8192 -rw-rw-rw- 1 baron root   8388608 Nov  4 07:40 fb
+204800 -rw-rw-rw- 1 baron root 209715200 Nov  4 07:40 l200
+    16 drw-rw-rw- 2 baron root     16384 Nov  4 07:40 lost+found
+  5120 -rw-rw-rw- 1 baron root   1048576 Nov  4 07:40 pg
+  9216 -rw-rw-rw- 1 baron root   1048576 Nov  4 07:40 pn
+  8192 -rw-rw-rw- 1 baron root         0 Nov  4 07:40 pz
+fa read md5 7dffdeb6a6a25231ad3de77a9e257215  -   (16 MiB of zeros: 2c7ab85a893283e98c931e9511add182)
+65536 bytes (66 kB, 64 KiB) copied, 0.000205 s, 320 MB/s
+fa write rc=0
+262144 bytes (262 kB, 256 KiB) copied, 0.000298 s, 880 MB/s
+fb write rc=0
+16384 -rw-rw-rw- 1 baron root 16777216 Nov  4 08:05 fa
+ 8192 -rw-rw-rw- 1 baron root  8388608 Nov  4 08:05 fb
+unmount x4k rc=0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw '
++ mkdir -p /ex4k /ex1k
++ dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1
++ dd if=/dev/urandom of=/boot/home/c256k bs=65536 count=4
+++ md5sum
++ echo 'c64k md5 5d5402d319eaa43030f11f4606a6e0ea  -'
+++ md5sum
++ echo 'c256k md5 88ae539a851121d666d641d84359d6dc  -'
++ mount -t ext2 /dev/disk/nvme/1/0 /ex4k
++ cd /ex4k
++ ls -ls
+++ md5sum
++ echo 'fa read md5 7dffdeb6a6a25231ad3de77a9e257215  -   (16 MiB of zeros: 2c7ab85a893283e98c931e9511add182)'
++ dd if=/boot/home/c64k of=fa bs=65536 seek=16 conv=notrunc
++ tail -1
++ echo 'fa write rc=0'
++ dd if=/boot/home/c256k of=fb bs=65536 conv=notrunc
++ tail -1
++ echo 'fb write rc=0'
++ sync
++ ls -ls fa fb
++ cd /
++ unmount /ex4k
++ echo 'unmount x4k rc=0'
