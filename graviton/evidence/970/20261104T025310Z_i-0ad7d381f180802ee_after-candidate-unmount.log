@@ -1,0 +1,16 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-unmount
+# instance: i-0ad7d381f180802ee   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: after arm: unmount NTFS then FAT after the run
+# start: 20261104T025310Z   end: 20261104T025725Z   rc: 1
+# script sha256: ecec5ee8882fb88234856b399c0866e78378319213e553d6971be001018a8611
+# ---- script ----
+# | # Unmount step, on its own: the first stock box KDLed in the FAT unmount after the full run
+# | # ("acquire_vnode(...): node wasn't used!" from dosfs_io <- _dosfs_fsync <- free_vnode <-
+# | # fs_unmount). NTFS first, then FAT; if this command never returns, the console has the KDL.
+# | set -x
+# | sync
+# | unmount /ntfs967; echo "unmount ntfs rc=$?"
+# | unmount /fat970; echo "unmount fat rc=$?"
+# | df | grep -E "fat970|ntfs967"; echo "still mounted lines: $?"
+# ---- raw output ----

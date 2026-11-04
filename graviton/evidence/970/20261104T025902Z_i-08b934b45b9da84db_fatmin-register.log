@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fatmin-register
+# instance: i-08b934b45b9da84db   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: minimal FAT unmount repro: register the pristine image
+# start: 20261104T025902Z   end: 20261104T025920Z   rc: 0
+# script sha256: 9a7ee622fd51d2ca4ca97f6dedd890af18f59f10d646d750fc067994c5b73bb7
+# ---- script ----
+# | # Minimal FAT unmount repro, step 1 (stock canonical, fresh launch): fetch the pristine
+# | # mkfs.vfat image and register it with diskimage. Mount is a later command.
+# | set -x
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/fat
+# | pkgman install -y wget 2>&1 | tail -1
+# | mkdir -p /boot/home/m && cd /boot/home/m
+# | wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/fat.img?<PRESIGNED>
+# | echo '49e15b6938f7e81234dbd44880c2442a7a414dd9e49e0344e32e6c56f95b860d  fat.img' | sha256sum -c || exit 1
+# | diskimage register /boot/home/m/fat.img
+# ---- raw output ----
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  /boot/system/add-ons/kernel/file_systems/fat
+[system] Done.
+fat.img: OK
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/fat
++ pkgman install -y wget
++ tail -1
++ mkdir -p /boot/home/m
++ cd /boot/home/m
++ wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/fat.img?<PRESIGNED>'
++ echo '49e15b6938f7e81234dbd44880c2442a7a414dd9e49e0344e32e6c56f95b860d  fat.img'
++ sha256sum -c
++ diskimage register /boot/home/m/fat.img

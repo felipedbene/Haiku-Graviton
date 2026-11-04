@@ -1,0 +1,104 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linuxref2
+# instance: i-031477615f842b77f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux reference: chown970 (corrected) on vfat and ext4; ntfs-3g chmod967 detail
+# start: 20261104T023409Z   end: 20261104T023421Z   rc: 0
+# script sha256: a869f36cec172b706cae736e12fe2f6bd81c78a9b1ca68842ddde56328fca306
+# ---- script ----
+# | # Linux reference, second pass: chown970 with the corrected chown(-1,-1) row, on a fresh copy
+# | # of the pristine fat.img (vfat, same options) and an ext4 control; plus the ntfs-3g detail.
+# | set -x
+# | cd /opt/img
+# | echo 'LyoKICogY2hvd245NzAgLS0gY2hvd24oKS9jaGdycCgpIG9uIGEgdm9sdW1lIHRoYXQgc3RvcmVzIG5vIG93bmVyIChpc3N1ZSA5NzApLgogKgogKiBGQVQgc3RvcmVzIG5vIG93bmVyOiBIYWlrdSdzIGRyaXZlciBtYWtlcyB0aGUgdm9sdW1lJ3MgdWlkIGFuZCBnaWQgdGhlIG93bmVyCiAqIG9mIGV2ZXJ5IG5vZGUuIExpbnV4IHZmYXQgKHdpdGhvdXQgaXRzICJxdWlldCIgb3B0aW9uKSBsZXRzIGEgY2hvd24oKS9jaGdycCgpCiAqIHRvIHRob3NlIGlkcyB0aHJvdWdoIGFzIGEgbm8tb3AgYW5kIHJlZnVzZXMgYW
+# | sha256sum chown970.c fat.img ntfs.img
+# | gcc -O2 -Wall -o chown970 chown970.c || exit 1
+# | cp fat.img lfat2.img && mount -t vfat -o loop,uid=0,gid=0,fmask=0022,dmask=0022,tz=UTC lfat2.img m && grep " $PWD/m " /proc/mounts || exit 1
+# | mkdir m/c970 && ./chown970 m/c970; echo "chown970 vfat rc=$?"
+# | umount m && fsck.vfat -n lfat2.img; echo "fsck.vfat rc=$?"
+# | truncate -s 256M e2.img && mkfs.ext4 -q -F e2.img && mount -o loop e2.img m && mkdir m/c970 && chmod 755 m/c970
+# | ./chown970 -o m/c970 | tail -1; echo "chown970 -o ext4 rc=${PIPESTATUS[0]}"; umount m
+# | cp ntfs.img l3g2.img && LD=$(losetup -f --show l3g2.img) && ntfs-3g -o uid=0,gid=0,fmask=0111,dmask=0 $LD m && mkdir m/m967 && ./chmod967 m/m967 | grep -v ^PASS; umount m; losetup -d $LD
+# ---- raw output ----
+77433e41e55f7e30732277bfa0d9a645dc1e5abb62bb57b60fd4c73d58f4e92e  chown970.c
+49e15b6938f7e81234dbd44880c2442a7a414dd9e49e0344e32e6c56f95b860d  fat.img
+ce78656d585e8353e015928b4bca1c7d116a68e0d45e33793ae67cd086bf8e68  ntfs.img
+/dev/loop3 /opt/img/m vfat rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,tz=UTC,errors=remount-ro 0 0
+== m/c970 (stores no owner: another id must be refused with EPERM)
+PASS root    chown(cur,-1)        -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(-1,cur)        -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(cur,cur)       -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(-1,-1)         -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(1002,-1)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(-1,1002)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(1002,1002)     -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(cur,1002)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    chown(1002,cur)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    lchown(cur,-1)       -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    lchown(1002,-1)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    fchown(cur,cur)      -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    fchown(1002,-1)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    fchown(-1,1002)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS root    dir chown(cur,cur)   -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793759652 atime 1793750400
+PASS root    dir chown(1002,-1)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793759652 atime 1793750400
+PASS root    dir chown(-1,1002)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(cur,-1)        -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(-1,cur)        -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(cur,cur)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(-1,-1)         -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(1002,-1)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(-1,1002)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(1002,1002)     -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(cur,1002)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 chown(1002,cur)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 lchown(cur,-1)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 lchown(1002,-1)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 fchown(cur,cur)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 fchown(1002,-1)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 fchown(-1,1002)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793759652 atime 1793750400
+PASS uid1002 dir chown(cur,cur)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793759652 atime 1793750400
+PASS uid1002 dir chown(1002,-1)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793759652 atime 1793750400
+PASS uid1002 dir chown(-1,1002)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793759652 atime 1793750400
+SUMMARY cases=34 failures=0
+chown970 vfat rc=0
+fsck.fat 4.2 (2021-01-31)
+lfat2.img: 36 files, 41/516190 clusters
+fsck.vfat rc=0
+SUMMARY cases=34 failures=0
+chown970 -o ext4 rc=0
+== m/m967
+FAIL root    chmod(other)         -> ok      (expect ok/ref) mode 100666->100666 (asked 000664)(BAD) size 1 mtime 1793759653
+FAIL root    chmod(same|S_ISUID)  -> ok      (expect ok/ref) mode 100666->100666 (asked 004666)(BAD) size 1 mtime 1793759653
+FAIL root    dir chmod(other)     -> ok      (expect ok/ref) mode 040777->040777 (asked 000775)(BAD) size 0 mtime 1793759653
+SUMMARY cases=16 failures=3 refused-by-fs=0
++ cd /opt/img
++ base64 -d
++ echo LyoKICogY2hvd245NzAgLS0gY2hvd24oKS9jaGdycCgpIG9uIGEgdm9sdW1lIHRoYXQgc3RvcmVzIG5vIG93bmVyIChpc3N1ZSA5NzApLgogKgogKiBGQVQgc3RvcmVzIG5vIG93bmVyOiBIYWlrdSdzIGRyaXZlciBtYWtlcyB0aGUgdm9sdW1lJ3MgdWlkIGFuZCBnaWQgdGhlIG93bmVyCiAqIG9mIGV2ZXJ5IG5vZGUuIExpbnV4IHZmYXQgKHdpdGhvdXQgaXRzICJxdWlldCIgb3B0aW9uKSBsZXRzIGEgY2hvd24oKS9jaGdycCgpCiAqIHRvIHRob3NlIGlkcyB0aHJvdWdoIGFzIGEgbm8tb3AgYW5kIHJlZnVzZXMgYW55IG90aGVyIGlkIHdpdGggRVBFUk0sIHNvIGEKICogY2FsbGVyIGxlYXJucyB0aGF0IGl0cyBjaGFuZ2Ugd2FzIG5vdCBtYWRlLiBCZWZvcmUgdGhlIGZpeCwgSGFpa3UgcmVwb3J0ZWQKICogc3VjY2VzcyBmb3Igcm9vdCdzIGNob3duKCkgdG8gYW5vdGhlciBpZCBhbmQgY2hhbmdlZCBub3RoaW5nLgogKgogKiBFdmVyeSBjYXNlIHJ1bnMgb24gYSBmcmVzaCBmaWxlIChvciBkaXJlY3RvcnkpIHVuZGVyIGVhY2ggZGlyIGdpdmVuLCBhcyByb290CiAqIGFuZCBhcyB1aWQgMTAwMiAobm90IHRoZSBvd25lciksIHRocm91Z2ggY2hvd24oKSwgbGNob3duKCkgYW5kIGZjaG93bigpOgogKiAgIC0gcm9vdCwgdG8gdGhlIGN1cnJlbnQgdWlkIGFuZC9vciBnaWQgKG9yIC0xKTogb2ssIG5vdGhpbmcgY2hhbmdlczsKICogICAtIHJvb3QsIHRvIGFub3RoZXIgdWlkIG9yIGdpZCAoYWxvbmUgb3Igd2l0aCB0aGUgY3VycmVudCBvdGhlciBpZCk6IEVQRVJNLAogKiAgICAgbm90aGluZyBjaGFuZ2VzOyB3aXRoIC1vIChhIGZpbGUgc3lzdGVtIHRoYXQgc3RvcmVzIG93bmVycywgdGhlIGNvbnRyb2wpCiAqICAgICBvaywgYW5kIHN0YXQoKSBtdXN0IHRoZW4gc2hvdyB0aGUgbmV3IGlkczsKICogICAtIHVpZCAxMDAyLCB0byBhbnkgaWQsIGluY2x1ZGluZyB0aGUgY3VycmVudCBvd25lcjogRVBFUk0gKG9ubHkgdGhlIG93bmVyCiAqICAgICBvciByb290IG1heSBjaG93bjsgUE9TSVgsIGFuZCBMaW51eCdzIGNob3duX29rKCkpOwogKiAgIC0gYW55b25lLCBjaG93bigtMSwgLTEpLCB3aGljaCBhc2tzIGZvciBub3RoaW5nOiBvay4KICogRXZlcnkgb3V0Y29tZSBpcyBjaGVja2VkIHR3aWNlOiB0aGUgY2FsbCdzIHJlc3VsdCwgYW5kIHdoYXQgc3RhdCgpIHJlcG9ydHMKICogYWZ0ZXJ3YXJkcyAodWlkLCBnaWQsIG1vZGUsIHNpemUgYW5kIHRpbWVzIHVudG91Y2hlZCB1bmxlc3MgdGhlIGNhbGwKICogc3VjY2VlZGVkIHdpdGggYSBjaGFuZ2UpLgogKgogKiBVc2FnZTogY2hvd245NzAgWy1vXSBkaXIuLi4gICAgICAobXVzdCBydW4gYXMgcm9vdCkKICogQnVpbGQ6IGNjIC1PMiAtV2FsbCAtbyBjaG93bjk3MCBjaG93bjk3MC5jICAgICAgRXhpdCBzdGF0dXM6IGZhaWx1cmVzLgogKi8KI2luY2x1ZGUgPGVycm5vLmg+CiNpbmNsdWRlIDxmY250bC5oPgojaW5jbHVkZSA8Z3JwLmg+CiNpbmNsdWRlIDxzdGRpby5oPgojaW5jbHVkZSA8c3RkbGliLmg+CiNpbmNsdWRlIDxzdHJpbmcuaD4KI2luY2x1ZGUgPHN5cy9zdGF0Lmg+CiNpbmNsdWRlIDxzeXMvd2FpdC5oPgojaW5jbHVkZSA8dW5pc3RkLmg+CgojZGVmaW5lIE9USEVSX0lECTEwMDIKI2RlZmluZSBDVVIJCQkoKGxvbmcpLTIpCS8qIHRoZSBub2RlJ3MgY3VycmVudCBpZCAqLwojZGVmaW5lIEtFRVAJCSgobG9uZyktMSkJLyogLTE6IGxlYXZlIHRoZSBpZCBhbG9uZSAqLwoKZW51bSBjYWxsIHsgQ19DSE9XTiwgQ19MQ0hPV04sIENfRkNIT1dOIH07CmVudW0gd2hvIHsgUk9PVCwgT1RIRVIgfTsKCnN0cnVjdCBvcCB7Cgljb25zdCBjaGFyKgluYW1lOwoJZW51bSBjYWxsCWNhbGw7Cglsb25nCQl1aWQ7CS8qIENVUiwgS0VFUCBvciBhbiBpZCAqLwoJbG9uZwkJZ2lkOwoJaW50CQkJZGlyOwkvKiBvbiBhIGRpcmVjdG9yeSBpbnN0ZWFkIG9mIGEgZmlsZSAqLwp9OwoKc3RhdGljIGNvbnN0IHN0cnVjdCBvcCBrT3BzW10gPSB7Cgl7ICJjaG93bihjdXIsLTEpIiwgICAgICAgQ19DSE9XTiwgIENVUiwgICAgICBLRUVQLCAgICAgMCB9LAoJeyAiY2hvd24oLTEsY3VyKSIsICAgICAgIENfQ0hPV04sICBLRUVQLCAgICAgQ1VSLCAgICAgIDAgfSwKCXsgImNob3duKGN1cixjdXIpIiwgICAgICBDX0NIT1dOLCAgQ1VSLCAgICAgIENVUiwgICAgICAwIH0sCgl7ICJjaG93bigtMSwtMSkiLCAgICAgICAgQ19DSE9XTiwgIEtFRVAsICAgICBLRUVQLCAgICAgMCB9LAoJeyAiY2hvd24oMTAwMiwtMSkiLCAgICAgIENfQ0hPV04sICBPVEhFUl9JRCwgS0VFUCwgICAgIDAgfSwKCXsgImNob3duKC0xLDEwMDIpIiwgICAgICBDX0NIT1dOLCAgS0VFUCwgICAgIE9USEVSX0lELCAwIH0sCgl7ICJjaG93bigxMDAyLDEwMDIpIiwgICAgQ19DSE9XTiwgIE9USEVSX0lELCBPVEhFUl9JRCwgMCB9LAoJeyAiY2hvd24oY3VyLDEwMDIpIiwgICAgIENfQ0hPV04sICBDVVIsICAgICAgT1RIRVJfSUQsIDAgfSwKCXsgImNob3duKDEwMDIsY3VyKSIsICAgICBDX0NIT1dOLCAgT1RIRVJfSUQsIENVUiwgICAgICAwIH0sCgl7ICJsY2hvd24oY3VyLC0xKSIsICAgICAgQ19MQ0hPV04sIENVUiwgICAgICBLRUVQLCAgICAgMCB9LAoJeyAibGNob3duKDEwMDIsLTEpIiwgICAgIENfTENIT1dOLCBPVEhFUl9JRCwgS0VFUCwgICAgIDAgfSwKCXsgImZjaG93bihjdXIsY3VyKSIsICAgICBDX0ZDSE9XTiwgQ1VSLCAgICAgIENVUiwgICAgICAwIH0sCgl7ICJmY2hvd24oMTAwMiwtMSkiLCAgICAgQ19GQ0hPV04sIE9USEVSX0lELCBLRUVQLCAgICAgMCB9LAoJeyAiZmNob3duKC0xLDEwMDIpIiwgICAgIENfRkNIT1dOLCBLRUVQLCAgICAgT1RIRVJfSUQsIDAgfSwKCXsgImRpciBjaG93bihjdXIsY3VyKSIsICBDX0NIT1dOLCAgQ1VSLCAgICAgIENVUiwgICAgICAxIH0sCgl7ICJkaXIgY2hvd24oMTAwMiwtMSkiLCAgQ19DSE9XTiwgIE9USEVSX0lELCBLRUVQLCAgICAgMSB9LAoJeyAiZGlyIGNob3duKC0xLDEwMDIpIiwgIENfQ0hPV04sICBLRUVQLCAgICAgT1RIRVJfSUQsIDEgfSwKfTsKCnN0YXRpYyBpbnQgc1N0b3Jlc093bmVyczsKc3RhdGljIGludCBzQ2FzZXMsIHNGYWlsdXJlczsKCgpzdGF0aWMgY29uc3QgY2hhcioKZXJyX25hbWUoaW50IGVycikKewoJc3RhdGljIGNoYXIgYnVmZmVyWzMyXTsKCXN3aXRjaCAoZXJyKSB7CgkJY2FzZSAwOgkJCXJldHVybiAib2siOwoJCWNhc2UgRVBFUk06CQlyZXR1cm4gIkVQRVJNIjsKCQljYXNlIEVBQ0NFUzoJcmV0dXJuICJFQUNDRVMiOwoJCWNhc2UgRUlOVkFMOglyZXR1cm4gIkVJTlZBTCI7CgkJY2FzZSBFTk9UU1VQOglyZXR1cm4gIkVOT1RTVVAiOwoJCWNhc2UgRVJPRlM6CQlyZXR1cm4gIkVST0ZTIjsKCX0KCXNucHJpbnRmKGJ1ZmZlciwgc2l6ZW9mKGJ1ZmZlciksICJlcnJubyVkIiwgZXJyKTsKCXJldHVybiBidWZmZXI7Cn0KCgpzdGF0aWMgbG9uZwpyZXNvbHZlKGxvbmcgaWQsIGxvbmcgY3VycmVudCkKewoJcmV0dXJuIGlkID09IENVUiA/IGN1cnJlbnQgOiBpZDsKfQoKCi8qIFJ1bnMgdGhlIGNhbGwgYXMgYHdob2AgaW4gYSBjaGlsZDsgcmV0dXJucyAwIG9yIGFuIGVycm5vLiAqLwpzdGF0aWMgaW50CnJ1bl9hcyhlbnVtIHdobyB3aG8sIGNvbnN0IHN0cnVjdCBvcCogb3AsIGNvbnN0IGNoYXIqIHBhdGgsIHVpZF90IHVpZCwgZ2lkX3QgZ2lkKQp7CglwaWRfdCBwaWQgPSBmb3JrKCk7CglpZiAocGlkIDwgMCkKCQlyZXR1cm4gZXJybm87CglpZiAocGlkID09IDApIHsKCQlpZiAod2hvID09IE9USEVSICYmIChzZXRncm91cHMoMCwgTlVMTCkgIT0gMCB8fCBzZXRnaWQoT1RIRVJfSUQpICE9IDAKCQkJCXx8IHNldHVpZChPVEhFUl9JRCkgIT0gMCkpCgkJCV9leGl0KDEyNSk7CgkJaW50IHIsIGZkOwoJCXN3aXRjaCAob3AtPmNhbGwpIHsKCQkJY2FzZSBDX0NIT1dOOgoJCQkJciA9IGNob3duKHBhdGgsIHVpZCwgZ2lkKTsKCQkJCWJyZWFrOwoJCQljYXNlIENfTENIT1dOOgoJCQkJciA9IGxjaG93bihwYXRoLCB1aWQsIGdpZCk7CgkJCQlicmVhazsKCQkJZGVmYXVsdDoKCQkJCWZkID0gb3BlbihwYXRoLCBPX1JET05MWSk7CgkJCQlpZiAoZmQgPCAwKQoJCQkJCV9leGl0KGVycm5vKTsKCQkJCXIgPSBmY2hvd24oZmQsIHVpZCwgZ2lkKTsKCQkJCWJyZWFrOwoJCX0KCQlfZXhpdChyID09IDAgPyAwIDogZXJybm8pOwoJfQoJaW50IHN0YXR1czsKCWlmICh3YWl0cGlkKHBpZCwgJnN0YXR1cywgMCkgIT0gcGlkIHx8ICFXSUZFWElURUQoc3RhdHVzKSkKCQlyZXR1cm4gLTE7CglyZXR1cm4gV0VYSVRTVEFUVVMoc3RhdHVzKTsKfQoKCnN0YXRpYyB2b2lkCnJ1bl9jYXNlKGNvbnN0IGNoYXIqIGJhc2UsIGVudW0gd2hvIHdobywgY29uc3Qgc3RydWN0IG9wKiBvcCkKewoJY29uc3QgY2hhciogd2hvTmFtZSA9IHdobyA9PSBST09UID8gInJvb3QiIDogInVpZDEwMDIiOwoJY2hhciBwYXRoWzEwMjRdOwoJc25wcmludGYocGF0aCwgc2l6ZW9mKHBhdGgpLCAiJXMvYzk3MC0lcy0lZCIsIGJhc2UsIHdob05hbWUsIHNDYXNlcyk7CglzQ2FzZXMrKzsKCglpbnQgbWFkZSA9IG9wLT5kaXIgPyBta2RpcihwYXRoLCAwNzU1KSA6IC0xOwoJaWYgKCFvcC0+ZGlyKSB7CgkJaW50IGZkID0gb3BlbihwYXRoLCBPX0NSRUFUIHwgT19UUlVOQyB8IE9fV1JPTkxZLCAwNjQ0KTsKCQltYWRlID0gZmQgPCAwID8gLTEgOiAod3JpdGUoZmQsICJ4IiwgMSkgPT0gMSA/IDAgOiAtMSk7CgkJaWYgKGZkID49IDApCgkJCWNsb3NlKGZkKTsKCX0KCXN0cnVjdCBzdGF0IGJlZm9yZSwgc3Q7CglpZiAobWFkZSAhPSAwIHx8IHN0YXQocGF0aCwgJmJlZm9yZSkgIT0gMCkgewoJCXByaW50ZigiRkFJTCAlLTdzICUtMjBzIHNldHVwOiAlc1xuIiwgd2hvTmFtZSwgb3AtPm5hbWUsIHN0cmVycm9yKGVycm5vKSk7CgkJc0ZhaWx1cmVzKys7CgkJcmV0dXJuOwoJfQoKCWxvbmcgdWlkID0gcmVzb2x2ZShvcC0+dWlkLCBiZWZvcmUuc3RfdWlkKTsKCWxvbmcgZ2lkID0gcmVzb2x2ZShvcC0+Z2lkLCBiZWZvcmUuc3RfZ2lkKTsKCWludCBjaGFuZ2UgPSAodWlkICE9IEtFRVAgJiYgdWlkICE9IChsb25nKWJlZm9yZS5zdF91aWQpCgkJfHwgKGdpZCAhPSBLRUVQICYmIGdpZCAhPSAobG9uZyliZWZvcmUuc3RfZ2lkKTsKCglpbnQgZXJyID0gcnVuX2FzKHdobywgb3AsIHBhdGgsICh1aWRfdCl1aWQsIChnaWRfdClnaWQpOwoJaWYgKHN0YXQocGF0aCwgJnN0KSAhPSAwKSB7CgkJcHJpbnRmKCJGQUlMICUtN3MgJS0yMHMgc3RhdCBhZnRlcndhcmRzOiAlc1xuIiwgd2hvTmFtZSwgb3AtPm5hbWUsCgkJCXN0cmVycm9yKGVycm5vKSk7CgkJc0ZhaWx1cmVzKys7CgkJcmV0dXJuOwoJfQoKCWNvbnN0IGNoYXIqIGV4cGVjdDsKCWludCBvazsKCWlmICh1aWQgPT0gS0VFUCAmJiBnaWQgPT0gS0VFUCkgewoJCS8qIGFza3MgZm9yIG5vdGhpbmc6IGFueW9uZSBtYXkgKExpbnV4LCBhbmQgZXZlcnkgSGFpa3UgZmlsZSBzeXN0ZW0pICovCgkJZXhwZWN0ID0gIm9rIjsKCQlvayA9IGVyciA9PSAwOwoJfSBlbHNlIGlmICh3aG8gPT0gT1RIRVIpIHsKCQlleHBlY3QgPSAiRVBFUk0iOwoJCW9rID0gZXJyID09IEVQRVJNOwoJfSBlbHNlIGlmICghY2hhbmdlKSB7CgkJZXhwZWN0ID0gIm9rIjsKCQlvayA9IGVyciA9PSAwOwoJfSBlbHNlIGlmIChzU3RvcmVzT3duZXJzKSB7CgkJZXhwZWN0ID0gIm9rIjsKCQlvayA9IGVyciA9PSAwOwoJfSBlbHNlIHsKCQlleHBlY3QgPSAiRVBFUk0iOwoJCW9rID0gZXJyID09IEVQRVJNOwoJfQoKCS8qIHdoYXQgc3RhdCgpIG11c3Qgc2hvdzogdGhlIG5ldyBpZHMgb25seSBhZnRlciBhIHN1Y2Nlc3NmdWwgY2hhbmdlICovCgl1aWRfdCB3YW50VWlkID0gYmVmb3JlLnN0X3VpZDsKCWdpZF90IHdhbnRHaWQgPSBiZWZvcmUuc3RfZ2lkOwoJaWYgKGVyciA9PSAwKSB7CgkJaWYgKHVpZCAhPSBLRUVQKQoJCQl3YW50VWlkID0gKHVpZF90KXVpZDsKCQlpZiAoZ2lkICE9IEtFRVApCgkJCXdhbnRHaWQgPSAoZ2lkX3QpZ2lkOwoJfQoJaW50IGlkc09rID0gc3Quc3RfdWlkID09IHdhbnRVaWQgJiYgc3Quc3RfZ2lkID09IHdhbnRHaWQ7CgkvKiBjaG93bigpIGRvZXMgbm90IHRvdWNoIHRoZSBkYXRhLCB0aGUgbW9kZSdzIHBlcm1pc3Npb24gYml0cyAoYmV5b25kCgkgICBjbGVhcmluZyBzZXQtaWQgYml0cywgbm9uZSBoZXJlKSBvciB0aGUgYWNjZXNzL21vZGlmaWNhdGlvbiB0aW1lcyAqLwoJaW50IHJlc3RPayA9IHN0LnN0X3NpemUgPT0gYmVmb3JlLnN0X3NpemUKCQkmJiAoc3Quc3RfbW9kZSAmIDA3Nzc3KSA9PSAoYmVmb3JlLnN0X21vZGUgJiAwNzc3NykKCQkmJiBzdC5zdF9tdGltZSA9PSBiZWZvcmUuc3RfbXRpbWUgJiYgc3Quc3RfYXRpbWUgPT0gYmVmb3JlLnN0X2F0aW1lOwoJb2sgPSBvayAmJiBpZHNPayAmJiByZXN0T2s7CgoJcHJpbnRmKCIlcyAlLTdzICUtMjBzIC0+ICUtN3MgKGV4cGVjdCAlLTVzKSB1aWQgJWQtPiVkIGdpZCAlZC0+JWQlcyIKCQkiIG1vZGUgJTA0byBzaXplICVsZCBtdGltZSAlbGQgYXRpbWUgJWxkJXNcbiIsCgkJb2sgPyAiUEFTUyIgOiAiRkFJTCIsIHdob05hbWUsIG9wLT5uYW1lLCBlcnJfbmFtZShlcnIpLCBleHBlY3QsCgkJKGludCliZWZvcmUuc3RfdWlkLCAoaW50KXN0LnN0X3VpZCwgKGludCliZWZvcmUuc3RfZ2lkLAoJCShpbnQpc3Quc3RfZ2lkLCBpZHNPayA/ICIiIDogIihCQUQpIiwKCQkodW5zaWduZWQpKHN0LnN0X21vZGUgJiAwNzc3NyksIChsb25nKXN0LnN0X3NpemUsIChsb25nKXN0LnN0X210aW1lLAoJCShsb25nKXN0LnN0X2F0aW1lLCByZXN0T2sgPyAiIiA6ICIgKEJBRDogY2hhbmdlZCkiKTsKCWlmICghb2spCgkJc0ZhaWx1cmVzKys7Cn0KCgppbnQKbWFpbihpbnQgYXJnYywgY2hhcioqIGFyZ3YpCnsKCWludCBmaXJzdCA9IDE7CglpZiAoYXJnYyA+IDEgJiYgc3RyY21wKGFyZ3ZbMV0sICItbyIpID09IDApIHsKCQlzU3RvcmVzT3duZXJzID0gMTsKCQlmaXJzdCA9IDI7Cgl9CglpZiAoYXJnYyA8PSBmaXJzdCB8fCBnZXRldWlkKCkgIT0gMCkgewoJCWZwcmludGYoc3RkZXJyLCAidXNhZ2U6IGNob3duOTcwIFstb10gZGlyLi4uIChhcyByb290KVxuIik7CgkJcmV0dXJuIDI7Cgl9CgoJZm9yIChpbnQgZCA9IGZpcnN0OyBkIDwgYXJnYzsgZCsrKSB7CgkJcHJpbnRmKCI9PSAlcyAoJXMpXG4iLCBhcmd2W2RdLCBzU3RvcmVzT3duZXJzCgkJCT8gInN0b3JlcyBvd25lcnM6IHJvb3QncyBjaG93biB0byBhbm90aGVyIGlkIG11c3QgY2hhbmdlIGl0IgoJCQk6ICJzdG9yZXMgbm8gb3duZXI6IGFub3RoZXIgaWQgbXVzdCBiZSByZWZ1c2VkIHdpdGggRVBFUk0iKTsKCQlmb3IgKGludCB3ID0gUk9PVDsgdyA8PSBPVEhFUjsgdysrKSB7CgkJCWZvciAoc2l6ZV90IGkgPSAwOyBpIDwgc2l6ZW9mKGtPcHMpIC8gc2l6ZW9mKGtPcHNbMF0pOyBpKyspCgkJCQlydW5fY2FzZShhcmd2W2RdLCAoZW51bSB3aG8pdywgJmtPcHNbaV0pOwoJCX0KCX0KCglwcmludGYoIlNVTU1BUlkgY2FzZXM9JWQgZmFpbHVyZXM9JWRcbiIsIHNDYXNlcywgc0ZhaWx1cmVzKTsKCXJldHVybiBzRmFpbHVyZXMgPiAyNTUgPyAyNTUgOiBzRmFpbHVyZXM7Cn0K
++ sha256sum chown970.c fat.img ntfs.img
++ gcc -O2 -Wall -o chown970 chown970.c
++ cp fat.img lfat2.img
++ mount -t vfat -o loop,uid=0,gid=0,fmask=0022,dmask=0022,tz=UTC lfat2.img m
++ grep ' /opt/img/m ' /proc/mounts
++ mkdir m/c970
++ ./chown970 m/c970
++ echo 'chown970 vfat rc=0'
++ umount m
++ fsck.vfat -n lfat2.img
++ echo 'fsck.vfat rc=0'
++ truncate -s 256M e2.img
++ mkfs.ext4 -q -F e2.img
++ mount -o loop e2.img m
++ mkdir m/c970
++ chmod 755 m/c970
++ ./chown970 -o m/c970
++ tail -1
++ echo 'chown970 -o ext4 rc=0'
++ umount m
++ cp ntfs.img l3g2.img
+++ losetup -f --show l3g2.img
++ LD=/dev/loop3
++ ntfs-3g -o uid=0,gid=0,fmask=0111,dmask=0 /dev/loop3 m
++ mkdir m/m967
++ ./chmod967 m/m967
++ grep -v '^PASS'
++ umount m
++ losetup -d /dev/loop3

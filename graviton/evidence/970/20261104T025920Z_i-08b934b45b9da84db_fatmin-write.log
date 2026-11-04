@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fatmin-write
+# instance: i-08b934b45b9da84db   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: minimal FAT unmount repro: mount, write one file, sync, wait
+# start: 20261104T025920Z   end: 20261104T030021Z   rc: 0
+# script sha256: 019545fc7163ed77b42d93e71cf504794682bb0f135077ca44ab5e39a1b23209
+# ---- script ----
+# | # Minimal FAT unmount repro, step 2: mount, write one 2-byte file, sync, wait 40 s, and
+# | # report whether the kernel log shows writeback failures. Unmount is step 3.
+# | set -x
+# | mkdir -p /f && mount -t fat /dev/disk/virtual/files/3/raw /f; echo "mount rc=$?"
+# | echo x > /f/a; ls -l /f
+# | sync; sleep 40
+# | grep -c "failed to lock memory" /var/log/syslog
+# | grep -E "failed to lock memory|PageWriteWrapper|page writer" /var/log/syslog | tail -4
+# ---- raw output ----
+mount rc=0
+total 1
+drwxr-xr-x 1 baron root 512 Nov  4 02:59 RECYCLED
+-rwxr-xr-x 1 baron root   2 Nov  4 02:59 a
+14
+KERN: [33mnvme_disk:[0m failed to lock memory: Bad address
+KERN: PageWriteWrapper: Failed to write page 0xffff00000362ff10: Bad address
+KERN: [33mnvme_disk:[0m failed to lock memory: Bad address
+KERN: PageWriteWrapper: Failed to write page 0xffff00000362ff10: Bad address
++ mkdir -p /f
++ mount -t fat /dev/disk/virtual/files/3/raw /f
++ echo 'mount rc=0'
++ echo x
++ ls -l /f
++ sync
++ sleep 40
++ grep -c 'failed to lock memory' /var/log/syslog
++ grep -E 'failed to lock memory|PageWriteWrapper|page writer' /var/log/syslog
++ tail -4

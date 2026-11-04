@@ -1,0 +1,956 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>
+# evidence: console-kdl
+# instance: i-0ad7d381f180802ee   region: us-west-2   transport: ec2 get-console-output --latest (last 64 KiB of the serial console)
+# what: after arm (fat.fix970 + ntfs.fix967): console after the unmount step hung
+# captured: 20261104T030436Z
+# ---- raw output ----
+ageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+page writer: no page written for 42320 ms with 30 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+page writer: no page written for 52900 ms with 30 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+page writer: no page written for 63481 ms with 30 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000033b85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd890: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bd250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be010: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bed30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033be6f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bf4b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bee70: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033bfc30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c0360: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1120: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c1e90: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c18a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c39c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c4e10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5590: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6350: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c5d10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c6ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c81a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c7b10: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c8880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9780: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033c9140: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+page writer: no page written for 74061 ms with 30 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+page writer: no page written for 84641 ms with 30 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+page writer: no page written for 95221 ms with 30 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 29 times.
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+slab memory manager: created area 0xffff00002c001000 (21999)
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+fs_unmount(): inode 64 is still referenced
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cbda0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003a73a90: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff970: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ff330: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039000f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038ffab0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900870: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003901630: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003900ff0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003902e40: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003903c00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039049c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904380: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905140: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003904b00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039058c0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039065e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003905fa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003906d60: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907ad0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003907490: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003908250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000039082f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fa0b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fcea0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fc860: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fd620: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fe430: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038fddf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000038febb0: Bad address
+PANIC: acquire_vnode(0xffff000029074200, 7): node wasn't used!
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 962 "unmount" running on CPU 6
+iframe 0xffff0000007e7cc7 (end = 0xffff0000007e7fff)
+stack trace for thread 0x3c2 "unmount"
+    kernel stack: 0xffff0000007e3000 to 0xffff0000007e8000
+      user stack: 0x0000013a55296000 to 0x0000013a59296000
+frame            caller     <image>:function + offset
+ 0 ffff0000007e71d0 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000007e7220 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000007e7290[0m [36m"Ps~"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000007e7290 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff0000007e7350[0m [36m"pt~"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�@C���"[0m, std::__va_list: [34m0x1ba358[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff0000007e7350 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000007e7470 (+ 288) ffff000000138940   <kernel_arm64> acquire_vnode + 0xc0
+ 5 ffff0000007e74b0 (+  64) ffff00000240ebd4   <fat> dosfs_io(fs_volume*: [34m0xffff0000007e74f0[0m, fs_vnode*: [34m0xffff000000140e00[0m, void*: [34m0xffff0000297ed910[0m, IORequest*: [34m0xffff0000007e75a8[0m) + 0x8c
+ 6 ffff0000007e74f0 (+  64) ffff000000140e00   <kernel_arm64> vfs_vnode_io.localalias + 0x40
+ 7 ffff0000007e7550 (+  96) ffff0000001417b4   <kernel_arm64> vfs_write_pages + 0xac
+ 8 ffff0000007e76c0 (+ 368) ffff00000016fefc   <kernel_arm64> PageWriteTransfer<[32m0x7e76f0[0m>::Schedule[clone .localalias] (uint32: [34m0xffff0000[0m) + 0x6c
+ 9 ffff0000007e76f0 (+  48) ffff000000170960   <kernel_arm64> vm_page_write_modified_page_range.localalias + 0x47c
+10 ffff0000007e7a00 (+ 784) ffff00000017a9c8   <kernel_arm64> VMCache<[32m0x7e7a20[0m>::WriteModified() + 0x3c
+11 ffff0000007e7a20 (+  32) ffff00000240ff94   <fat> _dosfs_fsync(vnode*: [34m0xffff0000007e7a70[0m) + 0x54
+12 ffff0000007e7a70 (+  80) ffff00000012f144   <kernel_arm64> free_vnode(vnode*: [34m0xffff0000007e7ab0[0m, [34mtrue[0m) + 0x7c
+13 ffff0000007e7ab0 (+  64) ffff000000136f6c   <kernel_arm64> fs_unmount(char*: [34m0xffff0000007e7b40[0m, int32: [34m1301344[0m, uint32: [34m0xffff0000[0m, [34mfalse[0m) + 0x44c
+14 ffff0000007e7b40 (+ 144) ffff00000013db60   <kernel_arm64> _user_unmount + 0xa0
+15 ffff0000007e7ba0 (+  96) ffff0000000a71e8   <kernel_arm64> syscall_dispatcher + 0x1318
+16 ffff0000007e7bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+17 ffff0000007e7cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff0000007e7cc7
+ELR=00000113f2f6b530 SPSR=0000000020000000
+LR =0000004f2de62198 SP  =0000013a59295ef0 FP =0000013a59295ef0
+ESR=000000005600006a FAR =0000004f2de720b8
+18 0000013a59295ef0 (+   0) 00000113f2f6b530   </boot/system/lib/libroot.so> _kern_unmount (nearest) + 0x04
+19 0000013a59295fa0 (+ 176) 0000004f2de62310   </boot/system/bin/unmount> _start + 0x50
+20 0000013a59295fd0 (+  48) 00000043fff63348   </boot/system/runtime_loader> runtime_loader + 0x128
+21 0000000000000000 (+   0) 000006187d5f8208   <commpage> commpage_thread_exit + 0x00
+

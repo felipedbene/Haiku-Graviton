@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-candidate
+# instance: i-0fb122cf505b6af9d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical haiku.hpkg with fat.fix970 + ntfs.fix967
+# start: 20261104T024653Z   end: 20261104T024755Z   rc: 0
+# script sha256: b7ae2497cac69ec93e75e6afa5b2da178e43f11d507c5ee88013ef76f64a796c
+# ---- script ----
+# | # Repack arm "c970-967": canonical haiku.hpkg with fat.fix970 and ntfs.fix967 (everything else,
+# | # kernel and libroot included, stays canonical's: canonical's fat and ntfs are byte-identical to
+# | # the trunk build), so a fresh launch of an image of this box boots them (the boot loader
+# | # preloads system/add-ons/kernel/file_systems). Method of #898/#933/#1011.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O 'fat.fix970' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/out/fat.fix970?<PRESIGNED>
+# | wget -q -O 'ntfs.fix967' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/out/ntfs.fix967?<PRESIGNED>
+# | cat > sums <<'SUMS'
+# | 33fe8b1faa2cdb5e9d611cc8d8d77e1030641eb95f71ab0f726d19c90392cdbc  fat.fix970
+# | 08e826289e7fbab26e40ff50cf47e2667aa441da3e518da00272d5c57ff9be4c  ntfs.fix967
+# | SUMS
+# | sha256sum -c sums
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/fat $A/ntfs
+# | cat fat.fix970 > $A/fat; cat ntfs.fix967 > $A/ntfs
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/fat $A/ntfs
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+fat.fix970: OK
+ntfs.fix967: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  x/add-ons/kernel/file_systems/fat
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  x/add-ons/kernel/file_systems/ntfs
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+33fe8b1faa2cdb5e9d611cc8d8d77e1030641eb95f71ab0f726d19c90392cdbc  x/add-ons/kernel/file_systems/fat
+08e826289e7fbab26e40ff50cf47e2667aa441da3e518da00272d5c57ff9be4c  x/add-ons/kernel/file_systems/ntfs
+----- Package Info ----------------
+header size:                     80
+heap size:                 20510426
+TOC size:                    324054
+package attributes size:       1100
+total size:                20510506
+-----------------------------------
+-rw-r--r-- 1 baron root 20510506 Nov  4 02:47 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+8db21e5c3cda9f4a7f324a0703197b6f710cc09509b72c7b4e29030aa348ac9e  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
