@@ -1,0 +1,185 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-run
+# instance: i-0b1fd248f4abb3996   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: after arm (this PR's ntfs + #1086 kernel): silent967, chmod967, atime933, coreutils, BFS control, unmount/remount
+# start: 20261104T142406Z   end: 20261104T142417Z   rc: 0
+# script sha256: cff5834cd6fb500696680533ac3ac37ac9adff246f46d949abf9f707e580f688
+# ---- script ----
+# | # #967 run (group W): mount the registered NTFS image, then silent967 (the owner's policy),
+# | # chmod967 (#1033's matrix), atime933 (#969's matrix), the coreutils matrix (install -m, chmod,
+# | # chown, cp -p, tar xp), strace of install -m; BFS control with silent967 -s; unmount.
+# | set -x
+# | cd /boot/home/t967 || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/ntfs
+# | listimage 1 | grep -E "file_systems/ntfs"
+# | D=$(diskimage list | awk '/ntfs.img/ {print $3}'); echo "device: $D"
+# | mkdir -p /ntfs967 && mount -t ntfs "$D" /ntfs967; echo "mount ntfs rc=$?"
+# | df | grep ntfs967 || exit 1
+# | set +x
+# | rm -rf /ntfs967/s967 /ntfs967/m967 /ntfs967/a933; mkdir /ntfs967/s967 /ntfs967/m967 /ntfs967/a933
+# | echo "=== NTFS: silent967 ==="; ./silent967 /ntfs967/s967; echo "silent967 ntfs rc=$?"
+# | echo "=== NTFS: chmod967 (regression) ==="; ./chmod967 /ntfs967/m967; echo "chmod967 ntfs rc=$?"
+# | echo "=== NTFS: atime933 (regression) ==="; ./atime933 /ntfs967/a933 | grep -E "^FAIL|chown|chmod|SUMMARY"; echo "atime933 ntfs rc=${PIPESTATUS[0]}"
+# | echo "=== NTFS: coreutils ==="; bash ./coreutils.sh /ntfs967
+# | echo "=== NTFS: install -m 0644 (strace, chmod-family and open calls) ==="
+# | strace -o /tmp/inst.trace install -m 0644 /tmp/src967 /ntfs967/inst-strace; echo "install rc=$?"
+# | grep -iE "write_stat|open|unlink" /tmp/inst.trace | grep -v "/boot/system" | tail -8
+# | echo "=== BFS control ==="
+# | rm -rf bfs-s967; mkdir bfs-s967; chmod 777 bfs-s967
+# | ./silent967 -s bfs-s967 | grep -vE "^PASS"; echo "silent967 -s bfs rc=${PIPESTATUS[0]}"
+# | sync
+# | echo "=== unmount ==="
+# | unmount /ntfs967; echo "unmount ntfs rc=$?"
+# | mount -t ntfs "$D" /ntfs967; echo "remount rc=$?"
+# | stat -c "%n mode=%a uid=%u gid=%g size=%s" /ntfs967/cu967/inst644 /ntfs967/cu967/t/a; cmp /tmp/src967 /ntfs967/cu967/inst644 && echo "inst644 content ok after remount"
+# | unmount /ntfs967; echo "unmount ntfs rc=$?"
+# ---- raw output ----
+a4b3d258ab1e8532866417250282848002296d698a52a34126344d602a491c24  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+6a3955bf7d5cfe3c4728b22da3ad2e54ff6a4d460bae6aad7b6d3cca165e8e6e  /boot/system/add-ons/kernel/file_systems/ntfs
+ 3758 0xffff0000dcb01000 0xffff0000dcb50000     0          0 /boot/system/add-ons/kernel/file_systems/ntfs
+device: /dev/disk/virtual/files/3/raw
+mount ntfs rc=0
+[1m/ntfs967          [0m
+=== NTFS: silent967 ===
+== /ntfs967/s967
+PASS root    chmod(same)           -> ok       (expect ok    ) asked 000666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chmod(same|S_IFREG)   -> ok       (expect ok    ) asked 100666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chmod(other)          -> ok       (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chmod(0600)           -> ok       (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    fchmod(0600)          -> ok       (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    fchmodat(other)       -> ok       (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chmod(same|S_ISUID)   -> ok       (expect ok    ) asked 004666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chmod(S_IFDIR|same)   -> errno-2147459058 (expect refuse) asked 040666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    dir chmod(same)       -> ok       (expect ok    ) asked 000777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+PASS root    dir chmod(other)      -> ok       (expect ok    ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+PASS root    dir chmod(S_IFREG|..) -> errno-2147459058 (expect refuse) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+PASS root    chown(cur,cur)        -> ok       (expect ok    ) asked 0:0       mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chown(-1,-1)          -> ok       (expect ok    ) asked -1:-1     mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chown(1002,-1)        -> ok       (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chown(-1,1002)        -> ok       (expect ok    ) asked -1:1002   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    chown(1002,1002)      -> ok       (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    fchown(1002,1002)     -> ok       (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    lchown(1002,-1)       -> ok       (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS root    dir chown(1002,1002)  -> ok       (expect ok    ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+PASS uid1002 chmod(same)           -> EPERM    (expect EPERM ) asked 000666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chmod(same|S_IFREG)   -> EPERM    (expect EPERM ) asked 100666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chmod(other)          -> EPERM    (expect EPERM ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chmod(0600)           -> EPERM    (expect EPERM ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 fchmod(0600)          -> EPERM    (expect EPERM ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 fchmodat(other)       -> EPERM    (expect EPERM ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chmod(same|S_ISUID)   -> EPERM    (expect EPERM ) asked 004666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chmod(S_IFDIR|same)   -> EPERM    (expect EPERM ) asked 040666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 dir chmod(same)       -> EPERM    (expect EPERM ) asked 000777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+PASS uid1002 dir chmod(other)      -> EPERM    (expect EPERM ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+PASS uid1002 dir chmod(S_IFREG|..) -> EPERM    (expect EPERM ) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+PASS uid1002 chown(cur,cur)        -> EPERM    (expect EPERM ) asked 0:0       mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chown(-1,-1)          -> ok       (expect ok    ) asked -1:-1     mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chown(1002,-1)        -> EPERM    (expect EPERM ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chown(-1,1002)        -> EPERM    (expect EPERM ) asked -1:1002   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 chown(1002,1002)      -> EPERM    (expect EPERM ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 fchown(1002,1002)     -> EPERM    (expect EPERM ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 lchown(1002,-1)       -> EPERM    (expect EPERM ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+PASS uid1002 dir chown(1002,1002)  -> EPERM    (expect EPERM ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793802249 ctime same
+SUMMARY cases=38 failures=0
+silent967 ntfs rc=0
+=== NTFS: chmod967 (regression) ===
+== /ntfs967/m967
+PASS root    chmod(same)          -> ok      (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793802249
+PASS root    chmod(same|S_IFMT)   -> ok      (expect ok    ) mode 100666->100666 (asked 100666) size 1 mtime 1793802249
+PASS root    fchmod(same)         -> ok      (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793802249
+PASS root    fchmodat(same)       -> ok      (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793802249
+FAIL root    chmod(other)         -> ok      (expect ok/ref) mode 100666->100666 (asked 000664)(BAD) size 1 mtime 1793802249
+FAIL root    chmod(same|S_ISUID)  -> ok      (expect ok/ref) mode 100666->100666 (asked 004666)(BAD) size 1 mtime 1793802249
+PASS root    dir chmod(same)      -> ok      (expect ok    ) mode 040777->040777 (asked 000777) size 0 mtime 1793802249
+FAIL root    dir chmod(other)     -> ok      (expect ok/ref) mode 040777->040777 (asked 000775)(BAD) size 0 mtime 1793802249
+PASS uid1002 chmod(same)          -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000666) size 1 mtime 1793802249
+PASS uid1002 chmod(same|S_IFMT)   -> EPERM   (expect EPERM ) mode 100666->100666 (asked 100666) size 1 mtime 1793802249
+PASS uid1002 fchmod(same)         -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000666) size 1 mtime 1793802249
+PASS uid1002 fchmodat(same)       -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000666) size 1 mtime 1793802249
+PASS uid1002 chmod(other)         -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000664) size 1 mtime 1793802249
+PASS uid1002 chmod(same|S_ISUID)  -> EPERM   (expect EPERM ) mode 100666->100666 (asked 004666) size 1 mtime 1793802249
+PASS uid1002 dir chmod(same)      -> EPERM   (expect EPERM ) mode 040777->040777 (asked 000777) size 0 mtime 1793802249
+PASS uid1002 dir chmod(other)     -> EPERM   (expect EPERM ) mode 040777->040777 (asked 000775) size 0 mtime 1793802249
+SUMMARY cases=16 failures=3 refused-by-fs=0
+chmod967 ntfs rc=3
+=== NTFS: atime933 (regression) ===
+PASS root      chmod(same mode)     -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793802249 size 1 mode 0666 uid 0
+FAIL root      chmod(other mode)    -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793802249 size 1 mode 0666(BAD) uid 0
+FAIL root      chown(1002)          -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793802249 size 1 mode 0666 uid 0(BAD)
+PASS writer    chmod(same mode)     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793802249 size 1 mode 0666 uid 0
+PASS writer    chmod(other mode)    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793802249 size 1 mode 0666 uid 0
+PASS writer    chown(1002)          -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793802249 size 1 mode 0666 uid 0
+SUMMARY cases=44 failures=2 errno-notes=0 unsupported=0
+atime933 ntfs rc=2
+=== NTFS: coreutils ===
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+chmod 0600 rc=0
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+chmod 0666 rc=0
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+chmod u+x rc=0
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+install -m 0644 rc=0
+  -> /ntfs967/cu967/inst644 mode=666 uid=0 gid=0 size=12
+install -m 0755 rc=0
+  -> /ntfs967/cu967/inst755 mode=666 uid=0 gid=0 size=12
+install -d -m 0700 rc=0
+  -> /ntfs967/cu967/instdir mode=777 uid=0 gid=0 size=0
+mkdir -m 0700 rc=0
+  -> /ntfs967/cu967/d700 mode=777 uid=0 gid=0 size=0
+chown 1002 rc=0
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+chown 1002:1002 rc=0
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+chgrp 1002 rc=0
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+chown 0:0 rc=0
+  -> /ntfs967/cu967/f mode=666 uid=0 gid=0 size=2
+cp -p (0644 source) rc=0
+  -> /ntfs967/cu967/cpp mode=666 uid=0 gid=0 size=12
+tar xpf (0640, 1002:1002) rc=127
+=== NTFS: install -m 0644 (strace, chmod-family and open calls) ===
+install rc=0
+[   575] open(0xffffff9c, "/tmp/src967", 0, 0x0) = 0x4 (6 us)
+[   575] open(0xffffff9c, "/ntfs967/inst-strace", O_WRONLY|O_EXCL|O_CREAT, 0x180) = 0x5 (66 us)
+[   575] open_attr_dir(0x4, (nil), false) = 0x6 (1 us)
+[   575] write_stat(0x5, (nil), false, {st_mode = 0x0|600}, 0x80, 0x1) = 0x0 No error (4 us)
+[   575] write_stat(0xffffff9c, "/ntfs967/inst-strace", true, {st_mode = 0x0|644}, 0x80, 0x1) = 0x0 No error (5 us)
+=== BFS control ===
+== bfs-s967 (-s: expects stored changes)
+FAIL root    chmod(S_IFDIR|same)   -> ok       (expect refuse) asked 040644    mode 100644->100644 uid 0->0 gid 0->0 size 1 mtime 1793802249 ctime same
+FAIL root    dir chmod(same)       -> ok       (expect ok    ) asked 000755    mode 100040755->100040755 uid 0->0 gid 0->0 (BAD state) size 2048 mtime 1793802249 ctime same
+FAIL root    dir chmod(other)      -> ok       (expect ok    ) asked 000757    mode 100040755->100040757 uid 0->0 gid 0->0 (BAD state) size 2048 mtime 1793802249 ctime same
+FAIL root    dir chmod(S_IFREG|..) -> ok       (expect refuse) asked 100755    mode 100040755->100040755 uid 0->0 gid 0->0 (BAD state) size 2048 mtime 1793802249 ctime same
+SUMMARY cases=38 failures=4
+silent967 -s bfs rc=4
+=== unmount ===
+unmount ntfs rc=1
+remount rc=1
+/ntfs967/cu967/inst644 mode=666 uid=0 gid=0 size=12
+unmount ntfs rc=1
++ cd /boot/home/t967
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/ntfs
++ listimage 1
++ grep -E file_systems/ntfs
+++ diskimage list
+++ awk '/ntfs.img/ {print $3}'
++ D=/dev/disk/virtual/files/3/raw
++ echo 'device: /dev/disk/virtual/files/3/raw'
++ mkdir -p /ntfs967
++ mount -t ntfs /dev/disk/virtual/files/3/raw /ntfs967
++ echo 'mount ntfs rc=0'
++ df
++ grep ntfs967
++ set +x
+./coreutils.sh: line 10: cmp: command not found
+./coreutils.sh: line 18: cmp: command not found
+./coreutils.sh: line 20: tar: command not found
+stat: cannot stat '/ntfs967/cu967/t/a': No such file or directory
+./coreutils.sh: line 20: cmp: command not found
+unmount: unmounting failed: Device/File/Resource busy
+mount: Device/File/Resource busy
+stat: cannot stat '/ntfs967/cu967/t/a': No such file or directory
+/tmp/run-70993-01b3d5.sh: line 27: cmp: command not found
+unmount: unmounting failed: Device/File/Resource busy

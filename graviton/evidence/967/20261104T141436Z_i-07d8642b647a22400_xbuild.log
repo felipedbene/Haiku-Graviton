@@ -1,0 +1,128 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-07d8642b647a22400   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build the #1086 kernel and the ntfs module for the before (#1033) and after (this PR) arms
+# start: 20261104T141436Z   end: 20261104T141524Z   rc: 0
+# script sha256: 48a4636c05910fbad7b7b3946886fb27e0a4447c6e0527e5fe1654cf78ea6108
+# ---- script ----
+# | # Build for #967 (group W) on the #1086 kernel branch (fix/1069-arm64-physmap-area, base trunk
+# | # a9954f424a), revision pinned to canonical's hrev59996:
+# | #   kernel_arm64.1086: the #1086 kernel, in BOTH Haiku arms (diskimage single-page I/O needs it)
+# | #   ntfs.1033:         + ntfs1033.patch (PR #1033, the "before" arm: same-mode chmod ok)
+# | #   ntfs.W:            + ntfsW.patch (#1033 + this fix: silent chmod/chown, the "after" arm)
+# | set -x
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated || exit 1
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area && git -C .. log -1 --format='base %H %s' || exit 1
+# | s=$(date +%s)
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV kernel_arm64 > $O/jam-kernel.log 2>&1 || { tail -40 $O/jam-kernel.log; exit 1; }
+# | echo "JAM kernel_arm64 ok wall=$(( $(date +%s) - s ))s"
+# | K=$(find objects/haiku/arm64 -name kernel_arm64 -type f | head -1); echo "kernel: $K"
+# | cp "$K" $O/kernel_arm64.1086 || exit 1
+# | fixbuild() {	# fixbuild <label> <patch>
+# | 	git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
+# | 	git -C .. apply --check $O/$2 && git -C .. apply $O/$2 || return 1
+# | 	git -C .. diff --stat
+# | 	rm -rf $A/ntfs
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > $O/jam-$1.log 2>&1 || { tail -40 $O/jam-$1.log; return 1; }
+# | 	echo "JAM ntfs $1 ok"
+# | 	grep -E "warning:|error:" $O/jam-$1.log | grep -E "ntfs/kernel_interface"
+# | 	cp $A/ntfs/ntfs $O/ntfs.$1 || return 1
+# | }
+# | fixbuild 1033 ntfs1033.patch || exit 1
+# | fixbuild W ntfsW.patch || exit 1
+# | # a second clean build of the after module, to show it is reproducible
+# | rm -rf $A/ntfs; jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > $O/jam-W2.log 2>&1 && cmp $A/ntfs/ntfs $O/ntfs.W && echo "ntfs.W rebuild identical"
+# | git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
+# | CC=cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | ${CC}nm -S --size-sort $O/ntfs.1033 | grep -i fs_write_stat; ${CC}nm -S --size-sort $O/ntfs.W | grep -i fs_write_stat
+# | cd $O && sha256sum kernel_arm64.1086 ntfs.1033 ntfs.W
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | for f in kernel_arm64.1086 ntfs.1033 ntfs.W; do aws s3 cp --quiet $f s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/out/$f || exit 1; done
+# | echo uploaded
+# ---- raw output ----
+base e2ca7e9c68343a4852b1630e81fe13ac7c3df04c evidence: hardware A/B for the arm64 physical map area (#1069)
+JAM kernel_arm64 ok wall=13s
+kernel: objects/haiku/arm64/release/system/kernel/kernel_arm64
+ src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+JAM ntfs 1033 ok
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1011:36: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1013:59: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+ .../kernel/file_systems/ntfs/kernel_interface.cpp  | 34 +++++++++++-----------
+ 1 file changed, 17 insertions(+), 17 deletions(-)
+JAM ntfs W ok
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1009:36: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1011:59: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+ntfs.W rebuild identical
+0000000000004f00 0000000000000380 t _ZL13fs_write_statP9fs_volumeP8fs_vnodePK4statj
+0000000000004dec 0000000000000344 t _ZL13fs_write_statP9fs_volumeP8fs_vnodePK4statj
+a4b3d258ab1e8532866417250282848002296d698a52a34126344d602a491c24  kernel_arm64.1086
+08e826289e7fbab26e40ff50cf47e2667aa441da3e518da00272d5c57ff9be4c  ntfs.1033
+6a3955bf7d5cfe3c4728b22da3ad2e54ff6a4d460bae6aad7b6d3cca165e8e6e  ntfs.W
+uploaded
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
++ git -C .. log -1 '--format=base %H %s'
+++ date +%s
++ s=1793801681
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 kernel_arm64
+++ date +%s
++ echo 'JAM kernel_arm64 ok wall=13s'
+++ find objects/haiku/arm64 -name kernel_arm64 -type f
+++ head -1
++ K=objects/haiku/arm64/release/system/kernel/kernel_arm64
++ echo 'kernel: objects/haiku/arm64/release/system/kernel/kernel_arm64'
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/t/out/kernel_arm64.1086
++ fixbuild 1033 ntfs1033.patch
++ git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
++ git -C .. apply --check /opt/t/out/ntfs1033.patch
++ git -C .. apply /opt/t/out/ntfs1033.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ echo 'JAM ntfs 1033 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-1033.log
++ grep -E ntfs/kernel_interface
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.1033
++ fixbuild W ntfsW.patch
++ git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
++ git -C .. apply --check /opt/t/out/ntfsW.patch
++ git -C .. apply /opt/t/out/ntfsW.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ echo 'JAM ntfs W ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-W.log
++ grep -E ntfs/kernel_interface
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.W
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ cmp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.W
++ echo 'ntfs.W rebuild identical'
++ git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
++ CC=cross-tools-arm64/bin/aarch64-unknown-haiku-
++ cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S --size-sort /opt/t/out/ntfs.1033
++ grep -i fs_write_stat
++ cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S --size-sort /opt/t/out/ntfs.W
++ grep -i fs_write_stat
++ cd /opt/t/out
++ sha256sum kernel_arm64.1086 ntfs.1033 ntfs.W
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ for f in kernel_arm64.1086 ntfs.1033 ntfs.W
++ aws s3 cp --quiet kernel_arm64.1086 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out/kernel_arm64.1086
++ for f in kernel_arm64.1086 ntfs.1033 ntfs.W
++ aws s3 cp --quiet ntfs.1033 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out/ntfs.1033
++ for f in kernel_arm64.1086 ntfs.1033 ntfs.W
++ aws s3 cp --quiet ntfs.W s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out/ntfs.W
++ echo uploaded

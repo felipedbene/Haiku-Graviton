@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-run2-setup
+# instance: i-0b1fd248f4abb3996   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: after arm: corrected silent967/coreutils matrix, tar, fresh copy of the image registered
+# start: 20261104T142556Z   end: 20261104T142613Z   rc: 0
+# script sha256: bd82f51c3ae360231a4589a9a49f0387e22021eea90ebc4f8041831d369f06a9
+# ---- script ----
+# | # #967 run 2 (group W): the corrected silent967 (BFS control masks the flags BFS keeps above
+# | # S_IFMT on directories) and coreutils matrix (sha256 instead of cmp; tar installed). Uses a
+# | # FRESH copy of the NTFS image registered as a second device, because run 1's volume could not
+# | # be unmounted ("busy", in both arms): an idle mount/unmount cycle comes first, to tell whether
+# | # that is caused by the tests.
+# | set -x
+# | cd /boot/home/t967 || exit 1
+# | pkgman install -y tar 2>&1 | tail -1; command -v tar
+# | wget -q -O silent967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src/silent967.c?<PRESIGNED>'
+# | wget -q -O coreutils.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src/coreutils.sh?<PRESIGNED>'
+# | printf '%s\n' 'b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c' 'c5f7deb2a89acea3f1e9ecd76897cd540f7b41ceb194c252b6613cccb8349617  coreutils.sh' | sha256sum -c || exit 1
+# | gcc -O2 -Wall -o silent967 silent967.c || exit 1
+# | wget -q -O ntfs2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/img/ntfs.img?<PRESIGNED>'
+# | echo 'fb7840e012e4e3f9fdf01d2b4fcf02b36604e1d6b8cb76720d30ac7c0b2a82b8  ntfs2.img' | sha256sum -c || exit 1
+# | diskimage register /boot/home/t967/ntfs2.img
+# | diskimage list
+# ---- raw output ----
+[system] Done.
+/boot/system/bin/tar
+silent967.c: OK
+coreutils.sh: OK
+ntfs2.img: OK
+Registered file as disk device "/dev/disk/virtual/files/4/raw" with ID 4.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t967/ntfs.img           /dev/disk/virtual/files/3/raw
+     4  /boot/home/t967/ntfs2.img          /dev/disk/virtual/files/4/raw
++ cd /boot/home/t967
++ pkgman install -y tar
++ tail -1
++ command -v tar
++ wget -q -O silent967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src/silent967.c?<PRESIGNED>'
++ wget -q -O coreutils.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src/coreutils.sh?<PRESIGNED>'
++ printf '%s\n' 'b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c' 'c5f7deb2a89acea3f1e9ecd76897cd540f7b41ceb194c252b6613cccb8349617  coreutils.sh'
++ sha256sum -c
++ gcc -O2 -Wall -o silent967 silent967.c
++ wget -q -O ntfs2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/img/ntfs.img?<PRESIGNED>'
++ echo 'fb7840e012e4e3f9fdf01d2b4fcf02b36604e1d6b8cb76720d30ac7c0b2a82b8  ntfs2.img'
++ sha256sum -c
++ diskimage register /boot/home/t967/ntfs2.img
++ diskimage list

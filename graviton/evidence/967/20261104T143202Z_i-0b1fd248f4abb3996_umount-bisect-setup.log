@@ -1,0 +1,41 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: umount-bisect-setup
+# instance: i-0b1fd248f4abb3996   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: incidental: four fresh image copies to narrow down the NTFS unmount-busy
+# start: 20261104T143202Z   end: 20261104T143216Z   rc: 0
+# script sha256: 7ada9a46144da7dba02704c71a71de9ae5dcaa6c0140e1d3056abd11b080ebb2
+# ---- script ----
+# | # Incidental (not this PR): narrow down which test leaves an NTFS vnode referenced so that
+# | # unmount is "busy". Fresh image copies a/b/c/d registered here, used by the next command.
+# | set -x
+# | cd /boot/home/t967 || exit 1
+# | for x in a b c d; do cp ntfs.img nb-$x.img && diskimage register /boot/home/t967/nb-$x.img; done
+# | diskimage list
+# ---- raw output ----
+Registered file as disk device "/dev/disk/virtual/files/6/raw" with ID 6.
+Registered file as disk device "/dev/disk/virtual/files/7/raw" with ID 7.
+Registered file as disk device "/dev/disk/virtual/files/8/raw" with ID 8.
+Registered file as disk device "/dev/disk/virtual/files/9/raw" with ID 9.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t967/ntfs.img           /dev/disk/virtual/files/3/raw
+     4  /boot/home/t967/ntfs2.img          /dev/disk/virtual/files/4/raw
+     5  /boot/home/t967/ntfs3.img          /dev/disk/virtual/files/5/raw
+     6  /boot/home/t967/nb-a.img           /dev/disk/virtual/files/6/raw
+     7  /boot/home/t967/nb-b.img           /dev/disk/virtual/files/7/raw
+     8  /boot/home/t967/nb-c.img           /dev/disk/virtual/files/8/raw
+     9  /boot/home/t967/nb-d.img           /dev/disk/virtual/files/9/raw
++ cd /boot/home/t967
++ for x in a b c d
++ cp ntfs.img nb-a.img
++ diskimage register /boot/home/t967/nb-a.img
++ for x in a b c d
++ cp ntfs.img nb-b.img
++ diskimage register /boot/home/t967/nb-b.img
++ for x in a b c d
++ cp ntfs.img nb-c.img
++ diskimage register /boot/home/t967/nb-c.img
++ for x in a b c d
++ cp ntfs.img nb-d.img
++ diskimage register /boot/home/t967/nb-d.img
++ diskimage list
