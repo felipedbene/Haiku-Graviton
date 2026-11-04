@@ -40,6 +40,9 @@
  *              refreshed: first at 0 s, middle at 40 s, last at 70 s: NOT
  *                         delivered; a timer restarted by every fragment
  *                         would still be running and deliver it.
+ *              zero-data: a fragment with no data at 0 s, the others at
+ *                         40 and 70 s: delivered; a fragment without data
+ *                         must not start the 60 s.
  *            On Linux, set net.ipv4.ipfrag_time=60 first (its default is
  *            30 s); net.ipv6.ip6frag_time is already 60.
  *
@@ -649,21 +652,33 @@ sleep_until(time_t start, int seconds)
 
 
 /*!	Both families at once on one timeline:
-	within:    [0,1000) at 0 s, [1000,3000) at 50 s
-	refreshed: [0,1000) at 0 s, [1000,2000) at 40 s, [2000,3000) at 70 s
+	within:    [0,1000) at 0 s, [1000,3000) at 50 s: delivered
+	refreshed: [0,1000) at 0 s, [1000,2000) at 40 s, [2000,3000) at 70 s:
+	           not delivered
+	zero-data: a fragment with no data at 0 s, [0,2000) at 40 s, [2000,3000)
+	           at 70 s: delivered. A fragment without data must not create a
+	           partial datagram; if it did, that datagram's timer, started at
+	           0 s, would expire at 60 s and take the real fragments with it.
 */
 static void
 timeout_rows(void)
 {
-	struct timed rows[4];
+	enum { kWithin, kRefreshed, kZeroData, kKinds };
+	static const char* const kLabels[kKinds] = {
+		"within: last fragment at 50 s",
+		"refreshed: at 0, 40 and 70 s",
+		"zero-data fragment at 0 s, rest at 40 and 70 s"
+	};
+	struct timed rows[2 * kKinds];
+	int kinds[2 * kKinds];
 	int count = 0;
 	for (int f = 0; f < 2; f++) {
-		for (int r = 0; r < 2; r++) {
-			struct timed* row = &rows[count++];
+		for (int r = 0; r < kKinds; r++) {
+			struct timed* row = &rows[count];
+			kinds[count++] = r;
 			row->family = f == 0 ? AF_INET : AF_INET6;
-			row->label = r == 0 ? "within: last fragment at 50 s"
-				: "refreshed: at 0, 40 and 70 s";
-			row->expectDrop = r;
+			row->label = kLabels[r];
+			row->expectDrop = r == kRefreshed;
 			row->port = sPort++;
 			row->receiver = bind_receiver(row->family, row->port);
 			row->udp = make_udp(row->family, row->port, 3000);
@@ -673,32 +688,35 @@ timeout_rows(void)
 	}
 
 	time_t start = time(NULL);
-	for (int i = 0; i < count; i++)
-		timed_send(&rows[i], 0, 1000, 1);
+	for (int i = 0; i < count; i++) {
+		if (kinds[i] == kZeroData)
+			timed_send(&rows[i], 0, 0, 1);
+		else
+			timed_send(&rows[i], 0, 1000, 1);
+	}
 	printf("  t=0s first fragments sent\n");
 	sleep_until(start, 40);
 	for (int i = 0; i < count; i++) {
-		if (rows[i].expectDrop)
+		if (kinds[i] == kZeroData)
+			timed_send(&rows[i], 0, 1000, 1);
+		if (kinds[i] != kWithin)
 			timed_send(&rows[i], 1000, 1000, 1);
 	}
 	sleep_until(start, 50);
 	for (int i = 0; i < count; i++) {
-		if (!rows[i].expectDrop) {
+		if (kinds[i] == kWithin) {
 			timed_send(&rows[i], 1000, 1000, 1);
 			timed_send(&rows[i], 2000, 1000, 0);
-		}
-	}
-	for (int i = 0; i < count; i++) {
-		if (!rows[i].expectDrop)
 			timed_check(&rows[i]);
+		}
 	}
 	sleep_until(start, 70);
 	for (int i = 0; i < count; i++) {
-		if (rows[i].expectDrop)
+		if (kinds[i] != kWithin)
 			timed_send(&rows[i], 2000, 1000, 0);
 	}
 	for (int i = 0; i < count; i++) {
-		if (rows[i].expectDrop)
+		if (kinds[i] != kWithin)
 			timed_check(&rows[i]);
 	}
 
