@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: candidate-ctxsw-series
+# instance: i-0dbae3f35c5f5b052   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #988 ctxsw988 series, candidate arm, all four boxes concurrently
+# start: 20261104T030851Z   end: 20261104T031326Z   rc: 0
+# script sha256: 832304ce7734ec86051b51d60538ed3feeda80532dd2c8e29dd569682e4367ab
+# ---- script ----
+# | # #988 ctxsw988 series (3 x 15 reps) on each of the four boxes, run concurrently.
+# | sha256sum /boot/system/kernel_arm64
+# | cd /boot/home/t988; for i in 1 2 3; do ./ctxsw988 -r 15 | tail -1; done
+# ---- raw output ----
+bcdcbb73663a26753cdab9fe5dbea475de2ca6b9ace15635d58b8363e5b342c9  /boot/system/kernel_arm64
+median: pingpong 19211 ns/round trip, yield 2296874 /s
+median: pingpong 19304 ns/round trip, yield 2090918 /s
+median: pingpong 19329 ns/round trip, yield 2320712 /s

@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base2-ctxsw
+# instance: i-0e21afeae3ccd400e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #988 second base instance (ami-0b923ec85d89c237a): ctxsw988 + system_time cost
+# start: 20261104T030635Z   end: 20261104T030837Z   rc: 0
+# script sha256: 58c8387eaae609c5cceaad21191fbf09d01d0bada81b36465eabcc09accd7b39
+# ---- script ----
+# | # #988 second instance per arm: ctxsw988 (2 x 9 reps) to size instance-to-instance drift,
+# | # plus the cost of one userland system_time() call (the same CNTVCT read the fix adds).
+# | sha256sum /boot/system/kernel_arm64
+# | pkgman install -y gcc binutils haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/t988 && cd /boot/home/t988
+# | echo 'LyoKICogY3R4c3c5ODggLS0gY29udGV4dC1zd2l0Y2ggY29zdCBjaGVjayBmb3IgRGVCZU9TIGlzc3VlIDk4OC4KICoKICogVGhlIDk4OCBmaXggYWRkcyBhIGNsb2NrIHJlYWQgYW5kIGEgc3RvcmUgYmFycmllciB0byB0aGUgc2NoZWR1bGVyJ3MKICogVHJhY2tBY3Rpdml0eSgpIHdoZW5ldmVyIGEgbm9uLWlkbGUgdGhyZWFkIGlzIHN3aXRjaGVkIGluIG9yIG91dC4gVGhpcwogKiBtZWFzdXJlcyB3aGF0IHRoYXQgY29zdHMgb24gdGhlIHBhdGhzIHRoYXQgc3dpdGNoIG1vc3Q6CiAqICAgcGluZ3BvbmcgIHR3byB0aHJlYWRzIGhhbmQgYSBzZW1hcGhvcmUgYmFjayBhbmQgZm9ydGgsIHNvIGV2ZXJ5IHJvdW5kIHRyaXAKICogICAgICAgICAgICAgaXMgdHdvIGJsb2NraW5nIHN3aXRjaGVzIChidXN5IDwtPiBpZGxlIG9uIGVhY2ggQ1BVLCBvciBhIGRpcmVjdAogKiAgICAgICAgICAgICBidXN5IC0+IGJ1c3kgc3dpdGNoIHdoZW4gYm90aCBsYW5kIG9uIG9uZSBDUFUpOwogKiAgIHlpZWxkICAgICA8bj4gdGhyZWFkcyBwZXIgQ1BVIGNhbGxpbmcgc2NoZWRfeWllbGQoKSwgYSBidXN5IC0+IGJ1c3kgc3dpdGNoCiAqICAgICAgICAgICAgIG9uIGV2ZXJ5IGNhbGwuCiAqIEVhY2ggaXMgcmVwZWF0ZWQgPHJlcHM+IHRpbWVzIGFuZCBwcmludGVkIHBlciBydW4sIHRoZW4gYXMgdGhlIG1lZGlhbi4KICoKICogdXNhZ2U6IGN0eHN3OTg4IFstciByZXBzXSBbLW4gcm91bmRfdHJpcHNdCiAqLwoKI2luY2x1ZGUgPE9TLmg+CgojaW5jbHVkZSA8c2NoZWQuaD4KI2luY2x1ZGUgPHN0ZGlvLmg+CiNpbmNsdWRlIDxzdGRsaWIuaD4KI2luY2x1ZGUgPHVuaXN0ZC5oPgoKc3RhdGljIHNlbV9pZCBzUGluZywgc1Bvbmc7CnN0YXRpYyBpbnQzMiBzUm91bmRzOwpzdGF0aWMgdm9sYXRpbGUgaW50MzIgc1N0b3A7CnN0YXRpYyBpbnQzMiBzWWllbGRzWzY0XTsKCgpzdGF0aWMgc3RhdHVzX3QKcG9uZ190aHJlYWQodm9pZCopCnsKCWZvciAoaW50MzIgaSA9IDA7IGkgPCBzUm91bmRzOyBpKyspIHsKCQlhY3F1aXJlX3NlbShzUGluZyk7CgkJcmVsZWFzZV9zZW0oc1BvbmcpOwoJfQoJcmV0dXJuIEJfT0s7Cn0KCgpzdGF0aWMgZG91YmxlCnBpbmdwb25nKHZvaWQpCnsKCXNQaW5nID0gY3JlYXRlX3NlbSgwLCAicGluZyIpOwoJc1BvbmcgPSBjcmVhdGVfc2VtKDAsICJwb25nIik7Cgl0aHJlYWRfaWQgdCA9IHNwYXduX3RocmVhZChwb25nX3RocmVhZCwgInBvbmciLCBCX05PUk1BTF9QUklPUklUWSwgTlVMTCk7CglyZXN1bWVfdGhyZWFkKHQpOwoJYmlndGltZV90IHN0YXJ0ID0gc3lzdGVtX3RpbWUoKTsKCWZvciAoaW50MzIgaSA9IDA7IGkgPCBzUm91bmRzOyBpKyspIHsKCQlyZWxlYXNlX3NlbShzUGluZyk7CgkJYWNxdWlyZV9zZW0oc1BvbmcpOwoJfQoJYmlndGltZV90IGVsYXBzZWQgPSBzeXN0ZW1fdGltZSgpIC0gc3RhcnQ7CglzdGF0dXNfdCByOwoJd2FpdF9mb3JfdGhyZWFkKHQsICZyKTsKCWRlbGV0ZV9zZW0oc1BpbmcpOwoJZGVsZXRlX3NlbShzUG9uZyk7CglyZXR1cm4gKGRvdWJsZSllbGFwc2VkICogMTAwMC4wIC8gc1JvdW5kczsKCQkvLyBucyBwZXIgcm91bmQgdHJpcAp9CgoKc3RhdGljIHN0YXR1c190CnlpZWxkX3RocmVhZCh2b2lkKiBhcmcpCnsKCWludDMyKiBjb3VudGVyID0gKGludDMyKilhcmc7Cgl3aGlsZSAoIXNTdG9wKSB7CgkJc2NoZWRfeWllbGQoKTsKCQkoKmNvdW50ZXIpKys7Cgl9CglyZXR1cm4gQl9PSzsKfQoKCnN0YXRpYyBkb3VibGUKeWllbGRfcmF0ZShpbnQgdGhyZWFkcykKewoJdGhyZWFkX2lkIHRbNjRdOwoJc1N0b3AgPSAwOwoJZm9yIChpbnQgaSA9IDA7IGkgPCB0aHJlYWRzOyBpKyspIHsKCQlzWWllbGRzW2ldID0gMDsKCQl0W2ldID0gc3Bhd25fdGhyZWFkKHlpZWxkX3RocmVhZCwgInlpZWxkIiwgQl9OT1JNQUxfUFJJT1JJVFksCgkJCSZzWWllbGRzW2ldKTsKCQlyZXN1bWVfdGhyZWFkKHRbaV0pOwoJfQoJc25vb3plKDIwMDAwMDApOwoJc1N0b3AgPSAxOwoJbG9uZyB0b3RhbCA9IDA7Cglmb3IgKGludCBpID0gMDsgaSA8IHRocmVhZHM7IGkrKykgewoJCXN0YXR1c190IHI7CgkJd2FpdF9mb3JfdGhyZWFkKHRbaV0sICZyKTsKCQl0b3RhbCArPSBzWWllbGRzW2ldOwoJfQoJcmV0dXJuIHRvdGFsIC8gMi4wOwoJCS8vIHlpZWxkcyBwZXIgc2Vjb25kLCBhbGwgdGhyZWFkcyB0b2dldGhlcgp9CgoKc3RhdGljIGludApjb21wYXJlKGNvbnN0IHZvaWQqIGEsIGNvbnN0IHZvaWQqIGIpCnsKCWRvdWJsZSB4ID0gKihjb25zdCBkb3VibGUqKWEsIHkgPSAqKGNvbnN0IGRvdWJsZSopYjsKCXJldHVybiB4IDwgeSA/IC0xIDogeCA+IHk7Cn0KCgppbnQKbWFpbihpbnQgYXJnYywgY2hhcioqIGFyZ3YpCnsKCWludCByZXBzID0gNzsKCXNSb3VuZHMgPSAyMDAwMDA7CglpbnQgb3B0OwoJd2hpbGUgKChvcHQgPSBnZXRvcHQoYXJnYywgYXJndiwgInI6bjoiKSkgIT0gLTEpIHsKCQlpZiAob3B0ID09ICdyJykKCQkJcmVwcyA9IGF0b2kob3B0YXJnKTsKCQllbHNlIGlmIChvcHQgPT0gJ24nKQoJCQlzUm91bmRzID0gYXRvaShvcHRhcmcpOwoJfQoJaWYgKHJlcHMgPCAxIHx8IHJlcHMgPiA2NCkKCQlyZXR1cm4gMjsKCWludCBjcHVzID0gKGludClzeXNjb25mKF9TQ19OUFJPQ0VTU09SU19PTkxOKTsKCWludCB0aHJlYWRzID0gY3B1cyAqIDIgPiA2NCA/IDY0IDogY3B1cyAqIDI7CgoJZG91YmxlIHBwWzY0XSwgeXJbNjRdOwoJZm9yIChpbnQgaSA9IDA7IGkgPCByZXBzOyBpKyspIHsKCQlwcFtpXSA9IHBpbmdwb25nKCk7CgkJeXJbaV0gPSB5aWVsZF9yYXRlKHRocmVhZHMpOwoJCXByaW50ZigicnVuICVkOiBwaW5ncG9uZyAlLjBmIG5zL3JvdW5kIHRyaXAsIHlpZWxkICUuMGYgL3MgKCVkIgoJCQkiIHRocmVhZHMpXG4iLCBpICsgMSwgcHBbaV0sIHlyW2ldLCB0aHJlYWRzKTsKCX0KCXFzb3J0KHBwLCByZXBzLCBzaXplb2YoZG91YmxlKSwgY29tcGFyZSk7Cglxc29ydCh5ciwgcmVwcywgc2l6ZW9mKGRvdWJsZSksIGNvbXBhcmUpOwoJcHJpbnRmKCJtZWRpYW46IHBpbmdwb25nICUuMGYgbnMvcm91bmQgdHJpcCwgeWllbGQgJS4wZiAvc1xuIiwKCQlwcFtyZXBzIC8gMl0sIHlyW3JlcHMgLyAyXSk7CglyZXR1cm4gMDsKfQo=' | base64 -d > ctxsw988.c
+# | gcc -O2 -Wall -o ctxsw988 ctxsw988.c || exit 1
+# | cat > st.c <<'S'
+# | #include <OS.h>
+# | #include <stdio.h>
+# | int main(void){bigtime_t s=system_time(),x=0;for(int i=0;i<10000000;i++)x+=system_time();bigtime_t e=system_time();printf("system_time: %.1f ns/call (%lld)\n",(e-s)*1000.0/1e7,(long long)(x&1));return 0;}
+# | S
+# | gcc -O2 -o st st.c && ./st
+# | ./ctxsw988 -r 9; ./ctxsw988 -r 9
+# ---- raw output ----
+7588ab2eb7ef69bd9a25ba226ab66dbab97bcd416400751e55eee28132b6b8b0  /boot/system/kernel_arm64
+[system] Done.
+system_time: 7.2 ns/call (0)
+run 1: pingpong 18490 ns/round trip, yield 2216088 /s (16 threads)
+run 2: pingpong 19553 ns/round trip, yield 2251055 /s (16 threads)
+run 3: pingpong 19522 ns/round trip, yield 2326992 /s (16 threads)
+run 4: pingpong 19089 ns/round trip, yield 2324494 /s (16 threads)
+run 5: pingpong 19472 ns/round trip, yield 2273675 /s (16 threads)
+run 6: pingpong 19564 ns/round trip, yield 2251725 /s (16 threads)
+run 7: pingpong 19681 ns/round trip, yield 2233060 /s (16 threads)
+run 8: pingpong 19106 ns/round trip, yield 2229942 /s (16 threads)
+run 9: pingpong 19435 ns/round trip, yield 2271052 /s (16 threads)
+median: pingpong 19472 ns/round trip, yield 2251725 /s
+run 1: pingpong 19318 ns/round trip, yield 2166562 /s (16 threads)
+run 2: pingpong 19161 ns/round trip, yield 2131157 /s (16 threads)
+run 3: pingpong 19432 ns/round trip, yield 2203964 /s (16 threads)
+run 4: pingpong 19112 ns/round trip, yield 2171831 /s (16 threads)
+run 5: pingpong 19398 ns/round trip, yield 2136132 /s (16 threads)
+run 6: pingpong 19446 ns/round trip, yield 2138069 /s (16 threads)
+run 7: pingpong 19257 ns/round trip, yield 2131758 /s (16 threads)
+run 8: pingpong 19425 ns/round trip, yield 2143401 /s (16 threads)
+run 9: pingpong 19407 ns/round trip, yield 2163063 /s (16 threads)
+median: pingpong 19398 ns/round trip, yield 2143401 /s

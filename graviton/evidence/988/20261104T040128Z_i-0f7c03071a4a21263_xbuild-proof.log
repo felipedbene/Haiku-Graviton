@@ -1,0 +1,65 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-proof
+# instance: i-0f7c03071a4a21263   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-build proof: trunk/fix988 build log, jam target counts, SHA256SUMS, S3 listing
+# start: 20261104T040128Z   end: 20261104T040139Z   rc: 0
+# script sha256: 2d49b2821da3b06058fc509d1f6a3d47f43c608679179d571585a565b3aae3c0
+# ---- script ----
+# | # Proof for the module builds on this cross-build host (logs under /opt/t/out): the detached
+# | # build log of trunk + fix988 (xb.log), jam target counts for every pass, SHA256SUMS, the patch
+# | # hashes, and the S3 listing.
+# | cd /opt/t/out
+# | echo "xb.rc=$(cat xb.rc)"; grep -v "^+" xb.log
+# | grep -h "updated .* target" jam-*.log
+# | sha256sum fix988.patch fix988b.patch fix988c.patch cpuactive988.c
+# | cat SHA256SUMS
+# | aws s3 ls s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/B/988/out/
+# ---- raw output ----
+xb.rc=0
+trunk be94c468aa7a2f045efc8ced7a558e175bbb2b8e ramfs: put the root vnode on unmount, so unmounting no longer KDLs (#1016)
+JAM trunk ok wall=17s
+ headers/private/kernel/cpu.h                  |  4 +++
+ src/system/kernel/cpu.cpp                     | 47 ++++++++++++++++++++++++---
+ src/system/kernel/scheduler/scheduler_cpu.cpp | 29 +++++++++++++----
+ 3 files changed, 68 insertions(+), 12 deletions(-)
+cpu_get_active_time disassembly size (trunk / fix988):
+ffff0000000878a0 0000000000000094 T cpu_get_active_time
+ffff0000000878a0 0000000000000120 T cpu_get_active_time
+sReportedActiveTime in fix only:
+0
+ffff0000001fef10 b _ZL19sReportedActiveTime
+libroot.so.trunk revision: hrev59996
+kernel_arm64.trunk revision: hrev59996
+kernel_arm64.fix988 revision: hrev59996
+bcdcbb73663a26753cdab9fe5dbea475de2ca6b9ace15635d58b8363e5b342c9  kernel_arm64.fix988
+7588ab2eb7ef69bd9a25ba226ab66dbab97bcd416400751e55eee28132b6b8b0  kernel_arm64.trunk
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  bfs.trunk
+fbf55902935961312bc1448e6e7a4cc066a91ee20638017fd2771da9b27bf6fb  cpuactive988.c
+uploaded
+...updated 129 target(s)...
+...updated 129 target(s)...
+...updated 129 target(s)...
+...updated 856 target(s)...
+...updated 960 target(s)...
+...updated 24 target(s)...
+4eaae7d674f6ad3a9085c64a626c1c72de759b5d372060027da4b33d2ce3817e  fix988.patch
+8baddac3a36ea26caf3d9b50f50e74d68c0c0e73ea8c8b2567f43e8d50d11764  fix988b.patch
+f3871612104f888a27e1efd3b3023221bd600698105717187de23ad20f6bb92e  fix988c.patch
+fbf55902935961312bc1448e6e7a4cc066a91ee20638017fd2771da9b27bf6fb  cpuactive988.c
+bcdcbb73663a26753cdab9fe5dbea475de2ca6b9ace15635d58b8363e5b342c9  kernel_arm64.fix988
+7588ab2eb7ef69bd9a25ba226ab66dbab97bcd416400751e55eee28132b6b8b0  kernel_arm64.trunk
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  bfs.trunk
+fbf55902935961312bc1448e6e7a4cc066a91ee20638017fd2771da9b27bf6fb  cpuactive988.c
+917b490df93bdb56e8988319bfe12b09acecabfadcb173bca8e0b95b022bc057  kernel_arm64.fix988b
+8a70dae0b5955f26a8d997c3447be52653f638973475188d7be750d48dd8878d  kernel_arm64.fix988c
+2026-11-04 02:32:29        411 SHA256SUMS
+2026-11-04 02:32:29     276931 bfs.trunk
+2026-11-04 02:32:29       7427 cpuactive988.c
+2026-11-04 02:32:29       7323 fix988.patch
+2026-11-04 02:32:29    2551465 kernel_arm64.fix988
+2026-11-04 03:14:49    2551465 kernel_arm64.fix988b
+2026-11-04 03:32:18    2551465 kernel_arm64.fix988c
+2026-11-04 02:32:29    2551417 kernel_arm64.trunk
+2026-11-04 02:32:29    1366771 libroot.so.trunk
