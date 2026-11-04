@@ -1,0 +1,38 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-after
+# instance: i-0368e45136cf850f4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical with the #1086 kernel + ntfs.1115 (after arm)
+# start: 20261104T144738Z   end: 20261104T144843Z   rc: 0
+# script sha256: 2c21e2b62efb651a39c1019a9930d6ede548d9e0a472c3480f7b40705921b7bc
+# ---- script ----
+# | # Repack arm "after" for #1115: canonical haiku.hpkg with the #1086 kernel and ntfs.1115 (ntfs.trunk
+# | # is byte-identical to canonical's own ntfs); libroot and everything else stay canonical's.
+# | # Method of #898/#933/#1033.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O kernel_arm64.1086 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1115/kernel_arm64.1086?<PRESIGNED>'
+# | wget -q -O ntfs.1115 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1115/ntfs.1115?<PRESIGNED>'
+# | printf '%s\n' '1b55370d495b142fcb7d3ab4fdae1f4ca3e4f3ffe99f6e5e087f6fdce6022dca  kernel_arm64.1086' '8e9ff44a24748f8602a071a38416b391096752a901dd9dbd71cebb44563707f6  ntfs.1115' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/ntfs
+# | cat kernel_arm64.1086 > x/kernel_arm64; cat ntfs.1115 > $A/ntfs
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/ntfs
+# | package create -C x ../haiku-new.hpkg > /dev/null && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+kernel_arm64.1086: OK
+ntfs.1115: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  x/add-ons/kernel/file_systems/ntfs
+1b55370d495b142fcb7d3ab4fdae1f4ca3e4f3ffe99f6e5e087f6fdce6022dca  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+8e9ff44a24748f8602a071a38416b391096752a901dd9dbd71cebb44563707f6  x/add-ons/kernel/file_systems/ntfs
+-rw-r--r-- 1 baron root 20509867 Nov  4 14:48 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+ee83d803c0393a1ed93a86f8111a793cd325c8f7194e3520f44f02bd9e051211  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

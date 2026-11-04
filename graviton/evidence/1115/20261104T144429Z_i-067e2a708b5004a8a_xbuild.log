@@ -1,0 +1,180 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-067e2a708b5004a8a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: builder setup + build: #1086 kernel, trunk ntfs (before), ntfs with this fix (after); mkntfs test image
+# start: 20261104T144429Z   end: 20261104T144647Z   rc: 0
+# script sha256: 4b761d35e00141eb61712ecad0b84e63acba11f3af06e5338f989620e440d05e
+# ---- script ----
+# | # Cross-build for #1115 (group W) on an Ubuntu arm64 builder: the 150 GiB volume arrives as a
+# | # second disk, so the tree lives there. Toolchain, jam, cross-tools from the oven's cache,
+# | # configure on the #1086 kernel branch (fix/1069-arm64-physmap-area, base trunk a9954f424a),
+# | # revision pinned to canonical's hrev59996. Builds:
+# | #   kernel_arm64.1086: the #1086 kernel, in BOTH Haiku arms (diskimage single-page I/O needs it)
+# | #   ntfs.trunk:        trunk ntfs (the "before" arm; should equal canonical's 39cf1fda...)
+# | #   ntfs.1115:         + ntfs1115.patch (this fix, the "after" arm)
+# | # Also makes the mkntfs test image and keeps ntfs-3g/losetup for the Linux reference.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | mkfs.ext4 -q -F /dev/nvme1n1 && mkdir -p /mnt/w && mount /dev/nvme1n1 /mnt/w && mkdir -p /mnt/w/t && ln -sfn /mnt/w/t /opt/t || exit 1
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -r; dpkg -s ntfs-3g | grep -E "^Version"
+# | cd /opt/t
+# | git clone -q --filter=blob:none https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg checkout -q origin/fix/1069-arm64-physmap-area && git -C hg log -1 --format='configure at %H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam || exit 1
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 1
+# | tar --zstd -xf /tmp/ct.tar.zst -C . || exit 1
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -1
+# | O=/opt/t/out; mkdir -p $O
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet --recursive s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/src1115/ $O/ && (cd $O && sha256sum *)
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV kernel_arm64 > $O/jam-kernel.log 2>&1 || { tail -40 $O/jam-kernel.log; exit 1; }
+# | cp objects/haiku/arm64/release/system/kernel/kernel_arm64 $O/kernel_arm64.1086 || exit 1
+# | git -C .. diff --quiet a9954f424a HEAD -- src/add-ons/kernel/file_systems/ntfs && echo "ntfs sources identical to trunk a9954f424a"
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > $O/jam-trunk.log 2>&1 || { tail -40 $O/jam-trunk.log; exit 1; }
+# | cp $A/ntfs/ntfs $O/ntfs.trunk
+# | git -C .. apply --check $O/ntfs1115.patch && git -C .. apply $O/ntfs1115.patch || exit 1
+# | git -C .. diff --stat
+# | rm -rf $A/ntfs
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > $O/jam-1115.log 2>&1 || { tail -40 $O/jam-1115.log; exit 1; }
+# | grep -E "warning:|error:" $O/jam-1115.log | grep ntfs/kernel_interface
+# | cp $A/ntfs/ntfs $O/ntfs.1115
+# | rm -rf $A/ntfs; jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > /dev/null 2>&1 && cmp $A/ntfs/ntfs $O/ntfs.1115 && echo "ntfs.1115 rebuild identical"
+# | git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
+# | CC=cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for m in trunk 1115; do ${CC}nm -S $O/ntfs.$m | grep -E "fs_create_dirP|fs_createP"; done
+# | cd $O && truncate -s 256M ntfs.img && mkntfs -F -Q -L NTFS1115 ntfs.img > /dev/null || exit 1
+# | sha256sum kernel_arm64.1086 ntfs.trunk ntfs.1115 ntfs.img
+# | for f in kernel_arm64.1086 ntfs.trunk ntfs.1115 ntfs.img; do aws s3 cp --quiet $f s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/out1115/$f || exit 1; done; echo uploaded
+# ---- raw output ----
+apt rc=0
+7.0.0-1016-aws
+Version: 1:2022.10.3-5ubuntu1.1
+configure at e2ca7e9c68343a4852b1630e81fe13ac7c3df04c evidence: hardware A/B for the arm64 physical map area (#1069)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+Configured successfully!
+549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c
+e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c
+c5f7deb2a89acea3f1e9ecd76897cd540f7b41ceb194c252b6613cccb8349617  coreutils967.sh
+886b7a1c03ca663c93166291e5fcfe00f9d32b90d089d99653a4a01f2a05789c  ntfs1115.patch
+b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c
+62118046a171f4d2d03747e76096611df2200cfa8e1cd13e2f5540b33918508f  unmount1115.sh
+ntfs sources identical to trunk a9954f424a
+ .../kernel/file_systems/ntfs/kernel_interface.cpp        | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1012:36: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1014:59: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+ntfs.1115 rebuild identical
+0000000000004dec 0000000000000114 t _ZL13fs_create_dirP9fs_volumeP8fs_vnodePKci
+00000000000056d0 0000000000000198 t _ZL9fs_createP9fs_volumeP8fs_vnodePKciiPPvPl
+00000000000052e8 000000000000012c t _ZL13fs_create_dirP9fs_volumeP8fs_vnodePKci
+00000000000056f0 00000000000001b8 t _ZL9fs_createP9fs_volumeP8fs_vnodePKciiPPvPl
+1b55370d495b142fcb7d3ab4fdae1f4ca3e4f3ffe99f6e5e087f6fdce6022dca  kernel_arm64.1086
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  ntfs.trunk
+8e9ff44a24748f8602a071a38416b391096752a901dd9dbd71cebb44563707f6  ntfs.1115
+b9859141b757863b8d1edbc7fc4b4438b97a7dd0d00a38e4b37f053d0c9deaf5  ntfs.img
+uploaded
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ mkfs.ext4 -q -F /dev/nvme1n1
++ mkdir -p /mnt/w
++ mount /dev/nvme1n1 /mnt/w
++ mkdir -p /mnt/w/t
++ ln -sfn /mnt/w/t /opt/t
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ uname -r
++ dpkg -s ntfs-3g
++ grep -E '^Version'
++ cd /opt/t
++ git clone -q --filter=blob:none https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg checkout -q origin/fix/1069-arm64-physmap-area
++ git -C hg log -1 '--format=configure at %H %s'
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ tail -1
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ O=/opt/t/out
++ mkdir -p /opt/t/out
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/src1115/ /opt/t/out/
++ cd /opt/t/out
++ sha256sum atime933.c chmod967.c coreutils967.sh ntfs1115.patch silent967.c unmount1115.sh
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 kernel_arm64
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/t/out/kernel_arm64.1086
++ git -C .. diff --quiet a9954f424a HEAD -- src/add-ons/kernel/file_systems/ntfs
++ echo 'ntfs sources identical to trunk a9954f424a'
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.trunk
++ git -C .. apply --check /opt/t/out/ntfs1115.patch
++ git -C .. apply /opt/t/out/ntfs1115.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ grep -E 'warning:|error:' /opt/t/out/jam-1115.log
++ grep ntfs/kernel_interface
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.1115
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ cmp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.1115
++ echo 'ntfs.1115 rebuild identical'
++ git -C .. checkout -q -f origin/fix/1069-arm64-physmap-area
++ CC=cross-tools-arm64/bin/aarch64-unknown-haiku-
++ for m in trunk 1115
++ cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S /opt/t/out/ntfs.trunk
++ grep -E 'fs_create_dirP|fs_createP'
++ for m in trunk 1115
++ cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S /opt/t/out/ntfs.1115
++ grep -E 'fs_create_dirP|fs_createP'
++ cd /opt/t/out
++ truncate -s 256M ntfs.img
++ mkntfs -F -Q -L NTFS1115 ntfs.img
+ntfs.img is not a block device.
+mkntfs forced anyway.
+The sector size was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 512 bytes.
+The partition start sector was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 0.
+The number of sectors per track was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 0.
+The number of heads was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 0.
+To boot from a device, Windows needs the 'partition start sector', the 'sectors per track' and the 'number of heads' to be set.
+Windows will not be able to boot from this device.
++ sha256sum kernel_arm64.1086 ntfs.trunk ntfs.1115 ntfs.img
++ for f in kernel_arm64.1086 ntfs.trunk ntfs.1115 ntfs.img
++ aws s3 cp --quiet kernel_arm64.1086 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1115/kernel_arm64.1086
++ for f in kernel_arm64.1086 ntfs.trunk ntfs.1115 ntfs.img
++ aws s3 cp --quiet ntfs.trunk s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1115/ntfs.trunk
++ for f in kernel_arm64.1086 ntfs.trunk ntfs.1115 ntfs.img
++ aws s3 cp --quiet ntfs.1115 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1115/ntfs.1115
++ for f in kernel_arm64.1086 ntfs.trunk ntfs.1115 ntfs.img
++ aws s3 cp --quiet ntfs.img s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1115/ntfs.img
++ echo uploaded

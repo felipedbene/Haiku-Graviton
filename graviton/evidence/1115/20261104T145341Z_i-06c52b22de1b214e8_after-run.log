@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-run
+# instance: i-06c52b22de1b214e8   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: after arm: unmount1115 x2 (5 cycles each), regression matrices, unmount, syslog
+# start: 20261104T145341Z   end: 20261104T152354Z   rc: 1
+# script sha256: d8ed74138e5cf1b1de68eb51036b74e487ae1ebcca0f1782f3e5929348d1e58f
+# ---- script ----
+# | # #1115 run (group W): unmount1115 with 5 cycles on n1, then a second, separate 5-cycle pass on
+# | # the same device (repeat); then the regression matrices on n2 (silent967, chmod967, atime933,
+# | # coreutils967), followed by an unmount of n2 with retries. Syslog "still referenced" lines last.
+# | cd /boot/home/t1115 || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ntfs
+# | listimage 1 | grep -E "file_systems/ntfs"
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | echo "=== unmount1115, pass 1"; bash ./unmount1115.sh $(dev n1) /n1 5; echo "unmount1115 pass1 rc=$?"
+# | echo "=== unmount1115, pass 2"; bash ./unmount1115.sh $(dev n1) /n1 5; echo "unmount1115 pass2 rc=$?"
+# | echo "=== regressions on n2"
+# | mkdir -p /n2 && mount -t ntfs $(dev n2) /n2; echo "mount n2 rc=$?"
+# | mkdir /n2/s967 /n2/m967 /n2/a933
+# | ./silent967 /n2/s967 | grep -E "^FAIL|SUMMARY"; echo "silent967 rc=${PIPESTATUS[0]}"
+# | ./chmod967 /n2/m967 | grep -E "^FAIL|SUMMARY"; echo "chmod967 rc=${PIPESTATUS[0]}"
+# | ./atime933 /n2/a933 | grep -E "^FAIL|SUMMARY"; echo "atime933 rc=${PIPESTATUS[0]}"
+# | bash ./coreutils967.sh /n2 2>&1 | grep -E "rc="
+# | cd /; ok=no; for t in 1 2 3 4 5; do unmount /n2 2>/dev/null && { ok=yes; break; }; sleep 2; done; echo "unmount n2 after the regression matrices: $ok (attempt $t)"
+# | echo "=== syslog"; grep -E "still referenced" /var/log/syslog | tail -5; echo "still-referenced lines: $(grep -c 'still referenced' /var/log/syslog)"
+# ---- raw output ----

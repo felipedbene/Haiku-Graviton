@@ -1,0 +1,73 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-setup
+# instance: i-044c57ef03f61211b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm (ami-070ca2b59b1eb5501 = canonical + #1086 kernel, trunk ntfs): setup
+# start: 20261104T145306Z   end: 20261104T145329Z   rc: 0
+# script sha256: 74729404df35781ae86fb897b879d096b8a658f374fe90add842a7318d80b7c9
+# ---- script ----
+# | # Haiku arm setup for #1115 (group W): checksums, toolchain, the mkntfs test image and repros
+# | # (sha256 checked), compile, and register two copies of the image with diskimage (mounted from
+# | # a LATER command: #1013 saw a register + mount in one SSM command fail). n1 is for the
+# | # unmount cycles, n2 for the regression matrices.
+# | set -x
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/ntfs
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -1
+# | command -v gcc wget || exit 1
+# | rm -rf /boot/home/t1115 && mkdir -p /boot/home/t1115 && cd /boot/home/t1115
+# | wget -q -O ntfs.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1115/ntfs.img?<PRESIGNED>'
+# | wget -q -O unmount1115.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/unmount1115.sh?<PRESIGNED>'
+# | wget -q -O silent967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/silent967.c?<PRESIGNED>'
+# | wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/chmod967.c?<PRESIGNED>'
+# | wget -q -O atime933.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/atime933.c?<PRESIGNED>'
+# | wget -q -O coreutils967.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/coreutils967.sh?<PRESIGNED>'
+# | printf '%s\n' 'b9859141b757863b8d1edbc7fc4b4438b97a7dd0d00a38e4b37f053d0c9deaf5  ntfs.img' '62118046a171f4d2d03747e76096611df2200cfa8e1cd13e2f5540b33918508f  unmount1115.sh' 'b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c' 'e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c' '549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c' 'c5f7deb2a89acea3f1e9ecd76897cd540f7b41ceb194c252b6613cccb8349617  coreutils967.sh' | sha256sum -c || exit 1
+# | for p in silent967 chmod967 atime933; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | cp ntfs.img n1.img && cp ntfs.img n2.img
+# | diskimage register /boot/home/t1115/n1.img
+# | diskimage register /boot/home/t1115/n2.img
+# | diskimage list
+# ---- raw output ----
+1b55370d495b142fcb7d3ab4fdae1f4ca3e4f3ffe99f6e5e087f6fdce6022dca  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  /boot/system/add-ons/kernel/file_systems/ntfs
+[system] Done.
+/boot/system/bin/gcc
+/boot/system/bin/wget
+ntfs.img: OK
+unmount1115.sh: OK
+silent967.c: OK
+chmod967.c: OK
+atime933.c: OK
+coreutils967.sh: OK
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
+Registered file as disk device "/dev/disk/virtual/files/4/raw" with ID 4.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1115/n1.img            /dev/disk/virtual/files/3/raw
+     4  /boot/home/t1115/n2.img            /dev/disk/virtual/files/4/raw
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/ntfs
++ pkgman install -y gcc binutils haiku_devel wget
++ tail -1
++ command -v gcc wget
++ rm -rf /boot/home/t1115
++ mkdir -p /boot/home/t1115
++ cd /boot/home/t1115
++ wget -q -O ntfs.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1115/ntfs.img?<PRESIGNED>'
++ wget -q -O unmount1115.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/unmount1115.sh?<PRESIGNED>'
++ wget -q -O silent967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/silent967.c?<PRESIGNED>'
++ wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/chmod967.c?<PRESIGNED>'
++ wget -q -O atime933.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/atime933.c?<PRESIGNED>'
++ wget -q -O coreutils967.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1115/coreutils967.sh?<PRESIGNED>'
++ printf '%s\n' 'b9859141b757863b8d1edbc7fc4b4438b97a7dd0d00a38e4b37f053d0c9deaf5  ntfs.img' '62118046a171f4d2d03747e76096611df2200cfa8e1cd13e2f5540b33918508f  unmount1115.sh' 'b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c' 'e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c' '549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c' 'c5f7deb2a89acea3f1e9ecd76897cd540f7b41ceb194c252b6613cccb8349617  coreutils967.sh'
++ sha256sum -c
++ for p in silent967 chmod967 atime933
++ gcc -O2 -Wall -o silent967 silent967.c
++ for p in silent967 chmod967 atime933
++ gcc -O2 -Wall -o chmod967 chmod967.c
++ for p in silent967 chmod967 atime933
++ gcc -O2 -Wall -o atime933 atime933.c
++ cp ntfs.img n1.img
++ cp ntfs.img n2.img
++ diskimage register /boot/home/t1115/n1.img
++ diskimage register /boot/home/t1115/n2.img
++ diskimage list
