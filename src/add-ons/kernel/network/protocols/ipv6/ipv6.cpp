@@ -486,8 +486,12 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 	// Any other overlap abandons the whole datagram (RFC 5722, RFC 8200 4.5).
 	// Trimming it, as RFC 791 allows for IPv4, let the overlapping part of a
 	// fragment be dropped while the rest was kept, and a fragment spanning
-	// more than one held fragment lost its data past the first. As on Linux,
-	// "duplicate" above means wholly inside contiguous data already held.
+	// more than one held fragment lost its data past the first.
+	// "Duplicate" above means wholly inside one held buffer. Fragments are
+	// merged with a neighbour they meet as they arrive, but one that fills a
+	// gap is merged with one side only, so contiguous data can still sit in
+	// two buffers; a fragment spanning them is then taken as an overlap where
+	// Linux, which compares against its contiguous runs, may see a duplicate.
 	if ((previous != NULL && previous->fragment.end > start)
 		|| (next != NULL && end > next->fragment.start)) {
 		TRACE("    overlaps held data, abandoning the datagram");
