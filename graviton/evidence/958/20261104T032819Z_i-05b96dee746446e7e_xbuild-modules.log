@@ -1,0 +1,162 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-05b96dee746446e7e   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T032819Z   end: 20261104T032924Z   rc: 0
+# script sha256: eebe47571370ba04e248e37671617eeed8f6c059c775c525b30462fc61928474
+# ---- script ----
+# | export HOME=/root
+# | OUT=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/K
+# | cd /opt/wK/hg/generated || exit 1
+# | aws s3 cp --quiet $OUT/patch/958-v2.patch /opt/wK/958-v2.patch || exit 1
+# | aws s3 cp --quiet $OUT/src/offs958.cpp /opt/wK/offs958.cpp || exit 1
+# | sha256sum /opt/wK/958-v2.patch /opt/wK/offs958.cpp
+# | MODS="stack ipv4 ipv6 tcp udp unix icmp icmp6 arp ethernet_frame ipv6_datagram loopback_frame ethernet loopback tunnel ena virtio_net"
+# | REL=objects/haiku/arm64/release/add-ons/kernel
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo $REL/network/stack/stack ;;
+# | 		ipv4|ipv6|tcp|udp|unix|icmp|icmp6) echo $REL/network/protocols/$1/$1 ;;
+# | 		arp|ethernet_frame|ipv6_datagram|loopback_frame) echo $REL/network/datalink_protocols/$1/$1 ;;
+# | 		ethernet|loopback|tunnel) echo $REL/network/devices/$1/$1 ;;
+# | 		ena) echo $REL/drivers/network/ether/ena/ena ;;
+# | 		virtio_net) echo $REL/drivers/network/ether/virtio/virtio_net ;;
+# | 	esac
+# | }
+# | # The compile line jam uses for net_buffer.cpp, with the probe substituted and
+# | # -S instead of -c, so the offsets come out of the same compiler and flags the
+# | # stack add-on is built with. Values are read from the "i" asm operands.
+# | probe() {
+# | 	local label=$1
+# | 	local line=$(grep -E -- '-gcc -c "[^"]*stack/net_buffer\.cpp"' jam-$label.log | tail -1)
+# | 	[ -n "$line" ] || { echo "no net_buffer.cpp compile line"; return 1; }
+# | 	local cmd=$(echo "$line" | sed -E 's# -c # -S #; s# -o "[^"]+"# -o "/opt/wK/offs-'$label'.s"#; s#"[^"]*stack/net_buffer\.cpp"#"/opt/wK/offs958.cpp"#')
+# | 	[ $label = f958 ] && cmd="$cmd -DHAS_HOP"
+# | 	echo "probe compiler: $(echo $cmd | awk '{print $1}')"
+# | 	eval "$cmd" || { echo "probe compile failed"; return 1; }
+# | 	grep -E '^[[:space:]]*//? ?OFF|OFF ' /opt/wK/offs-$label.s | sed -E 's/^[[:space:]]*\/\/[[:space:]]*//' | sed "s/^/$label: /"
+# | }
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f --detach a9954f424a || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		git -C .. apply --whitespace=nowarn /opt/wK/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	for t in $MODS; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -dx -j32 $(echo $MODS | sed "s/ arp / <module>arp /") > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error:|BUILD FAILURE' jam-$label.log | head -20; return 1; }
+# | 	grep -A3 'warning:' jam-$label.log | grep -E 'net_buffer|protocols/ipv6/ipv6\.cpp' | head -20
+# | 	mkdir -p /opt/wK/out/$label
+# | 	for t in $MODS; do
+# | 		cp "$(path_of $t)" /opt/wK/out/$label/$t && sha256sum /opt/wK/out/$label/$t | sed "s|/opt/wK/out/||"
+# | 		aws s3 cp --quiet /opt/wK/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	probe $label
+# | }
+# | build trunk none || exit 2
+# | build f958 958-v2.patch || exit 3
+# | echo "--- trunk vs f958, per module"
+# | for t in $MODS; do
+# | 	if cmp -s /opt/wK/out/trunk/$t /opt/wK/out/f958/$t; then echo "$t identical"; else echo "$t DIFFERS"; fi
+# | done
+# | echo "--- probe diff (trunk vs f958, hop_limit row excluded)"
+# | diff <(grep -E 'OFF|SIZEOF' /opt/wK/offs-trunk.s | sed -E 's/^.*(OFF|SIZEOF)/\1/') <(grep -E 'OFF|SIZEOF' /opt/wK/offs-f958.s | grep -v hop_limit | sed -E 's/^.*(OFF|SIZEOF)/\1/') && echo "PROBE: no other field moved, size unchanged"
+# ---- raw output ----
+abd9dbe83a314f05d1230c2ec53ba5cac8c5549358f55c47d467a5a1c39ca563  /opt/wK/958-v2.patch
+8414ecf60792e73c61079d947997fbd6469f067060a400b98c592494987d10ac  /opt/wK/offs958.cpp
+JAM trunk head=a9954f42 patch=none rc=0 wall=12s failed=0 warnings=3
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  trunk/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  trunk/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  trunk/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  trunk/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  trunk/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  trunk/unix
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  trunk/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  trunk/icmp6
+ff4ec3f3359c2888bc267776fdaaeee2e5acbbf39ddd6b03612e355c0f29fbc4  trunk/arp
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  trunk/ethernet_frame
+1e8113d7be7e74247c75370f26ac8dc145f6d5754f9ecb413a2290620711e8e0  trunk/ipv6_datagram
+9fdbf84adebe7f81c57ad31741104b644d180f5ba99c3f56071d71b6c5a85754  trunk/loopback_frame
+d5075a6375417d7d2f16c16a054730516665a94ba29932a36a1f41873b1cefb8  trunk/ethernet
+a4433aa1c76e0c47bbaa81df4eeb6a1cdcde72d6e6646ebb9672cd514ee19f10  trunk/loopback
+60c46d614890cb7691ac4e9469f62d3716b6d893c02e2e8aada88c620bb19d22  trunk/tunnel
+ed719d1f45f768c9aff7844cde6fd62e0c9aced41c79fc882716fbdedb1ba129  trunk/ena
+c6e16cbde97860197eb385d4c0bc2240312e83a5fc26416d04096d69d3eb2598  trunk/virtio_net
+probe compiler: /opt/wK/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc
+trunk: OFF link 0 16
+trunk: OFF source 16 8
+trunk: OFF destination 24 8
+trunk: OFF interface_address 32 8
+trunk: OFF fragment 40 4
+trunk: OFF sequence 40 4
+trunk: OFF offset 40 4
+trunk: OFF index 40 4
+trunk: OFF type 40 4
+trunk: OFF msg_flags 44 4
+trunk: OFF size 48 4
+trunk: OFF protocol 52 1
+trunk: OFF buffer_flags 54 2
+trunk: OFF receive_enqueue_time 56 8
+ headers/private/net/net_buffer.h                   |  3 +++
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 26 ++++++++++------------
+ src/add-ons/kernel/network/stack/net_buffer.cpp    |  2 ++
+ 3 files changed, 17 insertions(+), 14 deletions(-)
+JAM f958 head=a9954f42 patch=958-v2.patch rc=0 wall=12s failed=0 warnings=3
+48f30d072a8dda5bd234e03d23e0af32a9d505891ef78400a63434cec0b87e10  f958/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  f958/ipv4
+119ada6ae47a9095d085ffab337303cf909431262ed84c6ceb73d93d9d4225a1  f958/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  f958/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  f958/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  f958/unix
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  f958/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  f958/icmp6
+ff4ec3f3359c2888bc267776fdaaeee2e5acbbf39ddd6b03612e355c0f29fbc4  f958/arp
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  f958/ethernet_frame
+1e8113d7be7e74247c75370f26ac8dc145f6d5754f9ecb413a2290620711e8e0  f958/ipv6_datagram
+9fdbf84adebe7f81c57ad31741104b644d180f5ba99c3f56071d71b6c5a85754  f958/loopback_frame
+d5075a6375417d7d2f16c16a054730516665a94ba29932a36a1f41873b1cefb8  f958/ethernet
+a4433aa1c76e0c47bbaa81df4eeb6a1cdcde72d6e6646ebb9672cd514ee19f10  f958/loopback
+60c46d614890cb7691ac4e9469f62d3716b6d893c02e2e8aada88c620bb19d22  f958/tunnel
+4a29fac82bd35ef9eaa1d9f999f70b74d1feb95f6163e3eb699f652d2ae2c14a  f958/ena
+c6e16cbde97860197eb385d4c0bc2240312e83a5fc26416d04096d69d3eb2598  f958/virtio_net
+probe compiler: /opt/wK/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc
+f958: OFF link 0 16
+f958: OFF source 16 8
+f958: OFF destination 24 8
+f958: OFF interface_address 32 8
+f958: OFF fragment 40 4
+f958: OFF sequence 40 4
+f958: OFF offset 40 4
+f958: OFF index 40 4
+f958: OFF type 40 4
+f958: OFF msg_flags 44 4
+f958: OFF size 48 4
+f958: OFF protocol 52 1
+f958: OFF hop_limit 53 1
+f958: OFF buffer_flags 54 2
+f958: OFF receive_enqueue_time 56 8
+--- trunk vs f958, per module
+stack DIFFERS
+ipv4 identical
+ipv6 DIFFERS
+tcp identical
+udp identical
+unix identical
+icmp identical
+icmp6 identical
+arp identical
+ethernet_frame identical
+ipv6_datagram identical
+loopback_frame identical
+ethernet identical
+loopback identical
+tunnel identical
+ena DIFFERS
+virtio_net identical
+--- probe diff (trunk vs f958, hop_limit row excluded)
+PROBE: no other field moved, size unchanged

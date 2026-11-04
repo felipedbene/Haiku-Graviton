@@ -1,0 +1,219 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-f958-regress
+# instance: i-07979d5a244d9e136   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T033404Z   end: 20261104T033433Z   rc: 0
+# script sha256: 6676edc8d1cd8046989f24dbf6920f08293463cd496e3c916d7586b8604b40a6
+# ---- script ----
+# | set -u
+# | command -v gcc > /dev/null || { pkgman install -y curl gcc binutils haiku_devel 2>&1 | tail -2; }
+# | mkdir -p /boot/home/wK && cd /boot/home/wK
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | sort | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/'
+# | curl -sSf -o hoplimit958.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/src/hoplimit958.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/src/udp947.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/src/tcp900.c?<PRESIGNED>' || exit 4
+# | sha256sum *.c
+# | for p in hoplimit958 udp947 tcp900; do gcc -O2 -Wall -o $p $p.c -lnetwork || exit 2; done
+# | ifconfig loop mtu 65536; echo "=== $(ifconfig loop | grep -o 'MTU: [0-9]*')"
+# | for i in 1 2 3; do echo "=== hoplimit958 run $i"; ./hoplimit958; echo "rc=$?"; done
+# | echo "=== udp947"; ./udp947 | tail -20; echo "rc=$?"
+# | echo "=== udp947 -t"; ./udp947 -t; echo "rc=$?"
+# | echo "=== tcp900"; ./tcp900 2>&1 | tail -45; echo "rc=$?"
+# | ifconfig loop mtu 1280; echo "=== $(ifconfig loop | grep -o 'MTU: [0-9]*')"
+# | echo "=== tcp900 (loop mtu 1280)"; ./tcp900 2>&1 | tail -45; echo "rc=$?"
+# | ifconfig loop mtu 65536
+# | true
+# ---- raw output ----
+Haiku ip-10-128-7-125.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+ff4ec3f3359c2888bc267776fdaaeee2e5acbbf39ddd6b03612e355c0f29fbc4  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/arp
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+1e8113d7be7e74247c75370f26ac8dc145f6d5754f9ecb413a2290620711e8e0  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+9fdbf84adebe7f81c57ad31741104b644d180f5ba99c3f56071d71b6c5a85754  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/loopback_frame
+d5075a6375417d7d2f16c16a054730516665a94ba29932a36a1f41873b1cefb8  /boot/home/config/non-packaged/add-ons/kernel/network/devices/ethernet
+a4433aa1c76e0c47bbaa81df4eeb6a1cdcde72d6e6646ebb9672cd514ee19f10  /boot/home/config/non-packaged/add-ons/kernel/network/devices/loopback
+60c46d614890cb7691ac4e9469f62d3716b6d893c02e2e8aada88c620bb19d22  /boot/home/config/non-packaged/add-ons/kernel/network/devices/tunnel
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+119ada6ae47a9095d085ffab337303cf909431262ed84c6ceb73d93d9d4225a1  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+48f30d072a8dda5bd234e03d23e0af32a9d505891ef78400a63434cec0b87e10  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2202 0xffff0000022c9000 0xffff0000022eb000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2203 0xffff000002284000 0xffff000002286000     0          0 /boot/system/add-ons/kernel/network/notifications
+ 2228 0xffff0000020f1000 0xffff0000020f9000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2229 0xffff0000020fa000 0xffff000002105000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2231 0xffff000002287000 0xffff000002288000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/devices/loopback
+ 2232 0xffff0000021bc000 0xffff0000021bd000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/loopback_frame
+ 2233 0xffff000002107000 0xffff000002112000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2246 0xffff0000022ed000 0xffff000002300000     0          0 /boot/system/add-ons/kernel/drivers/network/ena
+ 2267 0xffff00000211e000 0xffff000002121000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/devices/ethernet
+ 2268 0xffff000002365000 0xffff000002369000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/arp
+ 2269 0xffff00000213b000 0xffff00000213d000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+ 2316 0xffff00000236a000 0xffff00000237c000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2317 0xffff0000de9e0000 0xffff0000de9ee000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+733b003d3b52e025962d5d94e2ef014464c7b664ed68f1047ea876dbe3dfe447  hoplimit958.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+=== MTU: 65536
+=== hoplimit958 run 1
+udp ::1, sender hops 1                               PASS  recvmsg=3 [IPV6_HOPLIMIT 1]
+udp ::1, sender hops 7                               PASS  recvmsg=3 [IPV6_HOPLIMIT 7]
+udp ::1, sender hops 200                             PASS  recvmsg=3 [IPV6_HOPLIMIT 200]
+udp ::1, MSG_PEEK then read, sender hops 9           PASS  peek=3 [IPV6_HOPLIMIT 9], then recvmsg=3 [IPV6_HOPLIMIT 9]
+udp ::1, zero-length datagram, sender hops 5         PASS  recvmsg=0 [IPV6_HOPLIMIT 5]
+udp ::1, zero-length, MSG_PEEK then read, hops 6     PASS  peek=0 [IPV6_HOPLIMIT 6], then recvmsg=0 [IPV6_HOPLIMIT 6]
+raw IPPROTO_UDP socket, sender hops 11               PASS  raw recvmsg=11 [IPV6_HOPLIMIT 11]
+v4-to-dual 127.0.0.1 -> ::, no IPV6_HOPLIMIT         PASS  recvmsg=3 [IPV6_HOPLIMIT -1]
+0 FAIL(s)
+rc=0
+=== hoplimit958 run 2
+udp ::1, sender hops 1                               PASS  recvmsg=3 [IPV6_HOPLIMIT 1]
+udp ::1, sender hops 7                               PASS  recvmsg=3 [IPV6_HOPLIMIT 7]
+udp ::1, sender hops 200                             PASS  recvmsg=3 [IPV6_HOPLIMIT 200]
+udp ::1, MSG_PEEK then read, sender hops 9           PASS  peek=3 [IPV6_HOPLIMIT 9], then recvmsg=3 [IPV6_HOPLIMIT 9]
+udp ::1, zero-length datagram, sender hops 5         PASS  recvmsg=0 [IPV6_HOPLIMIT 5]
+udp ::1, zero-length, MSG_PEEK then read, hops 6     PASS  peek=0 [IPV6_HOPLIMIT 6], then recvmsg=0 [IPV6_HOPLIMIT 6]
+raw IPPROTO_UDP socket, sender hops 11               PASS  raw recvmsg=11 [IPV6_HOPLIMIT 11]
+v4-to-dual 127.0.0.1 -> ::, no IPV6_HOPLIMIT         PASS  recvmsg=3 [IPV6_HOPLIMIT -1]
+0 FAIL(s)
+rc=0
+=== hoplimit958 run 3
+udp ::1, sender hops 1                               PASS  recvmsg=3 [IPV6_HOPLIMIT 1]
+udp ::1, sender hops 7                               PASS  recvmsg=3 [IPV6_HOPLIMIT 7]
+udp ::1, sender hops 200                             PASS  recvmsg=3 [IPV6_HOPLIMIT 200]
+udp ::1, MSG_PEEK then read, sender hops 9           PASS  peek=3 [IPV6_HOPLIMIT 9], then recvmsg=3 [IPV6_HOPLIMIT 9]
+udp ::1, zero-length datagram, sender hops 5         PASS  recvmsg=0 [IPV6_HOPLIMIT 5]
+udp ::1, zero-length, MSG_PEEK then read, hops 6     PASS  peek=0 [IPV6_HOPLIMIT 6], then recvmsg=0 [IPV6_HOPLIMIT 6]
+raw IPPROTO_UDP socket, sender hops 11               PASS  raw recvmsg=11 [IPV6_HOPLIMIT 11]
+v4-to-dual 127.0.0.1 -> ::, no IPV6_HOPLIMIT         PASS  recvmsg=3 [IPV6_HOPLIMIT -1]
+0 FAIL(s)
+rc=0
+=== udp947
+ipv4 none                                                  PASS  controllen=0 flags=0x0
+ipv4 IP_RECVDSTADDR                                        PASS  controllen=24 flags=0x0 [IP_RECVDSTADDR 127.0.0.1]
+ipv4 IP_RECVDSTADDR set+cleared                            PASS  controllen=0 flags=0x0
+ipv4 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+ipv6 none                                                  PASS  controllen=0 flags=0x0
+ipv6 IPV6_RECVPKTINFO                                      PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVHOPLIMIT                                     PASS  controllen=24 flags=0x0 [IPV6_HOPLIMIT 7]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    PASS  controllen=64 flags=0x0 [IPV6_HOPLIMIT 7] [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVPKTINFO set+cleared                          PASS  controllen=0 flags=0x0
+ipv6 both set+cleared                                      PASS  controllen=0 flags=0x0
+ipv6 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+v4-to-dual none                                            PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO                                PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVPKTINFO set+cleared                    PASS  controllen=0 flags=0x0
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 18 passed, 0 failed
+rc=0
+=== udp947 -t
+ipv4 IP_RECVDSTADDR, 4-byte control buffer                 FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+ipv6 IPV6_RECVPKTINFO, 4-byte control buffer               FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+udp947 -t: 0 passed, 3 failed
+rc=3
+=== tcp900
+tcp ::1               s2c    65463 in   65463 writes       PASS  delivered 65463/65463 in 0.000s, 229.5 MiB/s, eof
+tcp ::1               s2c    65464 in   65464 writes       PASS  delivered 65464/65464 in 0.000s, 307.5 MiB/s, eof
+tcp ::1               s2c    65476 in   65476 writes       PASS  delivered 65476/65476 in 0.000s, 307.6 MiB/s, eof
+tcp ::1               s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 24.4 MiB/s, eof
+tcp ::1               c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 25.7 MiB/s, eof
+tcp ::1               s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 314.1 MiB/s, eof
+tcp ::1               c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 317.3 MiB/s, eof
+tcp ::1               s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 273.1 MiB/s, eof
+tcp ::1               c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 318.6 MiB/s, eof
+tcp ::1               s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.200s, 320.1 MiB/s, eof
+tcp ::1               c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.200s, 320.5 MiB/s, eof
+tcp ::1               s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 391.4 MiB/s, eof
+tcp ::1               c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.163s, 392.0 MiB/s, eof
+tcp ::ffff:127.0.0.1  TCP_MAXSEG 65495
+tcp ::ffff:127.0.0.1  s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 313.8 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 313.8 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 312.3 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 320.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 320.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 314.0 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 317.3 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.3 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.1 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.8 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.0 MiB/s, eof
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 310.7 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 315.4 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 315.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 290.7 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 320.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 318.3 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 316.3 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.6 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.6 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.9 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, delivered 65488
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 2.2s, 0 FAIL
+rc=0
+=== MTU: 1280
+=== tcp900 (loop mtu 1280)
+tcp ::1               s2c     1207 in    1207 writes       PASS  delivered 1207/1207 in 0.000s, 24.5 MiB/s, eof
+tcp ::1               s2c     1208 in    1208 writes       PASS  delivered 1208/1208 in 0.000s, 29.5 MiB/s, eof
+tcp ::1               s2c     1220 in    1220 writes       PASS  delivered 1220/1220 in 0.000s, 28.4 MiB/s, eof
+tcp ::1               s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 23.8 MiB/s, eof
+tcp ::1               c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 25.7 MiB/s, eof
+tcp ::1               s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.001s, 107.6 MiB/s, eof
+tcp ::1               c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 133.8 MiB/s, eof
+tcp ::1               s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.008s, 118.4 MiB/s, eof
+tcp ::1               c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.008s, 133.0 MiB/s, eof
+tcp ::1               s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.499s, 128.2 MiB/s, eof
+tcp ::1               c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.510s, 125.5 MiB/s, eof
+tcp ::1               s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.295s, 216.8 MiB/s, eof
+tcp ::1               c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.288s, 222.4 MiB/s, eof
+tcp ::ffff:127.0.0.1  TCP_MAXSEG 1240
+tcp ::ffff:127.0.0.1  s2c     1227 in    1227 writes       PASS  delivered 1227/1227 in 0.000s, 17.0 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1228 in    1228 writes       PASS  delivered 1228/1228 in 0.000s, 32.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1240 in    1240 writes       PASS  delivered 1240/1240 in 0.000s, 31.1 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 147.8 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 127.3 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.007s, 148.4 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.007s, 148.0 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.428s, 149.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.417s, 153.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.284s, 225.4 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.280s, 228.6 MiB/s, eof
+tcp 127.0.0.1         TCP_MAXSEG 1240
+tcp 127.0.0.1         s2c     1227 in    1227 writes       PASS  delivered 1227/1227 in 0.000s, 31.6 MiB/s, eof
+tcp 127.0.0.1         s2c     1228 in    1228 writes       PASS  delivered 1228/1228 in 0.000s, 33.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1240 in    1240 writes       PASS  delivered 1240/1240 in 0.000s, 31.1 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.1 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 130.8 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.001s, 125.0 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.008s, 133.2 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.007s, 152.4 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.409s, 156.6 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.412s, 155.4 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.282s, 227.1 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.281s, 228.1 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, NOT DELIVERED within 2 s
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, NOT DELIVERED within 2 s
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, NOT DELIVERED within 2 s
+total 10.4s, 0 FAIL
+rc=0

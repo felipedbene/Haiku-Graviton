@@ -1,0 +1,66 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-layout
+# instance: i-05b96dee746446e7e   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T032956Z   end: 20261104T033007Z   rc: 0
+# script sha256: 99b2831ecbf0680ff436e9a11fe323dc7dcfb1d8c49aeb83a356954d585ff871
+# ---- script ----
+# | # net_buffer layout, trunk vs candidate, from the probe assembly the
+# | # stack add-on's own compile line produced (see xbuild-modules), plus why
+# | # ena's bytes differ between two builds of the same layout.
+# | cd /opt/wK
+# | for l in trunk f958; do
+# | 	echo "== $l"
+# | 	grep -E '// (OFF|SIZEOF)' offs-$l.s | sed -E 's/^[[:space:]]*\/\/[[:space:]]*//'
+# | done
+# | echo "== diff, hop_limit row excluded"
+# | diff <(grep -E '// (OFF|SIZEOF)' offs-trunk.s) <(grep -E '// (OFF|SIZEOF)' offs-f958.s | grep -v hop_limit) && echo "IDENTICAL: no other offset moved, sizeof unchanged"
+# | echo "== ena: differing bytes $(cmp -l out/trunk/ena out/f958/ena | wc -l); differing strings:"
+# | diff <(strings -n 8 out/trunk/ena) <(strings -n 8 out/f958/ena)
+# | echo "(ENA_BUILD_STAMP = __DATE__ \" \" __TIME__, ena.h:72)"
+# | true
+# ---- raw output ----
+== trunk
+OFF link 0 16
+OFF source 16 8
+OFF destination 24 8
+OFF interface_address 32 8
+OFF fragment 40 4
+OFF sequence 40 4
+OFF offset 40 4
+OFF index 40 4
+OFF type 40 4
+OFF msg_flags 44 4
+OFF size 48 4
+OFF protocol 52 1
+OFF buffer_flags 54 2
+OFF receive_enqueue_time 56 8
+SIZEOF net_buffer 64 align 8
+== f958
+OFF link 0 16
+OFF source 16 8
+OFF destination 24 8
+OFF interface_address 32 8
+OFF fragment 40 4
+OFF sequence 40 4
+OFF offset 40 4
+OFF index 40 4
+OFF type 40 4
+OFF msg_flags 44 4
+OFF size 48 4
+OFF protocol 52 1
+OFF hop_limit 53 1
+OFF buffer_flags 54 2
+OFF receive_enqueue_time 56 8
+SIZEOF net_buffer 64 align 8
+== diff, hop_limit row excluded
+IDENTICAL: no other offset moved, sizeof unchanged
+== ena: differing bytes 6; differing strings:
+342c342
+< Nov  4 2026 03:28:38
+---
+> Nov  4 2026 03:29:05
+359c359
+< ena: attached [build Nov  4 2026 03:28:38]; interrupts so far: %d management, %d io%s
+---
+> ena: attached [build Nov  4 2026 03:29:05]; interrupts so far: %d management, %d io%s
+(ENA_BUILD_STAMP = __DATE__ " " __TIME__, ena.h:72)
