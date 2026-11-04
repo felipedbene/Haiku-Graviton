@@ -1831,6 +1831,15 @@ dosfs_wstat(fs_volume* volume, fs_vnode* vnode, const struct stat* stat, uint32 
 	if (status != B_OK)
 		RETURN_ERROR(status);
 
+	// FAT stores no owner: every node belongs to the volume's uid and gid. A chown()/chgrp() to
+	// those is a no-op that succeeds; to any other id it is refused with EPERM, as Linux vfat does
+	// (without its "quiet" option), so that a caller learns its change was not made. Like the
+	// permission check, this runs before anything is changed.
+	if (((statMask & B_STAT_UID) != 0 && stat->st_uid != fatVolume->pm_uid)
+		|| ((statMask & B_STAT_GID) != 0 && stat->st_gid != fatVolume->pm_gid)) {
+		RETURN_ERROR(B_NOT_ALLOWED);
+	}
+
 	off_t previousSize = fatNode->de_FileSize;
 
 	if ((statMask & B_STAT_SIZE) != 0) {
@@ -1900,18 +1909,6 @@ dosfs_wstat(fs_volume* volume, fs_vnode* vnode, const struct stat* stat, uint32 
 			fatNode->de_Attributes |= ATTR_ARCHIVE;
 			fatNode->de_flag |= DE_MODIFIED;
 		}
-	}
-
-	if ((statMask & B_STAT_UID) != 0) {
-		PRINT("cannot set UID at file level\n");
-		if (stat->st_uid != fatVolume->pm_uid)
-			status = B_BAD_VALUE;
-	}
-
-	if ((statMask & B_STAT_GID) != 0) {
-		PRINT("cannot set GID at file level\n");
-		if (stat->st_gid != fatVolume->pm_gid)
-			status = B_BAD_VALUE;
 	}
 
 	if ((statMask & B_STAT_ACCESS_TIME) != 0) {
