@@ -29,6 +29,9 @@ public:
 	status_t		Shrink(Transaction& transaction, off_t& numBlocks);
 
 private:
+	status_t		_Enlarge(Transaction& transaction, off_t targetBlocks);
+	status_t		_Shrink(Transaction& transaction, off_t numBlocks);
+
 	uint32			_BlocksNeeded(off_t end);
 
 	status_t		_GetBlock(Transaction& transaction, uint32& block);
@@ -91,6 +94,8 @@ private:
 
 	off_t			fNumBlocks;
 	uint32			fRemovedBlocks;
+	off_t			fAddedBlocks;
+	off_t			fFreedBlocks;
 	off_t			fSize;
 };
 

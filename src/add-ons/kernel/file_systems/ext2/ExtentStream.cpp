@@ -158,7 +158,9 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 		"\n", fNumBlocks, numBlocks);
 	
 	off_t targetBlocks = numBlocks;
-	numBlocks = targetBlocks - fNumBlocks;
+	numBlocks = 0;
+		// Counts the blocks really mapped, data and tree blocks, for the
+		// caller's i_blocks; on a failure, it still covers what was mapped.
 	uint32 allocated = 0;
 
 	while (fNumBlocks < targetBlocks) {
@@ -215,6 +217,7 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 					.SetLength(last.Length() + allocated);
 				fInode->SetExtentChecksum(stream);
 				fNumBlocks += allocated;
+				numBlocks += allocated;
 				allocated = 0;
 				TRACE("Enlarge() entry extended\n");
 				continue;
@@ -377,6 +380,7 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 		ASSERT(stream->extent_header.IsValid());
 
 		fNumBlocks += allocated;
+		numBlocks += allocated;
 		allocated = 0;
 	}
 	
@@ -391,7 +395,8 @@ ExtentStream::Shrink(Transaction& transaction, off_t& numBlocks)
 		B_PRIdOFF "\n", fNumBlocks, numBlocks);
 
 	off_t targetBlocks = numBlocks;
-	numBlocks = fNumBlocks - targetBlocks;
+	numBlocks = 0;
+		// As in Enlarge(), counts the data and tree blocks really freed.
 
 	while (targetBlocks < fNumBlocks) {
 		ext2_extent_stream *stream = fStream;
@@ -432,6 +437,7 @@ ExtentStream::Shrink(Transaction& transaction, off_t& numBlocks)
 			if (status != B_OK)
 				break;
 			fNumBlocks -= length;
+			numBlocks += length;
 			stream->extent_entries[index].SetLength(last.Length() - length);
 			TRACE("Shrink() new length for %" B_PRId32 ": %d\n", index, last.Length());
 			if (last.Length() != 0)
