@@ -11,6 +11,7 @@
 
 #include <net/if_dl.h>
 #include <new>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1484,6 +1485,21 @@ get_interface_for_device(net_domain* domain, uint32 index)
 }
 
 
+/*!	Returns whether \a linkAddress names \a interface. The name in sdl_data
+	is sdl_nlen bytes long and not terminated: the link address follows it
+	directly.
+*/
+static bool
+link_name_matches(const Interface* interface, const sockaddr_dl& linkAddress)
+{
+	size_t length = linkAddress.sdl_nlen;
+	return length > 0 && length < sizeof(interface->name)
+		&& strncmp(interface->name, (const char*)linkAddress.sdl_data,
+			length) == 0
+		&& interface->name[length] == '\0';
+}
+
+
 /*!	Returns a reference to an Interface that matches the given \a linkAddress.
 	The link address is checked against its hardware address, or its interface
 	name, or finally the interface index.
@@ -1513,10 +1529,11 @@ get_interface_for_link(net_domain* domain, const sockaddr* _linkAddress,
 		// it gives.
 		if ((linkAddress.sdl_alen != 0
 				&& linkAddress.sdl_alen == interface->device->address.length
+				&& offsetof(sockaddr_dl, sdl_data) + linkAddress.sdl_nlen
+					+ linkAddress.sdl_alen <= sizeof(sockaddr_storage)
 				&& memcmp(LLADDR(&linkAddress), interface->device->address.data,
 					linkAddress.sdl_alen) == 0)
-			|| (linkAddress.sdl_nlen > 0
-				&& !strcmp(interface->name, (const char*)linkAddress.sdl_data))
+			|| link_name_matches(interface, linkAddress)
 			|| (linkAddress.sdl_nlen == 0 && linkAddress.sdl_alen == 0
 				&& linkAddress.sdl_index == interface->index)) {
 			if (interface->IsBusy())
