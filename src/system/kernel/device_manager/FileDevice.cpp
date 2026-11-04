@@ -7,6 +7,7 @@
 #include "FileDevice.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -14,10 +15,28 @@
 
 #include <fs_interface.h>
 
+#include <kernel.h>
+#include <lock.h>
+#include <util/AutoLock.h>
 #include <vfs.h>
 
 
 static const uint32 kBlockSize = 512;
+
+// Read() and Write() copy through a buffer of their own. The buffer they are
+// given is not always memory the I/O stack below the file can lock: for an
+// I/O request on physical pages, the VFS's synchronous fallback
+// (synchronous_io() in vfs_request_io.cpp) maps a single page with
+// vm_get_physical_page(), which leaves no area behind the address. The file
+// is opened with the caller's open mode, so for a file system that opened the
+// device O_NOCACHE (FAT, BFS, ...) the file's cache is disabled, its data goes
+// straight to the disk driver, and the driver's lock_memory() fails with
+// B_BAD_ADDRESS (on arm64, where that mapping has no area at all; #1069). A
+// copy is cheap next to the file I/O it stands in front of. Each cookie owns
+// its buffer, allocated when the device is opened, so the I/O path -- the page
+// writer's included -- never allocates memory and never touches the caller's
+// buffer with anything but user_memcpy().
+static const size_t kBounceBufferSize = 64 * 1024;
 
 static const uint8 kDeviceIcon[] = {
 	0x6e, 0x63, 0x69, 0x66, 0x08, 0x05, 0x00, 0x04, 0x00, 0x54, 0x02, 0x00,
@@ -58,18 +77,24 @@ static const uint8 kDeviceIcon[] = {
 
 
 struct FileDevice::Cookie {
-	int	fd;
+	int		fd;
+	void*	bounceBuffer;
+	mutex	bounceLock;
 
 	Cookie(int fd)
 		:
-		fd(fd)
+		fd(fd),
+		bounceBuffer(malloc(kBounceBufferSize))
 	{
+		mutex_init(&bounceLock, "file device bounce buffer");
 	}
 
 	~Cookie()
 	{
 		if (fd >= 0)
 			close(fd);
+		mutex_destroy(&bounceLock);
+		free(bounceBuffer);
 	}
 };
 
@@ -187,6 +212,10 @@ FileDevice::Open(const char* path, int openMode, void** _cookie)
 		close(fd);
 		return B_NO_MEMORY;
 	}
+	if (cookie->bounceBuffer == NULL) {
+		delete cookie;
+		return B_NO_MEMORY;
+	}
 
 	*_cookie = cookie;
 	return B_OK;
@@ -197,14 +226,31 @@ status_t
 FileDevice::Read(void* _cookie, off_t pos, void* buffer, size_t* _length)
 {
 	Cookie* cookie = (Cookie*)_cookie;
+	size_t length = *_length;
+	*_length = 0;
 
-	ssize_t bytesRead = pread(cookie->fd, buffer, *_length, pos);
-	if (bytesRead < 0) {
-		*_length = 0;
-		return errno;
+	MutexLocker locker(cookie->bounceLock);
+
+	size_t done = 0;
+	while (done < length) {
+		size_t chunk = min_c(length - done, kBounceBufferSize);
+		ssize_t bytesRead = pread(cookie->fd, cookie->bounceBuffer, chunk,
+			pos + done);
+		if (bytesRead < 0) {
+			*_length = done;
+			return errno;
+		}
+		if (user_memcpy((uint8*)buffer + done, cookie->bounceBuffer,
+				bytesRead) != B_OK) {
+			*_length = done;
+			return B_BAD_ADDRESS;
+		}
+		done += bytesRead;
+		if ((size_t)bytesRead < chunk)
+			break;
 	}
 
-	*_length = bytesRead;
+	*_length = done;
 	return B_OK;
 }
 
@@ -213,14 +259,31 @@ status_t
 FileDevice::Write(void* _cookie, off_t pos, const void* buffer, size_t* _length)
 {
 	Cookie* cookie = (Cookie*)_cookie;
+	size_t length = *_length;
+	*_length = 0;
 
-	ssize_t bytesWritten = pwrite(cookie->fd, buffer, *_length, pos);
-	if (bytesWritten < 0) {
-		*_length = 0;
-		return errno;
+	MutexLocker locker(cookie->bounceLock);
+
+	size_t done = 0;
+	while (done < length) {
+		size_t chunk = min_c(length - done, kBounceBufferSize);
+		if (user_memcpy(cookie->bounceBuffer, (const uint8*)buffer + done,
+				chunk) != B_OK) {
+			*_length = done;
+			return B_BAD_ADDRESS;
+		}
+		ssize_t bytesWritten = pwrite(cookie->fd, cookie->bounceBuffer, chunk,
+			pos + done);
+		if (bytesWritten < 0) {
+			*_length = done;
+			return errno;
+		}
+		done += bytesWritten;
+		if ((size_t)bytesWritten < chunk)
+			break;
 	}
 
-	*_length = bytesWritten;
+	*_length = done;
 	return B_OK;
 }
 
