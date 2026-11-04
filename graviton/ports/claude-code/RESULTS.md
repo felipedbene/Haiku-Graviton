@@ -298,6 +298,71 @@ workstation (`003704Z_workstation…staged-set-check`). It needs openssl3 3.5.9-
 `openssl359r3/` in the same publish: the package only requires `lib:libcrypto >= 3`, so pkgman
 cannot stop it from being paired with 3.5.9-2.
 
+## 2026-11-04 — promoted canonical 00632cb3
+
+This is the full verification on one fresh launch of the promoted canonical `ami-00632cb3ccefc53dc`
+(`haiku-oven-1793751576`, `debeos-r70781-g79292bc67f`, `canonical=true`). Over 010361cf it adds
+PR 1013: the sticky bit is enforced in BFS/ramfs/ext2/btrfs and `/tmp` is 1777.
+
+Instance `i-0f77238d8c95e88dc`: c8g.4xlarge, 60 GiB, `subnet-02f8f7929c0cd9607`,
+`sg-0efc97cc673949063`, key `haiku-rdclient`, `ssm-instance-profile`, tags `Project=haiku-graviton`,
+`auto-stop=no`, Name `cc-verify-final-00632cb3`. It has been terminated
+(`20261104T011723Z_workstation_p63-repo-origin-and-ami.log`; the repo is `packages.debene.dev` ->
+`debeos-repo-green`). Bedrock env: `CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2
+ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0`, with instance-profile credentials.
+The scripts are the 010361cf ones with fresh presigned URLs, except the working soak, which is
+`tools/working-soak.sh` from this branch (PR 1009). Evidence names below drop the
+`_i-0f77238d8c95e88dc_` part.
+
+**Installed** (`20261104T004147Z…p63-install`).
+- **`pkgman install claude_code`** from the repo (answers fed on stdin) pulled in claude_code 2.1.314-2, nodejs24 24.22.2-1, libuv 1.52.1-6, brotli 1.2.1-2, nghttp2 1.63.0-1, icu78 78.3-1 and the rest of the 010361cf set.
+- **Then:**
+  - haiku_devel r1~beta6_hrev59996-1, binutils 2.41_2026_03_10_bootstrap-2, tmux 3.7c-1.
+  - For the suites and node-gyp: python3.14 3.14.7-1, tar, gzip, patch, gcc 13.3.0 bootstrap-1, make, nodejs24_devel 24.22.2-1.
+- **Already on the image:** openssl3 3.5.9-3, openssh_debeos 10.4p1-1, coreutils 9.9_bootstrap-1.
+- **`process.versions`:** openssl 3.5.9, brotli 1.2.1, nghttp2 1.63.0, uv 1.52.1, ICU 78.3, undici 7.30.1. 0 `.node` files.
+
+| Check | 010361cf | **00632cb3** | Evidence (`20261104T…`) |
+|---|---|---|---|
+| Node acceptance | 23/23 | **23/23 ALL PASS** | `004249Z…p63-node24-accept` |
+| node-gyp addon (`haiku_devel` + `binutils`) | 42 | `add(2,40) = 42` | `004317Z…p63-node24-gyp-addon-cxx` |
+| `--version`, `doctor`, `cc-teaminfo`, vectors | pass | pass | `004359Z…p63-claude-accept` |
+| `claude -p` via Bedrock | `pong`, 8 s | `pong`, rc 0, 7 s | `004547Z…p63-bedrock-headless-smoke` |
+| Headless Read/Grep/Bash | correct | `aurora-7\|src/a.js,src/deep/b.js\|Haiku` | `004617Z…p63-bedrock-headless-tools` |
+| Grep tool vs rg | 0.386 s | 0.389 s, same 3 files, hooks fire | `004646Z…p63-bedrock-grep-timing` |
+| Interactive TUI: edit, bash, resize, /compact | pass | **pass**: edit on disk; the `$(uname -s)` command ran after the manual-mode prompt, and the model reported it as "confirmed the system is Haiku" rather than echoing `bash-ok-Haiku`, so the script's literal wait timed out; reflow at 70/130 columns; `/compact` then recall `"edited on Haiku"`. The startup screen **no longer shows the cross-session warning** (1 line at 010361cf, 0 here) | `004715Z…p63-bedrock-tui-session` |
+| `/compact` + recall ×5 | 5/5 | 5/5 | `005100Z…p63-compact-haiku-x5` |
+| End-user reinstall + FileChanged through `libuv_fs_event` | fired 2× | uninstall, then `pkgman install claude_code`: fired 2×, `delivers`; vectors pass | `005343Z…p63-uninstall-claude`, `005412Z…p63-enduser-fresh-install-3` |
+| Ctrl-C, `-p` with no credentials | identical | identical | `005626Z…p63-tui-ctrlc-and-headless` |
+| Worker scenarios | 13/13 | 13/13 | `005722Z…p63-compat-scenarios-on-haiku` |
+| Bun.spawn / Bun.net vs Bun (SSH) | 188/24/2/0/4; 35/6/1 | identical | `005803Z…p63-scen-haiku-node-v2-ssh` |
+| TUI snapshots vs Linux | 60/64, 33/33 | 60/64 (same 4 keycap snapshots), 33/33; all 64 byte-identical to the 010361cf capture | `005913Z…p63-tui-capture-B-haiku`, `010600Z_workstation_p63-tui-compare-{linuxA-haikuB,tmux37c}`, `010600Z_workstation_p63-tui-B-vs-010361cf-B` |
+| **Cross-session messaging** (new) | warning shown, no socket | **pass**: no "Cross-session messaging is off" warning; `/tmp/cc-socks` is `drwx------`, and session B listens on `/tmp/cc-socks/9137.sock` (`srw-------`). An outside process sends to B: B wrote `ext.txt` (`pong-ext-1008`) after 5 s. Session A's Bash tool sends to B: B wrote `froma.txt` (`pong-from-session-a`) after 6 s | `010642Z…p63-claude-code-messaging` (PR 1013's own script, unchanged) |
+| **Sticky sanity** (new) | — | **pass**: `/tmp` → `/boot/system/cache/tmp` is `drwxrwxrwt`, `1777 0:0`. `sticky1008 /tmp` (trunk source, sha256 `90d27bb4…`): `rows=84 failures=0 skipped=0`. Direct check: in `/tmp`, a file owned by 2001 cannot be unlinked by uid 2002 (`Operation not allowed`, file still there) and can be by its owner (removed). The children `printf` + `fflush` before `_exit` | `010612Z…p63-sticky` |
+| 30-min working soak (`tools/working-soak.sh`, PR 1009) | run 1 0/12, run 2 122/122 | **122/122**, 120 tasks at 4–7 s, one process, RSS 415 → 528 MB | `011553Z…p63-working-soak-v3-haiku` |
+| 30-min idle soak | 322 → 186 MB | alive, 12 threads, 322 → 186 MB | `014638Z…p63-tui-soak-30min` |
+
+The working soak had two tasks at 10 s and 11 s. That window overlapped a read-only TAP scan I
+ran on the same box (`011635Z…p63-tap-scan`); neither task failed.
+
+**Node 24 suites** (24.22.2 tree, the same recipe tarball and both patchsets, 30 + 4 files, rc 0:
+`010749Z…p63-node-src-prepare`; full plans, stdin a pipe: `010913Z…p63-full-suites`):
+
+| Suite | 010361cf | **00632cb3** |
+|---|---|---|
+| parallel | 4584 ok (332 skip) / 21 not ok (0 timeout) | **4584 ok (332 skip) / 21 not ok (0 timeout)**, 258 s |
+| sequential | 119 / 2 | 119 / 2, 119 s |
+
+Per-test diff: `20261104T011723Z_workstation_p63-node-suites-vs-010361cf.log`.
+- **No test changed state.** 0 went from fail to pass, 0 from pass to fail, and there were no FAIL/TIMEOUT changes. The 332-entry skip list is identical.
+- **The 23 failures are the same set as 010361cf:** class (c) ×9, #882 ×5, #991 ×3, uid 0 ×2, #929, #871, `setproctitle`, `worker-memory`.
+- **fs, child-process and tmp-dependent tests** (`011635Z…p63-tap-scan`):
+  - parallel `test-fs-*`: 350 ok / 17 skip / 4 not ok; `test-child-process-*`: 108 / 5 / 3.
+  - The 590 parallel tests whose source uses `tmpdir`/`os.tmpdir()`: 555 / 23 / 9. Sequential: 31 → 27 / 0 / 2.
+  - Every not-ok among them is in the unchanged list above.
+  - Node's `test/common/tmpdir` lives under the test tree (`test/.tmp.N`), so only direct `os.tmpdir()` users touch the now-sticky `/tmp`. The test runs as root, so the sticky rule does not restrict it.
+- Nothing new was filed.
+
 ## 2026-11-03 — final canonical 010361cf (all fixes published)
 
 This is the full verification on one fresh launch of canonical `ami-010361cfdaa9d22e1`
