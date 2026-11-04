@@ -1,0 +1,93 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild1
+# instance: i-0d0dc1e4705977484   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build kernel (#1086) and ext2 c1105 / c1108
+# start: 20261104T104713Z   end: 20261104T104747Z   rc: 0
+# script sha256: beb0e4fa5e3fadecc277803abcffa364ee993f7dedc12a4f6700f0f3175f6d33
+# ---- script ----
+# | # Build for #1108, revision hrev59996:
+# | #  kernel_arm64  at the #1069 tip e2ca7e9c68 (PR #1086), so single-page disk I/O works in both arms
+# | #  ext2.c1105    at the #1105 tip 1c2651b4b6 (PR #1109): the before arm (must rebuild to 8f74dd8b...)
+# | #  ext2.c1108    c1105 + fix1108-v1.patch (sha256 6d04484f...)
+# | set +e
+# | set -x
+# | cd /opt/t/out
+# | curl -sSf -o fix1108-v1.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/fix1108-v1.patch?<PRESIGNED>' || exit 1
+# | echo '6d04484fbc87e368801e7b3a18448a7894932cbb5aa0e1fcb3e32beedf2ff980  fix1108-v1.patch' | sha256sum -c || exit 1
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | git -C .. checkout -q -f e2ca7e9c68 || exit 1
+# | jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 kernel_arm64 > $O/jam-kernel.log 2>&1 || { tail -40 $O/jam-kernel.log; exit 1; }
+# | cp $(find objects/haiku/arm64/release/system/kernel -maxdepth 1 -type f -name kernel_arm64) $O/kernel_arm64.k1069 || exit 1
+# | mbuild() {
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f 1c2651b4b6 || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	rm -rf $A/ext2
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok"
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/" | grep -v "address-of-packed-member"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | mbuild c1105 || exit 1
+# | mbuild c1108 fix1108-v1.patch || exit 1
+# | git -C .. checkout -q -f 1c2651b4b6
+# | cd $O
+# | sha256sum kernel_arm64.k1069 ext2.c1105 ext2.c1108 | tee SHA256SUMS1
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include 'kernel_arm64.*' --include SHA256SUMS1 . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/U/out1/ && echo uploaded
+# ---- raw output ----
+fix1108-v1.patch: OK
+JAM ext2 c1105 ok
+JAM ext2 c1108 ok
+9a74215c4a4e85e75bb55ca594b8cadfc01d86b14f2f60f92af80fce755d409f  kernel_arm64.k1069
+6f85ccdd9e062d72a3fb7d0e59745f2b8884bd4d4d19bf109830067d55dd7942  ext2.c1105
+0043079c70ff870b1a27e425e5af041095382598bb51c48640713bd9c2633066  ext2.c1108
+uploaded
++ cd /opt/t/out
++ curl -sSf -o fix1108-v1.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/fix1108-v1.patch?<PRESIGNED>'
++ echo '6d04484fbc87e368801e7b3a18448a7894932cbb5aa0e1fcb3e32beedf2ff980  fix1108-v1.patch'
++ sha256sum -c
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ git -C .. checkout -q -f e2ca7e9c68
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 kernel_arm64
+++ find objects/haiku/arm64/release/system/kernel -maxdepth 1 -type f -name kernel_arm64
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/t/out/kernel_arm64.k1069
++ mbuild c1105
++ l=c1105
++ shift
++ git -C .. checkout -q -f 1c2651b4b6
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 c1105 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1105.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1105
++ mbuild c1108 fix1108-v1.patch
++ l=c1108
++ shift
++ git -C .. checkout -q -f 1c2651b4b6
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1108-v1.patch
++ git -C .. apply /opt/t/out/fix1108-v1.patch
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 c1108 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1108.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1108
++ git -C .. checkout -q -f 1c2651b4b6
++ cd /opt/t/out
++ sha256sum kernel_arm64.k1069 ext2.c1105 ext2.c1108
++ tee SHA256SUMS1
++ aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include 'kernel_arm64.*' --include SHA256SUMS1 . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/U/out1/
++ echo uploaded
