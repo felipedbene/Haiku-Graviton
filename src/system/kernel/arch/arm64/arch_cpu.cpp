@@ -285,6 +285,11 @@ arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
 		if (ID_AA64ISAR0_TS(isar0) >= ID_AA64ISAR0_TS_FLAGM2)
 			caps2 |= HWCAP2_FLAGM2;
 	}
+	// FEAT_RNG: RNDR/RNDRRS are EL0-executable, so code that probes
+	// AT_HWCAP2 (OpenSSL's ARMV8_RNG seed source, __builtin_arm_rndr users)
+	// can use them directly; there is no register state to save.
+	if (ID_AA64ISAR0_RNDR(isar0) >= ID_AA64ISAR0_RNDR_IMPL)
+		caps2 |= HWCAP2_RNG;
 
 	// ID_AA64ISAR1_EL1.
 	if (ID_AA64ISAR1_DPB(isar1) >= ID_AA64ISAR1_DPB_IMPL) {
