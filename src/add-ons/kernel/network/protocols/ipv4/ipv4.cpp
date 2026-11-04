@@ -54,6 +54,11 @@
 	// slots in the fragment packet's hash
 #define FRAGMENT_TIMEOUT		60000000LL
 	// discard fragment after 60 seconds
+#define MAX_FRAGMENT_MEMORY		(4 * 1024 * 1024)
+	// what all partial datagrams may hold at once, as Linux's default
+	// ip(6)frag_high_thresh; the oldest are dropped to stay below it
+#define FRAGMENT_OVERHEAD		2048
+	// charged per fragment on top of its data: its buffer and data block
 
 
 typedef DoublyLinkedList<struct net_buffer,
@@ -69,7 +74,7 @@ struct ipv4_packet_key {
 };
 
 
-class FragmentPacket {
+class FragmentPacket : public DoublyLinkedListLinkImpl<FragmentPacket> {
 public:
 								FragmentPacket(const ipv4_packet_key& key);
 								~FragmentPacket();
@@ -85,6 +90,8 @@ public:
 
 			bool				StopTimer();
 			void				Orphan() { fOrphaned = true; }
+			void				StartTimer();
+			bool				CancelTimer();
 
 	static	void				StaleTimer(struct net_timer* timer, void* data);
 
@@ -100,6 +107,8 @@ private:
 			bool				fOrphaned;
 				// taken out of the hash while StaleTimer() was already running
 				// for it; StaleTimer() deletes it
+			uint32				fMemory;
+				// what this packet is charged in sFragmentMemory
 };
 
 
@@ -223,6 +232,11 @@ static RawSocketList sRawSockets;
 static mutex sRawSocketsLock;
 static mutex sFragmentLock;
 static FragmentTable sFragmentHash;
+typedef DoublyLinkedList<FragmentPacket> FragmentPacketList;
+static FragmentPacketList sFragmentPackets;
+	// every packet in sFragmentHash, oldest first
+static int64 sFragmentMemory;
+	// what all of them hold, see FRAGMENT_OVERHEAD
 static mutex sMulticastGroupsLock;
 
 typedef MultiHashTable<MulticastStateHash> MulticastState;
@@ -262,6 +276,7 @@ FragmentPacket::FragmentPacket(const ipv4_packet_key& key)
 	fEnd(0)
 {
 	fOrphaned = false;
+	fMemory = 0;
 	gStackModule->init_timer(&fTimer, FragmentPacket::StaleTimer, this);
 }
 
@@ -276,6 +291,8 @@ FragmentPacket::~FragmentPacket()
 	while ((buffer = fFragments.RemoveHead()) != NULL) {
 		gBufferModule->free(buffer);
 	}
+
+	atomic_add64(&sFragmentMemory, -(int64)fMemory);
 }
 
 
@@ -283,9 +300,6 @@ status_t
 FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 	bool lastFragment)
 {
-	// restart the timer
-	gStackModule->set_timer(&fTimer, FRAGMENT_TIMEOUT);
-
 	if (start >= end) {
 		// invalid fragment
 		return B_BAD_DATA;
@@ -331,6 +345,11 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		return B_OK;
 	}
 
+	// Charged until the packet goes, whatever merging makes of the buffer.
+	const uint32 charge = buffer->size + FRAGMENT_OVERHEAD;
+	fMemory += charge;
+	atomic_add64(&sFragmentMemory, charge);
+
 	fIndex = buffer->index;
 		// adopt the buffer's device index
 
@@ -364,6 +383,8 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		TRACE("    merge previous: %s", strerror(status));
 		if (status != B_OK) {
 			fFragments.InsertBefore(next, previous);
+			fMemory -= charge;
+			atomic_add64(&sFragmentMemory, -(int64)charge);
 			return status;
 		}
 
@@ -386,6 +407,8 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		if (status != B_OK) {
 			// Insert "next" at its previous position
 			fFragments.InsertBefore(afterNext, next);
+			fMemory -= charge;
+			atomic_add64(&sFragmentMemory, -(int64)charge);
 			return status;
 		}
 
@@ -497,6 +520,27 @@ FragmentPacket::StopTimer()
 }
 
 
+/*!	Gives the datagram FRAGMENT_TIMEOUT from its first fragment to complete
+	(RFC 8200 4.5, RFC 791). Later fragments do not restart it, so a sender
+	cannot keep a partial datagram alive by trickling fragments into it.
+*/
+void
+FragmentPacket::StartTimer()
+{
+	gStackModule->set_timer(&fTimer, FRAGMENT_TIMEOUT);
+}
+
+
+/*!	Cancels the timer. Returns \c false if it has already fired, in which case
+	StaleTimer() is about to free the packet.
+*/
+bool
+FragmentPacket::CancelTimer()
+{
+	return gStackModule->cancel_timer(&fTimer);
+}
+
+
 /*static*/ void
 FragmentPacket::StaleTimer(struct net_timer* timer, void* data)
 {
@@ -512,6 +556,7 @@ FragmentPacket::StaleTimer(struct net_timer* timer, void* data)
 		return;
 	}
 	sFragmentHash.Remove(packet);
+	sFragmentPackets.Remove(packet);
 	locker.Unlock();
 
 	if (!packet->fFragments.IsEmpty()) {
@@ -598,6 +643,51 @@ dump_ipv4_multicast(int argc, char** argv)
 }
 
 
+/*!	Drops the oldest partial datagrams, other than \a keep, until \a charge
+	more bytes fit under MAX_FRAGMENT_MEMORY. Returns whether they do.
+	Must be called with sFragmentLock held.
+*/
+static bool
+make_room_for_fragment(FragmentPacket* keep, uint32 charge)
+{
+	FragmentPacketList::Iterator iterator = sFragmentPackets.GetIterator();
+	while (atomic_get64(&sFragmentMemory) + charge > MAX_FRAGMENT_MEMORY) {
+		FragmentPacket* oldest = iterator.Next();
+		if (oldest == NULL)
+			return false;
+		if (oldest == keep || !oldest->CancelTimer()) {
+			// One whose timer has fired is StaleTimer()'s to free; it is
+			// waiting for sFragmentLock.
+			continue;
+		}
+
+		TRACE("  dropping FragmentPacket %p to make room", oldest);
+		iterator.Remove();
+		sFragmentHash.Remove(oldest);
+		delete oldest;
+	}
+	return true;
+}
+
+
+/*!	Takes \a packet, which is done with, out of the hash and the eviction list
+	and frees it, or, if its timer hook is already waiting for sFragmentLock,
+	leaves it to the hook (see FragmentPacket::StopTimer()). Its memory is
+	given back when it is freed. Must be called with sFragmentLock held.
+*/
+static void
+release_fragment_packet(FragmentPacket* packet)
+{
+	sFragmentHash.Remove(packet);
+	sFragmentPackets.Remove(packet);
+
+	if (packet->StopTimer())
+		delete packet;
+	else
+		packet->Orphan();
+}
+
+
 /*!	Attempts to re-assemble fragmented packets.
 	\return B_OK if everything went well; if it could reassemble the packet, \a _buffer
 		will point to its buffer, otherwise, it will be \c NULL.
@@ -625,10 +715,17 @@ reassemble_fragments(const ipv4_header &header, net_buffer** _buffer)
 	if (end + header.HeaderLength() > IP_MAXPACKET)
 		return B_BAD_DATA;
 
+	// A fragment without data is dropped before it can create a packet that
+	// would hold nothing, be charged nothing, and still live for
+	// FRAGMENT_TIMEOUT.
+	if (start >= end)
+		return B_BAD_DATA;
+
 	// TODO: Make locking finer grained.
 	MutexLocker locker(&sFragmentLock);
 
 	FragmentPacket* packet = sFragmentHash.Lookup(key);
+	bool created = false;
 	if (packet == NULL) {
 		// New fragment packet
 		packet = new (std::nothrow) FragmentPacket(key);
@@ -641,6 +738,17 @@ reassemble_fragments(const ipv4_header &header, net_buffer** _buffer)
 			delete packet;
 			return status;
 		}
+		sFragmentPackets.Add(packet);
+		packet->StartTimer();
+		created = true;
+	}
+
+	if (!make_room_for_fragment(packet, buffer->size + FRAGMENT_OVERHEAD)) {
+		// A packet created for this fragment would be left empty, holding
+		// nothing and uncharged, until its timer ran out.
+		if (created)
+			release_fragment_packet(packet);
+		return B_NO_MEMORY;
 	}
 
 	TRACE("   Received IPv4 %sfragment of size %" B_PRIu32 ", offset %"
@@ -651,19 +759,19 @@ reassemble_fragments(const ipv4_header &header, net_buffer** _buffer)
 		gBufferModule->remove_header(buffer, header.HeaderLength());
 
 	status = packet->AddFragment(start, end, buffer, lastFragment);
-	if (status != B_OK)
+	if (status != B_OK) {
+		// A failing AddFragment() never keeps the buffer, so a packet created
+		// for it is still empty.
+		if (created)
+			release_fragment_packet(packet);
 		return status;
+	}
 
 	if (packet->IsComplete()) {
-		sFragmentHash.Remove(packet);
-			// no matter if reassembling succeeds, we won't need this packet
-			// anymore
-
+		// no matter if reassembling succeeds, we won't need this packet
+		// anymore
 		status = packet->Reassemble(buffer);
-		if (packet->StopTimer())
-			delete packet;
-		else
-			packet->Orphan();
+		release_fragment_packet(packet);
 
 		// _buffer does not change
 		return status;
@@ -2289,6 +2397,8 @@ init_ipv4()
 		goto err5;
 
 	new (&sFragmentHash) FragmentTable();
+	new (&sFragmentPackets) FragmentPacketList;
+	sFragmentMemory = 0;
 	status = sFragmentHash.Init(256);
 	if (status != B_OK)
 		goto err5;

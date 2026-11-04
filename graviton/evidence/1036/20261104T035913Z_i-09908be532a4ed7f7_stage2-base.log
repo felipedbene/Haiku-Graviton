@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage2-base
+# instance: i-09908be532a4ed7f7   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T035913Z   end: 20261104T035926Z   rc: 0
+# script sha256: 732bdb404dbe64540a0d68ecd9065f32c1cacd6d49173225189ca5ca89520c68
+# ---- script ----
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | mkdir -p $D/protocols /boot/home/wL && cd /boot/home/wL
+# | pkgman install -y curl gcc binutils haiku_devel 2>&1 | tail -2
+# | command -v curl gcc
+# | echo "--- overrides before"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | curl -sSf -o ipv4.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/L/mod/base/ipv4?<PRESIGNED>' || exit 4
+# | echo '095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  ipv4.mod' | sha256sum -c || exit 5
+# | curl -sSf -o ipv6.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/L/mod/base/ipv6?<PRESIGNED>' || exit 4
+# | echo '32bb4e4d36dbd25fd342248008929ae3510c2ac836c0cb7d87c32d617e8176a3  ipv6.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6
+# | curl -sSf -o ipfragconf.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/L/src/ipfragconf.c?<PRESIGNED>' || exit 4
+# | echo '5c563c815c527ddc438f7e531ce1170b377e977ee7371da416e332682f262f64  ipfragconf.c' | sha256sum -c || exit 5
+# | gcc -O2 -Wall -o ipfragconf ipfragconf.c -lnetwork || exit 6
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | echo "--- packaged"
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/protocols/ipv4 /boot/system/add-ons/kernel/network/protocols/ipv6 /boot/system/kernel_arm64
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/curl
+/boot/system/bin/gcc
+--- overrides before
+ipv4.mod: OK
+ipv6.mod: OK
+ipfragconf.c: OK
+--- overrides after
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+32bb4e4d36dbd25fd342248008929ae3510c2ac836c0cb7d87c32d617e8176a3  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+--- packaged
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/system/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/system/add-ons/kernel/network/protocols/ipv6
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+STAGE-DONE

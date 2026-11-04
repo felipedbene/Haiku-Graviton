@@ -1,0 +1,89 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-a1050h
+# instance: i-0a162b45b87544399   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T043346Z   end: 20261104T043524Z   rc: 0
+# script sha256: 8e5757579b535ff688b0884e4fe2bac46c8e4e9a5de20e62fa24a720b79dc328
+# ---- script ----
+# | cd /boot/home/wL || exit 1
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols/ipv)'
+# | curl -sSf -o ipfragconf.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/L/src/ipfragconf.c?<PRESIGNED>' || exit 4
+# | echo 'bd2962510f51a151b0a1984ee9e7c6f1dd172b2ddc892b9cdbf41238e1a8f538  ipfragconf.c' | sha256sum -c || exit 5
+# | gcc -O2 -Wall -o ipfragconf ipfragconf.c -lnetwork || exit 6
+# | ifconfig loop mtu 1280
+# | ifconfig loop | grep -i mtu
+# | ./ipfragconf -s -c -t
+# | echo "rc=$?"
+# | ifconfig loop mtu 65536
+# ---- raw output ----
+Haiku ip-10-128-12-186.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+f135649880c6203130d0c53a5006c0dca37817ffc06f5260d021b7860d660e10  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+e48b182b35cf992eaee1efcff278a483760e097198d24dedd3a6905711a6c003  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+--- loaded network images
+ 1955 0xffff0000020f9000 0xffff00000211b000     0          0 /boot/system/add-ons/kernel/network/stack
+ 1988 0xffff000002129000 0xffff000002134000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 1992 0xffff0000023af000 0xffff0000023bb000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ipfragconf.c: OK
+	MTU: 1280, Metric: 0, up loopback link
+  loopback alive after: start
+v4 send udp    100 bytes                           PASS  sent 100, received 100, intact
+v6 send udp    100 bytes                           PASS  sent 100, received 100, intact
+v4 send udp   1200 bytes                           PASS  sent 1200, received 1200, intact
+v6 send udp   1200 bytes                           PASS  sent 1200, received 1200, intact
+v4 send udp   3000 bytes                           PASS  sent 3000, received 3000, intact
+v6 send udp   3000 bytes                           PASS  sent 3000, received 3000, intact
+v4 send udp   9000 bytes                           PASS  sent 9000, received 9000, intact
+v6 send udp   9000 bytes                           PASS  sent 9000, received 9000, intact
+v4 send udp  20000 bytes                           PASS  sent 20000, received 20000, intact
+v6 send udp  20000 bytes                           PASS  sent 20000, received 20000, intact
+v4 send udp  65507 bytes                           PASS  sent 65507, received 65507, intact
+v6 send udp  65507 bytes                           PASS  sent 65507, received 65507, intact
+v6 send udp  65527 bytes                           PASS  sent 65527, received 65527, intact
+  loopback alive after: send rows
+v4 deliver in order                                PASS  received 2992 of 2992, intact
+v4 deliver reversed                                PASS  received 2992 of 2992, intact
+v4 deliver middle first                            PASS  received 2992 of 2992, intact
+v4 deliver duplicate middle                        PASS  received 2992 of 2992, intact
+v4 deliver last fragment first                     PASS  received 2992 of 2992, intact
+v4 drop gap (middle missing)                       PASS  not delivered, as required
+v4 drop past: data past the last fragment          PASS  not delivered, as required
+v4 drop short: last ends before received data      PASS  not delivered, as required
+v4 drop twoends: second last fragment, other end   PASS  not delivered, as required
+v4 deliver last fragment twice, then the middle    PASS  received 2992 of 2992, intact
+v4 drop last fragment inside held data             PASS  not delivered, as required
+v4 either last fragment overlapping held data      INFO  delivered intact
+v4 drop total length shorter than the header       PASS  not delivered, as required
+v6 deliver in order                                PASS  received 2992 of 2992, intact
+v6 deliver reversed                                PASS  received 2992 of 2992, intact
+v6 deliver middle first                            PASS  received 2992 of 2992, intact
+v6 deliver duplicate middle                        PASS  received 2992 of 2992, intact
+v6 deliver last fragment first                     PASS  received 2992 of 2992, intact
+v6 drop gap (middle missing)                       PASS  not delivered, as required
+v6 drop past: data past the last fragment          PASS  not delivered, as required
+v6 drop short: last ends before received data      PASS  not delivered, as required
+v6 drop twoends: second last fragment, other end   PASS  not delivered, as required
+v6 deliver last fragment twice, then the middle    PASS  received 2992 of 2992, intact
+v6 drop last fragment inside held data             PASS  not delivered, as required
+v6 drop last fragment overlapping held data        FAIL  DELIVERED 1008 bytes (the joined pieces), but must be dropped
+v6 deliver fragment inside a held fragment, then the last PASS  received 1008 of 1008, intact
+v6 deliver fragment inside held data across two fragments PASS  received 1008 of 1008, intact
+v6 drop fragment overlapping the start of held data FAIL  DELIVERED 1008 bytes (the joined pieces), but must be dropped
+v6 deliver resent cleanly after an abandoning overlap PASS  received 1008 of 1008, intact
+  loopback alive after: crafted rows
+  t=0s first fragments sent
+  t=40s
+  t=50s
+v4 timeout within: last fragment at 50 s           PASS  received 2992 of 2992, intact
+v6 timeout within: last fragment at 50 s           PASS  received 2992 of 2992, intact
+  t=70s
+v4 timeout refreshed: at 0, 40 and 70 s            PASS  not delivered, as required
+v4 timeout zero-data fragment at 0 s, rest at 40 and 70 s PASS  received 2992 of 2992, intact
+v6 timeout refreshed: at 0, 40 and 70 s            PASS  not delivered, as required
+v6 timeout zero-data fragment at 0 s, rest at 40 and 70 s PASS  received 2992 of 2992, intact
+  loopback alive after: timeout rows
+FAILURES 2
+rc=2
