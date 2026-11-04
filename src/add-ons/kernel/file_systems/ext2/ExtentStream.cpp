@@ -181,7 +181,8 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 	// comes from the size, where new extents are appended; give them back
 	// first, so the tree stays in order. They hold no visible data.
 	off_t mappedEnd;
-	status_t status = _MappedEnd(mappedEnd);
+	fsblock_t goal;
+	status_t status = _MappedEnd(mappedEnd, &goal);
 	if (status != B_OK)
 		return status;
 	if (mappedEnd > fNumBlocks) {
@@ -190,7 +191,13 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 		numBlocks -= freed;
 		if (status != B_OK)
 			return status;
+		status = _MappedEnd(mappedEnd, &goal);
+		if (status != B_OK)
+			return status;
 	}
+	// new blocks right after the last extent's merge with it
+	if (goal != 0)
+		fAllocatedPos = goal;
 
 	off_t oldNumBlocks = fNumBlocks;
 
@@ -281,6 +288,7 @@ ExtentStream::_Enlarge(Transaction& transaction, off_t targetBlocks,
 				fInode->SetExtentChecksum(stream);
 				fNumBlocks += fPending;
 				numBlocks += fPending;
+				fAllocatedPos += fPending;
 				fPending = 0;
 				TRACE("Enlarge() entry extended\n");
 				continue;
@@ -412,6 +420,8 @@ ExtentStream::_Enlarge(Transaction& transaction, off_t targetBlocks,
 
 		fNumBlocks += fPending;
 		numBlocks += fPending;
+		fAllocatedPos += fPending;
+			// the goal of the next run
 		fPending = 0;
 	}
 	
@@ -1161,9 +1171,12 @@ ExtentStream::_ZeroBlocks(fsblock_t start, uint32 count)
 
 
 status_t
-ExtentStream::_MappedEnd(off_t& end)
+ExtentStream::_MappedEnd(off_t& end, fsblock_t* _physicalEnd)
 {
-	// the logical end of the last extent, which can lie past fNumBlocks
+	// the logical end of the last extent, which can lie past fNumBlocks;
+	// and the block that follows the last extent on disk (0 if none)
+	if (_physicalEnd != NULL)
+		*_physicalEnd = 0;
 	ext2_extent_stream* stream = fStream;
 	if (!stream->extent_header.IsValid()
 		|| stream->extent_header.NumEntries()
@@ -1186,6 +1199,10 @@ ExtentStream::_MappedEnd(off_t& end)
 	int32 count = stream->extent_header.NumEntries();
 	end = count == 0 ? 0 : (off_t)stream->extent_entries[count - 1]
 		.LogicalBlock() + stream->extent_entries[count - 1].Length();
+	if (count > 0 && _physicalEnd != NULL) {
+		*_physicalEnd = stream->extent_entries[count - 1].PhysicalBlock()
+			+ stream->extent_entries[count - 1].Length();
+	}
 	return B_OK;
 }
 

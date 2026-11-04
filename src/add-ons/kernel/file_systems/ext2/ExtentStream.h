@@ -65,7 +65,7 @@ private:
 						fileblock_t end, off_t& added, bool& zeroed);
 	static	void	_ZeroVecs(const iovec* vecs, size_t count, off_t offset,
 						off_t length);
-	status_t		_MappedEnd(off_t& end);
+	status_t		_MappedEnd(off_t& end, fsblock_t* _physicalEnd = NULL);
 	status_t		_Check(ext2_extent_stream *stream, fileblock_t &block);
 	status_t		_CheckBlock(ext2_extent_stream *stream, fsblock_t block);
 

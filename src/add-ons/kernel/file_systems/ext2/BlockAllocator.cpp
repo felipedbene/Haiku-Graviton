@@ -51,6 +51,7 @@ public:
 
 			fsblock_t	LargestStart() const;
 			uint32		LargestLength() const;
+			uint32		FreeLengthAt(fsblock_t start, uint32 maximum);
 
 			// TransactionListener implementation
 			void		TransactionDone(bool success);
@@ -261,25 +262,23 @@ AllocationBlockGroup::Allocate(Transaction& transaction, fsblock_t _start,
 	_SetBlockBitmapChecksum(block);
 	fVolume->WriteBlockGroup(transaction, fBlockGroup);
 
-	if (start == fLargestStart) {
-		if (fFirstFree == fLargestStart)
-			fFirstFree += length;
+	if (fFirstFree >= start && fFirstFree < end)
+		fFirstFree = end;
 
-		fLargestStart += length;
-		fLargestLength -= length;
-	} else if (start + length == fLargestStart + fLargestLength) {
-		fLargestLength -= length;
-	} else if (start < fLargestStart + fLargestLength
-			&& start > fLargestStart) {
-		uint32 firstLength = start - fLargestStart;
-		uint32 secondLength = fLargestStart + fLargestLength
-			- (start + length);
+	// The range need not start at the largest free one (AllocateBlocks()
+	// takes the run at a goal block first), nor lie inside it: the largest
+	// free range is not always maximal, as Free() only joins it to a freed
+	// range right next to it. Keep the larger part left on either side.
+	uint32 largestEnd = fLargestStart + fLargestLength;
+	if (start < largestEnd && end > fLargestStart) {
+		uint32 firstLength = start > fLargestStart ? start - fLargestStart : 0;
+		uint32 secondLength = end < largestEnd ? largestEnd - end : 0;
 
 		if (firstLength >= secondLength) {
 			fLargestLength = firstLength;
 		} else {
 			fLargestLength = secondLength;
-			fLargestStart = start + length;
+			fLargestStart = end;
 		}
 	} else {
 		// No need to revalidate the largest free range
@@ -408,6 +407,27 @@ uint32
 AllocationBlockGroup::LargestLength() const
 {
 	return fLargestLength;
+}
+
+
+uint32
+AllocationBlockGroup::FreeLengthAt(fsblock_t _start, uint32 maximum)
+{
+	// The length of the free run that starts at _start, up to maximum; 0 if
+	// that block is in use. An uninitialized group has no valid bitmap yet.
+	if (_start < fStart || _start - fStart >= fNumBits || fFreeBits == 0
+		|| (fGroupDescriptor->Flags() & EXT2_BLOCK_GROUP_BLOCK_UNINIT) != 0) {
+		return 0;
+	}
+
+	uint32 start = _start - fStart;
+	BitmapBlock block(fVolume, fNumBits);
+	if (!block.SetTo(fBitmapBlock))
+		return 0;
+
+	uint32 end = start;
+	block.FindNextMarked(end);
+	return min_c(end - start, maximum);
 }
 
 
@@ -666,13 +686,32 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, uint32 minimum,
 	fsblock_t bestStart = 0;
 	uint32 bestLength = 0;
 	uint32 bestGroup = 0;
+	bool atGoal = false;
+
+	// A caller passes the block that would continue its last run (the end
+	// of the extent before the blocks it maps): when that one is free, take
+	// the run there, so that the extent grows instead of a new one being
+	// added, which would fill the extent tree faster.
+	if (start >= fFirstBlock && start < fNumBlocks) {
+		uint32 goalGroup = (start - fFirstBlock) / fBlocksPerGroup;
+		if (goalGroup < fNumGroups) {
+			uint32 goalLength = fGroups[goalGroup].FreeLengthAt(start,
+				maximum);
+			if (goalLength >= minimum) {
+				bestStart = start;
+				bestLength = goalLength;
+				bestGroup = goalGroup;
+				atGoal = true;
+			}
+		}
+	}
 
 	uint32 groupNum = blockGroup;
 
 	AllocationBlockGroup* last = &fGroups[fNumGroups];
 	AllocationBlockGroup* group = &fGroups[blockGroup];
 
-	for (int32 iterations = 0; iterations < 2; iterations++) {
+	for (int32 iterations = atGoal ? 2 : 0; iterations < 2; iterations++) {
 		for (; group < last; ++group, ++groupNum) {
 			TRACE("BlockAllocator::AllocateBlocks(): Group %" B_PRIu32
 				" has largest length of %" B_PRIu32 "\n", groupNum,
