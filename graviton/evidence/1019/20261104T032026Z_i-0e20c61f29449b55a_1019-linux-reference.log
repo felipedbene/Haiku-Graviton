@@ -1,0 +1,129 @@
+# 20261104T032026Z instance=i-0e20c61f29449b55a label=1019-linux-reference
+# script:
+#   cat > /tmp/nmap1003-repro.sh <<'REPRO'
+#   #!/bin/sh
+#   # nmap1003-repro.sh <same-subnet-peer> <routed-peer> -- issue 1003 reproduction.
+#   #
+#   # Run on a Haiku box with nmap installed (and, for comparison, on Linux with the
+#   # same arguments). Before the libdnet route backend, every scan that needs the
+#   # routing table -- anything but an unprivileged connect scan -Pn -sT -- aborts with
+#   #   route_dst_generic: Failed to obtain system routes: getsysroutes_dnet: route_open() failed
+#   # and --iflist prints "ROUTES: NONE FOUND(!)".
+#   near="${1:?usage: $0 <same-subnet-peer> <routed-peer>}"
+#   far="${2:?usage: $0 <same-subnet-peer> <routed-peer>}"
+#   run() { echo "== nmap $*"; nmap "$@" 2>&1; echo "rc=$?"; }
+#   run --iflist
+#   run -Pn -sT -p 22,23,8080 "$far"
+#   run -Pn -sT -p 22,23 "$near"
+#   run -sn "$far" "$near"
+#   run -Pn -p 22,23 "$near"
+#   run -Pn -p 22,23,8080 "$far"
+#   run -Pn -p 22 127.0.0.1
+#   REPRO
+#   uname -a; nmap --version | head -1
+#   sh /tmp/nmap1003-repro.sh 10.128.10.149 10.128.13.64; echo "== -sS same subnet"; nmap -sS -Pn -p 22,23 10.128.10.149; echo "rc=$?"
+# output:
+ssm-run: command d1266f3d-8743-4b56-bffc-25aa183540bd on i-0e20c61f29449b55a (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-67901-970fa7)
+Linux ip-10-128-9-200 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+Nmap version 7.94SVN ( https://nmap.org )
+== nmap --iflist
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+************************INTERFACES************************
+DEV  (SHORT) IP/MASK                    TYPE     UP MTU   MAC
+lo   (lo)    127.0.0.1/8                loopback up 65536
+lo   (lo)    ::1/128                    loopback up 65536
+ens5 (ens5)  10.128.9.200/22            ethernet up 9001  02:FF:D0:54:22:E3
+ens5 (ens5)  fe80::ff:d0ff:fe54:22e3/64 ethernet up 9001  02:FF:D0:54:22:E3
+
+**************************ROUTES**************************
+DST/MASK                    DEV  METRIC GATEWAY
+10.128.0.2/32               ens5 100    10.128.8.1
+10.128.8.1/32               ens5 100
+10.128.8.0/22               ens5 100
+0.0.0.0/0                   ens5 100    10.128.8.1
+::1/128                     lo   0
+fe80::ff:d0ff:fe54:22e3/128 ens5 0
+fe80::/64                   ens5 256
+ff00::/8                    ens5 256
+
+rc=0
+== nmap -Pn -sT -p 22,23,8080 10.128.13.64
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+Nmap scan report for ip-10-128-13-64.us-west-2.compute.internal (10.128.13.64)
+Host is up (0.00037s latency).
+
+PORT     STATE  SERVICE
+22/tcp   open   ssh
+23/tcp   closed telnet
+8080/tcp open   http-proxy
+
+Nmap done: 1 IP address (1 host up) scanned in 0.02 seconds
+rc=0
+== nmap -Pn -sT -p 22,23 10.128.10.149
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+Nmap scan report for ip-10-128-10-149.us-west-2.compute.internal (10.128.10.149)
+Host is up (0.00018s latency).
+
+PORT   STATE  SERVICE
+22/tcp open   ssh
+23/tcp closed telnet
+
+Nmap done: 1 IP address (1 host up) scanned in 0.02 seconds
+rc=0
+== nmap -sn 10.128.13.64 10.128.10.149
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+Nmap scan report for ip-10-128-13-64.us-west-2.compute.internal (10.128.13.64)
+Host is up (0.00029s latency).
+Nmap scan report for ip-10-128-10-149.us-west-2.compute.internal (10.128.10.149)
+Host is up (0.000056s latency).
+MAC Address: 02:FF:CC:95:92:F7 (Unknown)
+Nmap done: 2 IP addresses (2 hosts up) scanned in 0.06 seconds
+rc=0
+== nmap -Pn -p 22,23 10.128.10.149
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+Nmap scan report for ip-10-128-10-149.us-west-2.compute.internal (10.128.10.149)
+Host is up (0.000067s latency).
+
+PORT   STATE  SERVICE
+22/tcp open   ssh
+23/tcp closed telnet
+MAC Address: 02:FF:CC:95:92:F7 (Unknown)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds
+rc=0
+== nmap -Pn -p 22,23,8080 10.128.13.64
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+Nmap scan report for ip-10-128-13-64.us-west-2.compute.internal (10.128.13.64)
+Host is up (0.00027s latency).
+
+PORT     STATE  SERVICE
+22/tcp   open   ssh
+23/tcp   closed telnet
+8080/tcp open   http-proxy
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+== nmap -Pn -p 22 127.0.0.1
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+Nmap scan report for localhost (127.0.0.1)
+Host is up (0.000038s latency).
+
+PORT   STATE SERVICE
+22/tcp open  ssh
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+== -sS same subnet
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2026-11-04 03:20 UTC
+Nmap scan report for ip-10-128-10-149.us-west-2.compute.internal (10.128.10.149)
+Host is up (0.000067s latency).
+
+PORT   STATE  SERVICE
+22/tcp open   ssh
+23/tcp closed telnet
+MAC Address: 02:FF:CC:95:92:F7 (Unknown)
+
+Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds
+rc=0
+ssm-run: Success
+# ssm-run rc=0

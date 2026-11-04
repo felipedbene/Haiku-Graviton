@@ -25,7 +25,10 @@ LICENSE="GNU GPL v2"
 # so a build against the older headers passes its BN_ULONG argument as 32-bit.
 # 3, not 2: the patchset (carried in this overlay) adds a Haiku route backend to the
 # bundled libdnet, without which route_open() fails and every scan aborts (issue 1003).
-REVISION="3"
+# 4, not 3: the patchset adds a Haiku Ethernet backend to libdnet and makes nmap send
+# at the IP layer by default, so same-subnet scans no longer quit in eth_open() and
+# interfaces report their MAC (issue 1019).
+REVISION="4"
 SOURCE_URI="https://nmap.org/dist/nmap-$portVersion.tar.bz2"
 CHECKSUM_SHA256="d71be189eec43d7e099bac8571509d316c4577ca79491832ac3e1217bc8f92cc"
 PATCHES="nmap-$portVersion.patchset"
