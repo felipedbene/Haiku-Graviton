@@ -420,6 +420,15 @@ struct ext2_extent_entry {
 		logical_block = B_HOST_TO_LENDIAN_INT32(block); }
 	void SetLength(uint16 _length) {
 		length = B_HOST_TO_LENDIAN_INT16(_length) & 0x7fff; }
+	bool IsUninitialized() const
+		{ return B_LENDIAN_TO_HOST_INT16(length) > 0x8000; }
+		// a preallocated extent whose blocks read as zeros (fallocate)
+	void SetLength(uint16 _length, bool uninitialized) {
+		if (uninitialized && _length != 0)
+			length = B_HOST_TO_LENDIAN_INT16(_length | 0x8000);
+		else
+			SetLength(_length);
+	}
 	void SetPhysicalBlock(uint64 block) {
 		physical_block = B_HOST_TO_LENDIAN_INT32(block & 0xffffffff);
 		physical_block_high = B_HOST_TO_LENDIAN_INT16((block >> 32) & 0xffff); }
