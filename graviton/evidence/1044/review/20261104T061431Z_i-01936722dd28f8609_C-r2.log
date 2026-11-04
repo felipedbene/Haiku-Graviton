@@ -1,0 +1,171 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: C-r2
+# instance: i-01936722dd28f8609   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T061431Z   end: 20261104T063515Z   rc: 0
+# script sha256: 84f8e54f6b91865b1873b462a4c0b70311acc8ec0f5435b8b92931de0fef7b4a
+# ---- script ----
+# | set -u
+# | P=10.128.5.103
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	NS="netstat -n -t"
+# | 	echo "--- non-packaged overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	echo "--- loaded tcp image"; listimage 1 | grep -E 'protocols/tcp'
+# | else
+# | 	NS="ss -tn"
+# | 	sysctl net.ipv4.tcp_retries2
+# | fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | for m in write read poll close recover zerowin; do
+# | 	./tcp975 $P 9751 9752 $m 1200 > out.$m 2>&1 &
+# | done
+# | sleep 5
+# | echo "--- connections to the peer, every 120 s"
+# | while [ -n "$(jobs -r)" ]; do
+# | 	echo "$(date -u +%H:%M:%SZ) $($NS | grep -c ':9751') connections to :9751"
+# | 	$NS | grep ':9751' | sed 's/^/    /'
+# | 	sleep 120
+# | done
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | for m in write read poll close recover zerowin; do echo "=== $m"; cat out.$m; done
+# | echo "--- 150 s later (past the 2MSL wait of a close()d endpoint)"
+# | sleep 150
+# | $NS | grep ':9751' | sed 's/^/    /'
+# | echo "$($NS | grep -c ':9751') connections to :9751 left"
+# | grep RESULT out.* | sed 's/^/SUMMARY /'
+# ---- raw output ----
+Haiku ip-10-128-7-166.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+ab8cb78094255f418844499e5ebef48ed3944292670ead4b77a1fd6b2841f3fa  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+--- loaded tcp image
+ 2149 0xffff0000023dc000 0xffff0000023ef000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+f87f37ece92e8e44368be645a4ee85e80b7799639cfffeb6257841e037e8cb7d  tcp975
+start 2026-11-04T06:14:33Z
+--- connections to the peer, every 120 s
+06:14:38Z 8 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0   1000 [10.128.7.166]:46025  [10.128.5.103]:9751   fin-wait1    1065
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 237078 [10.128.7.166]:46255  [10.128.5.103]:9751   established  1092/tcp975
+    tcp         0 204175 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:16:38Z 7 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0      0 [10.128.7.166]:46255  [10.128.5.103]:9751   time-wait    1092
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:18:39Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:20:39Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:22:39Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:24:39Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:26:39Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:28:39Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:30:39Z 2 connections to :9751
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+end 2026-11-04T06:32:39Z
+=== write
+  [06:14:33Z write] connected from port 
+  local port 45873
+  [06:14:33Z write] control: DROP 45873
+RESULT write PASS send() failed with ETIMEDOUT after 924.8 s
+=== read
+  [06:14:33Z read] connected from port 
+  local port 45928
+  [06:14:33Z read] control: DROP 45928
+RESULT read PASS recv() failed with ETIMEDOUT after 925.6 s
+=== poll
+  [06:14:33Z poll] connected from port 
+  local port 45974
+  [06:14:33Z poll] control: DROP 45974
+  poll revents 0x85 IN ERR HUP, SO_ERROR -2147483639 (Operation timed out), then recv() -1 (Socket is not connected)
+RESULT poll PASS poll() woke after 925.6 s with SO_ERROR ETIMEDOUT
+=== close
+  [06:14:33Z close] connected from port 
+  local port 46025
+  [06:14:33Z close] control: DROP 46025
+RESULT close PASS close() of a black-holed connection returned 0
+=== recover
+  [06:14:33Z recover] connected from port 
+  local port 46050
+  [06:14:33Z recover] control: COUNT 46050
+  [06:14:33Z recover] control: COUNT 46050
+  [06:14:34Z recover] control: COUNT 46050
+  [06:14:34Z recover] control: DROP 46050
+  [06:22:55Z recover] control: UNDROP 46050
+  [06:22:55Z recover] control: COUNT 46050
+  [06:23:17Z recover] control: COUNT 46050
+  [06:23:18Z recover] control: COUNT 46050
+  [06:23:18Z recover] control: DROP 46050
+  [06:31:38Z recover] control: UNDROP 46050
+  [06:31:38Z recover] control: COUNT 46050
+  [06:32:00Z recover] control: COUNT 46050
+  [06:32:01Z recover] control: COUNT 46050
+RESULT recover PASS survived 2 x 500 s black-holes (1046 s in all), data delivered after each
+=== zerowin
+  [06:14:33Z zerowin] connected from port 
+  local port 46079
+  [06:14:33Z zerowin] control: STOPREAD 46079 1000
+  [06:31:14Z zerowin] control: COUNT 46079
+  [06:31:15Z zerowin] control: COUNT 46079
+RESULT zerowin PASS 64 MiB delivered across a 1001 s closed window, SO_ERROR 0
+--- 150 s later (past the 2MSL wait of a close()d endpoint)
+0 connections to :9751 left
+SUMMARY out.close:RESULT close PASS close() of a black-holed connection returned 0
+SUMMARY out.dupack3:RESULT dupack3 DONE see the capture for segments after the injection
+SUMMARY out.longreopen:RESULT longreopen DONE see the capture for segments sent while idle
+SUMMARY out.poll:RESULT poll PASS poll() woke after 925.6 s with SO_ERROR ETIMEDOUT
+SUMMARY out.read:RESULT read PASS recv() failed with ETIMEDOUT after 925.6 s
+SUMMARY out.recover:RESULT recover PASS survived 2 x 500 s black-holes (1046 s in all), data delivered after each
+SUMMARY out.reopen:RESULT reopen PASS 64 MiB delivered 26.2 s after the peer could be heard again (66.2 s in all)
+SUMMARY out.shutfin:RESULT shutfin PASS recv() after SHUT_WR failed with ETIMEDOUT after 924.6 s
+SUMMARY out.stale:RESULT stale PASS the old zero-window ACK was ignored: worst delivery 0.002 s after it (0.002 s before)
+SUMMARY out.submss:RESULT submss DONE see the capture for the first data after the injection
+SUMMARY out.winupd3:RESULT winupd3 DONE see the capture for segments after the injection
+SUMMARY out.write:RESULT write PASS send() failed with ETIMEDOUT after 924.8 s
+SUMMARY out.zerodead:RESULT zerodead PASS send() on a closed window failed with ETIMEDOUT after 937.6 s
+SUMMARY out.zerowin:RESULT zerowin PASS 64 MiB delivered across a 1001 s closed window, SO_ERROR 0

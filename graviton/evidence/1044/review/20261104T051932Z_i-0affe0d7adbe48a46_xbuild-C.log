@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-C
+# instance: i-0affe0d7adbe48a46   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T051932Z   end: 20261104T051948Z   rc: 0
+# script sha256: ab39eb69a47e5767bc5b0713fc0b1d11b1b182fed7bf218640bb2c5b787c823f
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/rv
+# | cd /opt/tw/hg/generated || exit 1
+# | T=objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
+# | build() {
+# | 	local label=$1
+# | 	git -C .. checkout -q -f --detach origin/graviton || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	aws s3 cp --quiet $OUT/patch/$label.patch /opt/tw/$label.patch || return 1
+# | 	sha256sum /opt/tw/$label.patch
+# | 	git -C .. apply --whitespace=nowarn /opt/tw/$label.patch || { echo "apply failed"; return 1; }
+# | 	git -C .. diff --stat | cat
+# | 	sleep 2
+# | 	rm -rf "$(dirname $T)"
+# | 	jam -q -j32 tcp > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) rc=$rc failed=$(grep -cE '\.\.\.failed' jam-$label.log) tcp-warnings=$(grep 'warning:' jam-$label.log | grep -c protocols/tcp/)"
+# | 	[ $rc = 0 ] || { grep -E 'error' jam-$label.log | head -40; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/tcp/' | head
+# | 	mkdir -p /opt/tw/out/$label
+# | 	cp $T /opt/tw/out/$label/tcp && sha256sum /opt/tw/out/$label/tcp | sed "s|/opt/tw/out/||"
+# | 	aws s3 cp --quiet /opt/tw/out/$label/tcp $OUT/mod/$label/tcp
+# | }
+# | for l in C; do build $l; done
+# ---- raw output ----
+15cca2aa100b4a2a677b0d4d4313ca31f30871321ecd2f8015503cb95d04becc  /opt/tw/C.patch
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp   | 318 ++++++++++++++++++++-
+ .../kernel/network/protocols/tcp/TCPEndpoint.h     |  18 ++
+ src/add-ons/kernel/network/protocols/tcp/tcp.h     |  13 +
+ 3 files changed, 339 insertions(+), 10 deletions(-)
+JAM C head=a9954f42 rc=0 failed=0 tcp-warnings=0
+ab8cb78094255f418844499e5ebef48ed3944292670ead4b77a1fd6b2841f3fa  C/tcp

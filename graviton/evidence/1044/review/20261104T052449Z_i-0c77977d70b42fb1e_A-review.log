@@ -1,0 +1,108 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: A-review
+# instance: i-0c77977d70b42fb1e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T052449Z   end: 20261104T054654Z   rc: 0
+# script sha256: 519c50ae2ae91e9550f4b91139dbc07c7cb435cae7f853fa52c5a561eb9dd77d
+# ---- script ----
+# | set -u
+# | P=10.128.5.103
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	NS="netstat -n -t"; CAP=1300
+# | 	find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	listimage 1 | grep -E 'protocols/tcp'
+# | else
+# | 	NS="ss -tn"; CAP=2000; sysctl net.ipv4.tcp_retries2
+# | fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 $P 9751 9752 shutfin $CAP > out.shutfin 2>&1 &
+# | ./tcp975 $P 9751 9752 longreopen 600 > out.longreopen 2>&1 &
+# | ./tcp975 $P 9751 9752 submss 600 > out.submss 2>&1 &
+# | sleep 30
+# | echo "--- 30 s in"; $NS | grep ':9751'
+# | wait %2 %3
+# | for m in dupack3 winupd3 stale; do ./tcp975 $P 9751 9752 $m 60 > out.$m 2>&1; done
+# | echo "--- short modes done $(date -u +%H:%M:%SZ)"; $NS | grep ':9751'
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | for m in shutfin longreopen submss dupack3 winupd3 stale; do echo "=== $m"; grep -v 'control: COUNT\|control: INQ' out.$m; done
+# | grep -h RESULT out.shutfin out.longreopen out.submss out.dupack3 out.winupd3 out.stale | sed 's/^/SUMMARY /'
+# ---- raw output ----
+Haiku ip-10-128-6-231.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+6646f52d3b22444df21304e2cd4c2d1fd3f8c726377b3b7f76c883b37208b4e2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2087 0xffff0000022ef000 0xffff000002302000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+4dd0852b92b41ec4f390717dff2b8acbc7c78e5494f2b6f5b92f2555b6fc5dce  tcp975
+start 2026-11-04T05:24:51Z
+--- 30 s in
+tcp         0 237078 [10.128.6.231]:41315  [10.128.5.103]:9751   established  366/tcp975
+tcp         0      0 [10.128.6.231]:41340  [10.128.5.103]:9751   fin-wait2    365/tcp975
+tcp         0 194202 [10.128.6.231]:41360  [10.128.5.103]:9751   established  367/tcp975
+--- short modes done 05:30:50Z
+tcp         0      0 [10.128.6.231]:41315  [10.128.5.103]:9751   time-wait    366
+tcp         0      0 [10.128.6.231]:41340  [10.128.5.103]:9751   fin-wait2    365/tcp975
+tcp         0 262144 [10.128.6.231]:41770  [10.128.5.103]:9751   fin-wait1    426
+tcp         0 262144 [10.128.6.231]:41789  [10.128.5.103]:9751   fin-wait1    427
+tcp         0      0 [10.128.6.231]:41800  [10.128.5.103]:9751   time-wait    428
+end 2026-11-04T05:46:49Z
+=== shutfin
+  [05:24:51Z shutfin] connected from port 
+  local port 41340
+  [05:24:51Z shutfin] control: STOPREAD 41340 100000
+  sent 327680, still owed 204175
+  [05:25:01Z shutfin] control: READ 41340 204175
+  sent 327680, still owed 0
+  [05:25:09Z shutfin] control: DROP 41340
+RESULT shutfin FAIL no error after 1300 s: recv() after SHUT_WR still blocked at the cap
+=== longreopen
+  [05:24:51Z longreopen] connected from port 
+  local port 41315
+  [05:24:51Z longreopen] control: STOPREAD 41315 200
+IDLE-FROM 05:28:12 (64 MiB delivered 200.2 s in)
+IDLE-TO 05:30:42
+RESULT longreopen DONE see the capture for segments sent while idle
+=== submss
+  [05:24:51Z submss] connected from port 
+  local port 41360
+  [05:24:51Z submss] control: STOPREAD 41360 100000
+  [05:25:01Z submss] control: MUTE 41360
+  [05:26:11Z submss] control: INJECT 41360 submss
+  inject: OK seq 4012077936 ack 3595104 win 1
+INJECTED 05:26:11
+  [05:27:41Z submss] control: UNMUTE 41360
+RESULT submss DONE see the capture for the first data after the injection
+=== dupack3
+  [05:30:42Z dupack3] connected from port 
+  local port 41770
+  [05:30:43Z dupack3] control: DROP 41770
+  [05:30:43Z dupack3] control: INJECT 41770 dup3
+INJECTED 05:30:43 after 262144 bytes queued: OK seq 1144915143 ack 28627091 win 343,343,343
+RESULT dupack3 DONE see the capture for segments after the injection
+=== winupd3
+  [05:30:45Z winupd3] connected from port 
+  local port 41789
+  [05:30:46Z winupd3] control: DROP 41789
+  [05:30:46Z winupd3] control: INJECT 41789 win3
+INJECTED 05:30:46 after 262144 bytes queued: OK seq 310945402 ack 28826947 win 184,185,186
+RESULT winupd3 DONE see the capture for segments after the injection
+=== stale
+  [05:30:48Z stale] connected from port 
+  local port 41800
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  [05:30:49Z stale] control: INJECT 41800 stalezero
+  inject: OK seq 185579785 ack 25753789 win 0
+  after: 1 KiB arrived in 1.002 s
+  after: 1 KiB arrived in 0.002 s
+  after: 1 KiB arrived in 0.002 s
+RESULT stale FAIL the old zero-window ACK closed the window: worst delivery 1.002 s after it (0.002 s before)
+SUMMARY RESULT shutfin FAIL no error after 1300 s: recv() after SHUT_WR still blocked at the cap
+SUMMARY RESULT longreopen DONE see the capture for segments sent while idle
+SUMMARY RESULT submss DONE see the capture for the first data after the injection
+SUMMARY RESULT dupack3 DONE see the capture for segments after the injection
+SUMMARY RESULT winupd3 DONE see the capture for segments after the injection
+SUMMARY RESULT stale FAIL the old zero-window ACK closed the window: worst delivery 1.002 s after it (0.002 s before)

@@ -1,0 +1,22 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: peer2-restart2
+# instance: i-0affe0d7adbe48a46   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T062334Z   end: 20261104T062347Z   rc: 0
+# script sha256: 3d4513dbfa3962038989f3319b9eeb9b5f3c4af7a8186aeae1953e2ad7fde29a
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | cd /opt/t975b
+# | aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/rv/src/tcp975-peer.py tcp975-peer.py
+# | sha256sum tcp975-peer.py
+# | pkill -TERM -f 'tcp975-peer.py 9761'; sleep 2
+# | nohup python3 -I /opt/t975b/tcp975-peer.py 9761 9762 > /opt/t975b/peer2.log 2>&1 &
+# | true
+# | true
+# | sleep 3; ss -ltnp | grep -E '976[124]'; ps aux | grep -c '[t]cpdump'
+# ---- raw output ----
+420c1ec4e74457defae8de62f73c75cc4ba4e4a83f7cf715591e610cd923520a  tcp975-peer.py
+LISTEN 0      64           0.0.0.0:9761      0.0.0.0:*    users:(("python3",pid=10386,fd=3))       
+LISTEN 0      64           0.0.0.0:9762      0.0.0.0:*    users:(("python3",pid=10386,fd=7))       
+LISTEN 0      64           0.0.0.0:9764      0.0.0.0:*    users:(("python3",pid=10386,fd=4))       
+2

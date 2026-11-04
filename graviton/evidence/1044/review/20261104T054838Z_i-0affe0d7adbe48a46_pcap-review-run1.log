@@ -1,0 +1,183 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pcap-review-run1
+# instance: i-0affe0d7adbe48a46   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T054838Z   end: 20261104T054849Z   rc: 0
+# script sha256: c0b806c68c3c5d5df0102ec34e7e968190a9be1cc615f636b5e46214d9ff2a0c
+# ---- script ----
+# | cat > /tmp/rows.txt <<"R"
+# | stock longreopen 10.128.7.228 42115 05:27:41 05:30:11
+# | stock submss 10.128.7.228 42088 05:25:41
+# | stock dupack3 10.128.7.228 42389 05:30:13
+# | stock winupd3 10.128.7.228 42415 05:30:16
+# | v2 longreopen 10.128.6.247 41266 05:28:11 05:30:41
+# | v2 submss 10.128.6.247 41306 05:26:11
+# | v2 dupack3 10.128.6.247 41700 05:30:43
+# | v2 winupd3 10.128.6.247 41725 05:30:46
+# | C longreopen 10.128.7.166 41248 05:28:12 05:30:42
+# | C submss 10.128.7.166 41259 05:26:11
+# | C dupack3 10.128.7.166 41642 05:30:43
+# | C winupd3 10.128.7.166 41695 05:30:46
+# | A longreopen 10.128.6.231 41315 05:28:12 05:30:42
+# | A submss 10.128.6.231 41360 05:26:11
+# | A dupack3 10.128.6.231 41770 05:30:43
+# | A winupd3 10.128.6.231 41789 05:30:46
+# | R
+# | cat > /tmp/pa.py <<"P"
+# | # Reads rows "label mode host port t1 [t2]" on stdin, analyses /opt/t975/rv.pcap.
+# | import subprocess, sys
+# | 
+# | def segs(host, port):
+# |     out = subprocess.run(["tcpdump", "-r", "/opt/t975/rv.pcap", "-nn", "-tttt",
+# |         "host %s and tcp port %s" % (host, port)], capture_output=True,
+# |         text=True).stdout.splitlines()
+# |     rows = []
+# |     for line in out:
+# |         parts = line.split()
+# |         if len(parts) < 8:
+# |             continue
+# |         h, m, s = parts[1].split(":")
+# |         t = int(h) * 3600 + int(m) * 60 + float(s)
+# |         fromclient = parts[5].startswith(host + ".")
+# |         length = int(line.rsplit("length ", 1)[1].split()[0]) if "length " in line else 0
+# |         rows.append((t, fromclient, length, line[11:150]))
+# |     return rows
+# | 
+# | def sec(x):
+# |     h, m, s = x.split(":")
+# |     return int(h) * 3600 + int(m) * 60 + float(s)
+# | 
+# | for row in sys.stdin:
+# |     f = row.split()
+# |     if not f:
+# |         continue
+# |     label, mode, host, port = f[:4]
+# |     s = segs(host, port)
+# |     print("=== %s %s (%s:%s): %d segments captured" % (label, mode, host, port, len(s)))
+# |     if mode == "longreopen":
+# |         # Clock-agnostic: the idle period starts at the client's last data
+# |         # segment, as the peer saw it, and lasts the 150 s the client sleeps.
+# |         data = [x for x in s if x[1] and x[2] > 0]
+# |         tl = data[-1][0]
+# |         idle = [x for x in s if x[1] and tl + 0.5 <= x[0] <= tl + 145]
+# |         print("  last data from the client at %s; segments from it in the next 0.5-145 s: %d" % (data[-1][3][:15], len(idle)))
+# |         for x in idle[:10]:
+# |             print("    +%.3f s: %s" % (x[0] - tl, x[3]))
+# |     elif mode == "submss":
+# |         inj = [x for x in s if not x[1] and "win 1," in x[3]]
+# |         if not inj:
+# |             print("  no injected win-1 segment found")
+# |             continue
+# |         t0 = inj[0][0]
+# |         data = [x for x in s if x[1] and x[0] > t0 and x[2] > 0]
+# |         print("  injected: " + inj[0][3])
+# |         if data:
+# |             print("  first data after it: +%.3f s: %s" % (data[0][0] - t0, data[0][3]))
+# |         else:
+# |             print("  no data from the client in the %d s captured after it" % 90)
+# |         for x in [x for x in s if x[1] and t0 < x[0] < t0 + 90][:6]:
+# |             print("    client +%.3f s: %s" % (x[0] - t0, x[3]))
+# |     else:
+# |         # The forged ACKs are the last three this end "sent": after DROP its
+# |         # own stack sends nothing that reaches the capture.
+# |         inj = [x for x in s if not x[1]][-3:]
+# |         if not inj:
+# |             print("  no injected segment found")
+# |             continue
+# |         t0 = inj[0][0]
+# |         print("  injected (%d): %s" % (len(inj[:3]), " | ".join(x[3][60:120] for x in inj[:3])))
+# |         within = [x for x in s if x[1] and t0 <= x[0] <= t0 + 0.15]
+# |         print("  client segments within 150 ms of the first: %d (%s)" % (len(within), ", ".join("+%.1f ms len %d" % ((x[0] - t0) * 1000, x[2]) for x in within)))
+# |         later = [x for x in s if x[1] and x[0] > t0 + 0.15][:3]
+# |         for x in later:
+# |             print("    later +%.3f s: %s" % (x[0] - t0, x[3][:110]))
+# | P
+# | python3 /tmp/pa.py < /tmp/rows.txt
+# ---- raw output ----
+=== stock longreopen (10.128.7.228:42115): 2635 segments captured
+  last data from the client at 05:27:42.402240; segments from it in the next 0.5-145 s: 0
+=== stock submss (10.128.7.228:42088): 28 segments captured
+  injected: 05:25:42.397738 ens5  Out IP 10.128.5.103.9751 > 10.128.7.228.42088: Flags [.], ack 132455, win 1, options [nop,nop,TS val 858311684 ecr 50
+  first data after it: +33.180 s: 05:26:15.577704 ens5  In  IP 10.128.7.228.42088 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+    client +33.180 s: 05:26:15.577704 ens5  In  IP 10.128.7.228.42088 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+=== stock dupack3 (10.128.7.228:42389): 306 segments captured
+  injected (3): 8.42389: Flags [.], ack 3276801, win 235, options [nop,nop,T | 8.42389: Flags [.], ack 3276801, win 235, options [nop,nop,T | 8.42389: Flags [.], ack 3276801, win 235, options [nop,nop,T
+  client segments within 150 ms of the first: 1 (+34.1 ms len 8949)
+    later +0.234 s: 05:30:13.884848 ens5  In  IP 10.128.7.228.42389 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.634 s: 05:30:14.284861 ens5  In  IP 10.128.7.228.42389 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.434 s: 05:30:15.084873 ens5  In  IP 10.128.7.228.42389 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+=== stock winupd3 (10.128.7.228:42415): 314 segments captured
+  injected (3): 8.42415: Flags [.], ack 3276801, win 289, options [nop,nop,T | 8.42415: Flags [.], ack 3276801, win 290, options [nop,nop,T | 8.42415: Flags [.], ack 3276801, win 291, options [nop,nop,T
+  client segments within 150 ms of the first: 1 (+38.0 ms len 8949)
+    later +0.238 s: 05:30:17.062819 ens5  In  IP 10.128.7.228.42415 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.638 s: 05:30:17.462863 ens5  In  IP 10.128.7.228.42415 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.438 s: 05:30:18.262838 ens5  In  IP 10.128.7.228.42415 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+=== v2 longreopen (10.128.6.247:41266): 3979 segments captured
+  last data from the client at 05:28:13.039163; segments from it in the next 0.5-145 s: 1
+    +44.973 s: 05:28:58.011891 ens5  In  IP 10.128.6.247.41266 > 10.128.5.103.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 302603 ecr 24655253
+=== v2 submss (10.128.6.247:41306): 45 segments captured
+  injected: 05:26:12.995743 ens5  Out IP 10.128.5.103.9751 > 10.128.6.247.41306: Flags [.], ack 123506, win 1, options [nop,nop,TS val 580730121 ecr 58
+  first data after it: +45.017 s: 05:26:58.012476 ens5  In  IP 10.128.6.247.41306 > 10.128.5.103.9751: Flags [.], seq 123506:124530, ack 1, win 255, options [nop,nop,TS val 
+    client +45.017 s: 05:26:58.012476 ens5  In  IP 10.128.6.247.41306 > 10.128.5.103.9751: Flags [.], seq 123506:124530, ack 1, win 255, options [nop,nop,TS val 
+    client +45.217 s: 05:26:58.212495 ens5  In  IP 10.128.6.247.41306 > 10.128.5.103.9751: Flags [.], seq 123506:124530, ack 1, win 255, options [nop,nop,TS val 
+    client +45.617 s: 05:26:58.612516 ens5  In  IP 10.128.6.247.41306 > 10.128.5.103.9751: Flags [.], seq 123506:124530, ack 1, win 255, options [nop,nop,TS val 
+    client +46.417 s: 05:26:59.412533 ens5  In  IP 10.128.6.247.41306 > 10.128.5.103.9751: Flags [.], seq 123506:124530, ack 1, win 255, options [nop,nop,TS val 
+    client +48.017 s: 05:27:01.012559 ens5  In  IP 10.128.6.247.41306 > 10.128.5.103.9751: Flags [.], seq 123506:124530, ack 1, win 255, options [nop,nop,TS val 
+    client +51.217 s: 05:27:04.212570 ens5  In  IP 10.128.6.247.41306 > 10.128.5.103.9751: Flags [.], seq 123506:124530, ack 1, win 255, options [nop,nop,TS val 
+=== v2 dupack3 (10.128.6.247:41700): 458 segments captured
+  injected (3): 7.41700: Flags [.], ack 3276801, win 220, options [nop,nop,T | 7.41700: Flags [.], ack 3276801, win 220, options [nop,nop,T | 7.41700: Flags [.], ack 3276801, win 220, options [nop,nop,T
+  client segments within 150 ms of the first: 1 (+41.3 ms len 8949)
+    later +0.241 s: 05:30:44.526041 ens5  In  IP 10.128.6.247.41700 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.641 s: 05:30:44.926055 ens5  In  IP 10.128.6.247.41700 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.441 s: 05:30:45.726068 ens5  In  IP 10.128.6.247.41700 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+=== v2 winupd3 (10.128.6.247:41725): 377 segments captured
+  injected (3): 7.41725: Flags [.], ack 3276801, win 407, options [nop,nop,T | 7.41725: Flags [.], ack 3276801, win 408, options [nop,nop,T | 7.41725: Flags [.], ack 3276801, win 409, options [nop,nop,T
+  client segments within 150 ms of the first: 1 (+47.8 ms len 8949)
+    later +0.248 s: 05:30:47.720578 ens5  In  IP 10.128.6.247.41725 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.648 s: 05:30:48.120599 ens5  In  IP 10.128.6.247.41725 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.448 s: 05:30:48.920609 ens5  In  IP 10.128.6.247.41725 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+=== C longreopen (10.128.7.166:41248): 2791 segments captured
+  last data from the client at 05:28:13.028703; segments from it in the next 0.5-145 s: 0
+=== C submss (10.128.7.166:41259): 61 segments captured
+  injected: 05:26:12.983766 ens5  Out IP 10.128.5.103.9751 > 10.128.7.166.41259: Flags [.], ack 132455, win 1, options [nop,nop,TS val 945620584 ecr 52
+  first data after it: +1.000 s: 05:26:13.983920 ens5  In  IP 10.128.7.166.41259 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+    client +1.000 s: 05:26:13.983920 ens5  In  IP 10.128.7.166.41259 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+    client +1.200 s: 05:26:14.183940 ens5  In  IP 10.128.7.166.41259 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+    client +1.600 s: 05:26:14.583960 ens5  In  IP 10.128.7.166.41259 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+    client +2.400 s: 05:26:15.383993 ens5  In  IP 10.128.7.166.41259 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+    client +4.000 s: 05:26:16.984042 ens5  In  IP 10.128.7.166.41259 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+    client +7.200 s: 05:26:20.184134 ens5  In  IP 10.128.7.166.41259 > 10.128.5.103.9751: Flags [.], seq 132455:133479, ack 1, win 255, options [nop,nop,TS val 
+=== C dupack3 (10.128.7.166:41642): 400 segments captured
+  injected (3): 6.41642: Flags [.], ack 3276801, win 198, options [nop,nop,T | 6.41642: Flags [.], ack 3276801, win 198, options [nop,nop,T | 6.41642: Flags [.], ack 3276801, win 198, options [nop,nop,T
+  client segments within 150 ms of the first: 1 (+40.9 ms len 8949)
+    later +0.241 s: 05:30:44.521870 ens5  In  IP 10.128.7.166.41642 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.641 s: 05:30:44.921895 ens5  In  IP 10.128.7.166.41642 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.441 s: 05:30:45.721941 ens5  In  IP 10.128.7.166.41642 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+=== C winupd3 (10.128.7.166:41695): 382 segments captured
+  injected (3): 6.41695: Flags [.], ack 3276801, win 289, options [nop,nop,T | 6.41695: Flags [.], ack 3276801, win 290, options [nop,nop,T | 6.41695: Flags [.], ack 3276801, win 291, options [nop,nop,T
+  client segments within 150 ms of the first: 0 ()
+    later +0.188 s: 05:30:47.654939 ens5  In  IP 10.128.7.166.41695 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.588 s: 05:30:48.054965 ens5  In  IP 10.128.7.166.41695 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.388 s: 05:30:48.855003 ens5  In  IP 10.128.7.166.41695 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+=== A longreopen (10.128.6.231:41315): 3670 segments captured
+  last data from the client at 05:28:13.044598; segments from it in the next 0.5-145 s: 0
+=== A submss (10.128.6.231:41360): 55 segments captured
+  injected: 05:26:13.007723 ens5  Out IP 10.128.5.103.9751 > 10.128.6.231.41360: Flags [.], ack 133479, win 1, options [nop,nop,TS val 2876590967 ecr 5
+  first data after it: +1.000 s: 05:26:14.007823 ens5  In  IP 10.128.6.231.41360 > 10.128.5.103.9751: Flags [.], seq 133479:134503, ack 1, win 255, options [nop,nop,TS val 
+    client +1.000 s: 05:26:14.007823 ens5  In  IP 10.128.6.231.41360 > 10.128.5.103.9751: Flags [.], seq 133479:134503, ack 1, win 255, options [nop,nop,TS val 
+    client +1.200 s: 05:26:14.207832 ens5  In  IP 10.128.6.231.41360 > 10.128.5.103.9751: Flags [.], seq 133479:134503, ack 1, win 255, options [nop,nop,TS val 
+    client +1.600 s: 05:26:14.607855 ens5  In  IP 10.128.6.231.41360 > 10.128.5.103.9751: Flags [.], seq 133479:134503, ack 1, win 255, options [nop,nop,TS val 
+    client +2.400 s: 05:26:15.407877 ens5  In  IP 10.128.6.231.41360 > 10.128.5.103.9751: Flags [.], seq 133479:134503, ack 1, win 255, options [nop,nop,TS val 
+    client +4.000 s: 05:26:17.007893 ens5  In  IP 10.128.6.231.41360 > 10.128.5.103.9751: Flags [.], seq 133479:134503, ack 1, win 255, options [nop,nop,TS val 
+    client +7.200 s: 05:26:20.207912 ens5  In  IP 10.128.6.231.41360 > 10.128.5.103.9751: Flags [.], seq 133479:134503, ack 1, win 255, options [nop,nop,TS val 
+=== A dupack3 (10.128.6.231:41770): 311 segments captured
+  injected (3): 1.41770: Flags [.], ack 3276801, win 343, options [nop,nop,T | 1.41770: Flags [.], ack 3276801, win 343, options [nop,nop,T | 1.41770: Flags [.], ack 3276801, win 343, options [nop,nop,T
+  client segments within 150 ms of the first: 1 (+40.1 ms len 8949)
+    later +0.240 s: 05:30:44.529834 ens5  In  IP 10.128.6.231.41770 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.640 s: 05:30:44.929854 ens5  In  IP 10.128.6.231.41770 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.440 s: 05:30:45.729868 ens5  In  IP 10.128.6.231.41770 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+=== A winupd3 (10.128.6.231:41789): 378 segments captured
+  injected (3): 1.41789: Flags [.], ack 3276801, win 184, options [nop,nop,T | 1.41789: Flags [.], ack 3276801, win 185, options [nop,nop,T | 1.41789: Flags [.], ack 3276801, win 186, options [nop,nop,T
+  client segments within 150 ms of the first: 2 (+0.1 ms len 8949, +49.8 ms len 8949)
+    later +0.250 s: 05:30:47.720532 ens5  In  IP 10.128.6.231.41789 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +0.650 s: 05:30:48.120548 ens5  In  IP 10.128.6.231.41789 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
+    later +1.450 s: 05:30:48.920565 ens5  In  IP 10.128.6.231.41789 > 10.128.5.103.9751: Flags [.], seq 3276801:3285750, ack 1, wi
