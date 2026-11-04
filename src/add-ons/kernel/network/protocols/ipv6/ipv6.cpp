@@ -806,6 +806,24 @@ make_room_for_fragment(FragmentPacket* keep, uint32 charge)
 }
 
 
+/*!	Takes \a packet, which is done with, out of the hash and the eviction list
+	and frees it, or, if its timer hook is already waiting for sFragmentLock,
+	leaves it to the hook (see FragmentPacket::StopTimer()). Its memory is
+	given back when it is freed. Must be called with sFragmentLock held.
+*/
+static void
+release_fragment_packet(FragmentPacket* packet)
+{
+	sFragmentHash.Remove(packet);
+	sFragmentPackets.Remove(packet);
+
+	if (packet->StopTimer())
+		delete packet;
+	else
+		packet->Orphan();
+}
+
+
 /*!	Attempts to re-assemble fragmented packets.
 	\return B_OK if everything went well; if it could reassemble the packet,
 		\a _buffer will point to its buffer, otherwise, it will be \c NULL.
@@ -842,6 +860,12 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 	if (end > IPV6_MAXPACKET || (!lastFragment && (end - start) % 8 != 0))
 		return B_BAD_DATA;
 
+	// A fragment without data is dropped before it can create a packet that
+	// would hold nothing, be charged nothing, and still live for
+	// FRAGMENT_TIMEOUT.
+	if (start >= end)
+		return B_BAD_DATA;
+
 	// \a header may point into the buffer's data, so it is read before the
 	// headers are removed
 	struct ipv6_packet_key key;
@@ -875,6 +899,7 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 	MutexLocker locker(&sFragmentLock);
 
 	FragmentPacket* packet = sFragmentHash.Lookup(key);
+	bool created = false;
 	if (packet == NULL) {
 		// New fragment packet
 		packet = new (std::nothrow) FragmentPacket(key);
@@ -889,11 +914,17 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 		}
 		sFragmentPackets.Add(packet);
 		packet->StartTimer();
+		created = true;
 	}
 
 	if (!make_room_for_fragment(packet, buffer->size + FRAGMENT_OVERHEAD
-			+ (headers != NULL ? offset : 0)))
+			+ (headers != NULL ? offset : 0))) {
+		// A packet created for this fragment would be left empty, holding
+		// nothing and uncharged, until its timer ran out.
+		if (created)
+			release_fragment_packet(packet);
 		return B_NO_MEMORY;
+	}
 
 	TRACE("   Received IPv6 %sfragment of size %" B_PRIu32 ", offset %" B_PRIu32
 		".", lastFragment ? "last ": "", end - start, start);
@@ -903,20 +934,19 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 			nextHeaderField);
 
 	status = packet->AddFragment(start, end, buffer, lastFragment);
-	if (status != B_OK)
+	if (status != B_OK) {
+		// A failing AddFragment() never keeps the buffer, so a packet created
+		// for it is still empty.
+		if (created)
+			release_fragment_packet(packet);
 		return status;
+	}
 
 	if (packet->IsComplete()) {
-		sFragmentHash.Remove(packet);
-		sFragmentPackets.Remove(packet);
-			// no matter if reassembling succeeds, we won't need this packet
-			// anymore
-
+		// no matter if reassembling succeeds, we won't need this packet
+		// anymore
 		status = packet->Reassemble(buffer);
-		if (packet->StopTimer())
-			delete packet;
-		else
-			packet->Orphan();
+		release_fragment_packet(packet);
 
 		// _buffer does not change
 		return status;
