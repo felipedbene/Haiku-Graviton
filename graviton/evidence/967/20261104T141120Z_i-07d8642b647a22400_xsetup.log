@@ -1,0 +1,109 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xsetup
+# instance: i-07d8642b647a22400   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-build host setup: toolchain, jam, cross-tools, configure on the #1086 kernel branch; patches and repros
+# start: 20261104T141120Z   end: 20261104T141320Z   rc: 0
+# script sha256: 0a8d1392f271c47e7f40b09483d8e5d86854798b5d1e4fbb51678361203e28ce
+# ---- script ----
+# | # Cross-build host setup for #967 (group W; method of #1033's xsetup): toolchain, jam,
+# | # cross-tools from the oven's cache, configure on the #1086 kernel branch
+# | # (fix/1069-arm64-physmap-area, base trunk a9954f424a); ntfs-3g for the test image.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g strace > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -r; mkntfs --version 2>&1 | head -1; dpkg -s ntfs-3g | grep -E "^Version"
+# | mkdir -p /opt/t && cd /opt/t
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg fetch -q origin fix/1069-arm64-physmap-area fix/967-ntfs-chmod-same-mode
+# | git -C hg checkout -q FETCH_HEAD 2>/dev/null; git -C hg checkout -q origin/fix/1069-arm64-physmap-area && git -C hg log -1 --format='configure at %H %s'
+# | git -C hg diff --stat a9954f424a HEAD -- src headers
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 1
+# | sha256sum /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | mkdir -p /opt/t/out && cd /opt/t/out
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet --recursive s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/src/ . && sha256sum *
+# | nproc; df -h /opt | tail -1
+# ---- raw output ----
+apt rc=0
+7.0.0-1016-aws
+
+Version: 1:2022.10.3-5ubuntu1.1
+configure at e2ca7e9c68343a4852b1630e81fe13ac7c3df04c evidence: hardware A/B for the arm64 physical map area (#1069)
+ headers/private/kernel/arch/arm64/arch_kernel.h    |   6 +-
+ .../kernel/arch/arm64/VMSAv8TranslationMap.cpp     | 143 +++++++++++++--------
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp  |  64 ++++++++-
+ 3 files changed, 157 insertions(+), 56 deletions(-)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+dd82a6dbe0b6087cd332daf7aed14f24cfe2cd98fdc7c7944920871db0592631  /tmp/ct.tar.zst
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c
+e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c
+2c0f3ebd81b6696077d38d235c84283ab7acf9cb801a4284452d5d397d6eb531  ntfs1033.patch
+af5202770b1c03c0010068a4db0dd71f54c054c0e8f88a66ae504b73b0457bf6  ntfsW.patch
+1bf75eeca986d4ff61eda89c4a4df0794051d599aaf2087e12ac9368db5c7d31  silent967.c
+32
+/dev/root       6.8G  5.5G  1.3G  82% /
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g strace
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ uname -r
++ mkntfs --version
++ head -1
++ dpkg -s ntfs-3g
++ grep -E '^Version'
++ mkdir -p /opt/t
++ cd /opt/t
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg fetch -q origin fix/1069-arm64-physmap-area fix/967-ntfs-chmod-same-mode
++ git -C hg checkout -q FETCH_HEAD
++ git -C hg checkout -q origin/fix/1069-arm64-physmap-area
++ git -C hg log -1 '--format=configure at %H %s'
++ git -C hg diff --stat a9954f424a HEAD -- src headers
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ sha256sum /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ mkdir -p /opt/t/out
++ cd /opt/t/out
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/src/ .
++ sha256sum atime933.c chmod967.c ntfs1033.patch ntfsW.patch silent967.c
++ nproc
++ df -h /opt
++ tail -1

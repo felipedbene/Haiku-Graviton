@@ -1,0 +1,304 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linuxref
+# instance: i-07d8642b647a22400   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: make the NTFS test image; Linux ntfs-3g reference (default options and #1033's options), ext4 control
+# start: 20261104T141617Z   end: 20261104T141629Z   rc: 0
+# script sha256: 1536f6c4fa1537027725ce4d7d409bab857f48d0b0e9ae856e89450b385a5e9d
+# ---- script ----
+# | # Linux reference for #967 on this Ubuntu builder: make the NTFS test image with mkntfs (256 MiB,
+# | # unpartitioned, as #1033), upload it; then run silent967, chmod967, atime933 and the coreutils
+# | # matrix on copies of it under ntfs-3g with DEFAULT options and with #1033's options
+# | # (uid=0,gid=0,fmask=0111,dmask=0, which match how Haiku presents NTFS); ext4 control with -s.
+# | set -x
+# | cd /opt/t/out || exit 1
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | for p in silent967 chmod967 atime933; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | sha256sum silent967.c chmod967.c atime933.c coreutils.sh
+# | rm -f ntfs.img && truncate -s 256M ntfs.img && mkntfs -F -Q -L NTFS967 ntfs.img > /dev/null || exit 1
+# | sha256sum ntfs.img; aws s3 cp --quiet ntfs.img s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/img/ntfs.img || exit 1
+# | dpkg -s ntfs-3g | grep -E "^(Package|Version)"; uname -r
+# | mkdir -p m
+# | run3g() {	# run3g <label> <ntfs-3g options or ->
+# | 	set +x
+# | 	echo "=================== ntfs-3g $1 ==================="
+# | 	cp ntfs.img l-$1.img && LD=$(losetup -f --show l-$1.img) || return 1
+# | 	if [ "$2" = - ]; then ntfs-3g $LD m; else ntfs-3g -o "$2" $LD m; fi || { losetup -d $LD; return 1; }
+# | 	grep " $PWD/m " /proc/mounts
+# | 	mkdir m/s967 m/m967 m/a933
+# | 	echo "--- silent967"; ./silent967 m/s967; echo "silent967 rc=$?"
+# | 	echo "--- chmod967"; ./chmod967 m/m967 | grep -vE "^PASS"; echo "chmod967 rc=${PIPESTATUS[0]}"
+# | 	echo "--- atime933"; ./atime933 m/a933 | grep -E "^FAIL|chown|chmod|SUMMARY"; echo "atime933 rc=${PIPESTATUS[0]}"
+# | 	echo "--- coreutils"; bash ./coreutils.sh $PWD/m
+# | 	echo "--- non-owner coreutils (setpriv uid/gid 1002)"
+# | 	echo x > m/no; stat -c "  %a %u:%g" m/no
+# | 	setpriv --reuid=1002 --regid=1002 --clear-groups chmod 0600 m/no; echo "uid1002 chmod 0600 rc=$?"; stat -c "  %a %u:%g" m/no
+# | 	setpriv --reuid=1002 --regid=1002 --clear-groups chown 1002 m/no; echo "uid1002 chown 1002 rc=$?"; stat -c "  %a %u:%g" m/no
+# | 	umount m; losetup -d $LD
+# | 	set -x
+# | }
+# | run3g default -
+# | run3g opts1033 uid=0,gid=0,fmask=0111,dmask=0
+# | set +x
+# | echo "=================== ext4 control ==================="
+# | rm -f e.img; truncate -s 256M e.img && mkfs.ext4 -q -F e.img && mount -o loop e.img m && mkdir m/s967 && chmod 777 m/s967
+# | ./silent967 -s m/s967 | tail -1; echo "silent967 -s ext4 rc=${PIPESTATUS[0]}"
+# | ./silent967 m/s967 | tail -1; echo "silent967 (no -s) ext4 rc=${PIPESTATUS[0]} (expected to fail: ext4 stores modes)"
+# | umount m
+# ---- raw output ----
+1bf75eeca986d4ff61eda89c4a4df0794051d599aaf2087e12ac9368db5c7d31  silent967.c
+e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c
+549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c
+0a36768ad77ad3c213e0bc2880037a5dde8d7bcbd5514633da416cd55f432b77  coreutils.sh
+fb7840e012e4e3f9fdf01d2b4fcf02b36604e1d6b8cb76720d30ac7c0b2a82b8  ntfs.img
+Package: ntfs-3g
+Version: 1:2022.10.3-5ubuntu1.1
+7.0.0-1016-aws
+=================== ntfs-3g default ===================
+--- silent967
+== m/s967
+PASS root    chmod(same)           -> ok       (expect ok    ) asked 000777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(same|S_IFREG)   -> ok       (expect ok    ) asked 100777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(other)          -> ok       (expect ok    ) asked 000775    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(0600)           -> ok       (expect ok    ) asked 000600    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    fchmod(0600)          -> ok       (expect ok    ) asked 000600    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    fchmodat(other)       -> ok       (expect ok    ) asked 000775    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(same|S_ISUID)   -> ok       (expect ok    ) asked 004777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL root    chmod(S_IFDIR|same)   -> ok       (expect refuse) asked 040777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    dir chmod(same)       -> ok       (expect ok    ) asked 000777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS root    dir chmod(other)      -> ok       (expect ok    ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+FAIL root    dir chmod(S_IFREG|..) -> ok       (expect refuse) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS root    chown(cur,cur)        -> ok       (expect ok    ) asked 0:0       mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(-1,-1)          -> ok       (expect ok    ) asked -1:-1     mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(1002,-1)        -> ok       (expect ok    ) asked 1002:-1   mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(-1,1002)        -> ok       (expect ok    ) asked -1:1002   mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(1002,1002)      -> ok       (expect ok    ) asked 1002:1002 mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    fchown(1002,1002)     -> ok       (expect ok    ) asked 1002:1002 mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    lchown(1002,-1)       -> ok       (expect ok    ) asked 1002:-1   mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    dir chown(1002,1002)  -> ok       (expect ok    ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+FAIL uid1002 chmod(same)           -> ok       (expect EPERM ) asked 000777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chmod(same|S_IFREG)   -> ok       (expect EPERM ) asked 100777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chmod(other)          -> ok       (expect EPERM ) asked 000775    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chmod(0600)           -> ok       (expect EPERM ) asked 000600    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 fchmod(0600)          -> ok       (expect EPERM ) asked 000600    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 fchmodat(other)       -> ok       (expect EPERM ) asked 000775    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chmod(same|S_ISUID)   -> ok       (expect EPERM ) asked 004777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chmod(S_IFDIR|same)   -> ok       (expect EPERM ) asked 040777    mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 dir chmod(same)       -> ok       (expect EPERM ) asked 000777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+FAIL uid1002 dir chmod(other)      -> ok       (expect EPERM ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+FAIL uid1002 dir chmod(S_IFREG|..) -> ok       (expect EPERM ) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+FAIL uid1002 chown(cur,cur)        -> ok       (expect EPERM ) asked 0:0       mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chown(-1,-1)          -> ok       (expect ok    ) asked -1:-1     mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chown(1002,-1)        -> ok       (expect EPERM ) asked 1002:-1   mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chown(-1,1002)        -> ok       (expect EPERM ) asked -1:1002   mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 chown(1002,1002)      -> ok       (expect EPERM ) asked 1002:1002 mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 fchown(1002,1002)     -> ok       (expect EPERM ) asked 1002:1002 mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 lchown(1002,-1)       -> ok       (expect EPERM ) asked 1002:-1   mode 100777->100777 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL uid1002 dir chown(1002,1002)  -> ok       (expect EPERM ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+SUMMARY cases=38 failures=20
+silent967 rc=20
+--- chmod967
+== m/m967
+FAIL root    chmod(other)         -> ok      (expect ok/ref) mode 100777->100777 (asked 000775)(BAD) size 1 mtime 1793801783
+FAIL root    chmod(same|S_ISUID)  -> ok      (expect ok/ref) mode 100777->100777 (asked 004777)(BAD) size 1 mtime 1793801783
+FAIL root    dir chmod(other)     -> ok      (expect ok/ref) mode 040777->040777 (asked 000775)(BAD) size 0 mtime 1793801783
+FAIL uid1002 chmod(same)          -> ok      (expect EPERM ) mode 100777->100777 (asked 000777) size 1 mtime 1793801783
+FAIL uid1002 chmod(same|S_IFMT)   -> ok      (expect EPERM ) mode 100777->100777 (asked 100777) size 1 mtime 1793801783
+FAIL uid1002 fchmod(same)         -> ok      (expect EPERM ) mode 100777->100777 (asked 000777) size 1 mtime 1793801783
+FAIL uid1002 fchmodat(same)       -> ok      (expect EPERM ) mode 100777->100777 (asked 000777) size 1 mtime 1793801783
+FAIL uid1002 chmod(other)         -> ok      (expect EPERM ) mode 100777->100777 (asked 000775)(BAD) size 1 mtime 1793801783
+FAIL uid1002 chmod(same|S_ISUID)  -> ok      (expect EPERM ) mode 100777->100777 (asked 004777)(BAD) size 1 mtime 1793801783
+FAIL uid1002 dir chmod(same)      -> ok      (expect EPERM ) mode 040777->040777 (asked 000777) size 0 mtime 1793801783
+FAIL uid1002 dir chmod(other)     -> ok      (expect EPERM ) mode 040777->040777 (asked 000775)(BAD) size 0 mtime 1793801783
+SUMMARY cases=16 failures=11 refused-by-fs=0
+chmod967 rc=11
+--- atime933
+PASS root      chmod(same mode)     -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL root      chmod(other mode)    -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777(BAD) uid 0
+FAIL root      chown(1002)          -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777 uid 0(BAD)
+FAIL writer    utimensat{NOW,OMIT}  -> ok      (expect EPERM ) atime 1793801783.603459400 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utimensat{OMIT,NOW}  -> ok      (expect EPERM ) atime 1000000000.000000000 mtime 1793801783.603763200 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utimensat{a,m}       -> ok      (expect EPERM ) atime 1234567890.500000000 mtime 1111111111.500000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utimensat{a,OMIT}    -> ok      (expect EPERM ) atime 1234567890.500000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utimensat{OMIT,m}    -> ok      (expect EPERM ) atime 1000000000.000000000 mtime 1111111111.500000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utimensat{NOW,m}     -> ok      (expect EPERM ) atime 1793801783.605129800 mtime 1111111111.500000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utimensat{a,NOW}     -> ok      (expect EPERM ) atime 1234567890.500000000 mtime 1793801783.605479600 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    futimens{a,OMIT}     -> ok      (expect EPERM ) atime 1234567890.500000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utimes{a,m}          -> ok      (expect EPERM ) atime 1234567890.500000000 mtime 1111111111.500000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    utime{a,m}           -> ok      (expect EPERM ) atime 1234567890.000000000 mtime 1111111111.000000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    chmod(same mode)     -> ok      (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777 uid 0
+FAIL writer    chmod(other mode)    -> ok      (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777(BAD) uid 0
+FAIL writer    chown(1002)          -> ok      (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0777 uid 0(BAD)
+SUMMARY cases=44 failures=15 errno-notes=0 unsupported=0
+atime933 rc=15
+--- coreutils
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+chmod 0600 rc=0
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+chmod 0666 rc=0
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+chmod u+x rc=0
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+install -m 0644 rc=0
+  -> /opt/t/out/m/cu967/inst644 mode=777 uid=0 gid=0 size=12
+  content ok
+install -m 0755 rc=0
+  -> /opt/t/out/m/cu967/inst755 mode=777 uid=0 gid=0 size=12
+install -d -m 0700 rc=0
+  -> /opt/t/out/m/cu967/instdir mode=777 uid=0 gid=0 size=0
+mkdir -m 0700 rc=0
+  -> /opt/t/out/m/cu967/d700 mode=777 uid=0 gid=0 size=0
+chown 1002 rc=0
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+chown 1002:1002 rc=0
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+chgrp 1002 rc=0
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+chown 0:0 rc=0
+  -> /opt/t/out/m/cu967/f mode=777 uid=0 gid=0 size=2
+cp -p (0644 source) rc=0
+  -> /opt/t/out/m/cu967/cpp mode=777 uid=0 gid=0 size=12
+  content ok
+tar xpf (0640, 1002:1002) rc=0
+  -> /opt/t/out/m/cu967/t/a mode=777 uid=0 gid=0 size=7
+  content ok
+--- non-owner coreutils (setpriv uid/gid 1002)
+  777 0:0
+uid1002 chmod 0600 rc=0
+  777 0:0
+uid1002 chown 1002 rc=0
+  777 0:0
+=================== ntfs-3g opts1033 ===================
+--- silent967
+== m/s967
+PASS root    chmod(same)           -> ok       (expect ok    ) asked 000666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(same|S_IFREG)   -> ok       (expect ok    ) asked 100666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(other)          -> ok       (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(0600)           -> ok       (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    fchmod(0600)          -> ok       (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    fchmodat(other)       -> ok       (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chmod(same|S_ISUID)   -> ok       (expect ok    ) asked 004666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+FAIL root    chmod(S_IFDIR|same)   -> ok       (expect refuse) asked 040666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    dir chmod(same)       -> ok       (expect ok    ) asked 000777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS root    dir chmod(other)      -> ok       (expect ok    ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+FAIL root    dir chmod(S_IFREG|..) -> ok       (expect refuse) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS root    chown(cur,cur)        -> ok       (expect ok    ) asked 0:0       mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(-1,-1)          -> ok       (expect ok    ) asked -1:-1     mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(1002,-1)        -> ok       (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(-1,1002)        -> ok       (expect ok    ) asked -1:1002   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    chown(1002,1002)      -> ok       (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    fchown(1002,1002)     -> ok       (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    lchown(1002,-1)       -> ok       (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS root    dir chown(1002,1002)  -> ok       (expect ok    ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS uid1002 chmod(same)           -> EPERM    (expect EPERM ) asked 000666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chmod(same|S_IFREG)   -> EPERM    (expect EPERM ) asked 100666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chmod(other)          -> EPERM    (expect EPERM ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chmod(0600)           -> EPERM    (expect EPERM ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 fchmod(0600)          -> EPERM    (expect EPERM ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 fchmodat(other)       -> EPERM    (expect EPERM ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chmod(same|S_ISUID)   -> EPERM    (expect EPERM ) asked 004666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chmod(S_IFDIR|same)   -> EPERM    (expect EPERM ) asked 040666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 dir chmod(same)       -> EPERM    (expect EPERM ) asked 000777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS uid1002 dir chmod(other)      -> EPERM    (expect EPERM ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS uid1002 dir chmod(S_IFREG|..) -> EPERM    (expect EPERM ) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+PASS uid1002 chown(cur,cur)        -> EPERM    (expect EPERM ) asked 0:0       mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chown(-1,-1)          -> ok       (expect ok    ) asked -1:-1     mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chown(1002,-1)        -> EPERM    (expect EPERM ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chown(-1,1002)        -> EPERM    (expect EPERM ) asked -1:1002   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 chown(1002,1002)      -> EPERM    (expect EPERM ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 fchown(1002,1002)     -> EPERM    (expect EPERM ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 lchown(1002,-1)       -> EPERM    (expect EPERM ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793801783 ctime same
+PASS uid1002 dir chown(1002,1002)  -> EPERM    (expect EPERM ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793801783 ctime same
+SUMMARY cases=38 failures=2
+silent967 rc=2
+--- chmod967
+== m/m967
+FAIL root    chmod(other)         -> ok      (expect ok/ref) mode 100666->100666 (asked 000664)(BAD) size 1 mtime 1793801783
+FAIL root    chmod(same|S_ISUID)  -> ok      (expect ok/ref) mode 100666->100666 (asked 004666)(BAD) size 1 mtime 1793801783
+FAIL root    dir chmod(other)     -> ok      (expect ok/ref) mode 040777->040777 (asked 000775)(BAD) size 0 mtime 1793801783
+SUMMARY cases=16 failures=3 refused-by-fs=0
+chmod967 rc=3
+--- atime933
+PASS root      chmod(same mode)     -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0666 uid 0
+FAIL root      chmod(other mode)    -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0666(BAD) uid 0
+FAIL root      chown(1002)          -> ok      (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0666 uid 0(BAD)
+PASS writer    chmod(same mode)     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0666 uid 0
+PASS writer    chmod(other mode)    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0666 uid 0
+PASS writer    chown(1002)          -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793801783 size 1 mode 0666 uid 0
+SUMMARY cases=44 failures=2 errno-notes=0 unsupported=0
+atime933 rc=2
+--- coreutils
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+chmod 0600 rc=0
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+chmod 0666 rc=0
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+chmod u+x rc=0
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+install -m 0644 rc=0
+  -> /opt/t/out/m/cu967/inst644 mode=666 uid=0 gid=0 size=12
+  content ok
+install -m 0755 rc=0
+  -> /opt/t/out/m/cu967/inst755 mode=666 uid=0 gid=0 size=12
+install -d -m 0700 rc=0
+  -> /opt/t/out/m/cu967/instdir mode=777 uid=0 gid=0 size=0
+mkdir -m 0700 rc=0
+  -> /opt/t/out/m/cu967/d700 mode=777 uid=0 gid=0 size=0
+chown 1002 rc=0
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+chown 1002:1002 rc=0
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+chgrp 1002 rc=0
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+chown 0:0 rc=0
+  -> /opt/t/out/m/cu967/f mode=666 uid=0 gid=0 size=2
+cp -p (0644 source) rc=0
+  -> /opt/t/out/m/cu967/cpp mode=666 uid=0 gid=0 size=12
+  content ok
+tar xpf (0640, 1002:1002) rc=0
+  -> /opt/t/out/m/cu967/t/a mode=666 uid=0 gid=0 size=7
+  content ok
+--- non-owner coreutils (setpriv uid/gid 1002)
+  666 0:0
+uid1002 chmod 0600 rc=1
+  666 0:0
+uid1002 chown 1002 rc=1
+  666 0:0
+=================== ext4 control ===================
+SUMMARY cases=38 failures=2
+silent967 -s ext4 rc=2
+SUMMARY cases=38 failures=11
+silent967 (no -s) ext4 rc=11 (expected to fail: ext4 stores modes)
++ cd /opt/t/out
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ for p in silent967 chmod967 atime933
++ gcc -O2 -Wall -o silent967 silent967.c
++ for p in silent967 chmod967 atime933
++ gcc -O2 -Wall -o chmod967 chmod967.c
++ for p in silent967 chmod967 atime933
++ gcc -O2 -Wall -o atime933 atime933.c
++ sha256sum silent967.c chmod967.c atime933.c coreutils.sh
++ rm -f ntfs.img
++ truncate -s 256M ntfs.img
++ mkntfs -F -Q -L NTFS967 ntfs.img
+ntfs.img is not a block device.
+mkntfs forced anyway.
+The sector size was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 512 bytes.
+The partition start sector was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 0.
+The number of sectors per track was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 0.
+The number of heads was not specified for ntfs.img and it could not be obtained automatically.  It has been set to 0.
+To boot from a device, Windows needs the 'partition start sector', the 'sectors per track' and the 'number of heads' to be set.
+Windows will not be able to boot from this device.
++ sha256sum ntfs.img
++ aws s3 cp --quiet ntfs.img s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/img/ntfs.img
++ dpkg -s ntfs-3g
++ grep -E '^(Package|Version)'
++ uname -r
++ mkdir -p m
++ run3g default -
++ set +x
++ run3g opts1033 uid=0,gid=0,fmask=0111,dmask=0
++ set +x
+chmod: changing permissions of 'm/no': Operation not permitted
+chown: changing ownership of 'm/no': Operation not permitted (os error 1)
++ set +x

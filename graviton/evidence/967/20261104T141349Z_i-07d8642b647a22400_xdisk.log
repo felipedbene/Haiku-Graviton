@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xdisk
+# instance: i-07d8642b647a22400   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: move the build tree onto the 150 GiB second volume
+# start: 20261104T141349Z   end: 20261104T141419Z   rc: 0
+# script sha256: 4f452115f040ebf4d1a23ce7511773fb0fbf5e30681dd3cd4550fd112cae5bbe
+# ---- script ----
+# | # The 150 GiB volume attached as a second disk (the launch's block-device name did not match
+# | # Ubuntu's root): format it and move /opt/t onto it, so the build has room.
+# | set -x
+# | mkfs.ext4 -q -F /dev/nvme1n1 && mkdir -p /mnt/w && mount /dev/nvme1n1 /mnt/w || exit 1
+# | mv /opt/t /mnt/w/t && ln -s /mnt/w/t /opt/t && ls -la /opt/ && df -h /mnt/w / | tail -2
+# ---- raw output ----
+total 8
+drwxr-xr-x  2 root root 4096 Nov  4 14:14 .
+drwxr-xr-x 19 root root 4096 Nov  4 14:09 ..
+lrwxrwxrwx  1 root root    8 Nov  4 14:14 t -> /mnt/w/t
+/dev/nvme1n1    147G  2.7G  137G   2% /mnt/w
+/dev/root       6.8G  2.9G  3.9G  43% /
++ mkfs.ext4 -q -F /dev/nvme1n1
++ mkdir -p /mnt/w
++ mount /dev/nvme1n1 /mnt/w
++ mv /opt/t /mnt/w/t
++ ln -s /mnt/w/t /opt/t
++ ls -la /opt/
++ df -h /mnt/w /
++ tail -2

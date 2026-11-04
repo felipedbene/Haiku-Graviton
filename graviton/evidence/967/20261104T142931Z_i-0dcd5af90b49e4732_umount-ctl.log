@@ -1,0 +1,54 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: umount-ctl
+# instance: i-0dcd5af90b49e4732   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: incidental: idle unmount on BFS vs NTFS diskimage volumes, forced unmount, syslog
+# start: 20261104T142931Z   end: 20261104T142948Z   rc: 0
+# script sha256: 8f1957bca974e114c7a12873dbe1e6c424d042dcae37b16aa60887b9e0cbc211
+# ---- script ----
+# | set -x
+# | cd /
+# | DB=$(diskimage list | awk '/bfs.img/ {print $3}'); DN=$(diskimage list | awk '/ntfs3.img/ {print $3}'); echo "$DB $DN"
+# | mkdir -p /bfsctl /ntfs3
+# | mount "$DB" /bfsctl; echo "bfs mount rc=$?"; unmount /bfsctl; echo "bfs idle unmount rc=$?"
+# | mount -t ntfs "$DN" /ntfs3; echo "ntfs mount rc=$?"; sleep 10; unmount /ntfs3; echo "ntfs unmount after 10s rc=$?"
+# | unmount -f /ntfs3; echo "ntfs forced unmount rc=$?"
+# | grep -iE "ntfs|still referenced|unmount" /var/log/syslog | tail -20
+# ---- raw output ----
+/dev/disk/virtual/files/5/raw /dev/disk/virtual/files/6/raw
+bfs mount rc=0
+bfs idle unmount rc=1
+ntfs mount rc=0
+ntfs unmount after 10s rc=0
+ntfs forced unmount rc=1
+KERN: add_partitions_for(0x000000007842a558, mountFS = no)
+KERN: add_partitions_for(fd = 0, mountFS = no)
+KERN: add_partitions_for(0x000000007842a558, mountFS = no)
+KERN: add_partitions_for(fd = 0, mountFS = no)
+KERN: fs_unmount(): inode 64 is still referenced
+KERN: fs_unmount(): inode 5 is still referenced
+KERN: fs_unmount(): inode 64 is still referenced
+KERN: fs_unmount(): inode 2189 is still referenced
++ cd /
+++ diskimage list
+++ awk '/bfs.img/ {print $3}'
++ DB=/dev/disk/virtual/files/5/raw
+++ diskimage list
+++ awk '/ntfs3.img/ {print $3}'
++ DN=/dev/disk/virtual/files/6/raw
++ echo '/dev/disk/virtual/files/5/raw /dev/disk/virtual/files/6/raw'
++ mkdir -p /bfsctl /ntfs3
++ mount /dev/disk/virtual/files/5/raw /bfsctl
++ echo 'bfs mount rc=0'
++ unmount /bfsctl
+unmount: unmounting failed: Device/File/Resource busy
++ echo 'bfs idle unmount rc=1'
++ mount -t ntfs /dev/disk/virtual/files/6/raw /ntfs3
++ echo 'ntfs mount rc=0'
++ sleep 10
++ unmount /ntfs3
++ echo 'ntfs unmount after 10s rc=0'
++ unmount -f /ntfs3
+unmount: unmounting failed: Invalid Argument
++ echo 'ntfs forced unmount rc=1'
++ grep -iE 'ntfs|still referenced|unmount' /var/log/syslog
++ tail -20

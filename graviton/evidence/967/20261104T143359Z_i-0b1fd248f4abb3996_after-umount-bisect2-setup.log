@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-umount-bisect2-setup
+# instance: i-0b1fd248f4abb3996   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: incidental: fresh copies e/f/g
+# start: 20261104T143359Z   end: 20261104T143419Z   rc: 0
+# script sha256: d3a6b390fb631ea6506e62f6f9bdd00bd75625ca166dbd28dc0bc2a2c54b3321
+# ---- script ----
+# | # Incidental, before arm: the same mkdir/file/rm/rmdir unmount check, on fresh copies; plus
+# | # mkdir alone and mkdir+rmdir alone.
+# | cd /boot/home/t967 || exit 1
+# | for x in e f g; do cp ntfs.img nb-$x.img && diskimage register /boot/home/t967/nb-$x.img > /dev/null; done
+# ---- raw output ----

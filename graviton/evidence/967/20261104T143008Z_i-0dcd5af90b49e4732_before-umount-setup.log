@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-umount-setup
+# instance: i-0dcd5af90b49e4732   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm: register a third image copy for the unmount check
+# start: 20261104T143008Z   end: 20261104T143020Z   rc: 0
+# script sha256: 6d854276f1d87348aee6e14e9c27bc33d9f167953f638956c295b1800169a9df
+# ---- script ----
+# | # Unmount check per arm: a third copy of the image, mount, silent967 + coreutils, wait 15 s
+# | # (an idle unmount right after mount is "busy" on BFS diskimages too: umount-ctl), unmount,
+# | # remount, re-stat, unmount.
+# | set -x
+# | cd /boot/home/t967 || exit 1
+# | [ -e ntfs3.img ] || { cp ntfs.img ntfs3.img && diskimage register /boot/home/t967/ntfs3.img; }
+# | diskimage list
+# ---- raw output ----
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t967/ntfs.img           /dev/disk/virtual/files/3/raw
+     4  /boot/home/t967/ntfs2.img          /dev/disk/virtual/files/4/raw
+     5  /boot/home/t967/bfs.img            /dev/disk/virtual/files/5/raw
+     6  /boot/home/t967/ntfs3.img          /dev/disk/virtual/files/6/raw
++ cd /boot/home/t967
++ '[' -e ntfs3.img ']'
++ diskimage list

@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: umount-bisect
+# instance: i-0b1fd248f4abb3996   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: incidental: which test leaves an NTFS vnode referenced (unmount busy)
+# start: 20261104T143217Z   end: 20261104T143330Z   rc: 0
+# script sha256: 434431da3d0f648ebbcad7fa795a2b5196b6658040677b38d1d4214866357d3f
+# ---- script ----
+# | cd /boot/home/t967 || exit 1
+# | dev() { diskimage list | awk "/nb-$1.img/ {print \$3}"; }
+# | try() {	# try <copy> <label> <command run inside the mount>
+# | 	mkdir -p /nb-$1; mount -t ntfs $(dev $1) /nb-$1 || { echo "$2: mount failed"; return; }
+# | 	(cd /boot/home/t967 && eval "$3") > /tmp/nb-$1.out 2>&1
+# | 	cd /; sleep 15; unmount /nb-$1; echo "$2: unmount rc=$?"; cd /boot/home/t967
+# | }
+# | try a "write one file, read it, stat it" 'echo x > /nb-a/f; cat /nb-a/f > /dev/null; stat /nb-a/f > /dev/null'
+# | try b "mkdir, file in it, rm, rmdir" 'mkdir /nb-b/d && echo x > /nb-b/d/f && rm /nb-b/d/f && rmdir /nb-b/d'
+# | try c "silent967 only" 'mkdir /nb-c/s && ./silent967 /nb-c/s | tail -1'
+# | try d "coreutils.sh only" 'bash ./coreutils.sh /nb-d'
+# | grep -E "still referenced" /var/log/syslog | tail -6
+# ---- raw output ----
+write one file, read it, stat it: unmount rc=0
+mkdir, file in it, rm, rmdir: unmount rc=1
+silent967 only: unmount rc=1
+coreutils.sh only: unmount rc=1
+KERN: fs_unmount(): inode 5 is still referenced
+KERN: fs_unmount(): inode 64 is still referenced
+KERN: fs_unmount(): inode 129 is still referenced
+KERN: fs_unmount(): inode 129 is still referenced
+KERN: fs_unmount(): inode 129 is still referenced
+KERN: fs_unmount(): inode 121 is still referenced
+unmount: unmounting failed: Device/File/Resource busy
+unmount: unmounting failed: Device/File/Resource busy
+unmount: unmounting failed: Device/File/Resource busy

@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: umount-ctl-setup
+# instance: i-0dcd5af90b49e4732   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: incidental: BFS and NTFS diskimage control images for the unmount-busy observation
+# start: 20261104T142858Z   end: 20261104T142930Z   rc: 0
+# script sha256: 576e2c0e8a1b898244667ba90db061bb98bb4677e858fb406193dfcad9c67723
+# ---- script ----
+# | # Incidental: unmount of an NTFS diskimage volume fails "busy" even right after mount, in both
+# | # arms. Control: the same with a BFS image on a diskimage device, and NTFS after a pause; syslog.
+# | set -x
+# | cd /boot/home/t967 || exit 1
+# | rm -f bfs.img; dd if=/dev/zero of=bfs.img bs=1M count=64 2>/dev/null; mkfs -t bfs -q bfs.img BFSCTL 2>&1 | tail -1
+# | cp ntfs.img ntfs3.img
+# | diskimage register /boot/home/t967/bfs.img; diskimage register /boot/home/t967/ntfs3.img; diskimage list
+# ---- raw output ----
+DiskDeviceJobQueue::Execute(): executing job: N8BPrivate13InitializeJobE
+Registered file as disk device "/dev/disk/virtual/files/5/raw" with ID 5.
+Registered file as disk device "/dev/disk/virtual/files/6/raw" with ID 6.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t967/ntfs.img           /dev/disk/virtual/files/3/raw
+     4  /boot/home/t967/ntfs2.img          /dev/disk/virtual/files/4/raw
+     5  /boot/home/t967/bfs.img            /dev/disk/virtual/files/5/raw
+     6  /boot/home/t967/ntfs3.img          /dev/disk/virtual/files/6/raw
++ cd /boot/home/t967
++ rm -f bfs.img
++ dd if=/dev/zero of=bfs.img bs=1M count=64
++ mkfs -t bfs -q bfs.img BFSCTL
++ tail -1
++ cp ntfs.img ntfs3.img
++ diskimage register /boot/home/t967/bfs.img
++ diskimage register /boot/home/t967/ntfs3.img
++ diskimage list
