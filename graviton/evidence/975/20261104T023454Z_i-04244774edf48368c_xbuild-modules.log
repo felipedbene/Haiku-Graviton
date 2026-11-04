@@ -1,0 +1,47 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T023454Z   end: 20261104T023529Z   rc: 0
+# script sha256: 0ced3bdb218cb81065e37cfdd8993f6ed0b33d87cf8618bfc34850479ecf56ba
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/975
+# | cd /opt/tw/hg/generated || exit 1
+# | T=objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f --detach origin/graviton || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/tw/$patch || return 1
+# | 		sha256sum /opt/tw/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/tw/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat | cat
+# | 	sleep 2
+# | 	rm -rf "$(dirname $T)"
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 tcp > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/tcp/' | head -20
+# | 	mkdir -p /opt/tw/out/$label
+# | 	cp $T /opt/tw/out/$label/tcp && sha256sum /opt/tw/out/$label/tcp | sed "s|/opt/tw/out/||"
+# | 	aws s3 cp --quiet /opt/tw/out/$label/tcp $OUT/mod/$label/tcp
+# | 	return $rc
+# | }
+# | git -C .. fetch -q --depth 80 origin graviton
+# | build trunk none
+# | build c975v1 975-v1.patch
+# ---- raw output ----
+JAM trunk head=a9954f42 patch=none rc=0 wall=13s failed=0 warnings=120
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  trunk/tcp
+b7a59d33c664266932ab16fbf56feb79212299a913abaebb680e548c020519df  /opt/tw/975-v1.patch
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp   | 99 ++++++++++++++++++++--
+ .../kernel/network/protocols/tcp/TCPEndpoint.h     |  5 ++
+ src/add-ons/kernel/network/protocols/tcp/tcp.h     | 13 +++
+ 3 files changed, 109 insertions(+), 8 deletions(-)
+JAM c975v1 head=a9954f42 patch=975-v1.patch rc=0 wall=6s failed=0 warnings=0
+c3a742beebe5fac30f8f126b6bbe25d6d02cb69b8cd1979da121cb925fad2017  c975v1/tcp

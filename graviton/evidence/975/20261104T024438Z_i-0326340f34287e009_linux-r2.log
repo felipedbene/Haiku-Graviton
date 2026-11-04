@@ -1,0 +1,313 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-r2
+# instance: i-0326340f34287e009   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T024438Z   end: 20261104T030724Z   rc: 0
+# script sha256: 2f4a455ce0e90a3984c34c7d42621ac690df099338aa3c87c85349922eab19ee
+# ---- script ----
+# | set -u
+# | P=10.128.5.190
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	NS="netstat -n -t"
+# | 	echo "--- non-packaged overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	echo "--- loaded tcp image"; listimage 1 | grep -E 'protocols/tcp'
+# | else
+# | 	NS="ss -tn"
+# | 	sysctl net.ipv4.tcp_retries2
+# | fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | for m in write read poll close recover zerowin; do
+# | 	./tcp975 $P 9751 9752 $m 1200 > out.$m 2>&1 &
+# | done
+# | sleep 5
+# | echo "--- connections to the peer, every 120 s"
+# | while [ -n "$(jobs -r)" ]; do
+# | 	echo "$(date -u +%H:%M:%SZ) $($NS | grep -c ':9751') connections to :9751"
+# | 	$NS | grep ':9751' | sed 's/^/    /'
+# | 	sleep 120
+# | done
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | for m in write read poll close recover zerowin; do echo "=== $m"; cat out.$m; done
+# | echo "--- 150 s later (past the 2MSL wait of a close()d endpoint)"
+# | sleep 150
+# | $NS | grep ':9751' | sed 's/^/    /'
+# | echo "$($NS | grep -c ':9751') connections to :9751 left"
+# | grep RESULT out.* | sed 's/^/SUMMARY /'
+# ---- raw output ----
+Linux ip-10-128-5-70 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+net.ipv4.tcp_retries2 = 15
+2ff2902ef73c86690d113edabebc6768ddd7b3a3a7711cca503936050078f2b7  tcp975
+start 2026-11-04T02:44:41Z
+--- connections to the peer, every 120 s
+02:44:46Z 6 connections to :9751
+    ESTAB      0      2631006   10.128.5.70:48260   10.128.5.190:9751       
+    ESTAB      0      1000      10.128.5.70:48262   10.128.5.190:9751       
+    ESTAB      0      1000      10.128.5.70:48274   10.128.5.190:9751       
+    FIN-WAIT-1 0      1001      10.128.5.70:48278   10.128.5.190:9751       
+    ESTAB      0      65536     10.128.5.70:48286   10.128.5.190:9751       
+    ESTAB      0      796863    10.128.5.70:48298   10.128.5.190:9751       
+02:46:46Z 5 connections to :9751
+    ESTAB 0      2631006   10.128.5.70:48260 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48262 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48274 10.128.5.190:9751       
+    ESTAB 0      65536     10.128.5.70:48286 10.128.5.190:9751       
+    ESTAB 0      796863    10.128.5.70:48298 10.128.5.190:9751       
+02:48:46Z 5 connections to :9751
+    ESTAB 0      2631006   10.128.5.70:48260 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48262 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48274 10.128.5.190:9751       
+    ESTAB 0      65536     10.128.5.70:48286 10.128.5.190:9751       
+    ESTAB 0      796863    10.128.5.70:48298 10.128.5.190:9751       
+02:50:46Z 5 connections to :9751
+    ESTAB 0      2631006   10.128.5.70:48260  10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48262  10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48274  10.128.5.190:9751       
+    ESTAB 0      65536     10.128.5.70:48286  10.128.5.190:9751       
+    ESTAB 0      796863    10.128.5.70:48298  10.128.5.190:9751       
+02:52:46Z 5 connections to :9751
+    ESTAB 0      2631006   10.128.5.70:48260 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48262 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48274 10.128.5.190:9751       
+    ESTAB 0      65536     10.128.5.70:48286 10.128.5.190:9751       
+    ESTAB 0      796863    10.128.5.70:48298 10.128.5.190:9751       
+02:54:46Z 5 connections to :9751
+    ESTAB 0      2631006   10.128.5.70:48260  10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48262  10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48274  10.128.5.190:9751       
+    ESTAB 0      65536     10.128.5.70:48286  10.128.5.190:9751       
+    ESTAB 0      796863    10.128.5.70:48298  10.128.5.190:9751       
+02:56:46Z 5 connections to :9751
+    ESTAB 0      2631006   10.128.5.70:48260 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48262 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48274 10.128.5.190:9751       
+    ESTAB 0      65536     10.128.5.70:48286 10.128.5.190:9751       
+    ESTAB 0      796863    10.128.5.70:48298 10.128.5.190:9751       
+02:58:46Z 5 connections to :9751
+    ESTAB 0      2631006   10.128.5.70:48260 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48262 10.128.5.190:9751       
+    ESTAB 0      1000      10.128.5.70:48274 10.128.5.190:9751       
+    ESTAB 0      65536     10.128.5.70:48286 10.128.5.190:9751       
+    ESTAB 0      796863    10.128.5.70:48298 10.128.5.190:9751       
+03:00:46Z 2 connections to :9751
+    ESTAB 0      65536    10.128.5.70:48286   10.128.5.190:9751       
+    ESTAB 0      796863   10.128.5.70:48298   10.128.5.190:9751       
+03:02:46Z 1 connections to :9751
+    ESTAB 0      1114112   10.128.5.70:48286 10.128.5.190:9751       
+end 2026-11-04T03:04:46Z
+=== write
+  [02:44:41Z write] connected from port 
+  local port 48260
+  [02:44:41Z write] control: DROP 48260
+RESULT write PASS send() failed with ETIMEDOUT after 950.5 s
+=== read
+  [02:44:41Z read] connected from port 
+  local port 48262
+  [02:44:41Z read] control: DROP 48262
+RESULT read PASS recv() failed with ETIMEDOUT after 950.5 s
+=== poll
+  [02:44:41Z poll] connected from port 
+  local port 48274
+  [02:44:41Z poll] control: DROP 48274
+  poll revents 0x19 IN ERR HUP, SO_ERROR 110 (Connection timed out), then recv() 0 (Success)
+RESULT poll PASS poll() woke after 950.5 s with SO_ERROR ETIMEDOUT
+=== close
+  [02:44:41Z close] connected from port 
+  local port 48278
+  [02:44:41Z close] control: DROP 48278
+RESULT close PASS close() of a black-holed connection returned 0
+=== recover
+  [02:44:41Z recover] connected from port 
+  local port 48286
+  [02:44:41Z recover] control: COUNT 48286
+  [02:44:41Z recover] control: COUNT 48286
+  [02:44:42Z recover] control: COUNT 48286
+  [02:44:42Z recover] control: DROP 48286
+  [02:53:02Z recover] control: UNDROP 48286
+  [02:53:02Z recover] control: COUNT 48286
+  [02:53:02Z recover] control: COUNT 48286
+  [02:53:03Z recover] control: COUNT 48286
+  [02:53:04Z recover] control: COUNT 48286
+  [02:53:05Z recover] control: COUNT 48286
+  [02:53:06Z recover] control: COUNT 48286
+  [02:53:07Z recover] control: COUNT 48286
+  [02:53:08Z recover] control: COUNT 48286
+  [02:53:09Z recover] control: COUNT 48286
+  [02:53:10Z recover] control: COUNT 48286
+  [02:53:11Z recover] control: COUNT 48286
+  [02:53:12Z recover] control: COUNT 48286
+  [02:53:13Z recover] control: COUNT 48286
+  [02:53:14Z recover] control: COUNT 48286
+  [02:53:15Z recover] control: COUNT 48286
+  [02:53:16Z recover] control: COUNT 48286
+  [02:53:17Z recover] control: COUNT 48286
+  [02:53:18Z recover] control: COUNT 48286
+  [02:53:19Z recover] control: COUNT 48286
+  [02:53:20Z recover] control: COUNT 48286
+  [02:53:21Z recover] control: COUNT 48286
+  [02:53:22Z recover] control: COUNT 48286
+  [02:53:23Z recover] control: COUNT 48286
+  [02:53:24Z recover] control: COUNT 48286
+  [02:53:25Z recover] control: COUNT 48286
+  [02:53:26Z recover] control: COUNT 48286
+  [02:53:27Z recover] control: COUNT 48286
+  [02:53:28Z recover] control: COUNT 48286
+  [02:53:29Z recover] control: COUNT 48286
+  [02:53:30Z recover] control: COUNT 48286
+  [02:53:31Z recover] control: COUNT 48286
+  [02:53:32Z recover] control: COUNT 48286
+  [02:53:33Z recover] control: COUNT 48286
+  [02:53:34Z recover] control: COUNT 48286
+  [02:53:35Z recover] control: COUNT 48286
+  [02:53:36Z recover] control: COUNT 48286
+  [02:53:37Z recover] control: COUNT 48286
+  [02:53:38Z recover] control: COUNT 48286
+  [02:53:39Z recover] control: COUNT 48286
+  [02:53:40Z recover] control: COUNT 48286
+  [02:53:41Z recover] control: COUNT 48286
+  [02:53:42Z recover] control: COUNT 48286
+  [02:53:43Z recover] control: COUNT 48286
+  [02:53:44Z recover] control: COUNT 48286
+  [02:53:45Z recover] control: COUNT 48286
+  [02:53:46Z recover] control: COUNT 48286
+  [02:53:47Z recover] control: COUNT 48286
+  [02:53:48Z recover] control: COUNT 48286
+  [02:53:49Z recover] control: COUNT 48286
+  [02:53:50Z recover] control: COUNT 48286
+  [02:53:51Z recover] control: COUNT 48286
+  [02:53:52Z recover] control: COUNT 48286
+  [02:53:53Z recover] control: COUNT 48286
+  [02:53:54Z recover] control: COUNT 48286
+  [02:53:55Z recover] control: COUNT 48286
+  [02:53:56Z recover] control: COUNT 48286
+  [02:53:57Z recover] control: COUNT 48286
+  [02:53:58Z recover] control: COUNT 48286
+  [02:53:59Z recover] control: COUNT 48286
+  [02:54:00Z recover] control: COUNT 48286
+  [02:54:01Z recover] control: COUNT 48286
+  [02:54:02Z recover] control: COUNT 48286
+  [02:54:03Z recover] control: COUNT 48286
+  [02:54:04Z recover] control: COUNT 48286
+  [02:54:05Z recover] control: COUNT 48286
+  [02:54:06Z recover] control: COUNT 48286
+  [02:54:07Z recover] control: COUNT 48286
+  [02:54:08Z recover] control: COUNT 48286
+  [02:54:09Z recover] control: COUNT 48286
+  [02:54:10Z recover] control: COUNT 48286
+  [02:54:11Z recover] control: COUNT 48286
+  [02:54:12Z recover] control: COUNT 48286
+  [02:54:13Z recover] control: COUNT 48286
+  [02:54:14Z recover] control: COUNT 48286
+  [02:54:15Z recover] control: COUNT 48286
+  [02:54:16Z recover] control: COUNT 48286
+  [02:54:17Z recover] control: COUNT 48286
+  [02:54:18Z recover] control: COUNT 48286
+  [02:54:19Z recover] control: COUNT 48286
+  [02:54:20Z recover] control: COUNT 48286
+  [02:54:21Z recover] control: COUNT 48286
+  [02:54:22Z recover] control: COUNT 48286
+  [02:54:23Z recover] control: COUNT 48286
+  [02:54:23Z recover] control: DROP 48286
+  [03:02:43Z recover] control: UNDROP 48286
+  [03:02:43Z recover] control: COUNT 48286
+  [03:02:43Z recover] control: COUNT 48286
+  [03:02:44Z recover] control: COUNT 48286
+  [03:02:45Z recover] control: COUNT 48286
+  [03:02:46Z recover] control: COUNT 48286
+  [03:02:47Z recover] control: COUNT 48286
+  [03:02:48Z recover] control: COUNT 48286
+  [03:02:49Z recover] control: COUNT 48286
+  [03:02:50Z recover] control: COUNT 48286
+  [03:02:51Z recover] control: COUNT 48286
+  [03:02:52Z recover] control: COUNT 48286
+  [03:02:53Z recover] control: COUNT 48286
+  [03:02:54Z recover] control: COUNT 48286
+  [03:02:55Z recover] control: COUNT 48286
+  [03:02:56Z recover] control: COUNT 48286
+  [03:02:57Z recover] control: COUNT 48286
+  [03:02:58Z recover] control: COUNT 48286
+  [03:02:59Z recover] control: COUNT 48286
+  [03:03:00Z recover] control: COUNT 48286
+  [03:03:01Z recover] control: COUNT 48286
+  [03:03:02Z recover] control: COUNT 48286
+  [03:03:03Z recover] control: COUNT 48286
+  [03:03:04Z recover] control: COUNT 48286
+  [03:03:05Z recover] control: COUNT 48286
+  [03:03:06Z recover] control: COUNT 48286
+  [03:03:07Z recover] control: COUNT 48286
+  [03:03:08Z recover] control: COUNT 48286
+  [03:03:09Z recover] control: COUNT 48286
+  [03:03:10Z recover] control: COUNT 48286
+  [03:03:11Z recover] control: COUNT 48286
+  [03:03:12Z recover] control: COUNT 48286
+  [03:03:13Z recover] control: COUNT 48286
+  [03:03:14Z recover] control: COUNT 48286
+  [03:03:15Z recover] control: COUNT 48286
+  [03:03:16Z recover] control: COUNT 48286
+  [03:03:17Z recover] control: COUNT 48286
+  [03:03:18Z recover] control: COUNT 48286
+  [03:03:19Z recover] control: COUNT 48286
+  [03:03:20Z recover] control: COUNT 48286
+  [03:03:21Z recover] control: COUNT 48286
+  [03:03:22Z recover] control: COUNT 48286
+  [03:03:23Z recover] control: COUNT 48286
+  [03:03:24Z recover] control: COUNT 48286
+  [03:03:25Z recover] control: COUNT 48286
+  [03:03:26Z recover] control: COUNT 48286
+  [03:03:27Z recover] control: COUNT 48286
+  [03:03:28Z recover] control: COUNT 48286
+  [03:03:29Z recover] control: COUNT 48286
+  [03:03:30Z recover] control: COUNT 48286
+  [03:03:31Z recover] control: COUNT 48286
+  [03:03:32Z recover] control: COUNT 48286
+  [03:03:33Z recover] control: COUNT 48286
+  [03:03:34Z recover] control: COUNT 48286
+  [03:03:35Z recover] control: COUNT 48286
+  [03:03:36Z recover] control: COUNT 48286
+  [03:03:37Z recover] control: COUNT 48286
+  [03:03:38Z recover] control: COUNT 48286
+  [03:03:39Z recover] control: COUNT 48286
+  [03:03:40Z recover] control: COUNT 48286
+  [03:03:41Z recover] control: COUNT 48286
+  [03:03:42Z recover] control: COUNT 48286
+  [03:03:43Z recover] control: COUNT 48286
+  [03:03:44Z recover] control: COUNT 48286
+  [03:03:45Z recover] control: COUNT 48286
+  [03:03:46Z recover] control: COUNT 48286
+  [03:03:47Z recover] control: COUNT 48286
+  [03:03:48Z recover] control: COUNT 48286
+  [03:03:49Z recover] control: COUNT 48286
+  [03:03:50Z recover] control: COUNT 48286
+  [03:03:51Z recover] control: COUNT 48286
+  [03:03:52Z recover] control: COUNT 48286
+  [03:03:53Z recover] control: COUNT 48286
+  [03:03:54Z recover] control: COUNT 48286
+  [03:03:55Z recover] control: COUNT 48286
+  [03:03:56Z recover] control: COUNT 48286
+  [03:03:57Z recover] control: COUNT 48286
+  [03:03:58Z recover] control: COUNT 48286
+  [03:03:59Z recover] control: COUNT 48286
+  [03:04:00Z recover] control: COUNT 48286
+  [03:04:01Z recover] control: COUNT 48286
+  [03:04:02Z recover] control: COUNT 48286
+  [03:04:03Z recover] control: COUNT 48286
+  [03:04:04Z recover] control: COUNT 48286
+  [03:04:05Z recover] control: COUNT 48286
+RESULT recover PASS survived 2 x 500 s black-holes (1163 s in all), data delivered after each
+=== zerowin
+  [02:44:41Z zerowin] connected from port 
+  local port 48298
+  [02:44:41Z zerowin] control: STOPREAD 48298 1000
+  [03:01:21Z zerowin] control: COUNT 48298
+  [03:01:22Z zerowin] control: COUNT 48298
+RESULT zerowin PASS 64 MiB delivered across a 1001 s closed window, SO_ERROR 0
+--- 150 s later (past the 2MSL wait of a close()d endpoint)
+0 connections to :9751 left
+SUMMARY out.close:RESULT close PASS close() of a black-holed connection returned 0
+SUMMARY out.poll:RESULT poll PASS poll() woke after 950.5 s with SO_ERROR ETIMEDOUT
+SUMMARY out.read:RESULT read PASS recv() failed with ETIMEDOUT after 950.5 s
+SUMMARY out.recover:RESULT recover PASS survived 2 x 500 s black-holes (1163 s in all), data delivered after each
+SUMMARY out.write:RESULT write PASS send() failed with ETIMEDOUT after 950.5 s
+SUMMARY out.zerowin:RESULT zerowin PASS 64 MiB delivered across a 1001 s closed window, SO_ERROR 0

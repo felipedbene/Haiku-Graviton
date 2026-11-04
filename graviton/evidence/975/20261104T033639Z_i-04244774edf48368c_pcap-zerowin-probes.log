@@ -1,0 +1,38 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pcap-zerowin-probes
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T033639Z   end: 20261104T033651Z   rc: 0
+# script sha256: b23b6d3653bf84118a51e99a3c3d33f24e50c61a01ae42ccfe6986cdc0a4a532
+# ---- script ----
+# | cd /opt/t975
+# | # The zerowin connection of each arm in run 1: the peer stops reading for
+# | # 1000 s, so its window closes while it stays alive. What does each client
+# | # send into the closed window, and does the peer answer it?
+# | for c in "after-v1 10.128.7.207 41598" "before 10.128.5.111 42930" "linux 10.128.5.70 48298"; do
+# | 	set -- $c
+# | 	tcpdump -r t975-run1.pcap -nn -tttt "tcp port $3" 2>/dev/null | cat > zw-$1.txt
+# | 	echo "=== zerowin $1 ($2:$3)"
+# | 	echo "  peer segments advertising win 0: $(grep "9751 > $2.$3" zw-$1.txt | grep -c 'win 0,')"
+# | 	echo "  02:47:00-03:01:00, window closed: $(awk '$2 >= "02:47:00" && $2 <= "03:01:00"' zw-$1.txt | grep -c "$2.$3 >") segments from $1, $(awk '$2 >= "02:47:00" && $2 <= "03:01:00"' zw-$1.txt | grep -c "9751 > $2.$3") from the peer"
+# | 	echo "  --- sample 02:48:00-02:50:00"
+# | 	awk '$2 >= "02:48:00" && $2 <= "02:50:00"' zw-$1.txt | head -6 | cut -c1-170
+# | done
+# ---- raw output ----
+=== zerowin after-v1 (10.128.7.207:41598)
+  peer segments advertising win 0: 1
+  02:47:00-03:01:00, window closed: 14 segments from after-v1, 0 from the peer
+  --- sample 02:48:00-02:50:00
+2026-11-04 02:48:35.395896 ens5  In  IP 10.128.7.207.41598 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 241029 ecr 1559963755], length 0
+2026-11-04 02:49:36.397624 ens5  In  IP 10.128.7.207.41598 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 302029 ecr 1559963755], length 0
+=== zerowin before (10.128.5.111:42930)
+  peer segments advertising win 0: 1
+  02:47:00-03:01:00, window closed: 14 segments from before, 0 from the peer
+  --- sample 02:48:00-02:50:00
+2026-11-04 02:48:37.919721 ens5  In  IP 10.128.5.111.42930 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 1112821 ecr 3790040116], length 0
+2026-11-04 02:49:38.918889 ens5  In  IP 10.128.5.111.42930 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 1173821 ecr 3790040116], length 0
+=== zerowin linux (10.128.5.70:48298)
+  peer segments advertising win 0: 16
+  02:47:00-03:01:00, window closed: 7 segments from linux, 7 from the peer
+  --- sample 02:48:00-02:50:00
+2026-11-04 02:48:14.933131 ens5  In  IP 10.128.5.70.48298 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1233568257 ecr 4104010854], length 0
+2026-11-04 02:48:14.933146 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.48298: Flags [.], ack 115936, win 0, options [nop,nop,TS val 4104117350 ecr 1233355249], length 0

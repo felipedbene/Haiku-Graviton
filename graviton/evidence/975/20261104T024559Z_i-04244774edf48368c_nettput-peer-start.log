@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: nettput-peer-start
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T024559Z   end: 20261104T024610Z   rc: 0
+# script sha256: 7f416c91b27ca54ba6e60e68c2c97926f328d58e765c6a234be95966dca5f5be
+# ---- script ----
+# | export HOME=/root
+# | cd /opt/t975
+# | aws s3 cp --quiet s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/C/975/src/nettput-peer.py nettput-peer.py
+# | sha256sum nettput-peer.py
+# | pkill -f 'nettput-peer.py -p 9753'; sleep 1
+# | nohup python3 -I /opt/t975/nettput-peer.py -p 9753 > /opt/t975/nettput-peer.log 2>&1 &
+# | sleep 2; ss -ltnp | grep 9753; echo NETTPUT-PEER-UP
+# ---- raw output ----
+aabbc0fcfe26216f89ad7f9a36e42986d1e56bccbdbfb4e1f2bc494652bdaf62  nettput-peer.py
+LISTEN 0      64           0.0.0.0:9753      0.0.0.0:*    users:(("python3",pid=8513,fd=3))        
+NETTPUT-PEER-UP
