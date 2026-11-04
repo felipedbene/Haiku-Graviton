@@ -17,6 +17,7 @@
  *
  * Set the interface up first:  ifconfig tap/0 up
  * usage: down1078 [cycles]   (default 300; run as root)
+ *        down1078 remove     a capture must end when tap/0 is deleted (ifconfig -d)
  */
 
 #include <sys/types.h>
@@ -164,9 +165,40 @@ read_one(int fd, int* failed)
 }
 
 
+/* "remove": a capture must end when its interface is removed. */
+static int
+remove_mode()
+{
+	pthread_t thread;
+	pthread_create(&thread, NULL, injector, NULL);
+	int capture = socket(AF_LINK, SOCK_DGRAM, 0);
+	struct ifreq ifr;
+	tap_request(&ifr);
+	int r = ioctl(capture, SIOCSPACKETCAP, &ifr, sizeof(ifr));
+	int failed;
+	int frame = read_one(capture, &failed);
+	sStop = 1;
+	pthread_join(thread, NULL);
+	int rc = system("ifconfig -d tap/0");
+	double end = now() + 3.0;
+	failed = 0;
+	while (!failed && now() < end)
+		read_one(capture, &failed);
+	int pass = r == 0 && frame && failed;
+	printf("%-12s %s  capture = %d, a frame before = %d, ifconfig -d tap/0"
+		" = %d, capture ended within 3 s = %d\n", "remove", pass ? "PASS"
+		: "FAIL", r, frame, rc, failed);
+	printf("RESULT failures=%d\n", !pass);
+	return !pass;
+}
+
+
 int
 main(int argc, char** argv)
 {
+	if (argc > 1 && strcmp(argv[1], "remove") == 0)
+		return remove_mode();
+
 	long cycles = argc > 1 ? atol(argv[1]) : 300;
 	int control = socket(AF_INET, SOCK_DGRAM, 0);
 
