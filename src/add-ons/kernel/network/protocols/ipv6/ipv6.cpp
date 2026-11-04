@@ -629,9 +629,9 @@ FragmentPacket::Reassemble(net_buffer* to)
 	waiting for sFragmentLock. The packet must then not be deleted, but handed
 	to the hook with Orphan().
 
-	set_timer(-1), which the destructor calls, is not enough: it cancels a
-	scheduled timer only, and the timer may have been scheduled again by
-	AddFragment() while the hook that already fired was waiting for the lock.
+	set_timer(-1), which the destructor calls, is not enough: it only takes a
+	timer off the list of scheduled ones, and does not wait for a hook that
+	has already fired and is waiting for the lock.
 	wait_for_timer() cannot be used either, as the hook needs sFragmentLock.
 */
 bool
