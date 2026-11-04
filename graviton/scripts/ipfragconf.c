@@ -29,7 +29,14 @@
  *                       partly over it: IPv6 only (RFC 5722), reported as
  *                       INFO for IPv4, where either outcome is allowed;
  *              short total length (IPv4): a header length of 60 with a
- *                       total length of 20.
+ *                       total length of 20;
+ *              front (IPv6): [8,1008) M=1, then [0,16) M=1 overlapping its
+ *                       start (RFC 5722), then the last fragment.
+ *            Must be delivered (IPv6), as on Linux: a fragment wholly inside
+ *            held contiguous data, within one fragment or across two, is a
+ *            duplicate and is dropped on its own; and the same
+ *            identification resent cleanly after an overlap abandoned it
+ *            (no tombstone is kept, nor on Linux).
  *            "last fragment twice, then the middle" must be delivered.
  *            The bytes of "past" and "short" are chosen so that joining the
  *            pieces back to back gives a valid UDP datagram, so a receiver
@@ -582,6 +589,32 @@ crafted_rows(int family)
 		{ 1000, 16, 1000, 0 } };
 	crafted(family, "last fragment overlapping held data", 1016, lastOverlaps,
 		2, family == AF_INET6 ? kDrop : kEither);
+
+	if (family == AF_INET6) {
+		// RFC 5722, as Linux reads it: a fragment wholly inside contiguous
+		// data already held is a duplicate and is dropped on its own, even
+		// across two received fragments; one that overlaps held data and
+		// also reaches past it abandons the datagram
+		const struct piece inside[] = { { 0, 1008, 0, 1 }, { 8, 8, 8, 1 },
+			{ 1008, 8, 1008, 0 } };
+		crafted(family, "fragment inside a held fragment, then the last",
+			1016, inside, 3, kDeliver);
+		const struct piece across[] = { { 0, 504, 0, 1 },
+			{ 504, 504, 504, 1 }, { 496, 16, 496, 1 }, { 1008, 8, 1008, 0 } };
+		crafted(family, "fragment inside held data across two fragments",
+			1016, across, 4, kDeliver);
+		const struct piece front[] = { { 8, 1000, 8, 1 }, { 0, 16, 0, 1 },
+			{ 1008, 8, 1008, 0 } };
+		crafted(family, "fragment overlapping the start of held data", 1016,
+			front, 3, kDrop);
+
+		// The same identification sent again, cleanly, after an overlap
+		// abandoned it: delivered, as no tombstone is kept (nor on Linux).
+		const struct piece again[] = { { 0, 1008, 0, 1 }, { 1000, 16, 1000, 0 },
+			{ 0, 1008, 0, 1 }, { 1008, 8, 1008, 0 } };
+		crafted(family, "resent cleanly after an abandoning overlap", 1016,
+			again, 4, kDeliver);
+	}
 
 	if (family == AF_INET)
 		short_total_length_row();
