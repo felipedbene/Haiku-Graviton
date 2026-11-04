@@ -1487,16 +1487,16 @@ get_interface_for_device(net_domain* domain, uint32 index)
 
 /*!	Returns whether \a linkAddress names \a interface. The name in sdl_data
 	is sdl_nlen bytes long and not terminated: the link address follows it
-	directly.
+	directly. All sdl_nlen bytes must match, so a NUL inside them cannot end
+	the name early.
 */
 static bool
 link_name_matches(const Interface* interface, const sockaddr_dl& linkAddress)
 {
 	size_t length = linkAddress.sdl_nlen;
-	return length > 0 && length < sizeof(interface->name)
-		&& strncmp(interface->name, (const char*)linkAddress.sdl_data,
-			length) == 0
-		&& interface->name[length] == '\0';
+	return length > 0
+		&& strnlen(interface->name, sizeof(interface->name)) == length
+		&& memcmp(interface->name, linkAddress.sdl_data, length) == 0;
 }
 
 
