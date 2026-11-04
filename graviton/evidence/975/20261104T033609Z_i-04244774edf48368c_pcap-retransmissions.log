@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pcap-retransmissions
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T033609Z   end: 20261104T033620Z   rc: 0
+# script sha256: 1b51017ae967db7e15833d38bb33c2879f94dfc97d7ab743042bcb6dddb10414
+# ---- script ----
+# | cd /opt/t975
+# | kill -INT $(pgrep -f 't975-run2.pcap'); sleep 2; ls -l *.pcap
+# | # The read-mode connection of each arm: one 1000-byte request sent into the
+# | # black-hole, so every later segment from the client is a retransmission.
+# | for c in "linux t975-run1.pcap 10.128.5.70 48262" "before t975-run1.pcap 10.128.5.111 42869" "after-v2 t975-run2.pcap 10.128.7.228 41253"; do
+# | 	set -- $c
+# | 	tcpdump -r $2 -nn -ttt "src host $3 and src port $4 and tcp[tcpflags] & tcp-syn == 0" 2>/dev/null | cat > rt-$1.txt
+# | 	n=$(grep -c 'length 1000' rt-$1.txt)
+# | 	echo "=== $1 ($3:$4): $n transmissions of the 1000-byte request (first + retransmissions), then: $(grep -vc 'length 1000' rt-$1.txt) other segments"
+# | 	echo "  gaps between them (s):" $(grep 'length 1000' rt-$1.txt | awk '{split($1,a,":"); printf "%.1f ", a[1]*3600+a[2]*60+a[3]}')
+# | 	tcpdump -r $2 -nn -tttt "host $3 and port $4" 2>/dev/null | grep 'length 1000' | sed -n '1p;$p' | cut -c1-150
+# | done
+# ---- raw output ----
+-rw-r--r-- 1 tcpdump tcpdump 1867928 Nov  4 03:09 t975-run1.pcap
+-rw-r--r-- 1 tcpdump tcpdump  565496 Nov  4 03:31 t975-run2.pcap
+=== linux (10.128.5.70:48262): 17 transmissions of the 1000-byte request (first + retransmissions), then: 1 other segments
+  gaps between them (s): 0.0 0.2 0.2 0.4 0.9 1.7 3.3 6.5 13.3 26.1 54.3 106.5 122.9 122.9 122.9 122.9 122.9
+2026-11-04 02:44:41.665881 ens5  In  IP 10.128.5.70.48262 > 10.128.5.190.9751: Flags [P.], seq 1:1001, ack 1, win 62, options [nop,nop,TS val 39020820
+2026-11-04 02:58:29.333110 ens5  In  IP 10.128.5.70.48262 > 10.128.5.190.9751: Flags [P.], seq 1:1001, ack 1, win 62, options [nop,nop,TS val 39029097
+=== before (10.128.5.111:42869): 27 transmissions of the 1000-byte request (first + retransmissions), then: 2 other segments
+  gaps between them (s): 0.0 1.0 2.0 4.0 8.0 16.0 32.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 3.0 60.0
+2026-11-04 02:44:42.633761 ens5  In  IP 10.128.5.111.42869 > 10.128.5.190.9751: Flags [P.], seq 1:1001, ack 1, win 255, options [nop,nop,TS val 877532
+2026-11-04 03:05:45.616105 ens5  In  IP 10.128.5.111.42869 > 10.128.5.190.9751: Flags [FP.], seq 1:1001, ack 1, win 255, options [nop,nop,TS val 21405
+=== after-v2 (10.128.7.228:41253): 21 transmissions of the 1000-byte request (first + retransmissions), then: 1 other segments
+  gaps between them (s): 0.0 1.0 2.0 4.0 8.0 16.0 32.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0 60.0
+2026-11-04 03:14:23.300947 ens5  In  IP 10.128.7.228.41253 > 10.128.5.190.9751: Flags [P.], seq 1:1001, ack 1, win 255, options [nop,nop,TS val 24738 
+2026-11-04 03:29:26.324688 ens5  In  IP 10.128.7.228.41253 > 10.128.5.190.9751: Flags [P.], seq 1:1001, ack 1, win 255, options [nop,nop,TS val 927738

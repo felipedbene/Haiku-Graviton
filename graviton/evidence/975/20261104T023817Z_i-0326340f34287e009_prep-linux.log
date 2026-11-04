@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: prep-linux
+# instance: i-0326340f34287e009   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T023817Z   end: 20261104T023830Z   rc: 0
+# script sha256: 59cf243775e900d417cdcb18704bf87a8ec911ec23b9ef5ccf06bb3d67e05d70
+# ---- script ----
+# | export HOME=/root DEBIAN_FRONTEND=noninteractive
+# | command -v gcc || apt-get install -y -qq gcc > /dev/null 2>&1; gcc --version | head -1
+# | mkdir -p /opt/t975 && cd /opt/t975
+# | curl -sSf -o tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/975/src/tcp975.c?<PRESIGNED>' || exit 4
+# | echo 'bac6dfa02df74f9d64cb56de5f870a44b1b879de6c337c69ebbe9dddd155dcb4  tcp975.c' | sha256sum -c || exit 5
+# | gcc -O2 -Wall -o tcp975 tcp975.c || exit 6
+# | sha256sum tcp975.c tcp975
+# | uname -a; sysctl net.ipv4.tcp_retries2 net.ipv4.tcp_retries1
+# | echo PREP-DONE
+# ---- raw output ----
+/usr/bin/gcc
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+tcp975.c: OK
+bac6dfa02df74f9d64cb56de5f870a44b1b879de6c337c69ebbe9dddd155dcb4  tcp975.c
+316eeb4f2c3d9514d1810877e99022e43d87f83b0d1cfc3f5894e1d594a3a59a  tcp975
+Linux ip-10-128-5-70 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+net.ipv4.tcp_retries2 = 15
+net.ipv4.tcp_retries1 = 3
+PREP-DONE

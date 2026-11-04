@@ -1,0 +1,161 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-r2
+# instance: i-075643926b31ecc2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T024438Z   end: 20261104T030724Z   rc: 0
+# script sha256: 2f4a455ce0e90a3984c34c7d42621ac690df099338aa3c87c85349922eab19ee
+# ---- script ----
+# | set -u
+# | P=10.128.5.190
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	NS="netstat -n -t"
+# | 	echo "--- non-packaged overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	echo "--- loaded tcp image"; listimage 1 | grep -E 'protocols/tcp'
+# | else
+# | 	NS="ss -tn"
+# | 	sysctl net.ipv4.tcp_retries2
+# | fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | for m in write read poll close recover zerowin; do
+# | 	./tcp975 $P 9751 9752 $m 1200 > out.$m 2>&1 &
+# | done
+# | sleep 5
+# | echo "--- connections to the peer, every 120 s"
+# | while [ -n "$(jobs -r)" ]; do
+# | 	echo "$(date -u +%H:%M:%SZ) $($NS | grep -c ':9751') connections to :9751"
+# | 	$NS | grep ':9751' | sed 's/^/    /'
+# | 	sleep 120
+# | done
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | for m in write read poll close recover zerowin; do echo "=== $m"; cat out.$m; done
+# | echo "--- 150 s later (past the 2MSL wait of a close()d endpoint)"
+# | sleep 150
+# | $NS | grep ':9751' | sed 's/^/    /'
+# | echo "$($NS | grep -c ':9751') connections to :9751 left"
+# | grep RESULT out.* | sed 's/^/SUMMARY /'
+# ---- raw output ----
+Haiku ip-10-128-5-111.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+--- loaded tcp image
+ 2063 0xffff0000022f1000 0xffff000002303000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+da822fe28cc82ace9f1c6d127f0a34c5e6c5a5836c4c7fe09825b7018b69400c  tcp975
+start 2026-11-04T02:44:41Z
+--- connections to the peer, every 120 s
+02:44:46Z 7 connections to :9751
+    tcp         0 681036 [10.128.5.111]:42151  [10.128.5.190]:9751   fin-wait1    507
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0   1000 [10.128.5.111]:42912  [10.128.5.190]:9751   fin-wait1    596
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+02:46:46Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+02:48:46Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+02:50:47Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+02:52:47Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+02:54:47Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+02:56:47Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+02:58:47Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+03:00:47Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0 262144 [10.128.5.111]:42930  [10.128.5.190]:9751   established  598/tcp975
+    tcp         0  65536 [10.128.5.111]:42935  [10.128.5.190]:9751   established  597/tcp975
+03:02:47Z 5 connections to :9751
+    tcp         0 672075 [10.128.5.111]:42847  [10.128.5.190]:9751   established  593/tcp975
+    tcp         0   1000 [10.128.5.111]:42869  [10.128.5.190]:9751   established  594/tcp975
+    tcp         0   1000 [10.128.5.111]:42886  [10.128.5.190]:9751   established  595/tcp975
+    tcp         0      0 [10.128.5.111]:42930  [10.128.5.190]:9751   time-wait    598
+    tcp         0      0 [10.128.5.111]:42935  [10.128.5.190]:9751   time-wait    597
+end 2026-11-04T03:04:47Z
+=== write
+  [02:44:41Z write] connected from port 
+  local port 42847
+  [02:44:41Z write] control: DROP 42847
+RESULT write FAIL no error after 1200 s: send() still blocked at the cap
+=== read
+  [02:44:41Z read] connected from port 
+  local port 42869
+  [02:44:41Z read] control: DROP 42869
+RESULT read FAIL no error after 1200 s: recv() still blocked at the cap
+=== poll
+  [02:44:41Z poll] connected from port 
+  local port 42886
+  [02:44:41Z poll] control: DROP 42886
+RESULT poll FAIL no event after 1200 s: poll() Interrupted system call (SO_ERROR 0)
+=== close
+  [02:44:41Z close] connected from port 
+  local port 42912
+  [02:44:41Z close] control: DROP 42912
+RESULT close PASS close() of a black-holed connection returned 0
+=== recover
+  [02:44:41Z recover] connected from port 
+  local port 42935
+  [02:44:41Z recover] control: COUNT 42935
+  [02:44:41Z recover] control: COUNT 42935
+  [02:44:42Z recover] control: COUNT 42935
+  [02:44:42Z recover] control: DROP 42935
+  [02:53:02Z recover] control: UNDROP 42935
+  [02:53:02Z recover] control: COUNT 42935
+  [02:53:25Z recover] control: COUNT 42935
+  [02:53:26Z recover] control: COUNT 42935
+  [02:53:26Z recover] control: DROP 42935
+  [03:01:46Z recover] control: UNDROP 42935
+  [03:01:46Z recover] control: COUNT 42935
+  [03:02:08Z recover] control: COUNT 42935
+  [03:02:09Z recover] control: COUNT 42935
+RESULT recover PASS survived 2 x 500 s black-holes (1046 s in all), data delivered after each
+=== zerowin
+  [02:44:41Z zerowin] connected from port 
+  local port 42930
+  [02:44:41Z zerowin] control: STOPREAD 42930 1000
+  [03:01:22Z zerowin] control: COUNT 42930
+  [03:01:23Z zerowin] control: COUNT 42930
+RESULT zerowin PASS 64 MiB delivered across a 1001 s closed window, SO_ERROR 0
+--- 150 s later (past the 2MSL wait of a close()d endpoint)
+0 connections to :9751 left
+SUMMARY out.close:RESULT close PASS close() of a black-holed connection returned 0
+SUMMARY out.poll:RESULT poll FAIL no event after 1200 s: poll() Interrupted system call (SO_ERROR 0)
+SUMMARY out.read:RESULT read FAIL no error after 1200 s: recv() still blocked at the cap
+SUMMARY out.recover:RESULT recover PASS survived 2 x 500 s black-holes (1046 s in all), data delivered after each
+SUMMARY out.write:RESULT write FAIL no error after 1200 s: send() still blocked at the cap
+SUMMARY out.zerowin:RESULT zerowin PASS 64 MiB delivered across a 1001 s closed window, SO_ERROR 0
