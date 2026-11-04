@@ -139,7 +139,16 @@ LinkProtocol::StopMonitoring(const char* deviceName)
 		|| strcmp(fMonitoredDevice->device->name, deviceName) != 0)
 		return B_BAD_VALUE;
 
-	return _Unregister();
+	net_device_interface* monitored = fMonitoredDevice;
+	fMonitoredDevice = NULL;
+
+	// As in Unbind(): the device holds its monitor lock while it calls
+	// _MonitorData(), which takes fLock, so unregister without fLock.
+	locker.Unlock();
+
+	status_t status = unregister_device_monitor(monitored->device, &fMonitor);
+	put_device_interface(monitored);
+	return status;
 }
 
 
@@ -226,13 +235,23 @@ LinkProtocol::Unbind()
 	if (fBoundToDevice == NULL)
 		return B_BAD_VALUE;
 
-	if (fBoundType != 0)
-		unregister_device_handler(fBoundToDevice->device, fBoundType);
-	put_device_interface(fBoundToDevice);
+	net_device_interface* boundTo = fBoundToDevice;
+	uint32 boundType = fBoundType;
 	fBoundToDevice = NULL;
+	fBoundType = 0;
 
 	socket->bound_to_device = 0;
 	socket->address.ss_len = 0;
+
+	// The device's receive thread holds its receive lock while it calls
+	// _ReceiveData(), which takes fLock; unregistering takes the receive
+	// lock, so it must not be done with fLock held. Once it returns, no
+	// receive is in progress and no other one can start.
+	locker.Unlock();
+
+	if (boundType != 0)
+		unregister_device_handler(boundTo->device, boundType);
+	put_device_interface(boundTo);
 	return B_OK;
 }
 
