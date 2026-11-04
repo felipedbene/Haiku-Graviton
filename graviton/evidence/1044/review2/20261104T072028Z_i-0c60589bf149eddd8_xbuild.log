@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-0c60589bf149eddd8   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T072028Z   end: 20261104T072116Z   rc: 0
+# script sha256: 183cc2adbfb55f85c1494c90fb087394c29fe7d498f36009fbf50cdb98edb418
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/rv2
+# | cd /opt/tw/hg/generated || exit 1
+# | T=objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
+# | build() {
+# | 	local label=$1
+# | 	git -C .. checkout -q -f --detach origin/graviton || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	aws s3 cp --quiet $OUT/patch/$label.patch /opt/tw/$label.patch || return 1
+# | 	sha256sum /opt/tw/$label.patch
+# | 	git -C .. apply --whitespace=nowarn /opt/tw/$label.patch || { echo "apply failed"; return 1; }
+# | 	git -C .. diff --stat | cat
+# | 	sleep 2
+# | 	rm -rf "$(dirname $T)"
+# | 	jam -q -j32 tcp > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) rc=$rc failed=$(grep -cE '\.\.\.failed' jam-$label.log) tcp-warnings=$(grep 'warning:' jam-$label.log | grep -c protocols/tcp/)"
+# | 	[ $rc = 0 ] || { grep -E 'error' jam-$label.log | head -40; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/tcp/' | head
+# | 	mkdir -p /opt/tw/out/$label
+# | 	cp $T /opt/tw/out/$label/tcp && sha256sum /opt/tw/out/$label/tcp | sed "s|/opt/tw/out/||"
+# | 	aws s3 cp --quiet /opt/tw/out/$label/tcp $OUT/mod/$label/tcp
+# | }
+# | for l in A Af Cf; do build $l; done
+# ---- raw output ----
+2c7ef228ed332f6db4fae05ecbf8d7a56394e11c384f3db514094527890a3b4f  /opt/tw/A.patch
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp   | 274 ++++++++++++++++++++-
+ .../kernel/network/protocols/tcp/TCPEndpoint.h     |  13 +
+ src/add-ons/kernel/network/protocols/tcp/tcp.h     |  13 +
+ 3 files changed, 291 insertions(+), 9 deletions(-)
+JAM A head=a9954f42 rc=0 failed=0 tcp-warnings=0
+6646f52d3b22444df21304e2cd4c2d1fd3f8c726377b3b7f76c883b37208b4e2  A/tcp
+2f2f6cb7b0995da41b80221885001e29c86eea9446b5b320e4997728927ef7c4  /opt/tw/Af.patch
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp   | 283 ++++++++++++++++++++-
+ .../kernel/network/protocols/tcp/TCPEndpoint.h     |  13 +
+ src/add-ons/kernel/network/protocols/tcp/tcp.h     |  13 +
+ 3 files changed, 300 insertions(+), 9 deletions(-)
+JAM Af head=a9954f42 rc=0 failed=0 tcp-warnings=0
+4d73cd09f86853b270bb2a3fcf2bd5b5faec19fb6ff0c9603560c5c778a119d5  Af/tcp
+f91f1ed0aa045e73150c93f52562f1c898ac2a5391dbf05893516eb0f42e74a6  /opt/tw/Cf.patch
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp   | 337 ++++++++++++++++++++-
+ .../kernel/network/protocols/tcp/TCPEndpoint.h     |  18 ++
+ src/add-ons/kernel/network/protocols/tcp/tcp.h     |  13 +
+ 3 files changed, 358 insertions(+), 10 deletions(-)
+JAM Cf head=a9954f42 rc=0 failed=0 tcp-warnings=0
+e07e37aee8ef48d2d7f1e45d937ae04b97b0f51f37e7d1d805998539c64b0589  Cf/tcp

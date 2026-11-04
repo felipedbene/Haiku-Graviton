@@ -1,0 +1,118 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: C-1044
+# instance: i-01936722dd28f8609   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T061433Z   end: 20261104T063053Z   rc: 0
+# script sha256: 9e04a8881332e8bc05883b4b6d30730104b2d471798d167bfcc1b6adf6b25d9f
+# ---- script ----
+# | set -u
+# | P=10.128.5.103
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	NS="netstat -n -t"
+# | 	echo "--- non-packaged overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	echo "--- loaded tcp image"; listimage 1 | grep -E 'protocols/tcp'
+# | else
+# | 	NS="ss -tn"
+# | 	sysctl net.ipv4.tcp_retries2
+# | fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 $P 9751 9752 reopen 300 > out.reopen 2>&1 &
+# | ./tcp975 $P 9751 9752 zerodead 1200 > out.zerodead 2>&1 &
+# | sleep 5
+# | while [ -n "$(jobs -r)" ]; do
+# | 	echo "$(date -u +%H:%M:%SZ) $($NS | grep -c ':9751') connections to :9751"
+# | 	$NS | grep ':9751' | sed 's/^/    /'
+# | 	sleep 120
+# | done
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | for m in reopen zerodead; do echo "=== $m"; cat out.$m; done
+# | sleep 5
+# | echo "$($NS | grep -c ':9751') connections to :9751 left"
+# | grep RESULT out.reopen out.zerodead | sed 's/^/SUMMARY /'
+# ---- raw output ----
+Haiku ip-10-128-7-166.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+ab8cb78094255f418844499e5ebef48ed3944292670ead4b77a1fd6b2841f3fa  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+--- loaded tcp image
+ 2149 0xffff0000023dc000 0xffff0000023ef000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+f87f37ece92e8e44368be645a4ee85e80b7799639cfffeb6257841e037e8cb7d  tcp975
+start 2026-11-04T06:14:35Z
+06:14:40Z 8 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0   1000 [10.128.7.166]:46025  [10.128.5.103]:9751   fin-wait1    1065
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 237078 [10.128.7.166]:46255  [10.128.5.103]:9751   established  1092/tcp975
+    tcp         0 204175 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:16:40Z 7 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0      0 [10.128.7.166]:46255  [10.128.5.103]:9751   time-wait    1092
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:18:40Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:20:40Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:22:40Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:24:40Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:26:40Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+06:28:40Z 6 connections to :9751
+    tcp         0 262144 [10.128.7.166]:45873  [10.128.5.103]:9751   established  1062/tcp975
+    tcp         0   1000 [10.128.7.166]:45928  [10.128.5.103]:9751   established  1063/tcp975
+    tcp         0   1000 [10.128.7.166]:45974  [10.128.5.103]:9751   established  1064/tcp975
+    tcp         0  65536 [10.128.7.166]:46050  [10.128.5.103]:9751   established  1066/tcp975
+    tcp         0 228129 [10.128.7.166]:46079  [10.128.5.103]:9751   established  1067/tcp975
+    tcp         0 262144 [10.128.7.166]:46269  [10.128.5.103]:9751   established  1093/tcp975
+end 2026-11-04T06:30:40Z
+=== reopen
+  [06:14:35Z reopen] connected from port 
+  local port 46255
+  [06:14:35Z reopen] control: SILENTREOPEN 46255 30 10
+  [06:15:40Z reopen] control: COUNT 46255
+  [06:15:41Z reopen] control: COUNT 46255
+RESULT reopen PASS 64 MiB delivered 26.2 s after the peer could be heard again (66.2 s in all)
+=== zerodead
+  [06:14:35Z zerodead] connected from port 
+  local port 46269
+  [06:14:35Z zerodead] control: STOPREAD 46269 100000
+  [06:14:55Z zerodead] control: DROP 46269
+RESULT zerodead PASS send() on a closed window failed with ETIMEDOUT after 937.6 s
+2 connections to :9751 left
+SUMMARY out.reopen:RESULT reopen PASS 64 MiB delivered 26.2 s after the peer could be heard again (66.2 s in all)
+SUMMARY out.zerodead:RESULT zerodead PASS send() on a closed window failed with ETIMEDOUT after 937.6 s

@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: nettput-1500tx-r1
+# instance: i-075643926b31ecc2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T045159Z   end: 20261104T045215Z   rc: 0
+# script sha256: 35efc32a6b575dd61531de3235b7b175ee9d9f38e8b78d473b5db8c3aa3b84f8
+# ---- script ----
+# | # 1500-byte MTU transmit only, 9 reps, 256M -- the one cell that looked lower
+# | set -u
+# | P=10.128.5.190; IF=/dev/net/ena/0
+# | listimage 1 | grep -E 'protocols/tcp'
+# | ifconfig $IF mtu 1500; sleep 3
+# | for rep in 1 2 3 4 5 6 7 8 9; do
+# | 	out=$(nettput -c $P -p 9753 -n 256M -L "mtu 1500" 2>&1)
+# | 	echo "CELL 1500 transmit $rep $(printf '%s' "$out" | sed -n 's/.*throughput *: *\([0-9.]*\) Mbit.*/\1/p' | head -1)"
+# | done
+# | ifconfig $IF mtu 9001
+# ---- raw output ----
+ 2063 0xffff0000022f1000 0xffff000002303000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+CELL 1500 transmit 1 3909.0
+CELL 1500 transmit 2 3902.4
+CELL 1500 transmit 3 3881.0
+CELL 1500 transmit 4 3893.1
+CELL 1500 transmit 5 3902.0
+CELL 1500 transmit 6 3829.7
+CELL 1500 transmit 7 3863.1
+CELL 1500 transmit 8 3938.0
+CELL 1500 transmit 9 3940.5

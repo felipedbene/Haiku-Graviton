@@ -1,0 +1,22 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: B-9001
+# instance: i-0975f11ed0b11403e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T063834Z   end: 20261104T063851Z   rc: 0
+# script sha256: 8b39ca4d20787582300f2b0c525744368193c517a30d3a30911b23a6dd7ff5b4
+# ---- script ----
+# | # 9001-byte MTU transmit and receive, 3 reps each, 256M
+# | P=10.128.5.103; IF=/dev/net/ena/0
+# | listimage 1 | grep -E 'protocols/tcp'
+# | ifconfig $IF mtu 9001; sleep 2
+# | for rep in 1 2 3; do for flag in "" "-r"; do
+# | 	out=$(nettput -c $P -p 9753 -n 256M $flag -L "mtu 9001" 2>&1)
+# | 	echo "CELL 9001 ${flag:-tx} $rep $(printf '%s' "$out" | sed -n 's/.*throughput *: *\([0-9.]*\) Mbit.*/\1/p' | head -1)"
+# | done; done
+# ---- raw output ----
+ 2101 0xffff0000023db000 0xffff0000023ee000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+CELL 9001 tx 1 4971.3
+CELL 9001 -r 1 1976.7
+CELL 9001 tx 2 4966.9
+CELL 9001 -r 2 1993.2
+CELL 9001 tx 3 4973.0
+CELL 9001 -r 3 4429.8

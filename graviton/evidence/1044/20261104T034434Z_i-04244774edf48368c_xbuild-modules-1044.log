@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules-1044
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T034434Z   end: 20261104T034451Z   rc: 0
+# script sha256: c0abc7058cd501ce721202c3f01f032cc7d33cf05a3a5af8d32f7f37d5df55b5
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/975
+# | cd /opt/tw/hg/generated || exit 1
+# | T=objects/haiku/arm64/release/add-ons/kernel/network/protocols/tcp/tcp
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f --detach origin/graviton || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/tw/$patch || return 1
+# | 		sha256sum /opt/tw/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/tw/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat | cat
+# | 	sleep 2
+# | 	rm -rf "$(dirname $T)"
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 tcp > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/tcp/' | head -20
+# | 	mkdir -p /opt/tw/out/$label
+# | 	cp $T /opt/tw/out/$label/tcp && sha256sum /opt/tw/out/$label/tcp | sed "s|/opt/tw/out/||"
+# | 	aws s3 cp --quiet /opt/tw/out/$label/tcp $OUT/mod/$label/tcp
+# | 	return $rc
+# | }
+# | git -C .. fetch -q --depth 80 origin graviton
+# | 
+# | build c1044v1 1044-v1.patch
+# ---- raw output ----
+37b97c84b960586d8cfb0c90f48aabac2293a0f8d70fb7730e909776ad0e782e  /opt/tw/1044-v1.patch
+ .../kernel/network/protocols/tcp/TCPEndpoint.cpp   | 216 ++++++++++++++++++++-
+ .../kernel/network/protocols/tcp/TCPEndpoint.h     |  13 ++
+ src/add-ons/kernel/network/protocols/tcp/tcp.h     |  13 ++
+ 3 files changed, 233 insertions(+), 9 deletions(-)
+JAM c1044v1 head=a9954f42 patch=1044-v1.patch rc=0 wall=6s failed=0 warnings=0
+63b4e8ae6fdaf2d343d6d8a26273e2ca8f369962a3475d5cca6c32546612696c  c1044v1/tcp

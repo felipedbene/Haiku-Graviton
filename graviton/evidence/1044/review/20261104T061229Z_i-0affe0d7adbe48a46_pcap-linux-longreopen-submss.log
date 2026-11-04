@@ -1,0 +1,98 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pcap-linux-longreopen-submss
+# instance: i-0affe0d7adbe48a46   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T061229Z   end: 20261104T061239Z   rc: 0
+# script sha256: 46dd76a962c6c4b46c5e5e9442deb1f367bd9d9b2a475024324a05379ec1200e
+# ---- script ----
+# | cat > /tmp/rows.txt <<"R"
+# | linux longreopen 10.128.7.233 40490 x x
+# | linux submss 10.128.7.233 40492 x
+# | R
+# | cat > /tmp/pa.py <<"P"
+# | # Reads rows "label mode host port t1 [t2]" on stdin, analyses /opt/t975/rv.pcap.
+# | import subprocess, sys
+# | 
+# | def segs(host, port):
+# |     out = subprocess.run(["tcpdump", "-r", "/opt/t975/rv.pcap", "-nn", "-tttt",
+# |         "host %s and tcp port %s" % (host, port)], capture_output=True,
+# |         text=True).stdout.splitlines()
+# |     rows = []
+# |     for line in out:
+# |         parts = line.split()
+# |         if len(parts) < 8:
+# |             continue
+# |         h, m, s = parts[1].split(":")
+# |         t = int(h) * 3600 + int(m) * 60 + float(s)
+# |         fromclient = parts[5].startswith(host + ".")
+# |         length = int(line.rsplit("length ", 1)[1].split()[0]) if "length " in line else 0
+# |         rows.append((t, fromclient, length, line[11:150]))
+# |     return rows
+# | 
+# | def sec(x):
+# |     h, m, s = x.split(":")
+# |     return int(h) * 3600 + int(m) * 60 + float(s)
+# | 
+# | for row in sys.stdin:
+# |     f = row.split()
+# |     if not f:
+# |         continue
+# |     label, mode, host, port = f[:4]
+# |     s = segs(host, port)
+# |     print("=== %s %s (%s:%s): %d segments captured" % (label, mode, host, port, len(s)))
+# |     if mode == "longreopen":
+# |         # Clock-agnostic: the idle period starts at the client's last data
+# |         # segment, as the peer saw it, and lasts the 150 s the client sleeps.
+# |         data = [x for x in s if x[1] and x[2] > 0]
+# |         tl = data[-1][0]
+# |         idle = [x for x in s if x[1] and tl + 0.5 <= x[0] <= tl + 145]
+# |         print("  last data from the client at %s; segments from it in the next 0.5-145 s: %d" % (data[-1][3][:15], len(idle)))
+# |         for x in idle[:10]:
+# |             print("    +%.3f s: %s" % (x[0] - tl, x[3]))
+# |     elif mode == "submss":
+# |         inj = [x for x in s if not x[1] and "win 1," in x[3]]
+# |         if not inj:
+# |             print("  no injected win-1 segment found")
+# |             continue
+# |         t0 = inj[0][0]
+# |         data = [x for x in s if x[1] and x[0] > t0 and x[2] > 0]
+# |         print("  injected: " + inj[0][3])
+# |         if data:
+# |             print("  first data after it: +%.3f s: %s" % (data[0][0] - t0, data[0][3]))
+# |         else:
+# |             print("  no data from the client in the %d s captured after it" % 90)
+# |         for x in [x for x in s if x[1] and t0 < x[0] < t0 + 90][:6]:
+# |             print("    client +%.3f s: %s" % (x[0] - t0, x[3]))
+# |     else:
+# |         # The forged ACKs are the last three this end "sent": after DROP its
+# |         # own stack sends nothing that reaches the capture.
+# |         inj = [x for x in s if not x[1]][-3:]
+# |         if not inj:
+# |             print("  no injected segment found")
+# |             continue
+# |         t0 = inj[0][0]
+# |         print("  injected (%d): %s" % (len(inj[:3]), " | ".join(x[3][60:120] for x in inj[:3])))
+# |         import re
+# |         una = re.search(r"ack (\d+)", inj[0][3]).group(1)
+# |         within = [x for x in s if x[1] and t0 <= x[0] <= t0 + 0.15]
+# |         def kind(x):
+# |             m = re.search(r"seq (\d+):", x[3])
+# |             return "SND.UNA" if m and m.group(1) == una else "new data seq %s" % (m.group(1) if m else "?")
+# |         new = [x for x in within if kind(x) != "SND.UNA"]
+# |         print("  client segments within 150 ms of the first: %d, of them new data (limited transmit): %d -- %s" % (len(within), len(new), ", ".join("+%.1f ms %s" % ((x[0] - t0) * 1000, kind(x)) for x in within)))
+# |         later = [x for x in s if x[1] and x[0] > t0 + 0.15][:3]
+# |         for x in later:
+# |             print("    later +%.3f s: %s" % (x[0] - t0, x[3][:110]))
+# | P
+# | python3 /tmp/pa.py < /tmp/rows.txt
+# ---- raw output ----
+=== linux longreopen (10.128.7.233:40490): 3553 segments captured
+  last data from the client at 05:27:42.281444; segments from it in the next 0.5-145 s: 0
+=== linux submss (10.128.7.233:40492): 43 segments captured
+  injected: 05:25:42.250767 ens5  Out IP 10.128.5.103.9751 > 10.128.7.233.40492: Flags [.], ack 114912, win 1, options [nop,nop,TS val 765236712 ecr 60
+  first data after it: +53.025 s: 05:26:35.276033 ens5  In  IP 10.128.7.233.40492 > 10.128.5.103.9751: Flags [P.], seq 114912:115936, ack 1, win 62, options [nop,nop,TS val 
+    client +53.025 s: 05:26:35.276033 ens5  In  IP 10.128.7.233.40492 > 10.128.5.103.9751: Flags [P.], seq 114912:115936, ack 1, win 62, options [nop,nop,TS val 
+    client +53.233 s: 05:26:35.484025 ens5  In  IP 10.128.7.233.40492 > 10.128.5.103.9751: Flags [P.], seq 114912:115936, ack 1, win 62, options [nop,nop,TS val 
+    client +53.649 s: 05:26:35.900020 ens5  In  IP 10.128.7.233.40492 > 10.128.5.103.9751: Flags [P.], seq 114912:115936, ack 1, win 62, options [nop,nop,TS val 
+    client +54.497 s: 05:26:36.748019 ens5  In  IP 10.128.7.233.40492 > 10.128.5.103.9751: Flags [P.], seq 114912:115936, ack 1, win 62, options [nop,nop,TS val 
+    client +56.161 s: 05:26:38.412027 ens5  In  IP 10.128.7.233.40492 > 10.128.5.103.9751: Flags [P.], seq 114912:115936, ack 1, win 62, options [nop,nop,TS val 
+    client +59.489 s: 05:26:41.740026 ens5  In  IP 10.128.7.233.40492 > 10.128.5.103.9751: Flags [P.], seq 114912:115936, ack 1, win 62, options [nop,nop,TS val 

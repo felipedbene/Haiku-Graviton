@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: tcpdump-restart
+# instance: i-0c60589bf149eddd8   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T072240Z   end: 20261104T072251Z   rc: 0
+# script sha256: fd235e230ac1cd396bd4676afb261ed426496ac6324e3b1996c9717b767a3894
+# ---- script ----
+# | pkill -INT tcpdump; sleep 2; ps aux | grep -c '[t]cpdump'; rm -f /opt/t975/rv.pcap
+# | nohup tcpdump -i any -nn -s 128 -B 32768 -U -w /opt/t975/rv.pcap 'tcp port 9751 or tcp port 9754' > /opt/t975/tcpdump.log 2>&1 &
+# | sleep 2; ps aux | grep '[t]cpdump' | wc -l
+# ---- raw output ----
+0
+1

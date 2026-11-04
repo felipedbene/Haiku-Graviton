@@ -1,0 +1,54 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-shutfin-final
+# instance: i-05fe5395bb180ec7f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T063249Z   end: 20261104T065511Z   rc: 0
+# script sha256: dbf3c69cea53e213cf8e646a1b29adb68b5583df098fe17d9404a7ebcf52a5f6
+# ---- script ----
+# | set -u
+# | P=10.128.5.103
+# | for p in $(ps 2>/dev/null | grep '[s]hutfin' | awk '{print $2}') $(pgrep -f 'tcp975.*shutfin' 2>/dev/null); do kill $p 2>/dev/null; done
+# | mkdir -p /tmp/t975g && cd /tmp/t975g
+# | if command -v wget >/dev/null; then wget -q -O tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/rv/src/tcp975.c?<PRESIGNED>'; else curl -sSf -o tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/rv/src/tcp975.c?<PRESIGNED>'; fi || exit 4
+# | echo '4234e715c8bf07804cf0e413143d58f6181c209f391e79385383eb7aabd16a35  tcp975.c' | sha256sum -c || exit 5
+# | uname -a
+# | if [ -d /boot/system ]; then NS="netstat -n -t"; CAP=1300; gcc -O2 -Wall -o tcp975 tcp975.c -lnetwork || exit 6
+# | 	find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'
+# | else NS="ss -tno"; CAP=2000; gcc -O2 -Wall -o tcp975 tcp975.c || exit 6; sysctl net.ipv4.tcp_retries2; fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 $P 9764 9762 shutfin $CAP > out.shutfin 2>&1 &
+# | for i in $(seq 1 60); do grep -q FIN-OWED-CHECK out.shutfin && break; sleep 1; done
+# | echo "--- FIN owed into a closed window: expect FIN-WAIT-1 with an empty send queue"
+# | $NS | grep ':9764'
+# | sleep 120
+# | echo "--- 120 s later"; $NS | grep ':9764'
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | grep -v 'control: COUNT\|control: INQ' out.shutfin
+# ---- raw output ----
+tcp975.c: OK
+Haiku ip-10-128-7-228.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+ 2083 0xffff0000023dc000 0xffff0000023ee000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+89bc3c51f95a5353428df8170042ba33dd0648b08ca37c2088eb481d4ef35f41  tcp975
+start 2026-11-04T06:32:54Z
+--- FIN owed into a closed window: expect FIN-WAIT-1 with an empty send queue
+tcp         0 204359 [10.128.7.228]:48166  [10.128.5.103]:9764   fin-wait1    1385/tcp975
+tcp         0      0 [10.128.7.228]:48184  [10.128.5.103]:9764   fin-wait1    1385/tcp975
+--- 120 s later
+tcp         0      0 [10.128.7.228]:48184  [10.128.5.103]:9764   fin-wait1    1385/tcp975
+end 2026-11-04T06:55:07Z
+  [06:32:54Z shutfin] connected from port 
+  local port 48166
+  [06:32:54Z shutfin] control: STOPREAD 48166 100000
+  capacity 114372; second connection from port 48184
+  [06:32:59Z shutfin] control: STOPREAD 48184 100000
+  [06:32:59Z shutfin] control: RCVWND 48184
+  the peer holds 97988, still offers 16314
+  [06:33:00Z shutfin] control: RCVWND 48184
+  the peer holds 114302, still offers 2
+  [06:33:00Z shutfin] control: RCVWND 48184
+  the peer holds 114304, still offers 0
+  [06:33:02Z shutfin] control: DROPFIN 48184
+FIN-OWED-CHECK now
+  [06:33:27Z shutfin] control: DROP 48184
+RESULT shutfin FAIL no error after 1300 s: recv() after SHUT_WR still blocked at the cap

@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-zerodead-long
+# instance: i-0326340f34287e009   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T041129Z   end: 20261104T043943Z   rc: 0
+# script sha256: d92df2f97cacae034807a6f1ff5fdda3226dd4d0741f89d09c85a89933405063
+# ---- script ----
+# | cd /opt/t975
+# | sysctl net.ipv4.tcp_retries2
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 10.128.5.190 9751 9752 zerodead 2400
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# ---- raw output ----
+net.ipv4.tcp_retries2 = 15
+start 2026-11-04T04:11:32Z
+  [04:11:32Z zerodead] connected from port 
+  local port 53972
+  [04:11:32Z zerodead] control: STOPREAD 53972 100000
+  [04:11:52Z zerodead] control: DROP 53972
+RESULT zerodead PASS send() on a closed window failed with ETIMEDOUT after 1667.3 s
+end 2026-11-04T04:39:39Z

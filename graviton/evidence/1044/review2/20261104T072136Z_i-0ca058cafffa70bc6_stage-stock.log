@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-stock
+# instance: i-0ca058cafffa70bc6   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T072136Z   end: 20261104T072153Z   rc: 0
+# script sha256: 7eac4de4c5688e83811f36277a44582bc4ac0071f102be8cf3b21387dcdc013a
+# ---- script ----
+# | set -u
+# | mkdir -p /boot/home/tw && cd /boot/home/tw
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -1
+# | wget -q -O tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/rv2/src/tcp975.c?<PRESIGNED>' || exit 4
+# | echo 'b42a955b63ce8dae34ba417d8dd1b5e376d584bfcbbd580539f4b1b16220151d  tcp975.c' | sha256sum -c || exit 5
+# | gcc -O2 -Wall -o tcp975 tcp975.c -lnetwork || exit 6
+# | sha256sum tcp975.c tcp975 /boot/system/add-ons/kernel/network/protocols/tcp
+# | if [ "stock" != stock ]; then
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network/protocols
+# | mkdir -p $D
+# | wget -q -O tcp.mod 'x' || exit 7
+# | echo 'x  tcp.mod' | sha256sum -c || exit 8
+# | cp tcp.mod $D/tcp.new && mv $D/tcp.new $D/tcp
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | fi
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+[system] Done.
+tcp975.c: OK
+b42a955b63ce8dae34ba417d8dd1b5e376d584bfcbbd580539f4b1b16220151d  tcp975.c
+4b8984b8637e198a9975c00d306235096b8e30c1d99b844100cb61a41384ca4a  tcp975
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/system/add-ons/kernel/network/protocols/tcp
+STAGE-DONE

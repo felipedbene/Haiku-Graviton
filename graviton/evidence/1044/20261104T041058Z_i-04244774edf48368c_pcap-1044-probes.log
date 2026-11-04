@@ -1,0 +1,111 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pcap-1044-probes
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T041058Z   end: 20261104T041110Z   rc: 141
+# script sha256: e68986a55e95eec675111461226392dfd5468f58f11eea22acecf31e8ee2f9a8
+# ---- script ----
+# | cd /opt/t975
+# | ls -l t975-run3.pcap
+# | show() { # label host port from to
+# | 	tcpdump -r t975-run3.pcap -nn -tttt "tcp port $3" 2>/dev/null | cat > p-$1.txt
+# | 	echo "=== $1 ($2:$3): $(wc -l < p-$1.txt) segments captured"
+# | 	echo "  $4-$5: $(awk -v a=$4 -v b=$5 '$2 >= a && $2 <= b' p-$1.txt | grep -c "$2.$3 >") from $1, $(awk -v a=$4 -v b=$5 '$2 >= a && $2 <= b' p-$1.txt | grep -c "9751 > $2.$3") from the peer"
+# | 	awk -v a=$4 -v b=$5 '$2 >= a && $2 <= b' p-$1.txt | head -${6:-12} | cut -c12-175
+# | }
+# | echo "##### zerodead: what goes out after the black-hole (DROP), and does anything answer"
+# | show linux-zerodead 10.128.5.70 57228 03:47:53 04:08:00 24
+# | show c1044-zerodead 10.128.7.122 41330 03:50:34 04:06:30 30
+# | echo "##### reopen: the 40 s after the pause, while the peer's own segments are dropped and after"
+# | show linux-reopen 10.128.5.70 57222 03:47:55 03:48:30 20
+# | show c1044-reopen 10.128.7.122 41360 03:50:30 03:51:20 30
+# ---- raw output ----
+-rw-r--r-- 1 tcpdump tcpdump 1532932 Nov  4 04:10 t975-run3.pcap
+##### zerodead: what goes out after the black-hole (DROP), and does anything answer
+=== linux-zerodead (10.128.5.70:57228): 41 segments captured
+  03:47:53-04:08:00: 12 from linux-zerodead, 0 from the peer
+03:47:59.445097 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639316208 ecr 1730246804], length 0
+03:48:26.069091 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639342832 ecr 1730246804], length 0
+03:49:20.853093 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639397616 ecr 1730246804], length 0
+03:51:07.349094 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639504112 ecr 1730246804], length 0
+03:53:10.229116 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639626992 ecr 1730246804], length 0
+03:55:13.109094 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639749872 ecr 1730246804], length 0
+03:57:15.989080 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639872752 ecr 1730246804], length 0
+03:59:18.869070 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1639995632 ecr 1730246804], length 0
+04:01:21.749053 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1640118512 ecr 1730246804], length 0
+04:03:24.629057 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1640241392 ecr 1730246804], length 0
+04:05:27.509069 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1640364272 ecr 1730246804], length 0
+04:07:30.389063 ens5  In  IP 10.128.5.70.57228 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 1640487152 ecr 1730246804], length 0
+=== c1044-zerodead (10.128.7.122:41330): 45 segments captured
+  03:50:34-04:06:30: 16 from c1044-zerodead, 0 from the peer
+03:50:47.539501 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 62497 ecr 114897090], length 0
+03:51:19.540242 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 94497 ecr 114897090], length 0
+03:52:19.541581 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 154497 ecr 114897090], length 0
+03:53:19.542875 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 214497 ecr 114897090], length 0
+03:54:19.544214 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 274497 ecr 114897090], length 0
+03:55:19.545514 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 334497 ecr 114897090], length 0
+03:56:19.546835 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 394497 ecr 114897090], length 0
+03:57:19.548159 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 454497 ecr 114897090], length 0
+03:58:19.549471 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 514497 ecr 114897090], length 0
+03:59:19.550798 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 574497 ecr 114897090], length 0
+04:00:19.552127 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 634497 ecr 114897090], length 0
+04:01:19.553457 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 694497 ecr 114897090], length 0
+04:02:19.554795 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 754497 ecr 114897090], length 0
+04:03:19.556099 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 814497 ecr 114897090], length 0
+04:04:19.557410 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 874497 ecr 114897090], length 0
+04:05:19.558736 ens5  In  IP 10.128.7.122.41330 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 934497 ecr 114897090], length 0
+##### reopen: the 40 s after the pause, while the peer's own segments are dropped and after
+=== linux-reopen (10.128.5.70:57222): 5124 segments captured
+  03:47:55-03:48:30: 2925 from linux-reopen, 2174 from the peer
+03:47:59.445103 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 2130350125 ecr 1071996683], length 0
+03:47:59.445118 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 108768, win 0, options [nop,nop,TS val 1072009995 ecr 2130323265], length 0
+03:48:26.069091 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [.], ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072009995], length 0
+03:48:26.069111 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 108768, win 80, options [nop,nop,TS val 1072036619 ecr 2130323265], length 0
+03:48:26.069365 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 108768:153513, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069380 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 153513, win 62, options [nop,nop,TS val 1072036619 ecr 2130376749], length 0
+03:48:26.069405 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 153513:190688, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069422 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 190688, win 152, options [nop,nop,TS val 1072036619 ecr 2130376749], length 0
+03:48:26.069618 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 190688:208586, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069624 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 208586, win 187, options [nop,nop,TS val 1072036619 ecr 2130376749], length 0
+03:48:26.069700 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [.], seq 208586:217535, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619],
+03:48:26.069706 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 217535, win 205, options [nop,nop,TS val 1072036619 ecr 2130376749], length 0
+03:48:26.069724 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 217535:271229, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069724 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 271229:304267, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069731 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 271229, win 255, options [nop,nop,TS val 1072036619 ecr 2130376749], length 0
+03:48:26.069736 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 304267:340063, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069763 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 340063, win 242, options [nop,nop,TS val 1072036619 ecr 2130376749], length 0
+03:48:26.069862 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 340063:375859, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069862 ens5  In  IP 10.128.5.70.57222 > 10.128.5.190.9751: Flags [P.], seq 375859:393757, ack 1, win 62, options [nop,nop,TS val 2130376749 ecr 1072036619]
+03:48:26.069867 ens5  Out IP 10.128.5.190.9751 > 10.128.5.70.57222: Flags [.], ack 375859, win 273, options [nop,nop,TS val 1072036619 ecr 2130376749], length 0
+=== c1044-reopen (10.128.7.122:41360): 4398 segments captured
+  03:50:30-03:51:20: 2234 from c1044-reopen, 2132 from the peer
+03:50:31.539106 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 46497 ecr 70977648], length 0
+03:50:31.539110 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 135260, win 0, options [nop,nop,TS val 70994781 ecr 30496], length 0
+03:50:47.539482 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 62497 ecr 70977648], length 0
+03:51:19.540212 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 94497 ecr 70977648], length 0
+03:51:19.540225 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 135260, win 94, options [nop,nop,TS val 71042782 ecr 30496], length 0
+03:51:19.540523 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 135260:144209, ack 1, win 255, options [nop,nop,TS val 94497 ecr 70977648], leng
+03:51:19.540535 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 144209, win 103, options [nop,nop,TS val 71042782 ecr 94497], length 0
+03:51:19.540576 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 144209:197903, ack 1, win 255, options [nop,nop,TS val 94497 ecr 70977648], leng
+03:51:19.540579 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 197903, win 178, options [nop,nop,TS val 71042782 ecr 94497], length 0
+03:51:19.540618 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 197903:206852, ack 1, win 255, options [nop,nop,TS val 94497 ecr 70977648], leng
+03:51:19.540642 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 206852, win 196, options [nop,nop,TS val 71042782 ecr 94497], length 0
+03:51:19.540814 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 206852:224750, ack 1, win 255, options [nop,nop,TS val 94497 ecr 70977648], leng
+03:51:19.540819 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 224750, win 213, options [nop,nop,TS val 71042782 ecr 94497], length 0
+03:51:19.540945 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 224750:287393, ack 1, win 255, options [nop,nop,TS val 94497 ecr 70977648], leng
+03:51:19.540952 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 287393, win 170, options [nop,nop,TS val 71042782 ecr 94497], length 0
+03:51:19.540962 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 287393:305291, ack 1, win 255, options [nop,nop,TS val 94497 ecr 70977648], leng
+03:51:19.540993 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 305291, win 213, options [nop,nop,TS val 71042782 ecr 94497], length 0
+03:51:19.541100 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 305291:332138, ack 1, win 255, options [nop,nop,TS val 94498 ecr 70977648], leng
+03:51:19.541109 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 332138, win 265, options [nop,nop,TS val 71042783 ecr 94498], length 0
+03:51:19.541239 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 332138:341087, ack 1, win 255, options [nop,nop,TS val 94498 ecr 70977648], leng
+03:51:19.541243 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 341087, win 283, options [nop,nop,TS val 71042783 ecr 94498], length 0
+03:51:19.541288 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 341087:403730, ack 1, win 255, options [nop,nop,TS val 94498 ecr 70977648], leng
+03:51:19.541292 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 403730, win 384, options [nop,nop,TS val 71042783 ecr 94498], length 0
+03:51:19.541336 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 403730:430577, ack 1, win 255, options [nop,nop,TS val 94498 ecr 70977648], leng
+03:51:19.541341 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 430577, win 419, options [nop,nop,TS val 71042783 ecr 94498], length 0
+03:51:19.541389 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 430577:448475, ack 1, win 255, options [nop,nop,TS val 94498 ecr 70977648], leng
+03:51:19.541393 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 448475, win 427, options [nop,nop,TS val 71042783 ecr 94498], length 0
+03:51:19.541433 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 448475:466373, ack 1, win 255, options [nop,nop,TS val 94498 ecr 70977648], leng
+03:51:19.541437 ens5  Out IP 10.128.5.190.9751 > 10.128.7.122.41360: Flags [.], ack 466373, win 427, options [nop,nop,TS val 71042783 ecr 94498], length 0
+03:51:19.541516 ens5  In  IP 10.128.7.122.41360 > 10.128.5.190.9751: Flags [.], seq 466373:484271, ack 1, win 255, options [nop,nop,TS val 94498 ecr 70977648], leng
+failed to run commands: exit status 141

@@ -1,0 +1,56 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c975v2-1044-reopen
+# instance: i-0fca1614e44e704f4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T041839Z   end: 20261104T042433Z   rc: 0
+# script sha256: a1b24be46f37ebf1ad2c2dd4ad85380ca847c8e1149ae5915af143debd805992
+# ---- script ----
+# | cd /boot/home/tw || exit 3
+# | echo "--- the first run's outputs (its SSM session timed out at 1800 s, before its reopen case ended)"
+# | date -u +%H:%M:%SZ
+# | for m in reopen zerodead; do echo "=== $m"; cat out.$m; done
+# | echo "--- still running, and their connections"
+# | ps | grep '[t]cp975 '
+# | netstat -n -t | grep ':9751'
+# | for p in $(ps | grep '[t]cp975 ' | awk '{print $2}'); do kill $p; done
+# | sleep 2
+# | echo "--- rerun reopen with the harness fixed to honour its cap after a short send()"
+# | wget -q -O tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/975/src/tcp975.c?<PRESIGNED>' || exit 4
+# | echo '4f96e9e5b838a36655b6aeeab75d9642027a82b7c1ee26e94dd5fb94296bf71d  tcp975.c' | sha256sum -c || exit 5
+# | gcc -O2 -Wall -o tcp975 tcp975.c -lnetwork || exit 6
+# | sha256sum tcp975.c tcp975
+# | listimage 1 | grep -E 'protocols/tcp'
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 10.128.5.190 9751 9752 reopen 300 > out.reopen2 2>&1 &
+# | sleep 200
+# | echo "--- 200 s in"; netstat -n -t | grep ':9751'
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | cat out.reopen2
+# ---- raw output ----
+--- the first run's outputs (its SSM session timed out at 1800 s, before its reopen case ended)
+04:18:42Z
+=== reopen
+  [03:47:31Z reopen] connected from port 
+  local port 44278
+  [03:47:31Z reopen] control: SILENTREOPEN 44278 30 10
+=== zerodead
+  [03:47:31Z zerodead] connected from port 
+  local port 44293
+  [03:47:31Z zerodead] control: STOPREAD 44293 100000
+  [03:47:51Z zerodead] control: DROP 44293
+RESULT zerodead FAIL no error after 1200 s: send() on a closed window still blocked at the cap
+--- still running, and their connections
+tcp         0 262144 [10.128.7.228]:44278  [10.128.5.190]:9751   fin-wait1    987
+--- rerun reopen with the harness fixed to honour its cap after a short send()
+tcp975.c: OK
+4f96e9e5b838a36655b6aeeab75d9642027a82b7c1ee26e94dd5fb94296bf71d  tcp975.c
+7773dc9a38df4bf7cc7a3c9dde5f2526f1b5d672d11345a1c50117a1a1641bd9  tcp975
+ 2042 0xffff000002120000 0xffff000002133000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+start 2026-11-04T04:18:44Z
+--- 200 s in
+tcp         0 262144 [10.128.7.228]:46377  [10.128.5.190]:9751   established  1448/tcp975
+end 2026-11-04T04:24:24Z
+  [04:18:44Z reopen] connected from port 
+  local port 46377
+  [04:18:44Z reopen] control: SILENTREOPEN 46377 30 10
+RESULT reopen FAIL send(): Interrupted system call after 340.0 s (the window never reopened)
