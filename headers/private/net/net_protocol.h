@@ -120,7 +120,8 @@ struct net_protocol_module_info {
 					void* buffer, size_t bufferSize, int flags,
 					int* _messageFlags);
 	ssize_t		(*process_ancillary_data_no_container)(net_protocol* self,
-					net_buffer* buffer, void* data, size_t bufferSize);
+					net_buffer* buffer, void* data, size_t bufferSize,
+					int* _messageFlags);
 
 	ssize_t		(*send_data_no_buffer)(net_protocol* self, const iovec* vecs,
 					size_t vecCount, ancillary_data_container* ancillaryData,

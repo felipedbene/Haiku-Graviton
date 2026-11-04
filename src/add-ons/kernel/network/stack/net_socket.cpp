@@ -395,9 +395,11 @@ process_ancillary_data(net_socket* socket,
 		return B_OK;
 	}
 
+	// A control message that does not fit is left out and reported with
+	// MSG_CTRUNC; it is no reason to fail the call and lose the data.
 	bytesWritten = socket->first_info->process_ancillary_data_no_container(
 		socket->first_protocol, buffer, dataBuffer,
-		messageHeader->msg_controllen);
+		messageHeader->msg_controllen, &messageHeader->msg_flags);
 	if (bytesWritten < 0)
 		return bytesWritten;
 	messageHeader->msg_controllen = bytesWritten;

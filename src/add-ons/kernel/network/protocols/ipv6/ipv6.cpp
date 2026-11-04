@@ -1838,7 +1838,8 @@ ipv6_error_reply(net_protocol* protocol, net_buffer* cause, net_error error,
 
 ssize_t
 ipv6_process_ancillary_data_no_container(net_protocol* _protocol,
-	net_buffer* buffer, void* msgControl, size_t msgControlLen)
+	net_buffer* buffer, void* msgControl, size_t msgControlLen,
+	int* _messageFlags)
 {
 	ipv6_protocol* protocol = (ipv6_protocol*)_protocol;
 	ssize_t bytesWritten = 0;
@@ -1846,8 +1847,12 @@ ipv6_process_ancillary_data_no_container(net_protocol* _protocol,
 	if (protocol->receive_hoplimit != 0) {
 		TRACE("receive_hoplimit");
 
-		if (msgControlLen < CMSG_SPACE(sizeof(int)))
-			return B_NO_MEMORY;
+		if (msgControlLen < CMSG_SPACE(sizeof(int))) {
+			// The datagram is still returned, without the control messages
+			// that do not fit (POSIX, as on Linux and the BSDs).
+			*_messageFlags |= MSG_CTRUNC;
+			return bytesWritten;
+		}
 
 		// use some default value (64 at the moment) when the real one fails
 		int hopLimit = IPV6_DEFHLIM;
@@ -1877,8 +1882,10 @@ ipv6_process_ancillary_data_no_container(net_protocol* _protocol,
 	if (protocol->receive_pktinfo != 0) {
 		TRACE("receive_pktinfo");
 
-		if (msgControlLen < CMSG_SPACE(sizeof(struct in6_pktinfo)))
-			return B_NO_MEMORY;
+		if (msgControlLen < CMSG_SPACE(sizeof(struct in6_pktinfo))) {
+			*_messageFlags |= MSG_CTRUNC;
+			return bytesWritten;
+		}
 
 		cmsghdr* messageHeader = (cmsghdr*)((char*)msgControl + bytesWritten);
 		messageHeader->cmsg_len = CMSG_LEN(sizeof(struct in6_pktinfo));
