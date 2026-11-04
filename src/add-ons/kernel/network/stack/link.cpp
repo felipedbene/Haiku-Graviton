@@ -333,7 +333,10 @@ LinkProtocol::_MonitorEvent(net_device_monitor* monitor, int32 event)
 {
 	LinkProtocol* protocol = (LinkProtocol*)monitor->cookie;
 
-	if (event == B_DEVICE_GOING_DOWN) {
+	if (event == B_DEVICE_GOING_DOWN || event == B_DEVICE_BEING_REMOVED) {
+		// A device being removed takes its monitors off its list after this
+		// event, so the capture ends then too, if it did not already when
+		// the device went down.
 		// This runs with the device's monitor lock held, and unregistering
 		// takes the device list lock, which register_device_monitor() and
 		// unregister_device_monitor() take before the monitor lock: only
