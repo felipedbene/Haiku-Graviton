@@ -101,7 +101,8 @@ public:
 
 			status_t			AddFragment(uint16 start, uint16 end,
 									net_buffer* buffer, bool lastFragment,
-									bool* _abandon);
+									uint8** _headers, uint32 headersLength,
+									uint32 nextHeaderField, bool* _abandon);
 			void				SetHeaders(uint8* headers, uint32 length,
 									uint32 nextHeaderField);
 			status_t			Reassemble(net_buffer* to);
@@ -119,6 +120,10 @@ public:
 	static	void				StaleTimer(struct net_timer* timer, void* data);
 
 private:
+			void				_Stored(uint16 end, bool lastFragment,
+									uint8** _headers, uint32 headersLength,
+									uint32 nextHeaderField);
+
 			FragmentPacket*		fNext;
 			struct ipv6_packet_key fKey;
 			uint32				fIndex;
@@ -433,7 +438,8 @@ FragmentPacket::~FragmentPacket()
 
 status_t
 FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
-	bool lastFragment, bool* _abandon)
+	bool lastFragment, uint8** _headers, uint32 headersLength,
+	uint32 nextHeaderField, bool* _abandon)
 {
 	*_abandon = false;
 
@@ -454,9 +460,10 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 	} else if (fReceivedLastFragment && end > fEnd)
 		return B_BAD_DATA;
 
-	// The end is only recorded once the fragment is stored below: one whose
-	// data is all held already is freed, and would leave a complete-looking
-	// datagram with no buffer of this call to reassemble into.
+	// The end, and a first fragment's headers (see _Stored()), are only
+	// taken once the fragment is stored below: one whose data is all held
+	// already is freed, and would leave a complete-looking datagram with no
+	// buffer of this call to reassemble into.
 	const uint16 datagramEnd = end;
 
 	// Search for a position in the list to insert the fragment
@@ -486,8 +493,12 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 	// Any other overlap abandons the whole datagram (RFC 5722, RFC 8200 4.5).
 	// Trimming it, as RFC 791 allows for IPv4, let the overlapping part of a
 	// fragment be dropped while the rest was kept, and a fragment spanning
-	// more than one held fragment lost its data past the first. As on Linux,
-	// "duplicate" above means wholly inside contiguous data already held.
+	// more than one held fragment lost its data past the first.
+	// "Duplicate" above means wholly inside one held buffer. Fragments are
+	// merged with a neighbour they meet as they arrive, but one that fills a
+	// gap is merged with one side only, so contiguous data can still sit in
+	// two buffers; a fragment spanning them is then taken as an overlap where
+	// Linux, which compares against its contiguous runs, may see a duplicate.
 	if ((previous != NULL && previous->fragment.end > start)
 		|| (next != NULL && end > next->fragment.start)) {
 		TRACE("    overlaps held data, abandoning the datagram");
@@ -526,10 +537,8 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		}
 
 		fFragments.InsertBefore(next, buffer);
-		if (lastFragment) {
-			fReceivedLastFragment = true;
-			fEnd = datagramEnd;
-		}
+		_Stored(datagramEnd, lastFragment, _headers, headersLength,
+			nextHeaderField);
 
 		return B_OK;
 	} else if (next != NULL && next->fragment.start == end) {
@@ -550,10 +559,8 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		}
 
 		fFragments.InsertBefore(afterNext, buffer);
-		if (lastFragment) {
-			fReceivedLastFragment = true;
-			fEnd = datagramEnd;
-		}
+		_Stored(datagramEnd, lastFragment, _headers, headersLength,
+			nextHeaderField);
 
 		return B_OK;
 	}
@@ -565,12 +572,34 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 	buffer->fragment.start = start;
 	buffer->fragment.end = end;
 	fFragments.InsertBefore(next, buffer);
-	if (lastFragment) {
-		fReceivedLastFragment = true;
-		fEnd = datagramEnd;
-	}
+	_Stored(datagramEnd, lastFragment, _headers, headersLength,
+		nextHeaderField);
 
 	return B_OK;
+}
+
+
+/*!	Records what a fragment that has just been stored says about its
+	datagram: the end, for the last fragment, and the headers in front of the
+	fragment header, for the first one. Those are only taken from a fragment
+	that is stored, so that one that is dropped, say for an end that does
+	not match the last fragment's, cannot leave its header chain to the
+	datagram.
+	\a *_headers is set to \c NULL once they have been taken.
+*/
+void
+FragmentPacket::_Stored(uint16 end, bool lastFragment, uint8** _headers,
+	uint32 headersLength, uint32 nextHeaderField)
+{
+	if (lastFragment) {
+		fReceivedLastFragment = true;
+		fEnd = end;
+	}
+
+	if (*_headers != NULL) {
+		SetHeaders(*_headers, headersLength, nextHeaderField);
+		*_headers = NULL;
+	}
 }
 
 
@@ -932,12 +961,14 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 	TRACE("   Received IPv6 %sfragment of size %" B_PRIu32 ", offset %" B_PRIu32
 		".", lastFragment ? "last ": "", end - start, start);
 
-	if (headers != NULL)
-		packet->SetHeaders((uint8*)headersDeleter.Detach(), offset,
-			nextHeaderField);
-
+	// The headers go to the packet only if AddFragment() stores the
+	// fragment; otherwise headersDeleter still frees them.
+	uint8* unstoredHeaders = headers;
 	bool abandon;
-	status = packet->AddFragment(start, end, buffer, lastFragment, &abandon);
+	status = packet->AddFragment(start, end, buffer, lastFragment,
+		&unstoredHeaders, offset, nextHeaderField, &abandon);
+	if (unstoredHeaders == NULL)
+		headersDeleter.Detach();
 	if (abandon) {
 		// No tombstone is kept, as on Linux: later fragments with the same
 		// key start a new datagram.

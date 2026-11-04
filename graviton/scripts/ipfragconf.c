@@ -30,6 +30,14 @@
  *                       INFO for IPv4, where either outcome is allowed;
  *              short total length (IPv4): a header length of 60 with a
  *                       total length of 20;
+ *              chain (IPv6): the genuine last fragment, then a first
+ *                       fragment [0,1016) whose end does not match and
+ *                       whose destination options header is marked EVIL,
+ *                       then the genuine first fragment, marked GOOD: if
+ *                       delivered, the datagram must carry GOOD. The chain
+ *                       is read from IPV6_DSTOPTS where the stack offers
+ *                       it, or with -l from the log line an instrumented
+ *                       ipv6 module writes (graviton/evidence/1071/).
  *              front (IPv6): [8,1008) M=1, then [0,16) M=1 overlapping its
  *                       start (RFC 5722), then the last fragment.
  *            Must be delivered (IPv6), as on Linux: a fragment wholly inside
@@ -62,6 +70,9 @@
  * Plain POSIX: builds and runs on Linux, which is the reference.
  */
 
+#define _GNU_SOURCE
+	// memmem() and the RFC 3542 IPV6_RECVDSTOPTS on glibc
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -70,6 +81,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -83,6 +95,8 @@
 #endif
 
 static int sFailures;
+static const char* sKernelLog;
+	// -l: where the instrumented ipv6 module logs reassembled header chains
 static unsigned short sPort = 41000;
 static uint32_t sIdent;
 
@@ -529,6 +543,9 @@ short_total_length_row(void)
 }
 
 
+static void header_chain_row(int bogus);
+
+
 static void
 crafted_rows(int family)
 {
@@ -616,8 +633,208 @@ crafted_rows(int family)
 			again, 4, kDeliver);
 	}
 
+	if (family == AF_INET6) {
+		header_chain_row(0);
+		header_chain_row(1);
+	}
+
 	if (family == AF_INET)
 		short_total_length_row();
+}
+
+
+/*!	Sends \a length bytes of \a data as the IPv6 fragment at byte \a offset
+	of datagram \a ident, behind an 8-byte destination options header whose
+	one option carries the four bytes \a marker. The options header is part
+	of the fragment's unfragmentable headers, so it becomes the reassembled
+	datagram's if this is the first fragment that is kept.
+*/
+static int
+send_fragment_marked(const unsigned char* data, size_t length, size_t offset,
+	int more, uint32_t ident, const char* marker)
+{
+	unsigned char packet[16 + 2048];
+	if (length > 2048) {
+		errno = EMSGSIZE;
+		return -1;
+	}
+	int fd = socket(AF_INET6, SOCK_RAW, 60);
+		// IPPROTO_DSTOPTS
+	if (fd < 0)
+		return -1;
+	packet[0] = IPPROTO_FRAGMENT;
+	packet[1] = 0;
+		// 8 bytes
+	packet[2] = 0x1e;
+		// an option type to skip if unrecognised (RFC 8200 4.2)
+	packet[3] = 4;
+	memcpy(packet + 4, marker, 4);
+	packet[8] = IPPROTO_UDP;
+	packet[9] = 0;
+	uint16_t offlg = (uint16_t)(offset & 0xfff8) | (more ? 1 : 0);
+	packet[10] = offlg >> 8;
+	packet[11] = offlg & 0xff;
+	packet[12] = ident >> 24; packet[13] = ident >> 16;
+	packet[14] = ident >> 8; packet[15] = ident;
+	memcpy(packet + 16, data, length);
+
+	struct sockaddr_in6 to;
+	memset(&to, 0, sizeof(to));
+	to.sin6_family = AF_INET6;
+	to.sin6_addr = in6addr_loopback;
+	ssize_t sent = sendto(fd, packet, 16 + length, 0, (struct sockaddr*)&to,
+		sizeof(to));
+	int error = errno;
+	close(fd);
+	errno = error;
+	return sent == (ssize_t)(16 + length) ? 0 : -1;
+}
+
+
+/*!	Finds which marker the reassembled datagram \a ident carried: from the
+	IPV6_DSTOPTS control message where the stack offers one (Linux), or from
+	the line the instrumented module logs (Haiku, -l). Returns "?" if it
+	cannot tell.
+*/
+static const char*
+chain_marker(const unsigned char* control, size_t controlLength,
+	uint32_t ident)
+{
+	static const char* const kMarkers[] = { "GOOD", "EVIL" };
+#ifdef IPV6_RECVDSTOPTS
+	struct msghdr message;
+	memset(&message, 0, sizeof(message));
+	message.msg_control = (void*)control;
+	message.msg_controllen = controlLength;
+	for (struct cmsghdr* header = CMSG_FIRSTHDR(&message); header != NULL;
+			header = CMSG_NXTHDR(&message, header)) {
+		if (header->cmsg_level != IPPROTO_IPV6
+			|| header->cmsg_type != IPV6_DSTOPTS)
+			continue;
+		const unsigned char* data = CMSG_DATA(header);
+		size_t length = header->cmsg_len - CMSG_LEN(0);
+		for (int i = 0; i < 2; i++) {
+			if (memmem(data, length, kMarkers[i], 4) != NULL)
+				return kMarkers[i];
+		}
+	}
+#else
+	(void)control;
+	(void)controlLength;
+#endif
+	if (sKernelLog == NULL)
+		return "?";
+
+	// "ipfrag-instrument: reassembled id XXXXXXXX headers N: hex..."
+	char needle[64];
+	snprintf(needle, sizeof(needle), "reassembled id %08x ", ident);
+	for (int attempt = 0; attempt < 30; attempt++) {
+		FILE* file = fopen(sKernelLog, "r");
+		char line[1024];
+		const char* found = NULL;
+		while (file != NULL && fgets(line, sizeof(line), file) != NULL) {
+			if (strstr(line, needle) == NULL)
+				continue;
+			// the markers in hex
+			if (strstr(line, "47 4f 4f 44") != NULL)
+				found = kMarkers[0];
+			else if (strstr(line, "45 56 49 4c") != NULL)
+				found = kMarkers[1];
+			else
+				found = "none";
+		}
+		if (file != NULL)
+			fclose(file);
+		if (found != NULL)
+			return found;
+		usleep(100000);
+	}
+	return "?";
+}
+
+
+/*!	IPv6 only: a datagram whose genuine fragments carry a destination options
+	header marked GOOD. With \a bogus, a first fragment whose end does not
+	match the genuine last fragment's, and whose options header is marked
+	EVIL, comes between the last and the genuine first fragment. It must be
+	dropped without leaving its header chain: the datagram, if delivered, must
+	carry GOOD. (Linux abandons the datagram at the inconsistent fragment, so
+	there it is not delivered at all, which is conformant too.)
+*/
+static void
+header_chain_row(int bogus)
+{
+	char name[96], detail[200];
+	snprintf(name, sizeof(name), "v6 chain %s", bogus
+		? "rejected first fragment leaves no headers"
+		: "genuine headers delivered (control)");
+	const size_t kLength = 1008;
+	unsigned short port = sPort++;
+	int receiver = bind_receiver(AF_INET6, port);
+	if (receiver < 0) {
+		snprintf(detail, sizeof(detail), "bind: %s", strerror(errno));
+		result(name, 0, detail);
+		return;
+	}
+#ifdef IPV6_RECVDSTOPTS
+	int on = 1;
+	setsockopt(receiver, IPPROTO_IPV6, IPV6_RECVDSTOPTS, &on, sizeof(on));
+#endif
+	unsigned char* udp = make_udp(AF_INET6, port, kLength);
+	uint32_t ident = ++sIdent;
+	int status = send_fragment_marked(udp + 1000, 8, 1000, 0, ident, "GOOD");
+	if (status == 0 && bogus) {
+		// [0,1016) with more fragments: past the end the last one set
+		unsigned char longer[1016];
+		memcpy(longer, udp, kLength);
+		memset(longer + kLength, 0, sizeof(longer) - kLength);
+		status = send_fragment_marked(longer, sizeof(longer), 0, 1, ident,
+			"EVIL");
+	}
+	if (status == 0)
+		status = send_fragment_marked(udp, 1000, 0, 1, ident, "GOOD");
+	if (status != 0) {
+		snprintf(detail, sizeof(detail), "raw send: %s", strerror(errno));
+		result(name, 0, detail);
+		free(udp);
+		close(receiver);
+		return;
+	}
+
+	unsigned char in[4096];
+	unsigned char control[512];
+	struct iovec vector = { in, sizeof(in) };
+	struct msghdr message;
+	memset(&message, 0, sizeof(message));
+	message.msg_iov = &vector;
+	message.msg_iovlen = 1;
+	message.msg_control = control;
+	message.msg_controllen = sizeof(control);
+	ssize_t received = recvmsg(receiver, &message, 0);
+	int intact = received == (ssize_t)(kLength - 8)
+		&& memcmp(in, udp + 8, kLength - 8) == 0;
+	const char* marker = received < 0 ? "-"
+		: chain_marker(control, message.msg_controllen, ident);
+
+	if (received < 0) {
+		snprintf(detail, sizeof(detail), "not delivered%s", bogus
+			? " (the datagram was abandoned; conformant)" : ", but must be");
+		result(name, bogus, detail);
+	} else if (strcmp(marker, "?") == 0) {
+		printf("%-50s INFO  delivered%s, header chain not observable here\n",
+			name, intact ? " intact" : ", WRONG CONTENT");
+		fflush(stdout);
+		if (!intact)
+			sFailures++;
+	} else {
+		snprintf(detail, sizeof(detail), "delivered%s, header chain %s%s",
+			intact ? " intact" : ", WRONG CONTENT", marker,
+			strcmp(marker, "GOOD") == 0 ? ""
+				: " (the dropped fragment's)");
+		result(name, intact && strcmp(marker, "GOOD") == 0, detail);
+	}
+	free(udp);
+	close(receiver);
 }
 
 
@@ -772,8 +989,11 @@ main(int argc, char** argv)
 			craftedRows = 1;
 		else if (strcmp(argv[i], "-t") == 0)
 			timeoutRows = 1;
+		else if (strcmp(argv[i], "-l") == 0 && i + 1 < argc)
+			sKernelLog = argv[++i];
 		else {
-			fprintf(stderr, "usage: %s [-s] [-c] [-t]\n", argv[0]);
+			fprintf(stderr, "usage: %s [-s] [-c] [-t] [-l kernel-log]\n",
+				argv[0]);
 			return 2;
 		}
 	}

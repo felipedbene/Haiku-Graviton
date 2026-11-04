@@ -1,0 +1,76 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild7-modules
+# instance: i-0d66fa8f03e10f968   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T045419Z   end: 20261104T045511Z   rc: 0
+# script sha256: d0fd823764a9a17cfef6c1f7a1c9b0b62fce54b505b609ed9dbe9b451e61951e
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/L
+# | cd /opt/wL/hg/generated || exit 1
+# | BASE=$(git -C .. rev-parse HEAD)
+# | echo "base=$BASE"
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f --detach "$BASE" || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/wL/$patch || return 1
+# | 		sha256sum /opt/wL/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wL/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	if [ "${3:-}" = instrument ]; then
+# | 		aws s3 cp --quiet $OUT/patch/instrument.patch /opt/wL/instrument.patch || return 1
+# | 		sha256sum /opt/wL/instrument.patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wL/instrument.patch || { echo "instrument apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	rm -rf objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 ipv4 ipv6 > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	echo "-- warnings in ipv4.cpp/ipv6.cpp:"
+# | 	grep -A3 'warning:' jam-$label.log | grep -E 'protocols/(ipv6/ipv6|ipv4/ipv4)\.cpp' | head -20
+# | 	mkdir -p /opt/wL/out/$label
+# | 	for t in ipv4 ipv6; do
+# | 		cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/$t/$t /opt/wL/out/$label/$t && sha256sum /opt/wL/out/$label/$t | sed "s|/opt/wL/out/||"
+# | 		aws s3 cp --quiet /opt/wL/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build b1070i b1070.patch instrument || exit 1
+# | build a1071i a1071.patch instrument || exit 1
+# | build a1071 a1071.patch || exit 1
+# | echo XBUILD-DONE
+# ---- raw output ----
+base=88e18b77a3181e20f0cf11021a006745b092c3ca
+5d16469157b3c8b4290bf468664199cb65e89843b64fb310d3fe42c62dfff876  /opt/wL/b1070.patch
+29021580c36685ed472f07c1691b14ca20aa639f85732a1ff61166c4ac167adb  /opt/wL/instrument.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 272 +++++++++++++++---
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 316 +++++++++++++++++----
+ 2 files changed, 486 insertions(+), 102 deletions(-)
+JAM b1070i patch=b1070.patch rc=0 wall=14s failed=0 warnings=122
+-- warnings in ipv4.cpp/ipv6.cpp:
+f135649880c6203130d0c53a5006c0dca37817ffc06f5260d021b7860d660e10  b1070i/ipv4
+0bc67185d18734da72e3c0075ea48eb2992c9ac4418da10fab3db469b4d4d340  b1070i/ipv6
+aec38ca20f1fe02ebb53c8f8c68d82479e53fc961f25a224b466437a063061c9  /opt/wL/a1071.patch
+29021580c36685ed472f07c1691b14ca20aa639f85732a1ff61166c4ac167adb  /opt/wL/instrument.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 272 +++++++++++++---
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 361 +++++++++++++++++----
+ 2 files changed, 524 insertions(+), 109 deletions(-)
+JAM a1071i patch=a1071.patch rc=0 wall=7s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+f135649880c6203130d0c53a5006c0dca37817ffc06f5260d021b7860d660e10  a1071i/ipv4
+9744386c3a2917802e86a3ef75dd088ede6854338f40189360677a084ecdee95  a1071i/ipv6
+aec38ca20f1fe02ebb53c8f8c68d82479e53fc961f25a224b466437a063061c9  /opt/wL/a1071.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 272 +++++++++++++---
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 345 +++++++++++++++++----
+ 2 files changed, 508 insertions(+), 109 deletions(-)
+JAM a1071 patch=a1071.patch rc=0 wall=7s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+f135649880c6203130d0c53a5006c0dca37817ffc06f5260d021b7860d660e10  a1071/ipv4
+1c90be19bb69b28fae0672ba66c490bff9d8ab2cb19134486b6e464b5125f091  a1071/ipv6
+XBUILD-DONE

@@ -1,0 +1,25 @@
+--- a/src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp	2026-11-03 22:50:41
++++ b/src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp	2026-11-03 22:50:41
+@@ -700,6 +700,22 @@
+ 	header->ip6_plen = htons(payloadLength);
+ 	fHeaders[fNextHeaderField] = fKey.protocol;
+ 		// what followed the fragment header now follows the header before it
++
++	{
++		// TEST INSTRUMENTATION ONLY (ipfragconf chain rows), not for merging:
++		// log the extension headers the reassembled datagram will carry.
++		char line[160];
++		int used = snprintf(line, sizeof(line),
++			"ipfrag-instrument: reassembled id %08" B_PRIx32 " headers %"
++			B_PRIu32 ":", B_BENDIAN_TO_HOST_INT32(fKey.id), fHeadersLength);
++		for (uint32 i = sizeof(ip6_hdr); i < fHeadersLength
++				&& i < sizeof(ip6_hdr) + 16 && used < (int)sizeof(line) - 4;
++				i++) {
++			used += snprintf(line + used, sizeof(line) - used, " %02x",
++				fHeaders[i]);
++		}
++		dprintf("%s\n", line);
++	}
+ 
+ 	return gBufferModule->prepend(to, fHeaders, fHeadersLength);
+ }
