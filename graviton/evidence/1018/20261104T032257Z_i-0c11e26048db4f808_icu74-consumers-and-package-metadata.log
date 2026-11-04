@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: icu74-consumers-and-package-metadata
+# instance: i-0c11e26048db4f808   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T032257Z   end: 20261104T032302Z   rc: 0
+# script sha256: 71b616b9b98da228eed6ae0d2ebe57ee3be0c1cf41140b5ac22945039a26ff7f
+# ---- script ----
+# | # issue 1018: who links ICU 74 on a canonical-image box, and what the bootstrap packages declare
+# | for f in /boot/system/lib/libbe.so /boot/system/lib/libbnetapi.so /boot/system/lib/libroot-addon-icu.so; do echo "$f:"; readelf -d $f 2>/dev/null | grep -E "NEEDED.*icu"; done
+# | echo "== bootstrap icu74 (image) provides"; package list -i /boot/system/packages/icu74-74.1_bootstrap-1-arm64.hpkg | grep -E "provides|requires"
+# | cd /tmp && curl -sSfO https://packages.debene.dev/arm64/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg 2>/dev/null
+# | echo "== bootstrap icu74_devel (repo) requires"; package list -i /tmp/icu74_devel-74.1_bootstrap-1-arm64.hpkg | grep -E "requires"
+# | echo "== the haiku package's ICU requirements"; package list -i /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg | grep -iE "icu"
+# | echo "== probe rebuilt from the committed source"; sha256sum /tmp/icuprobe-src.c; gcc -DV=74 -o /tmp/icuprobe74n /tmp/icuprobe-src.c -l:libicuuc.so.74 -l:libicui18n.so.74 && /tmp/icuprobe74n; echo "rc=$?"
+# ---- raw output ----
+/boot/system/lib/libbe.so:
+ 0x0000000000000001 (NEEDED)             Shared library: [libicudata.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicui18n.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicuio.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicuuc.so.74]
+/boot/system/lib/libbnetapi.so:
+ 0x0000000000000001 (NEEDED)             Shared library: [libicudata.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicui18n.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicuio.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicuuc.so.74]
+/boot/system/lib/libroot-addon-icu.so:
+ 0x0000000000000001 (NEEDED)             Shared library: [libicudata.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicui18n.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicuio.so.74]
+ 0x0000000000000001 (NEEDED)             Shared library: [libicuuc.so.74]
+== bootstrap icu74 (image) provides
+	provides: icu74 = 74.1 (compatible >= 74)
+	provides: lib:libicudata = 74.1 (compatible >= 74)
+	provides: lib:libicui18n = 74.1 (compatible >= 74)
+	provides: lib:libicuio = 74.1 (compatible >= 74)
+	provides: lib:libicuuc = 74.1 (compatible >= 74)
+	requires: haiku
+[srccache] MISS https://packages.debene.dev/arm64/packages/icu74_devel-74.1_bootstrap-1-arm64.hpkg (981095 bytes)
+== bootstrap icu74_devel (repo) requires
+	requires: icu74==74.1
+== the haiku package's ICU requirements
+	requires: lib:libicudata>=74.1
+	requires: lib:libicui18n>=74.1
+	requires: lib:libicuio>=74.1
+	requires: lib:libicuuc>=74.1
+== probe rebuilt from the committed source
+eaee914629602dbbeef297124f68f5ff9179dc79622a2132b916a59ef240a653  /tmp/icuprobe-src.c
+data dir: /packages/icu74_bootstrap-74.1-1/.self/data/icu/74.1
+ures_open(de):   U_MISSING_RESOURCE_ERROR
+ucol_open(de):   U_FILE_ACCESS_ERROR
+udatpg_open(en_US): U_MISSING_RESOURCE_ERROR
+rc=1

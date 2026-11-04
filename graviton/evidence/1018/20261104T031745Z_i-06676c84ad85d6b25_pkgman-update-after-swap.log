@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pkgman-update-after-swap
+# instance: i-06676c84ad85d6b25   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T031745Z   end: 20261104T031748Z   rc: 0
+# script sha256: 0e092d91ab476e45a50e384d85d6fd764377b63d4d423c432a571d981cbc64cc
+# ---- script ----
+# | # issue 1018: does a full `pkgman update` try to put the bootstrap icu74 back? (answers "no")
+# | ls /packages | grep -E "^icu74"
+# | yes n 2>/dev/null | head -5 | pkgman update 2>&1 | LC_ALL=C tr -cd '\11\12\15\40-\176' > /tmp/upd.txt
+# | echo "proposed changes: $(grep -cE '^\s+(install|upgrade|downgrade|uninstall) ' /tmp/upd.txt)"; echo "touching icu:"; grep -iE "icu" /tmp/upd.txt || echo "(none)"
+# ---- raw output ----
+icu74-74.1-6
+proposed changes: 6
+touching icu:
+(none)
