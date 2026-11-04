@@ -1959,8 +1959,11 @@ ipv4_receive_data(net_buffer* buffer)
 	uint16 packetLength = header.TotalLength();
 	headerLength = header.HeaderLength();
 	if (packetLength > buffer->size
-		|| headerLength < sizeof(ipv4_header))
+		|| headerLength < sizeof(ipv4_header)
+		|| packetLength < headerLength)
 		return B_BAD_DATA;
+			// a total length short of the header would make the fragment
+			// length, computed from the two, wrap around
 
 	if ((buffer->buffer_flags & NET_BUFFER_L3_CHECKSUM_VALID) == 0) {
 		if (gBufferModule->checksum(buffer, 0, headerLength, true) != 0)
