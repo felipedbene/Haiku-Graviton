@@ -1,0 +1,147 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 payloads elided
+# evidence: r2-xbuild-clean
+# instance: i-09468fba34e4f2239   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: rebuild every arm's icmp6/ipv6 from clean objects (the first r2 build gave c1082v2 trunk's ipv6), upload
+# start: 20261104T074840Z   end: 20261104T074915Z   rc: 0
+# script sha256: 073b56f464c9ea7b6f750f7a95dc4cc4914926f5be92211e17f522a7cb6cf522
+# ---- script ----
+# | # Builds for #1082 (second revision) and #1098, each a clean checkout of a pushed commit:
+# | #   trunk    origin/graviton                          icmp6 ipv6 (must match canonical's)
+# | #   c1082v2  fix/1082-icmp6-port-unreachable           icmp6 ipv6
+# | #   b1098    fix/1098 merge commit (#1073 + #1097, no 1098 fix)  icmp6 ipv6
+# | #   c1098    fix/1098-ipv6-time-exceeded-quote         icmp6 ipv6
+# | # plus the host-side rate-limit unit row, icmp6ratelimit1082.
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out; mkdir -p $O; REV=hrev59996
+# | P=objects/haiku/arm64/release/add-ons/kernel/network/protocols
+# | git -C .. fetch -q origin graviton fix/1082-icmp6-port-unreachable fix/1098-ipv6-time-exceeded-quote || exit 1
+# | C1098=$(git -C .. rev-parse origin/fix/1098-ipv6-time-exceeded-quote)
+# | B1098=$(git -C .. log --merges -1 --format=%H $C1098)
+# | for arm in trunk:origin/graviton c1082v2:origin/fix/1082-icmp6-port-unreachable b1098:$B1098 c1098:$C1098; do
+# | 	name=${arm%%:*}; ref=${arm#*:}
+# | 	git -C .. checkout -q -f $ref || exit 1
+# | 	rm -f $P/icmp6/*.o $P/icmp6/icmp6 $P/ipv6/*.o $P/ipv6/ipv6
+# | 		# clean objects: the first run gave c1082v2 trunk's ipv6, so a checkout switch alone was not trusted
+# | 	git -C .. log -1 --format="$name %H %s"
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV icmp6 ipv6 > $O/jam-$name.log 2>&1 || { grep -B2 -A10 -E "error|failed" $O/jam-$name.log | head -60; exit 1; }
+# | 	grep -E "warning:" $O/jam-$name.log | grep -E "icmp6/|ipv6/ipv6.cpp" | sort -u
+# | 	for m in icmp6 ipv6; do cp $(find $P/$m -maxdepth 1 -type f -name $m) $O/$m.$name || exit 1; done
+# | done
+# | git -C .. checkout -q -f origin/fix/1082-icmp6-port-unreachable
+# | c++ -Wall -I ../src/add-ons/kernel/network/protocols/icmp6 -o $O/icmp6ratelimit1082 ../graviton/scripts/icmp6ratelimit1082.cpp && echo "== icmp6ratelimit1082 (host)" && $O/icmp6ratelimit1082
+# | cd $O && sha256sum icmp6.* ipv6.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'icmp6.*' --include 'ipv6.*' --include SHA256SUMS . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/T/r2/out/ && echo uploaded
+# ---- raw output ----
+trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620 evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+c1082v2 df1f19a83e8f62759e87b938ec572684329df6ba evidence: issue 1082 before/after on c7g.2xlarge, and the Linux reference (first revision)
+b1098 1ce31fa31692b31814e3f4a4a66a29acff9d0490 Merge branch 'fix/1082-icmp6-port-unreachable' into fix/1098-ipv6-time-exceeded-quote
+c1098 e8a0851f031db87f7abc8f04c4eaa03be0c4f83a graviton: add the issue 1098 conformance row: the reassembly timeout's Time Exceeded
+== icmp6ratelimit1082 (host)
+200 at one instant from full: the burst              PASS  expected 50, got 50
+same instant again: none                             PASS  expected 0, got 0
+999 us later: none                                   PASS  expected 0, got 0
+1 ms after the burst: one                            PASS  expected 1, got 1
+10 ms later: ten                                     PASS  expected 10, got 10
+1 s of one try every 100 us: 1000                    PASS  expected 1000, got 1000
+after an idle hour: no more than the burst           PASS  expected 50, got 50
+clock 5 s back: no credit granted                    PASS  expected 0, got 0
+then 2 ms forward: two                               PASS  expected 2, got 2
+PASS: 0 failure(s)
+6d166f9091041fd9b1385620debedcd21e0700ee991140991578bbed56104b7a  icmp6.b1098
+6d166f9091041fd9b1385620debedcd21e0700ee991140991578bbed56104b7a  icmp6.c1082v2
+6d166f9091041fd9b1385620debedcd21e0700ee991140991578bbed56104b7a  icmp6.c1098
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  icmp6.trunk
+ec17bfa3b88ba044fcad66d735c2b7507bd44eb097ebe44a7fccc7d1313de4fb  ipv6.b1098
+ef4ae881f389141602e9b9e6af8339a5805afcb5fd7040dc1967058dabb82328  ipv6.c1082v2
+6236b335183e3db3867c411580f75782f6ebd2eeb7a53bd09418a65f8265bc25  ipv6.c1098
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  ipv6.trunk
+uploaded
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ mkdir -p /opt/t/out
++ REV=hrev59996
++ P=objects/haiku/arm64/release/add-ons/kernel/network/protocols
++ git -C .. fetch -q origin graviton fix/1082-icmp6-port-unreachable fix/1098-ipv6-time-exceeded-quote
+++ git -C .. rev-parse origin/fix/1098-ipv6-time-exceeded-quote
++ C1098=e8a0851f031db87f7abc8f04c4eaa03be0c4f83a
+++ git -C .. log --merges -1 --format=%H e8a0851f031db87f7abc8f04c4eaa03be0c4f83a
++ B1098=1ce31fa31692b31814e3f4a4a66a29acff9d0490
++ for arm in trunk:origin/graviton c1082v2:origin/fix/1082-icmp6-port-unreachable b1098:$B1098 c1098:$C1098
++ name=trunk
++ ref=origin/graviton
++ git -C .. checkout -q -f origin/graviton
++ rm -f objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_address.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_utils.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/multicast.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6
++ git -C .. log -1 '--format=trunk %H %s'
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 icmp6 ipv6
++ grep -E warning: /opt/t/out/jam-trunk.log
++ grep -E 'icmp6/|ipv6/ipv6.cpp'
++ sort -u
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6 -maxdepth 1 -type f -name icmp6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 /opt/t/out/icmp6.trunk
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6 -maxdepth 1 -type f -name ipv6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6 /opt/t/out/ipv6.trunk
++ for arm in trunk:origin/graviton c1082v2:origin/fix/1082-icmp6-port-unreachable b1098:$B1098 c1098:$C1098
++ name=c1082v2
++ ref=origin/fix/1082-icmp6-port-unreachable
++ git -C .. checkout -q -f origin/fix/1082-icmp6-port-unreachable
++ rm -f objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_address.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_utils.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/multicast.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6
++ git -C .. log -1 '--format=c1082v2 %H %s'
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 icmp6 ipv6
++ grep -E warning: /opt/t/out/jam-c1082v2.log
++ grep -E 'icmp6/|ipv6/ipv6.cpp'
++ sort -u
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6 -maxdepth 1 -type f -name icmp6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 /opt/t/out/icmp6.c1082v2
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6 -maxdepth 1 -type f -name ipv6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6 /opt/t/out/ipv6.c1082v2
++ for arm in trunk:origin/graviton c1082v2:origin/fix/1082-icmp6-port-unreachable b1098:$B1098 c1098:$C1098
++ name=b1098
++ ref=1ce31fa31692b31814e3f4a4a66a29acff9d0490
++ git -C .. checkout -q -f 1ce31fa31692b31814e3f4a4a66a29acff9d0490
++ rm -f objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_address.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_utils.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/multicast.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6
++ git -C .. log -1 '--format=b1098 %H %s'
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 icmp6 ipv6
++ grep -E warning: /opt/t/out/jam-b1098.log
++ grep -E 'icmp6/|ipv6/ipv6.cpp'
++ sort -u
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6 -maxdepth 1 -type f -name icmp6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 /opt/t/out/icmp6.b1098
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6 -maxdepth 1 -type f -name ipv6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6 /opt/t/out/ipv6.b1098
++ for arm in trunk:origin/graviton c1082v2:origin/fix/1082-icmp6-port-unreachable b1098:$B1098 c1098:$C1098
++ name=c1098
++ ref=e8a0851f031db87f7abc8f04c4eaa03be0c4f83a
++ git -C .. checkout -q -f e8a0851f031db87f7abc8f04c4eaa03be0c4f83a
++ rm -f objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_address.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_utils.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/multicast.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6
++ git -C .. log -1 '--format=c1098 %H %s'
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 icmp6 ipv6
++ grep -E warning: /opt/t/out/jam-c1098.log
++ grep -E 'icmp6/|ipv6/ipv6.cpp'
++ sort -u
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6 -maxdepth 1 -type f -name icmp6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 /opt/t/out/icmp6.c1098
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6 -maxdepth 1 -type f -name ipv6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6 /opt/t/out/ipv6.c1098
++ git -C .. checkout -q -f origin/fix/1082-icmp6-port-unreachable
++ c++ -Wall -I ../src/add-ons/kernel/network/protocols/icmp6 -o /opt/t/out/icmp6ratelimit1082 ../graviton/scripts/icmp6ratelimit1082.cpp
++ echo '== icmp6ratelimit1082 (host)'
++ /opt/t/out/icmp6ratelimit1082
++ cd /opt/t/out
++ sha256sum icmp6.b1098 icmp6.c1082v2 icmp6.c1098 icmp6.trunk ipv6.b1098 ipv6.c1082v2 ipv6.c1098 ipv6.trunk
++ tee SHA256SUMS
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet --recursive --exclude '*' --include 'icmp6.*' --include 'ipv6.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/T/r2/out/
++ echo uploaded
