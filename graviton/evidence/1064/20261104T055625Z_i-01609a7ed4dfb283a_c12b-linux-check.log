@@ -1,0 +1,487 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c12b-linux-check
+# instance: i-01609a7ed4dfb283a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck -fn + st_blocks/md5 of arm c12b's data volume vol-0d8b3f58ef0a8168a
+# start: 20261104T055625Z   end: 20261104T055637Z   rc: 0
+# script sha256: 42e1dc2c019e5adc047c805801147c4ee5d63e1d0522a39e294f2de59527dffb
+# ---- script ----
+# | # Linux check of arm c12b's data volume vol-0d8b3f58ef0a8168a after the Haiku run: e2fsck -fn on each of the
+# | # six file systems, then (read-only) size, st_blocks and md5 of every file through Linux.
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0d8b3f58ef0a8168a '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "volume device $D"; lsblk $D || exit 1
+# | P=${D}p
+# | mkdir -p /opt/chk/m
+# | for n in 1 2 3 4 5 6; do
+# | 	echo "== p$n $(blkid -o value -s LABEL ${P}$n)"
+# | 	e2fsck -fn ${P}$n 2>&1; echo "e2fsck p$n rc=$?"
+# | done
+# | for n in 1 2 3 4 5 6; do
+# | 	echo "== files p$n"
+# | 	mount -o ro ${P}$n /opt/chk/m || continue
+# | 	(cd /opt/chk/m && for f in *; do [ -f "$f" ] && printf '%-10s size=%-9s st_blocks=%-7s %s\n' "$f" "$(stat -c %s "$f")" "$(stat -c %b "$f")" "$(md5sum < "$f" | cut -d' ' -f1)"; done)
+# | 	umount /opt/chk/m
+# | done
+# ---- raw output ----
+volume device /dev/nvme6n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme6n1     259:39   0    3G  0 disk 
+├─nvme6n1p1 259:40   0  600M  0 part 
+├─nvme6n1p2 259:41   0  600M  0 part 
+├─nvme6n1p3 259:42   0  600M  0 part 
+├─nvme6n1p4 259:43   0  300M  0 part 
+├─nvme6n1p5 259:44   0   32M  0 part 
+└─nvme6n1p6 259:45   0  200M  0 part 
+== p1 e4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e4k: 20/38400 files (5.0% non-contiguous), 8186/153600 blocks
+e2fsck p1 rc=0
+== p2 ext
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+ext: 20/38400 files (0.0% non-contiguous), 8287/153600 blocks
+e2fsck p2 rc=0
+== p3 e1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e1k: 22/38400 files (9.1% non-contiguous), 127287/614400 blocks
+e2fsck p3 rc=0
+== p4 lsp
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+lsp: 15/76800 files (20.0% non-contiguous), 5126/76800 blocks
+e2fsck p4 rc=0
+== p5 full
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+full: 13/8192 files (7.7% non-contiguous), 781/8192 blocks
+e2fsck p5 rc=0
+== p6 lspx
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+lspx: 15/51200 files (13.3% non-contiguous), 3527/51200 blocks
+e2fsck p6 rc=0
+== files p1
+append     size=300000    st_blocks=600     ad2062d2dad3e3878bd080f7d6d5a945
+lin-1m     size=1048576   st_blocks=2056    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=8       900150983cd24fb0d6963f7d28e17f72
+seq1m      size=1048576   st_blocks=2056    42057a684943b5b67d3194ebd704512b
+seq8m      size=8388608   st_blocks=16408   d6a250664e7d3697ca287b655c822edd
+small2     size=2         st_blocks=8       cf8a84a6a027a3c12d6ff0e83211099e
+small4k    size=4096      st_blocks=8       0a4bf3aad9b025739f54f3790d4a638e
+sparse     size=12292096  st_blocks=24040   6faeb4abce1aec5293f51870ee09d472
+trunc      size=20480     st_blocks=40      b740de7020672320290644a229b2c6af
+== files p2
+append     size=300000    st_blocks=592     5d4ed3bc1375f744cf7e826b83958d76
+lin-1m     size=1048576   st_blocks=2048    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=8       900150983cd24fb0d6963f7d28e17f72
+seq1m      size=1048576   st_blocks=2048    069a499d4af6ff7fb93173da2b7e6be6
+seq8m      size=8388608   st_blocks=16384   6af15c6c18ef1df09baf44c44c431b49
+small2     size=2         st_blocks=8       315c745e69ef74e54e5007efc5e709ba
+small4k    size=4096      st_blocks=8       0b5fd2ba44184962804f0f24d5b8be0e
+sparse     size=12292096  st_blocks=24008   94a7cec951b41be47c3e74fabfff8182
+trunc      size=20480     st_blocks=40      5ac1592d11f3542f087911335091312a
+== files p3
+append     size=300000    st_blocks=592     3ea5e981ce9dd04074d872a6c2fbc493
+lin-1m     size=1048576   st_blocks=2058    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=2       900150983cd24fb0d6963f7d28e17f72
+seq1m      size=1048576   st_blocks=2058    b782d526025ad372d36b3cbdb171a1d1
+seq80m     size=83886080  st_blocks=164486  13a1d9c55c9fb24a652742b61b7ab457
+seq8m      size=8388608   st_blocks=16450   124b1511870ef86f4929b505ca4e62ca
+small2     size=2         st_blocks=2       e1bcbe392495c1750e2eb4ca971c5716
+small4k    size=4096      st_blocks=8       3a5e0c8a488c517eb37050b250c341e4
+sparse     size=12292096  st_blocks=24104   604d644ef2ee09270be4145ccee45094
+tri-trunc  size=10485760  st_blocks=20562   01a02823f590037ebe73cb84a78aaeea
+trunc      size=20480     st_blocks=42      fdc8da74eb91d0759b2ef5c95d47503a
+== files p4
+lin-1m     size=1048576   st_blocks=2056    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=8       900150983cd24fb0d6963f7d28e17f72
+lsparse-a  size=41943040  st_blocks=64      369791098a544969be0af7fffa3b12c9
+lsparse-b  size=41943040  st_blocks=64      bd15c59515f6006c4ef98e0024549248
+== files p5
+lin-1m     size=1048576   st_blocks=2056    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=8       900150983cd24fb0d6963f7d28e17f72
+== files p6
+lin-1m     size=1048576   st_blocks=2048    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=8       900150983cd24fb0d6963f7d28e17f72
+lsparse-a  size=41943040  st_blocks=32      e765718ef5df0a720202b5b3c8b6e75e
+lsparse-b  size=41943040  st_blocks=32      5f3c88997154ebc7c8c0b546247d203c
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0d8b3f58ef0a8168a '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme6n1
++ D=/dev/nvme6n1
++ echo 'volume device /dev/nvme6n1'
++ lsblk /dev/nvme6n1
++ P=/dev/nvme6n1p
++ mkdir -p /opt/chk/m
++ for n in 1 2 3 4 5 6
+++ blkid -o value -s LABEL /dev/nvme6n1p1
++ echo '== p1 e4k'
++ e2fsck -fn /dev/nvme6n1p1
++ echo 'e2fsck p1 rc=0'
++ for n in 1 2 3 4 5 6
+++ blkid -o value -s LABEL /dev/nvme6n1p2
++ echo '== p2 ext'
++ e2fsck -fn /dev/nvme6n1p2
++ echo 'e2fsck p2 rc=0'
++ for n in 1 2 3 4 5 6
+++ blkid -o value -s LABEL /dev/nvme6n1p3
++ echo '== p3 e1k'
++ e2fsck -fn /dev/nvme6n1p3
++ echo 'e2fsck p3 rc=0'
++ for n in 1 2 3 4 5 6
+++ blkid -o value -s LABEL /dev/nvme6n1p4
++ echo '== p4 lsp'
++ e2fsck -fn /dev/nvme6n1p4
++ echo 'e2fsck p4 rc=0'
++ for n in 1 2 3 4 5 6
+++ blkid -o value -s LABEL /dev/nvme6n1p5
++ echo '== p5 full'
++ e2fsck -fn /dev/nvme6n1p5
++ echo 'e2fsck p5 rc=0'
++ for n in 1 2 3 4 5 6
+++ blkid -o value -s LABEL /dev/nvme6n1p6
++ echo '== p6 lspx'
++ e2fsck -fn /dev/nvme6n1p6
++ echo 'e2fsck p6 rc=0'
++ for n in 1 2 3 4 5 6
++ echo '== files p1'
++ mount -o ro /dev/nvme6n1p1 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f append ']'
+++ stat -c %s append
+++ stat -c %b append
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' append 300000 600 ad2062d2dad3e3878bd080f7d6d5a945
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ stat -c %b lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-1m 1048576 2056 fa5aaf3de84965b2a03a10005e6ac4c7
++ for f in *
++ '[' -f lin-small ']'
+++ stat -c %s lin-small
+++ stat -c %b lin-small
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-small 3 8 900150983cd24fb0d6963f7d28e17f72
++ for f in *
++ '[' -f lost+found ']'
++ for f in *
++ '[' -f seq1m ']'
+++ stat -c %s seq1m
+++ stat -c %b seq1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' seq1m 1048576 2056 42057a684943b5b67d3194ebd704512b
++ for f in *
++ '[' -f seq8m ']'
+++ stat -c %s seq8m
+++ stat -c %b seq8m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' seq8m 8388608 16408 d6a250664e7d3697ca287b655c822edd
++ for f in *
++ '[' -f small2 ']'
+++ stat -c %s small2
+++ stat -c %b small2
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' small2 2 8 cf8a84a6a027a3c12d6ff0e83211099e
++ for f in *
++ '[' -f small4k ']'
+++ stat -c %s small4k
+++ stat -c %b small4k
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' small4k 4096 8 0a4bf3aad9b025739f54f3790d4a638e
++ for f in *
++ '[' -f sparse ']'
+++ stat -c %s sparse
+++ stat -c %b sparse
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' sparse 12292096 24040 6faeb4abce1aec5293f51870ee09d472
++ for f in *
++ '[' -f trunc ']'
+++ stat -c %s trunc
+++ stat -c %b trunc
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' trunc 20480 40 b740de7020672320290644a229b2c6af
++ umount /opt/chk/m
++ for n in 1 2 3 4 5 6
++ echo '== files p2'
++ mount -o ro /dev/nvme6n1p2 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f append ']'
+++ stat -c %s append
+++ stat -c %b append
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' append 300000 592 5d4ed3bc1375f744cf7e826b83958d76
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ stat -c %b lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-1m 1048576 2048 fa5aaf3de84965b2a03a10005e6ac4c7
++ for f in *
++ '[' -f lin-small ']'
+++ stat -c %s lin-small
+++ stat -c %b lin-small
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-small 3 8 900150983cd24fb0d6963f7d28e17f72
++ for f in *
++ '[' -f lost+found ']'
++ for f in *
++ '[' -f seq1m ']'
+++ stat -c %s seq1m
+++ stat -c %b seq1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' seq1m 1048576 2048 069a499d4af6ff7fb93173da2b7e6be6
++ for f in *
++ '[' -f seq8m ']'
+++ stat -c %s seq8m
+++ stat -c %b seq8m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' seq8m 8388608 16384 6af15c6c18ef1df09baf44c44c431b49
++ for f in *
++ '[' -f small2 ']'
+++ stat -c %s small2
+++ stat -c %b small2
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' small2 2 8 315c745e69ef74e54e5007efc5e709ba
++ for f in *
++ '[' -f small4k ']'
+++ stat -c %s small4k
+++ stat -c %b small4k
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' small4k 4096 8 0b5fd2ba44184962804f0f24d5b8be0e
++ for f in *
++ '[' -f sparse ']'
+++ stat -c %s sparse
+++ stat -c %b sparse
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' sparse 12292096 24008 94a7cec951b41be47c3e74fabfff8182
++ for f in *
++ '[' -f trunc ']'
+++ stat -c %s trunc
+++ stat -c %b trunc
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' trunc 20480 40 5ac1592d11f3542f087911335091312a
++ umount /opt/chk/m
++ for n in 1 2 3 4 5 6
++ echo '== files p3'
++ mount -o ro /dev/nvme6n1p3 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f append ']'
+++ stat -c %s append
+++ stat -c %b append
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' append 300000 592 3ea5e981ce9dd04074d872a6c2fbc493
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ stat -c %b lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-1m 1048576 2058 fa5aaf3de84965b2a03a10005e6ac4c7
++ for f in *
++ '[' -f lin-small ']'
+++ stat -c %s lin-small
+++ stat -c %b lin-small
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-small 3 2 900150983cd24fb0d6963f7d28e17f72
++ for f in *
++ '[' -f lost+found ']'
++ for f in *
++ '[' -f seq1m ']'
+++ stat -c %s seq1m
+++ stat -c %b seq1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' seq1m 1048576 2058 b782d526025ad372d36b3cbdb171a1d1
++ for f in *
++ '[' -f seq80m ']'
+++ stat -c %s seq80m
+++ stat -c %b seq80m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' seq80m 83886080 164486 13a1d9c55c9fb24a652742b61b7ab457
++ for f in *
++ '[' -f seq8m ']'
+++ stat -c %s seq8m
+++ stat -c %b seq8m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' seq8m 8388608 16450 124b1511870ef86f4929b505ca4e62ca
++ for f in *
++ '[' -f small2 ']'
+++ stat -c %s small2
+++ stat -c %b small2
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' small2 2 2 e1bcbe392495c1750e2eb4ca971c5716
++ for f in *
++ '[' -f small4k ']'
+++ stat -c %s small4k
+++ stat -c %b small4k
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' small4k 4096 8 3a5e0c8a488c517eb37050b250c341e4
++ for f in *
++ '[' -f sparse ']'
+++ stat -c %s sparse
+++ stat -c %b sparse
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' sparse 12292096 24104 604d644ef2ee09270be4145ccee45094
++ for f in *
++ '[' -f tri-trunc ']'
+++ stat -c %s tri-trunc
+++ stat -c %b tri-trunc
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' tri-trunc 10485760 20562 01a02823f590037ebe73cb84a78aaeea
++ for f in *
++ '[' -f trunc ']'
+++ stat -c %s trunc
+++ stat -c %b trunc
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' trunc 20480 42 fdc8da74eb91d0759b2ef5c95d47503a
++ umount /opt/chk/m
++ for n in 1 2 3 4 5 6
++ echo '== files p4'
++ mount -o ro /dev/nvme6n1p4 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ stat -c %b lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-1m 1048576 2056 fa5aaf3de84965b2a03a10005e6ac4c7
++ for f in *
++ '[' -f lin-small ']'
+++ stat -c %s lin-small
+++ stat -c %b lin-small
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-small 3 8 900150983cd24fb0d6963f7d28e17f72
++ for f in *
++ '[' -f lost+found ']'
++ for f in *
++ '[' -f lsparse-a ']'
+++ stat -c %s lsparse-a
+++ stat -c %b lsparse-a
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lsparse-a 41943040 64 369791098a544969be0af7fffa3b12c9
++ for f in *
++ '[' -f lsparse-b ']'
+++ stat -c %s lsparse-b
+++ stat -c %b lsparse-b
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lsparse-b 41943040 64 bd15c59515f6006c4ef98e0024549248
++ umount /opt/chk/m
++ for n in 1 2 3 4 5 6
++ echo '== files p5'
++ mount -o ro /dev/nvme6n1p5 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ stat -c %b lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-1m 1048576 2056 fa5aaf3de84965b2a03a10005e6ac4c7
++ for f in *
++ '[' -f lin-small ']'
+++ stat -c %s lin-small
+++ stat -c %b lin-small
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-small 3 8 900150983cd24fb0d6963f7d28e17f72
++ for f in *
++ '[' -f lost+found ']'
++ umount /opt/chk/m
++ for n in 1 2 3 4 5 6
++ echo '== files p6'
++ mount -o ro /dev/nvme6n1p6 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ stat -c %b lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-1m 1048576 2048 fa5aaf3de84965b2a03a10005e6ac4c7
++ for f in *
++ '[' -f lin-small ']'
+++ stat -c %s lin-small
+++ stat -c %b lin-small
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lin-small 3 8 900150983cd24fb0d6963f7d28e17f72
++ for f in *
++ '[' -f lost+found ']'
++ for f in *
++ '[' -f lsparse-a ']'
+++ stat -c %s lsparse-a
+++ stat -c %b lsparse-a
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lsparse-a 41943040 32 e765718ef5df0a720202b5b3c8b6e75e
++ for f in *
++ '[' -f lsparse-b ']'
+++ stat -c %s lsparse-b
+++ stat -c %b lsparse-b
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-10s size=%-9s st_blocks=%-7s %s\n' lsparse-b 41943040 32 5f3c88997154ebc7c8c0b546247d203c
++ umount /opt/chk/m

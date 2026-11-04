@@ -1,0 +1,200 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-01609a7ed4dfb283a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ext2 at trunk a9954f424a (hrev59996): trunk, c1 (commit 1), c12 (commits 1+2), trunk again
+# start: 20261104T043858Z   end: 20261104T043938Z   rc: 0
+# script sha256: 29c6d5eb90e002510c114427ee9d1c1cf10097533c6ea54ff39ca97922200db6
+# ---- script ----
+# | # Build the ext2 module (method of #1011's xbuild): trunk a9954f424a, trunk + fix1.patch
+# | # (c1: i_blocks accounting), trunk + fix1 + fix2 (c12: + triple indirect sizing), and trunk
+# | # again from a clean module dir to show the build reproduces bit for bit. Revision pinned to
+# | # canonical's hrev59996.
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | T=a9954f424a
+# | mbuild() {	# mbuild <label> [patch...]
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	rm -rf $A/ext2
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok wall=$(( $(date +%s) - s ))s"
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | mbuild trunk || exit 1
+# | mbuild c1 fix1.patch || exit 1
+# | mbuild c12 fix1.patch fix2.patch || exit 1
+# | mbuild trunk2 || exit 1
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | cmp ext2.trunk ext2.trunk2 && echo "ext2 trunk rebuild identical"
+# | cmp -s ext2.trunk ext2.c1 && { echo "c1 identical to trunk?"; exit 1; }
+# | cmp -s ext2.c1 ext2.c12 && { echo "c12 identical to c1?"; exit 1; }
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for l in trunk c1 c12; do echo "$l: DataStream::_Enlarge/_Shrink symbols: $(${X}nm -C ext2.$l | grep -cE 'DataStream::_(Enlarge|Shrink)\(')"; done
+# | sha256sum ext2.trunk ext2.trunk2 ext2.c1 ext2.c12 | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/Q/out/ && echo uploaded
+# ---- raw output ----
+JAM ext2 trunk ok wall=13s
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:534:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:546:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:563:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:580:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:735:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:747:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:766:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:785:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+ .../kernel/file_systems/ext2/DataStream.cpp        | 51 +++++++++++++++++++---
+ src/add-ons/kernel/file_systems/ext2/DataStream.h  |  5 +++
+ .../kernel/file_systems/ext2/ExtentStream.cpp      | 10 ++++-
+ src/add-ons/kernel/file_systems/ext2/Inode.cpp     | 40 ++++++++++++-----
+ 4 files changed, 86 insertions(+), 20 deletions(-)
+JAM ext2 c1 ok wall=6s
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:558:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:570:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:587:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:604:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:772:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:784:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:803:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:822:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+ .../kernel/file_systems/ext2/DataStream.cpp        | 57 ++++++++++++++++++----
+ src/add-ons/kernel/file_systems/ext2/DataStream.h  |  5 ++
+ .../kernel/file_systems/ext2/ExtentStream.cpp      | 10 +++-
+ src/add-ons/kernel/file_systems/ext2/Inode.cpp     | 40 ++++++++++-----
+ 4 files changed, 90 insertions(+), 22 deletions(-)
+JAM ext2 c12 ok wall=5s
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:560:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:572:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:589:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:606:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:774:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:786:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:805:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:824:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+JAM ext2 trunk2 ok wall=6s
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:534:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:546:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:563:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:580:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:735:26: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:747:28: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:766:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:785:34: warning: taking address of packed member of 'ext2_data_stream' may result in an unaligned pointer value [-Waddress-of-packed-member]
+ext2 trunk rebuild identical
+trunk: DataStream::_Enlarge/_Shrink symbols: 0
+c1: DataStream::_Enlarge/_Shrink symbols: 4
+c12: DataStream::_Enlarge/_Shrink symbols: 4
+7d96abad815846768f453d3a637f02442c3ab41e345c426b03b348cc786d1140  ext2.trunk
+7d96abad815846768f453d3a637f02442c3ab41e345c426b03b348cc786d1140  ext2.trunk2
+cdcc34195fefee86f7593110fa54a09cd4647f4b2bcc4aa2600680b16031db0f  ext2.c1
+cddf0caab37d389e7a3f8f6e0de0df2965a6693c3e7b8c461c71c4f6222a9e90  ext2.c12
+uploaded
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ T=a9954f424a
++ mbuild trunk
++ l=trunk
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793767141
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 trunk ok wall=13s'
++ grep -E 'warning:|error:' /opt/t/out/jam-trunk.log
++ grep ext2/
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.trunk
++ mbuild c1 fix1.patch
++ l=c1
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1.patch
++ git -C .. apply /opt/t/out/fix1.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793767154
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 c1 ok wall=6s'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1.log
++ grep ext2/
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1
++ mbuild c12 fix1.patch fix2.patch
++ l=c12
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1.patch
++ git -C .. apply /opt/t/out/fix1.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix2.patch
++ git -C .. apply /opt/t/out/fix2.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793767160
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 c12 ok wall=5s'
++ grep -E 'warning:|error:' /opt/t/out/jam-c12.log
++ grep ext2/
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c12
++ mbuild trunk2
++ l=trunk2
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793767165
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 trunk2 ok wall=6s'
++ grep -E 'warning:|error:' /opt/t/out/jam-trunk2.log
++ grep ext2/
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.trunk2
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
++ cmp ext2.trunk ext2.trunk2
++ echo 'ext2 trunk rebuild identical'
++ cmp -s ext2.trunk ext2.c1
++ cmp -s ext2.c1 ext2.c12
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ for l in trunk c1 c12
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C ext2.trunk
+++ grep -cE 'DataStream::_(Enlarge|Shrink)\('
++ echo 'trunk: DataStream::_Enlarge/_Shrink symbols: 0'
++ for l in trunk c1 c12
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C ext2.c1
+++ grep -cE 'DataStream::_(Enlarge|Shrink)\('
++ echo 'c1: DataStream::_Enlarge/_Shrink symbols: 4'
++ for l in trunk c1 c12
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C ext2.c12
+++ grep -cE 'DataStream::_(Enlarge|Shrink)\('
++ echo 'c12: DataStream::_Enlarge/_Shrink symbols: 4'
++ sha256sum ext2.trunk ext2.trunk2 ext2.c1 ext2.c12
++ tee SHA256SUMS
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/Q/out/
++ echo uploaded

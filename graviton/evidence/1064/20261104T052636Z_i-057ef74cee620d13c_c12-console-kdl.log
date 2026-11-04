@@ -1,0 +1,46 @@
+# evidence: c12-console-kdl
+# instance: i-057ef74cee620d13c   region: us-west-2   transport: ec2 get-console-output --latest
+# what: serial console of arm c12 after the first run: ext2 ENOSPC fill -> KDL in the page writer (ASSERT block != 0)
+# ---- raw output ----
+[34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+[34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+[34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+[34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+[34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+[34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+[34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+[34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+[34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+[34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+[34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+[34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+[34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+[34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+PANIC: ASSERT FAILED (../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:127): block != 0
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 28 "page writer: /dev/disk/nvme/1/r" running on CPU 0
+stack trace for thread 0x1c "page writer: /dev/disk/nvme/1/r"
+    kernel stack: 0xffff0000002b7000 to 0xffff0000002bc000
+frame            caller     <image>:function + offset
+ 0 ffff0000002bb5e0 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000002bb630 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000002bb6a0[0m [36m"`�+"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000002bb6a0 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff0000002bb760[0m [36m"��+"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�@C���"[0m, std::__va_list: [34m0x23f7a00[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff0000002bb760 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000002bb880 (+ 288) ffff0000023e7814   <ext2> DataStream<[32m0x2bb900[0m>::FindBlock(int64: [34m161808413225844736[0m, unsigned long&: [34m0x1cea000ffff0000[0m, unsigned int*: [34m0x2bba3800000000[0m) + 0x370
+ 5 ffff0000002bb900 (+ 128) ffff0000023edbe4   <ext2> Inode<[32m0x2bb9b0[0m>::FindBlock(int64: [34m161912454513623040[0m, unsigned long&: [34m0x1ffff0000[0m, unsigned int*: [34m0xfffb5fff00000000[0m) + 0xb8
+ 6 ffff0000002bb9b0 (+ 176) ffff0000023f3a84   <ext2> ext2_get_file_map(fs_volume*: [34m0xffff0000002bba40[0m, fs_vnode*: [34m0xffff000000084ae0[0m, int64: [34m-281474275343616[0m, uint64: [34m0x1cc0000[0m, file_io_vec*: [34m0xffff0000002bba90[0m, unsigned long*: [34m0x80007029[0m) + 0x104
+ 7 ffff0000002bba40 (+ 144) ffff000000084ae0   <kernel_arm64> FileMap<[32m0x2bbb10[0m>::_Cache[clone .localalias] (int64: [34m2336071366934528[0m, int64: [34m562954248323072[0m) + 0xa0
+ 8 ffff0000002bbb10 (+ 208) ffff000000084ca4   <kernel_arm64> FileMap<[32m0x2bbb90[0m>::Translate[clone .localalias] (int64: [34m161910530368274432[0m, uint64: [34m0x1ca0000ffff0000[0m, file_io_vec*: [34m0x2bbc4000000000[0m, unsigned long*: [34m0x8726b8ffff0000[0m, uint64: [34m0x2bbcd0ffff0000[0m) + 0x7c
+ 9 ffff0000002bbb90 (+ 128) ffff0000023f38c4   <ext2> ext2_write_pages(fs_volume*: [34m0xffff0000002bbcc0[0m, fs_vnode*: [34m0xffff000000143acc[0m, void*: [34m0x0[0m, int64: [34m30015488[0m, iovec const*: [34m0xffff0000002bbd90[0m, uint64: [34m0xffff000029485010[0m, unsigned long*: [34m0xffff0000002bbd48[0m) + 0xf8
+10 ffff0000002bbcc0 (+ 304) ffff000000143acc   <kernel_arm64> VnodeIO<[32m0x2bbce0[0m>::IO(int64: [34m5291438363312128[0m, void*: [34m0xdcb47000ffff0000[0m, unsigned long*: [34m0x20000ffff0000[0m) + 0x4c
+11 ffff0000002bbce0 (+  32) ffff00000012cc88   <kernel_arm64> synchronous_io(IORequest*: [34m0xffff0000002bbd60[0m, DoIO&: [34m0xffff000000140e48[0m) + 0x60
+12 ffff0000002bbd60 (+ 128) ffff000000140e48   <kernel_arm64> vfs_vnode_io.localalias + 0x88
+13 ffff0000002bbdb0 (+  80) ffff00000016fed8   <kernel_arm64> PageWriteTransfer<[32m0x2bbde0[0m>::Schedule[clone .localalias] (uint32: [34m0xffff0000[0m) + 0x48
+14 ffff0000002bbde0 (+  48) ffff000000170324   <kernel_arm64> PageWriterRun<[32m0x2bbe70[0m>::Go[clone .localalias] () + 0x84
+15 ffff0000002bbe70 (+ 144) ffff00000017171c   <kernel_arm64> ModifiedPageQueue<[32m0x2bbfc0[0m>::_PageWriter[clone .localalias] () + 0x3fc
+16 ffff0000002bbfc0 (+ 336) ffff0000000b7598   <kernel_arm64> common_thread_entry(void*: [34m0xffff0000002bbfe0[0m) + 0x38
+17 ffff0000002bbfe0 (+  32) ffff0000000b7560   <kernel_arm64> common_thread_entry(void*: [34m0xffff000000171c24[0m) + 0x00
+18 ffff000000171c24 (+   0) ffff0000dd18bb88   169:slab area@0xffff0000dd000000 + 0x18bb88
+19 a9bc7bfd17fffdbf (+   0) a90153f3910003fd   
+	2026-11-04T05:26:05+00:00

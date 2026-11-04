@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1-lspx
+# instance: i-0ccf504ba548602fd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1: truncate/remove the Linux-made sparse extent files on p6 (expected to loop in ExtentStream::Shrink)
+# start: 20261104T054203Z   end: 20261104T054714Z   rc: 137
+# script sha256: d99db8cc16b1c86d2f60a8434d3dd2da50b992905589ea3d1b615d67fd2231dc
+# ---- script ----
+# | # Issue 1064, arm c1, last command: truncate and remove the Linux-made sparse extent files
+# | # on p6 (lspx). Run apart from the rest, as a shrink of such a file is expected to loop in the
+# | # kernel (ExtentStream::Shrink assumes the last extent ends at the file size); the other file
+# | # systems are unmounted already. A timeout here is that hang.
+# | set -x
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/5 ] && DD=$d; done
+# | mkdir -p /elspx && mount -t ext2 $DD/5 /elspx || exit 1
+# | cd /elspx && ls -ls
+# | truncate -s 22M lsparse-a; echo "truncate 22M rc=$?"; ls -ls lsparse-a
+# | truncate -s 3000 lsparse-a; echo "truncate 3000 rc=$?"; ls -ls lsparse-a
+# | rm lsparse-b; echo "rm rc=$?"
+# | sync; ls -ls; cd /
+# | unmount /elspx; echo "unmount lspx rc=$?"
+# | sync
+# ---- raw output ----
+total 1076
+1024 -rw-rw-rw- 1 baron root  1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 baron root        3 Nov  4 04:40 lin-small
+  16 drwx------ 2 baron root    16384 Nov  4 04:40 lost+found
+  16 -rw-rw-rw- 1 baron root 41943040 Nov  4 04:40 lsparse-a
+  16 -rw-rw-rw- 1 baron root 41943040 Nov  4 04:40 lsparse-b
+truncate 22M rc=0
+12 -rw-rw-rw- 1 baron root 23068672 Nov  4 05:42 lsparse-a
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/5 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/5 ']'
++ DD=/dev/disk/nvme/1
++ mkdir -p /elspx
++ mount -t ext2 /dev/disk/nvme/1/5 /elspx
++ cd /elspx
++ ls -ls
++ truncate -s 22M lsparse-a
++ echo 'truncate 22M rc=0'
++ ls -ls lsparse-a
++ truncate -s 3000 lsparse-a
