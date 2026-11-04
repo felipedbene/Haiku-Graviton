@@ -1,0 +1,33 @@
+# evidence: p63-node-suites-vs-010361cf
+# workstation 20261104T011723Z. A = 20261103T174044Z_i-010c19cd3ba4fb3ba_fin-full-suites.log (canonical 010361cf), B = 20261104T010913Z_i-0f77238d8c95e88dc_p63-full-suites.log (promoted canonical 00632cb3); both 24.22.2 tree, green nodejs24 24.22.2-1, libuv 1.52.1-6. Skip lists: 20261103T174803Z_..._fin-residual-changed-tests.log and 20261104T011635Z_..._p63-tap-scan.log
+# ---- raw output ----
+A not ok: 23  B not ok: 23
+-- fail -> pass (0):
+-- pass -> fail (0):
+-- FAIL <-> TIMEOUT among tests failing in both:
+-- failing in both (23):
+parallel/test-child-process-default-options FAIL FAIL
+parallel/test-child-process-env FAIL FAIL
+parallel/test-child-process-exec-env FAIL FAIL
+parallel/test-cwd-enoent-improved-message FAIL FAIL
+parallel/test-fs-link FAIL FAIL
+parallel/test-fs-promises FAIL FAIL
+parallel/test-fs-rmSync-special-char-additional-error FAIL FAIL
+parallel/test-fs-stat-date FAIL FAIL
+parallel/test-http-writable-true-after-close FAIL FAIL
+parallel/test-http2-misbehaving-flow-control FAIL FAIL
+parallel/test-http2-misbehaving-flow-control-paused FAIL FAIL
+parallel/test-http2-sensitive-headers FAIL FAIL
+parallel/test-permission-fs-symlink-target-write FAIL FAIL
+parallel/test-process-dlopen-error-message-crash FAIL FAIL
+parallel/test-process-euid-egid FAIL FAIL
+parallel/test-repl-underscore FAIL FAIL
+parallel/test-setproctitle FAIL FAIL
+parallel/test-trace-events-fs-async FAIL FAIL
+parallel/test-trace-events-fs-sync FAIL FAIL
+parallel/test-util-exception-with-host-port FAIL FAIL
+parallel/test-worker-memory FAIL FAIL
+sequential/test-fs-watch FAIL FAIL
+sequential/test-module-loading FAIL FAIL
+-- skips: A 332, B 332; differences:
+(none)

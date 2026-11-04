@@ -1,0 +1,32 @@
+# evidence: p63-node24-gyp-addon-cxx
+# instance: i-0f77238d8c95e88dc   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T004317Z   end: 20261104T004352Z   rc: 0
+# script sha256: b3885ca380fcd24386513eb15c8648a82484a26f4ad9f130aa6cc437a4d3f486
+# ---- script ----
+# | set -u
+# | echo "== install haiku_devel and binutils from the DeBeOS repo (the bootstrap gcc pulls in neither)"
+# | { for i in $(seq 60); do echo 1; done; echo yes; } | pkgman install haiku_devel binutils 2>&1 | grep -E '^ +(install|upgrade) package|\[system\] Done|problem' ; echo "pkgman rc=${PIPESTATUS[1]}"
+# | command -v gcc as ld
+# | W=/boot/home/node-accept; G=$W/package/node_modules/node-gyp/bin/node-gyp.js
+# | node -p 'JSON.stringify(Object.fromEntries(Object.entries(process.config.variables).filter(([k,v])=>/(^cc$|^cxx$|ld|link|host_arch|target_arch|clang)/i.test(k))))'
+# | grep -n "aarch64-unknown-haiku" ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>/dev/null | head -5
+# | ls ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>&1
+# | grep -rn "aarch64-unknown-haiku" $W/node-accept/addon/build/*.mk $W/node-accept/addon/build/Makefile 2>/dev/null | head -5
+# | echo "== with CC=gcc CXX=g++"
+# | cd $W/node-accept/addon && rm -rf build
+# | CC=gcc CXX=g++ node $G rebuild 2>&1 | grep -E 'CC|CXX|SOLINK|ERR|error' | tail -10; echo "gyp rc=${PIPESTATUS[0]}"
+# | node -e 'const a=require("./build/Release/accept_addon.node"); console.log("addon add(2,40) =", a.add(2,40))'; echo "addon rc=$?"
+# ---- raw output ----
+== install haiku_devel and binutils from the DeBeOS repo (the bootstrap gcc pulls in neither)
+pkgman rc=0
+/boot/system/bin/gcc
+/boot/system/bin/as
+/boot/system/bin/ld
+{"clang":0,"host_arch":"arm64","target_arch":"arm64","napi_build_version":"10","v8_promise_internal_field_count":1}
+ls: cannot access '/boot/home/.cache/node-gyp/24.21.0/include/node/config.gypi': No such file or directory
+== with CC=gcc CXX=g++
+  CC(target) Release/obj.target/accept_addon/addon.o
+  SOLINK_MODULE(target) Release/obj.target/accept_addon.node
+gyp rc=0
+addon add(2,40) = 42
+addon rc=0
