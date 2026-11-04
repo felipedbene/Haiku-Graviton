@@ -1,0 +1,14 @@
+# evidence: issue 992 -- AFTER: graviton/scripts/haiku-attr-dir-race-stress, fixed libroot_build.so, 200 iterations x 64 parallel extracts
+# instance: i-01007d07b6f85a3dc (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193), us-west-2, via SSM
+# driver: /opt/bf/drive.sh sha256 c765f8922489d56551a1ed7bd81b8c81aafe686e293b7cdbd437d4b071691603 (account id redacted), runphase.py sha256 024b17bb2dc68f72c2355fab100a6d8887e1703a166efea3f9b59a4681887d04
+# ---- raw output ----
+start stress after 200 64 20261104T024910Z
+package tool: /opt/src/haiku/generated.arm64/objects/linux/arm64/release/tools/package/package
+libroot_build: /opt/ab/after/libroot_build.so (588aeda427590274f429e4e8654ea06c1a7ac10eda014114656747f1d1c995b8)
+attributes dir: /opt/src/haiku/generated.arm64/attributes
+hpkg: /opt/src/haiku/generated.arm64/download/openssl3-3.5.9-3-arm64.hpkg
+iterations: 200  parallel: 64
+RESULT: 0/200 iterations failed; 0/12800 extractions failed
+stress rc=0
+end stress 20261104T025544Z
+

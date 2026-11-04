@@ -1,0 +1,19 @@
+# evidence: issue 992 -- BEFORE (trunk be94c468aa): fresh-tree oven jam pass 0 (jam -q -j64 haiku-extract-build-features), try 1
+# instance: i-01007d07b6f85a3dc (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193), us-west-2, via SSM
+# driver: /opt/bf/drive.sh sha256 c765f8922489d56551a1ed7bd81b8c81aafe686e293b7cdbd437d4b071691603 (account id redacted), runphase.py sha256 024b17bb2dc68f72c2355fab100a6d8887e1703a166efea3f9b59a4681887d04
+# ---- raw output ----
+start pass0 before-1 20261104T023006Z
+fresh tree: attributes=absent build_packages=absent
+be94c468aa ramfs: put the root vnode on unmount, so unmounting no longer KDLs (#1016)
+jam pass 0 rc=1
+Error: Failed to create attribute "BEOS:TYPE" of file "develop": Unknown error -1
+...failed ExtractHPKGArchive1 build_packages/fluidlite_devel-1.0.9-3-arm64 ...
+...failed updating 1 target(s)...
+...updated 326 target(s)...
+ExtractHPKGArchive1 actions run: 22
+extracted build_packages dirs: 17
+BUILD FAILURE:
+...failed updating 1 target(s)...
+...updated 326 target(s)...
+end pass0 20261104T023015Z
+

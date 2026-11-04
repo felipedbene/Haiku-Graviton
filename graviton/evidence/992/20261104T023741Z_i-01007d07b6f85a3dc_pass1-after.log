@@ -1,0 +1,13 @@
+# evidence: issue 992 -- AFTER: oven jam pass 1 (@minimum-mmc) on the fixed tree; last line = count of attribute errors in the full jam log
+# instance: i-01007d07b6f85a3dc (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193), us-west-2, via SSM
+# driver: /opt/bf/drive.sh sha256 c765f8922489d56551a1ed7bd81b8c81aafe686e293b7cdbd437d4b071691603 (account id redacted), runphase.py sha256 024b17bb2dc68f72c2355fab100a6d8887e1703a166efea3f9b59a4681887d04
+# ---- raw output ----
+start pass1 after 20261104T023741Z
+jam pass 1 rc=0
+fssh:/> ...updated 9863 target(s)...
+-rw-r--r--  0  0         51 2026-11-04 02:38:52 uEnv.txt
+drwxr-xr-x  0  0       2048 2026-11-04 02:38:52 fdt
+fssh:/> ...updated 9863 target(s)...
+end pass1 20261104T023853Z
+0
+

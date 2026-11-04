@@ -1,0 +1,118 @@
+# evidence: issue 992 -- the A/B driver and runphase.py, verbatim (account id redacted)
+# ---- drive.sh ----
+# | #!/bin/bash
+# | # drive.sh <stage>: issue 992 A/B on an Ubuntu 24.04 arm64 host (bf-F).
+# | #   setup   -- clone trunk, run the oven cross-build buildspec (install, pre_build,
+# | #              build up to but excluding jam pass 0), WORK_BUCKET pointed at a
+# | #              read-only copy of the oven cache + hpkg pool under bugfix/F/
+# | #   pass0 <label> -- fresh-tree jam pass 0 exactly as the oven runs it
+# | #   save <label>  -- copy the built libroot_build.so to /opt/ab/<label>
+# | #   fix     -- check out the fix branch from the bundle
+# | #   stress <label> <iters> <par> -- run graviton/scripts/haiku-attr-dir-race-stress
+# | #   pass1 <label> -- jam pass 1 (@minimum-mmc) as the oven runs it
+# | set -uo pipefail
+# | export DEBIAN_FRONTEND=noninteractive
+# | export AWS_DEFAULT_REGION=us-west-2 HAIKU_REVISION=hrev59996 HG_SSH_DIR=/opt/haiku/ssh
+# | export WORK_BUCKET=haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F
+# | export IMPORT_PREFIX=import CACHE_PREFIX=cache
+# | export BUILDTOOLS_REPO=https://github.com/felipedbene/buildtools.git BUILDTOOLS_BRANCH=master
+# | export GEN_SUBDIR=generated.arm64
+# | export CODEBUILD_SRC_DIR=/opt/src/haiku
+# | TOP=$CODEBUILD_SRC_DIR GEN=$TOP/$GEN_SUBDIR
+# | stage=$1; shift
+# | date -u +"start $stage $* %Y%m%dT%H%M%SZ"
+# | case "$stage" in
+# | setup)
+# | 	apt-get update -qq && apt-get install -y -qq git python3-yaml > /dev/null
+# | 	rm -rf /opt/src /opt/cb-state.sh /tmp/ct.env; mkdir -p /opt/src
+# | 	git clone -q https://github.com/felipedbene/Haiku-Graviton.git "$TOP"
+# | 	git -C "$TOP" checkout -q be94c468aa7a2f045efc8ced7a558e175bbb2b8e
+# | 	git -C "$TOP" log --oneline -1
+# | 	python3 -I /opt/bf/runphase.py "$TOP/graviton/pipeline/buildspecs/cross-build.yml" \
+# | 		install pre_build "build:jam pass 0"
+# | 	;;
+# | pass0)
+# | 	cd "$GEN"
+# | 	rm -rf attributes build_packages
+# | 	echo "fresh tree: attributes=$(ls -d attributes 2>/dev/null || echo absent) build_packages=$(ls -d build_packages 2>/dev/null || echo absent)"
+# | 	git -C "$TOP" log --oneline -1
+# | 	HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$(nproc)" haiku-extract-build-features > /opt/bf/pass0-$1.jam.log 2>&1
+# | 	rc=$?
+# | 	echo "jam pass 0 rc=$rc"
+# | 	grep -E "Failed to create attribute|^\.\.\.failed|^\.\.\.skipped|updated [0-9]+ target|^Error" /opt/bf/pass0-$1.jam.log | head -20
+# | 	echo "ExtractHPKGArchive1 actions run: $(grep -c '^ExtractHPKGArchive1' /opt/bf/pass0-$1.jam.log)"
+# | 	echo "extracted build_packages dirs: $(ls build_packages | wc -l)"
+# | 	tail -n 3 /opt/bf/pass0-$1.jam.log
+# | 	;;
+# | save)
+# | 	mkdir -p /opt/ab/$1
+# | 	cp "$GEN/objects/linux/lib/libroot_build.so" /opt/ab/$1/
+# | 	sha256sum /opt/ab/$1/libroot_build.so
+# | 	;;
+# | fix)
+# | 	aws s3 cp "s3://$WORK_BUCKET/992/bf-F-992.bundle" /opt/bf/ --only-show-errors
+# | 	git -C "$TOP" fetch -q /opt/bf/bf-F-992.bundle fix/992-attr-dir-race:fix/992-attr-dir-race
+# | 	git -C "$TOP" checkout -q fix/992-attr-dir-race
+# | 	git -C "$TOP" log --oneline -3
+# | 	;;
+# | stress)
+# | 	hp=$(ls "$GEN"/download/openssl3-[0-9]*-arm64.hpkg | head -1)
+# | 	bash "$TOP/graviton/scripts/haiku-attr-dir-race-stress" --generated "$GEN" \
+# | 		--hpkg "$hp" --lib-dir /opt/ab/$1 --iterations "$2" --parallel "$3"
+# | 	echo "stress rc=$?"
+# | 	;;
+# | pass1)
+# | 	cd "$GEN"
+# | 	HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$(nproc)" @minimum-mmc > /opt/bf/pass1-$1.jam.log 2>&1
+# | 	echo "jam pass 1 rc=$?"
+# | 	grep -E "Failed to create attribute|^\.\.\.failed|updated [0-9]+ target|Unknown error" /opt/bf/pass1-$1.jam.log | head -20
+# | 	tail -n 3 /opt/bf/pass1-$1.jam.log
+# | 	;;
+# | esac
+# | date -u +"end $stage %Y%m%dT%H%M%SZ"
+# ---- runphase.py ----
+# | # runphase.py <buildspec> <phase>[:<stop-before-substring>]...: run buildspec commands
+# | # the way CodeBuild does -- each command in its own bash, exported variables and the
+# | # working directory carried to the next command, shell options NOT carried. Stops at
+# | # the first command that exits non-zero. With ":<substring>", stops (rc 0) before the
+# | # first command of that phase containing <substring>.
+# | import os, subprocess, sys, yaml
+# | spec = yaml.safe_load(open(sys.argv[1]))
+# | state = "/opt/cb-state.sh"
+# | if not os.path.exists(state):
+# |     open(state, "w").write("cd \"$CODEBUILD_SRC_DIR\"\n")
+# | for arg in sys.argv[2:]:
+# |     ph, _, stop = arg.partition(":")
+# |     for i, cmd in enumerate(spec["phases"][ph]["commands"]):
+# |         if stop and stop in cmd:
+# |             print(f"######## {ph}[{i}]: stopping before: {cmd.splitlines()[0][:100]}", flush=True)
+# |             break
+# |         print(f"######## {ph}[{i}]: {cmd.splitlines()[0][:100]}", flush=True)
+# |         script = (f". {state} 2>/dev/null\n" + cmd + "\n__rc=$?\n"
+# |                   f"{{ declare -p | grep -vE '^declare -[a-zA-Z]*r' | grep -vE '^declare -[-a-zA-Z]* (BASH[A-Z_]*|FUNCNAME|GROUPS|DIRSTACK|PIPESTATUS|_|__rc)='; printf 'cd %q\\n' \"$PWD\"; }} > {state}.new\nexit $__rc\n")
+# |         rc = subprocess.call(["bash", "-c", script])
+# |         if os.path.exists(state + ".new"):
+# |             os.replace(state + ".new", state)
+# |         if rc != 0:
+# |             print(f"######## {ph}[{i}] FAILED rc={rc}", flush=True)
+# |             sys.exit(rc)
+# |     print(f"######## phase {ph} done", flush=True)
+# ---- chain (stage order) ----
+# | D=/opt/bf/drive.sh; L=/opt/bf/logs; mkdir -p $L
+# | for t in 1 2 3; do $D pass0 before-$t > $L/pass0-before-$t.log 2>&1; done
+# | $D save before > $L/save-before.log 2>&1
+# | $D stress before 100 64 > $L/stress-before.log 2>&1
+# | $D fix > $L/fix.log 2>&1
+# | for t in 1 2 3 4 5; do $D pass0 after-$t > $L/pass0-after-$t.log 2>&1; done
+# | $D save after > $L/save-after.log 2>&1
+# | $D stress after 200 64 > $L/stress-after.log 2>&1
+# | $D pass1 after > $L/pass1-after.log 2>&1
+# | echo chain-done > $L/DONE
+# | D=/opt/bf/drive.sh; L=/opt/bf/logs
+# | G=/opt/src/haiku/generated.arm64; S=/opt/src/haiku/graviton/scripts/haiku-attr-dir-race-stress
+# | H=$(ls $G/download/openssl3-[0-9]*-arm64.hpkg | head -1)
+# | { ls $G/attributes | wc -l; (timeout -s INT 3 bash $S --generated $G --hpkg $H --lib-dir /opt/ab/after --iterations 1000 --parallel 64; echo "interrupted rc=$?"); ls $G/attributes | wc -l; ls -d $G/attributes* ; ls /tmp | grep -c attr-race-stress; } > $L/interrupt-check.log 2>&1
+# | $D stress before 100 64 > $L/stress-before-v2.log 2>&1
+# | $D stress after 200 64 > $L/stress-after-v2.log 2>&1
+# | echo done > $L/DONE2
+# | 

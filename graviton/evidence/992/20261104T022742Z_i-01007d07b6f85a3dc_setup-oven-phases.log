@@ -1,0 +1,155 @@
+# evidence: issue 992 -- oven cross-build buildspec install/pre_build/build up to jam pass 0, on trunk be94c468aa (WORK_BUCKET = read-only copy of oven cross-tools cache + hpkg pool under bugfix/F/)
+# instance: i-01007d07b6f85a3dc (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193), us-west-2, via SSM
+# driver: /opt/bf/drive.sh sha256 c765f8922489d56551a1ed7bd81b8c81aafe686e293b7cdbd437d4b071691603 (account id redacted), runphase.py sha256 024b17bb2dc68f72c2355fab100a6d8887e1703a166efea3f9b59a4681887d04
+# ---- raw output ----
+Cc bin.linuxarm/timestamp.o 
+Cc bin.linuxarm/variable.o 
+Archive bin.linuxarm/libjam.a 
+ar: creating bin.linuxarm/libjam.a
+Ranlib bin.linuxarm/libjam.a 
+Cc bin.linuxarm/mkjambase.o 
+Link bin.linuxarm/mkjambase 
+Chmod1 bin.linuxarm/mkjambase 
+Cc bin.linuxarm/jam.o 
+GenFile1 jambase.c 
+Cc bin.linuxarm/jambase.o 
+Link bin.linuxarm/jam 
+Chmod1 bin.linuxarm/jam 
+...updated 33 target(s)...
+...patience...
+...found 215 target(s)...
+...updating 1 target(s)...
+Install /usr/local/bin/jam 
+Chmod1 /usr/local/bin/jam 
+...updated 1 target(s)...
+/usr/local/bin/jam
+######## pre_build[7]: BT_SHA="$(git -C "$HAIKU_TOP/../buildtools" rev-parse --short HEAD)"
+######## pre_build[8]: echo "buildtools HEAD=$BT_SHA"
+buildtools HEAD=d2e0a41eb
+######## pre_build[9]: CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64-${BT_SHA}.tar.zst"
+######## pre_build[10]: mkdir -p "$GEN"
+######## pre_build[11]: if aws s3 cp "$CT_CACHE" /tmp/ct.tar.zst --region "$AWS_DEFAULT_REGION" 2>/dev/null; then
+Completed 83.9 MiB/83.9 MiB (230.3 MiB/s) with 1 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/cache/cross-tools-arm64-d2e0a41eb.tar.zst to ../../../tmp/ct.tar.zst
+== restoring cross-tools cache (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/cache/cross-tools-arm64-d2e0a41eb.tar.zst) ==
+######## pre_build[12]: printf 'HAVE_CROSS_TOOLS=%s\nCT_CACHE=%s\n' "$HAVE_CROSS_TOOLS" "$CT_CACHE" > /tmp/ct.env
+######## phase pre_build done
+######## build[0]: set -euo pipefail
+######## build[1]: export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+######## build[2]: export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+######## build[3]: export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+######## build[4]: . /tmp/ct.env
+######## build[5]: NPROC="$(nproc)"
+######## build[6]: cd "$GEN"
+######## build[7]: if [ "$HAVE_CROSS_TOOLS" = "1" ] && [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; t
+== configure (reuse cached cross-tools) ==
+Configured successfully!
+######## build[8]: export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
+######## build[9]: mkdir -p "$HG_POOL_DIR"
+######## build[10]: aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude 
+Completed 61.8 KiB/62.5 MiB (593.9 KiB/s) with 33 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg
+Completed 61.8 KiB/62.5 MiB (593.9 KiB/s) with 32 file(s) remainingCompleted 141.2 KiB/62.5 MiB (1.3 MiB/s) with 32 file(s) remaining download: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg
+Completed 141.2 KiB/62.5 MiB (1.3 MiB/s) with 31 file(s) remainingCompleted 170.7 KiB/62.5 MiB (1.6 MiB/s) with 31 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg
+Completed 170.7 KiB/62.5 MiB (1.6 MiB/s) with 30 file(s) remainingCompleted 226.8 KiB/62.5 MiB (2.1 MiB/s) with 30 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+Completed 226.8 KiB/62.5 MiB (2.1 MiB/s) with 29 file(s) remainingCompleted 333.7 KiB/62.5 MiB (2.9 MiB/s) with 29 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg to ../hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg
+Completed 333.7 KiB/62.5 MiB (2.9 MiB/s) with 28 file(s) remainingCompleted 553.5 KiB/62.5 MiB (4.7 MiB/s) with 28 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg
+Completed 553.5 KiB/62.5 MiB (4.7 MiB/s) with 27 file(s) remainingCompleted 970.9 KiB/62.5 MiB (6.5 MiB/s) with 27 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg to ../hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg
+Completed 970.9 KiB/62.5 MiB (6.5 MiB/s) with 26 file(s) remainingCompleted 1.1 MiB/62.5 MiB (7.7 MiB/s) with 26 file(s) remaining  download: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg
+Completed 1.1 MiB/62.5 MiB (7.7 MiB/s) with 25 file(s) remainingCompleted 1.7 MiB/62.5 MiB (10.8 MiB/s) with 25 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+Completed 1.7 MiB/62.5 MiB (10.8 MiB/s) with 24 file(s) remainingCompleted 1.9 MiB/62.5 MiB (11.7 MiB/s) with 24 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg
+Completed 1.9 MiB/62.5 MiB (11.7 MiB/s) with 23 file(s) remainingCompleted 2.2 MiB/62.5 MiB (13.2 MiB/s) with 23 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/libpng16-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16-1.6.53-1-arm64.hpkg
+Completed 2.2 MiB/62.5 MiB (13.2 MiB/s) with 22 file(s) remainingCompleted 2.4 MiB/62.5 MiB (10.2 MiB/s) with 22 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/jasper-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper-2.0.33-2-arm64.hpkg
+Completed 2.4 MiB/62.5 MiB (10.2 MiB/s) with 21 file(s) remainingCompleted 3.1 MiB/62.5 MiB (13.5 MiB/s) with 21 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/ncurses6-6.6-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6-1-arm64.hpkg
+Completed 3.1 MiB/62.5 MiB (13.5 MiB/s) with 20 file(s) remainingCompleted 6.4 MiB/62.5 MiB (25.5 MiB/s) with 20 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3-3.5.9-2-arm64.hpkg
+Completed 6.4 MiB/62.5 MiB (25.5 MiB/s) with 19 file(s) remainingCompleted 7.3 MiB/62.5 MiB (29.0 MiB/s) with 19 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg
+Completed 7.3 MiB/62.5 MiB (29.0 MiB/s) with 18 file(s) remainingCompleted 10.8 MiB/62.5 MiB (38.4 MiB/s) with 18 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3-3.5.7-1-arm64.hpkg
+Completed 10.8 MiB/62.5 MiB (38.4 MiB/s) with 17 file(s) remainingCompleted 12.9 MiB/62.5 MiB (40.8 MiB/s) with 17 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg
+Completed 12.9 MiB/62.5 MiB (40.8 MiB/s) with 16 file(s) remainingCompleted 16.8 MiB/62.5 MiB (52.0 MiB/s) with 16 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3-3.5.9-3-arm64.hpkg to ../hpkg-pool/openssl3-3.5.9-3-arm64.hpkg
+Completed 16.8 MiB/62.5 MiB (52.0 MiB/s) with 15 file(s) remainingCompleted 19.0 MiB/62.5 MiB (56.3 MiB/s) with 15 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg
+Completed 19.0 MiB/62.5 MiB (56.3 MiB/s) with 14 file(s) remainingCompleted 19.5 MiB/62.5 MiB (52.0 MiB/s) with 14 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3_man-3.5.7-1-any.hpkg to ../hpkg-pool/openssl3_man-3.5.7-1-any.hpkg
+Completed 19.5 MiB/62.5 MiB (52.0 MiB/s) with 13 file(s) remainingCompleted 54.7 MiB/62.5 MiB (144.6 MiB/s) with 13 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg to ../hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+Completed 54.7 MiB/62.5 MiB (144.6 MiB/s) with 12 file(s) remainingCompleted 55.2 MiB/62.5 MiB (144.1 MiB/s) with 12 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3_man-3.5.9-3-any.hpkg to ../hpkg-pool/openssl3_man-3.5.9-3-any.hpkg
+Completed 55.2 MiB/62.5 MiB (144.1 MiB/s) with 11 file(s) remainingCompleted 55.2 MiB/62.5 MiB (142.8 MiB/s) with 11 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg
+Completed 55.2 MiB/62.5 MiB (142.8 MiB/s) with 10 file(s) remainingCompleted 55.7 MiB/62.5 MiB (143.4 MiB/s) with 10 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3_man-3.5.9-2-any.hpkg to ../hpkg-pool/openssl3_man-3.5.9-2-any.hpkg
+Completed 55.7 MiB/62.5 MiB (143.4 MiB/s) with 9 file(s) remainingCompleted 55.9 MiB/62.5 MiB (141.4 MiB/s) with 9 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/tiff-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff-4.7.0-1-arm64.hpkg
+Completed 55.9 MiB/62.5 MiB (141.4 MiB/s) with 8 file(s) remainingCompleted 56.0 MiB/62.5 MiB (140.0 MiB/s) with 8 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/zlib-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib-1.3.2-1-arm64.hpkg
+Completed 56.0 MiB/62.5 MiB (140.0 MiB/s) with 7 file(s) remainingCompleted 58.1 MiB/62.5 MiB (140.7 MiB/s) with 7 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/openssl3_devel-3.5.9-3-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.9-3-arm64.hpkg
+Completed 58.1 MiB/62.5 MiB (140.7 MiB/s) with 6 file(s) remainingCompleted 59.2 MiB/62.5 MiB (141.2 MiB/s) with 6 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg
+Completed 59.2 MiB/62.5 MiB (141.2 MiB/s) with 5 file(s) remainingCompleted 59.3 MiB/62.5 MiB (137.5 MiB/s) with 5 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg
+Completed 59.3 MiB/62.5 MiB (137.5 MiB/s) with 4 file(s) remainingCompleted 59.6 MiB/62.5 MiB (136.9 MiB/s) with 4 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/zstd-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd-1.5.7-1-arm64.hpkg
+Completed 59.6 MiB/62.5 MiB (136.9 MiB/s) with 3 file(s) remainingCompleted 59.7 MiB/62.5 MiB (136.6 MiB/s) with 3 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg
+Completed 59.7 MiB/62.5 MiB (136.6 MiB/s) with 2 file(s) remainingCompleted 60.1 MiB/62.5 MiB (133.6 MiB/s) with 2 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/zstd-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd-1.5.6-2-arm64.hpkg
+Completed 60.1 MiB/62.5 MiB (133.6 MiB/s) with 1 file(s) remainingCompleted 62.5 MiB/62.5 MiB (107.0 MiB/s) with 1 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/F/hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg
+######## build[11]: # Must-have packages: the image is WRONG without these, so their
+ok: amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg was built from this tree's source (sha256:c2516c23c3bfe7948937642c3b4628619b7e7306ae9eb022ff70d6141eb514e2)
+total 64076
+drwxr-xr-x  2 root root     4096 Nov  4 02:29 .
+drwxr-xr-x 13 root root     4096 Nov  4 02:29 ..
+-rw-r--r--  1 root root 36856490 Nov  4 02:25 amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+-rw-r--r--  1 root root   109432 Nov  4 02:25 ca_root_certificates-2026_07_16-1-any.hpkg
+-rw-r--r--  1 root root   427396 Nov  4 02:25 debeos_cloudwatch-0.1.0-1-arm64.hpkg
+-rw-r--r--  1 root root    63254 Nov  4 02:25 fluidlite-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root    81370 Nov  4 02:25 fluidlite_devel-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root   184608 Nov  4 02:25 jasper-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root    30188 Nov  4 02:25 jasper_devel-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root   600692 Nov  4 02:25 libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root    57443 Nov  4 02:25 libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root   349435 Nov  4 02:25 libpng16-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   194287 Nov  4 02:25 libpng16_devel-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   225097 Nov  4 02:25 libvorbis-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   153942 Nov  4 02:25 libvorbis_devel-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   795387 Nov  4 02:25 ncurses6-6.6-1-arm64.hpkg
+-rw-r--r--  1 root root   958992 Nov  4 02:25 ncurses6-6.6_bootstrap-1-arm64.hpkg
+-rw-r--r--  1 root root  3717163 Nov  4 02:25 openssl3-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  3400263 Nov  4 02:25 openssl3-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root  4131650 Nov  4 02:25 openssl3-3.5.9-3-arm64.hpkg
+-rw-r--r--  1 root root  2278528 Nov  4 02:25 openssl3_devel-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2179701 Nov  4 02:25 openssl3_devel-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root  2179850 Nov  4 02:25 openssl3_devel-3.5.9-3-arm64.hpkg
+-rw-r--r--  1 root root   555837 Nov  4 02:25 openssl3_man-3.5.7-1-any.hpkg
+-rw-r--r--  1 root root   520649 Nov  4 02:25 openssl3_man-3.5.9-2-any.hpkg
+-rw-r--r--  1 root root   520681 Nov  4 02:25 openssl3_man-3.5.9-3-any.hpkg
+-rw-r--r--  1 root root   193823 Nov  4 02:25 tiff-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root  1154788 Nov  4 02:25 tiff_devel-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root   120495 Nov  4 02:25 zlib-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root    34849 Nov  4 02:25 zlib_devel-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root   408182 Nov  4 02:25 zstd-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root   364566 Nov  4 02:25 zstd-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root    88366 Nov  4 02:25 zstd_devel-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root    87602 Nov  4 02:25 zstd_devel-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2501000 Nov  4 02:25 zstd_source-1.5.6-2-arm64.hpkg
+warning: no host 'package' tool under /opt/src/haiku/generated.arm64/objects, so the
+  vendor of the staged files is UNVERIFIED. A file not vendored
+  'Haiku Project' will instead fail much later, in jam, as "has
+  unexpected vendor" from RepositoryCache1 .../HaikuPorts-local.
+  Run a jam pass first, then re-run this script, to check it here.
+staged: ca_root_certificates-2026_07_16-1-any.hpkg
+staged: openssl3_man-3.5.9-3-any.hpkg
+staged: jasper-2.0.33-2-arm64.hpkg
+staged: jasper_devel-2.0.33-2-arm64.hpkg
+staged: libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+staged: libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+staged: libpng16-1.6.53-1-arm64.hpkg
+staged: libpng16_devel-1.6.53-1-arm64.hpkg
+staged: tiff-4.7.0-1-arm64.hpkg
+staged: tiff_devel-4.7.0-1-arm64.hpkg
+staged: openssl3-3.5.9-3-arm64.hpkg
+staged: openssl3_devel-3.5.9-3-arm64.hpkg
+staged: zstd-1.5.7-1-arm64.hpkg
+staged: zstd_devel-1.5.7-1-arm64.hpkg
+staged: zstd_source-1.5.6-2-arm64.hpkg
+staged: zlib-1.3.2-1-arm64.hpkg
+staged: zlib_devel-1.3.2-1-arm64.hpkg
+MISSING in pool: haikuwebkit-1.10.0-2-arm64.hpkg
+MISSING in pool: haikuwebkit_devel-1.10.0-2-arm64.hpkg
+MISSING in pool: which-2.21-6-arm64.hpkg
+staged: fluidlite-1.0.9-3-arm64.hpkg
+staged: fluidlite_devel-1.0.9-3-arm64.hpkg
+staged: libvorbis-1.3.7-1-arm64.hpkg
+staged: libvorbis_devel-1.3.7-1-arm64.hpkg
+21 staged into /opt/src/haiku/generated.arm64/download, 3 missing from /opt/src/haiku/hpkg-pool, 0 rejected, 0 already staged with the wrong vendor
+stage-local-packages reported missing packages (features for any un-staged pkg stay off)
+######## build[12]: stopping before: echo "== jam pass 0 (pre-extract all build-feature archives) =="
+######## phase build done
+end setup 20261104T022912Z
+done
+
