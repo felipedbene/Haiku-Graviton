@@ -1,0 +1,66 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-c1000
+# instance: i-011608a88368aafbc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack arm c1000 on a canonical box
+# start: 20261104T024959Z   end: 20261104T025108Z   rc: 0
+# script sha256: 44b6f16a8e01a5764b0a0722b075cd3a4b9d8394cb305204bb90aae4763ff19f
+# ---- script ----
+# | # Repack arm "c1000": canonical haiku.hpkg with origin/graviton a9954f424a's kernel_arm64, libroot.so
+# | # and runtime_loader (the trunk-baseline set, method of #898/#933/#1011), with kernel_arm64.fix1000 and runtime_loader.fix1000 in place of the trunk ones.
+# | # A fresh launch of an image of this box boots them.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O kernel_arm64.new 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/out/kernel_arm64.fix1000?<PRESIGNED>'
+# | wget -q -O libroot.so.new 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/out/libroot.so.trunk?<PRESIGNED>'
+# | wget -q -O runtime_loader.new 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/out/runtime_loader.fix1000?<PRESIGNED>'
+# | cat > sums <<'SUMS'
+# | b14fb2d6330131b731ecd30d604065993d31e0d2265afc8108bf6f5a313e0504  kernel_arm64.new
+# | 2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.new
+# | ccfed2ec51c3f8da84eb5e1dbcc16cb85bd32bb61fd729e524b7e787b7abd4c0  runtime_loader.new
+# | SUMS
+# | sha256sum -c sums
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | ls x | head -20
+# | sha256sum x/kernel_arm64 x/lib/libroot.so x/runtime_loader
+# | cat kernel_arm64.new > x/kernel_arm64; cat libroot.so.new > x/lib/libroot.so; cat runtime_loader.new > x/runtime_loader
+# | sha256sum x/kernel_arm64 x/lib/libroot.so x/runtime_loader
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+kernel_arm64.new: OK
+libroot.so.new: OK
+runtime_loader.new: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+Deskbar
+Tracker
+add-ons
+apps
+bin
+boot
+data
+documentation
+kernel_arm64
+lib
+preferences
+runtime_loader
+servers
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  x/runtime_loader
+b14fb2d6330131b731ecd30d604065993d31e0d2265afc8108bf6f5a313e0504  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+ccfed2ec51c3f8da84eb5e1dbcc16cb85bd32bb61fd729e524b7e787b7abd4c0  x/runtime_loader
+----- Package Info ----------------
+header size:                     80
+heap size:                 20508800
+TOC size:                    324054
+package attributes size:       1100
+total size:                20508880
+-----------------------------------
+-rw-r--r-- 1 baron root 20508880 Nov  4 02:50 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+4704b11365a5110c3c82bc1745002fbc6e1a69a4ad5d82cfa1d663f09c1ace68  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

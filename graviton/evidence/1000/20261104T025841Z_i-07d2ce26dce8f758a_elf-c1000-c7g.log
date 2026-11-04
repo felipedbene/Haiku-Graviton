@@ -1,0 +1,66 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: elf-c1000-c7g
+# instance: i-07d2ce26dce8f758a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: c1000 arm (ami-0ff1b86104b8eb0e1, base + fix1000 kernel and runtime_loader): final elfmachine1000 + kernel-path poke driver with e_machine 62
+# start: 20261104T025841Z   end: 20261104T025853Z   rc: 0
+# script sha256: 0342b11de92d36b144f60cc131530b5fb343fc6af47d402889a68be17af54699
+# ---- script ----
+# | # #1000 rerun with the final elfmachine1000 (accurate dlopen column), plus the kernel path: a copy of
+# | # the legacy "poke" driver with e_machine patched to x86_64, installed in non-packaged drivers and
+# | # probed by listing /dev/misc, so the kernel's ELF loader (verify_eheader) sees it.
+# | cd /boot/home/bfA
+# | wget -q -O elfmachine1000.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/elfmachine1000.c?<PRESIGNED>"
+# | echo '48a9b40fc0f6461dd167a4b7bc2dce693d3923dc1ee0d376e8d524376fab1e0d  elfmachine1000.c' | sha256sum -c - || exit 1
+# | gcc -O2 -Wall -o elfmachine1000 elfmachine1000.c 2>/dev/null || exit 1
+# | SL=$(wc -l < /var/log/syslog)
+# | rm -rf e && mkdir e && cd e && ../elfmachine1000 /boot/system/bin/true /boot/system/lib/libbsd.so ../hello.x86_64; echo "rc=$?"; cd ..
+# | echo '=== the x86_64 binary from bash:'; bash -c ./hello.x86_64; echo "rc=$?"
+# | echo '=== kernel path: poke driver copy with e_machine 62'
+# | D=/boot/home/config/non-packaged/add-ons/kernel/drivers
+# | mkdir -p $D/bin $D/dev/misc
+# | cp /boot/system/add-ons/kernel/drivers/bin/poke $D/bin/poke1000
+# | printf '\076\000' | dd of=$D/bin/poke1000 bs=1 seek=18 conv=notrunc 2>/dev/null
+# | od -A d -t u2 -j 18 -N 2 $D/bin/poke1000 | head -1
+# | ln -sf ../../bin/poke1000 $D/dev/misc/poke1000
+# | ls /dev/misc; sleep 2; ls /dev/misc
+# | echo '=== syslog lines since the start of this run (runtime_loader/elf/poke):'
+# | tail -n +$((SL + 1)) /var/log/syslog | grep -iE "runtime_loader|elf:|poke|refusing" | sed 's/^.*KERN: //' | sort | uniq -c | head -40
+# | rm -f $D/dev/misc/poke1000 $D/bin/poke1000
+# ---- raw output ----
+elfmachine1000.c: OK
+execve ./exe.native                          ran, exit 0                              ok
+dlopen ./lib.native.so                       loaded                                   ok
+execve ./exe.x86_64                          execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.x86_64.so                       refused                                  ok
+execve ./exe.i386                            execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.i386.so                         refused                                  ok
+execve ./exe.em7777                          execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.em7777.so                       refused                                  ok
+execve ./exe.bigendian                       execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.bigendian.so                    refused                                  ok
+execve ../hello.x86_64                       execve: Not an executable                ok
+failures: 0
+rc=0
+=== the x86_64 binary from bash:
+rc=126
+=== kernel path: poke driver copy with e_machine 62
+0000018    62
+mem
+poke
+mem
+poke
+=== syslog lines since the start of this run (runtime_loader/elf/poke):
+      1 Could not load kernel add-on "/boot/home/config/non-packaged/add-ons/kernel/drivers/bin/poke1000": Not an executable
+      1 Could not load kernel add-on "/boot/home/config/non-packaged/add-ons/kernel/drivers/dev/misc/poke1000": Not an executable
+      1 driver "poke1000" added
+      2 elf: refusing an image for e_machine 62, EI_DATA 1 (this system: e_machine 183)
+      1 loaded driver /boot/system/add-ons/kernel/drivers/dev/misc/poke
+      1 runtime_loader: /boot/home/bfA/e/lib.bigendian.so: ELF image has the wrong byte order (EI_DATA 2) for this system
+      1 runtime_loader: /boot/home/bfA/e/lib.em7777.so: ELF image is for an unknown machine (e_machine 30583), but this system is arm64
+      1 runtime_loader: /boot/home/bfA/e/lib.i386.so: ELF image is for x86 (e_machine 3), but this system is arm64
+      1 runtime_loader: /boot/home/bfA/e/lib.x86_64.so: ELF image is for x86_64 (e_machine 62), but this system is arm64
+bash: line 1: ./hello.x86_64: cannot execute binary file: Not an executable

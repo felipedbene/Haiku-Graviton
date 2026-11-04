@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-cmp
+# instance: i-08d7a8a5e483ffab4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: why the trunk rebuild cmp printed nothing
+# start: 20261104T024405Z   end: 20261104T024416Z   rc: 0
+# script sha256: 1714074f49f824357b5f4bd6cdefffbac7d61670f0020eb7a315fb5553444662
+# ---- script ----
+# | cd /opt/t/out; grep -n -A3 "jam-trunk2\|+ cmp " xb.log | head -30; ls -la --time-style=+%T /opt/t/hg/generated/objects/haiku/arm64/release/system/kernel/revisioned/ | head
+# ---- raw output ----
+89:+ cmp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk
+90-objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk differ: byte 1749032, line 4879
+91:+ cmp objects/haiku/arm64/release/system/runtime_loader/runtime_loader /opt/t/out/runtime_loader.trunk
+92-objects/haiku/arm64/release/system/runtime_loader/runtime_loader /opt/t/out/runtime_loader.trunk differ: byte 25, line 1
+93-+ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+94-+ cd /opt/t/out
+--
+112:+ cmp -s kernel_arm64.trunk kernel_arm64.fix979
+113-+ for a in fix979 fix980 fix1000
+114:+ cmp -s kernel_arm64.trunk kernel_arm64.fix980
+115-+ for a in fix979 fix980 fix1000
+116:+ cmp -s kernel_arm64.trunk kernel_arm64.fix1000
+117:+ cmp -s runtime_loader.trunk runtime_loader.fix1000
+118-+ sha256sum kernel_arm64.fix1000 kernel_arm64.fix979 kernel_arm64.fix980 kernel_arm64.trunk libroot.so.trunk runtime_loader.fix1000 runtime_loader.trunk
+119-+ tee SHA256SUMS
+120-be77d9ea875a3a44e7963a1369c9f54dfd7578564df4d65f54a8140a62bbb2e5  kernel_arm64.fix1000
+total 2500
+drwxr-xr-x   2 root root    4096 02:40:18 .
+drwxr-xr-x  16 root root    4096 02:40:18 ..
+-rwxr-xr-x+  1 root root 2551417 02:40:18 kernel_arm64

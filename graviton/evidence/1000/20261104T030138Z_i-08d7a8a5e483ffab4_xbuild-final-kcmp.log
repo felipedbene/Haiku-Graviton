@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-final-kcmp
+# instance: i-08d7a8a5e483ffab4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: the final #1000 kernel differs from the tested one only in the embedded build date/time
+# start: 20261104T030138Z   end: 20261104T030150Z   rc: 0
+# script sha256: 0b04ad10bbe0a2dcad236720e2077b1eb98aa5938fd393b9866c4f27f6665fbc
+# ---- script ----
+# | cd /opt/t/hg/generated; R=objects/haiku/arm64/release/system
+# | cmp -l $R/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1000
+# | strings -a -t d $R/kernel/revisioned/kernel_arm64 | grep -E " [0-9]{2}:[0-9]{2}:[0-9]{2}$| Nov  4 2026$"
+# ---- raw output ----
+1749118  63  62
+1749120  60  64
+1749121  61  65
+1749123  61  63
+1749124  70  60
+1754826  63  62
+1754828  60  64
+1754829  61  65
+1754831  61  63
+1754832  70  60
+1749104 Nov  4 2026 03:01:18
+1754824 03:01:18
+1754840 Nov  4 2026

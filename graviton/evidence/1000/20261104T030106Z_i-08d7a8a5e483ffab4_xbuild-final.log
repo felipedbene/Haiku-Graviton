@@ -1,0 +1,55 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-final
+# instance: i-08d7a8a5e483ffab4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: rebuild the final #1000 commit and compare with the tested binaries
+# start: 20261104T030106Z   end: 20261104T030129Z   rc: 0
+# script sha256: 0c07ee1204a31f9c9319f90622ede7bd89aca5fa914eb8f2554420793e281107
+# ---- script ----
+# | # Rebuild fix1000 from the final #1000 commit (d4262c33de: EM_486 also accepted on x86, which
+# | # changes nothing on arm64) and compare with the binaries the hardware arms ran.
+# | set -x
+# | cd /opt/t/out && ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/A/in/fix1000-final.patch .
+# | echo '35311a5f6fa242fb54b162c93c4562fe98f1c61153c703f12e82991c250a034e  fix1000-final.patch' | sha256sum -c - || exit 1
+# | cd /opt/t/hg/generated; R=objects/haiku/arm64/release/system
+# | git -C .. checkout -q -f a9954f424a && git -C .. apply fix1000-final.patch 2>/dev/null || git -C .. apply /opt/t/out/fix1000-final.patch || exit 1
+# | git -C .. diff --stat
+# | sleep 2; rm -rf $R/kernel $R/runtime_loader
+# | jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 "<revisioned>kernel_arm64" runtime_loader > /opt/t/out/jam-fix1000-final.log 2>&1 || { tail -40 /opt/t/out/jam-fix1000-final.log; exit 1; }
+# | sha256sum $R/runtime_loader/runtime_loader /opt/t/out/runtime_loader.fix1000
+# | cmp $R/runtime_loader/runtime_loader /opt/t/out/runtime_loader.fix1000 && echo "runtime_loader final == tested"
+# | echo "kernel differing bytes final vs tested: $(cmp -l $R/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1000 | wc -l)"
+# | git -C .. checkout -q -f a9954f424a
+# ---- raw output ----
+fix1000-final.patch: OK
+ headers/private/system/elf_private.h         | 29 ++++++++++
+ src/system/kernel/elf.cpp                    | 15 ++++++
+ src/system/runtime_loader/elf_load_image.cpp | 81 +++++++++++++++++++++++++++-
+ 3 files changed, 124 insertions(+), 1 deletion(-)
+ccfed2ec51c3f8da84eb5e1dbcc16cb85bd32bb61fd729e524b7e787b7abd4c0  objects/haiku/arm64/release/system/runtime_loader/runtime_loader
+ccfed2ec51c3f8da84eb5e1dbcc16cb85bd32bb61fd729e524b7e787b7abd4c0  /opt/t/out/runtime_loader.fix1000
+runtime_loader final == tested
+kernel differing bytes final vs tested: 10
++ cd /opt/t/out
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/A/in/fix1000-final.patch .
++ echo '35311a5f6fa242fb54b162c93c4562fe98f1c61153c703f12e82991c250a034e  fix1000-final.patch'
++ sha256sum -c -
++ cd /opt/t/hg/generated
++ R=objects/haiku/arm64/release/system
++ git -C .. checkout -q -f a9954f424a
++ git -C .. apply fix1000-final.patch
++ git -C .. apply /opt/t/out/fix1000-final.patch
++ git -C .. diff --stat
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel objects/haiku/arm64/release/system/runtime_loader
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64' runtime_loader
++ sha256sum objects/haiku/arm64/release/system/runtime_loader/runtime_loader /opt/t/out/runtime_loader.fix1000
++ cmp objects/haiku/arm64/release/system/runtime_loader/runtime_loader /opt/t/out/runtime_loader.fix1000
++ echo 'runtime_loader final == tested'
+++ cmp -l objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1000
+++ wc -l
++ echo 'kernel differing bytes final vs tested: 10'
++ git -C .. checkout -q -f a9954f424a

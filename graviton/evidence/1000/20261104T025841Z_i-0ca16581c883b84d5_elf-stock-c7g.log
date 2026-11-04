@@ -1,0 +1,57 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: elf-stock-c7g
+# instance: i-0ca16581c883b84d5   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm (stock canonical, c7g.4xlarge): final elfmachine1000 + kernel-path poke driver with e_machine 62
+# start: 20261104T025841Z   end: 20261104T025853Z   rc: 0
+# script sha256: 003c9fabba9998edd6e21a1099919bd53658a621e90eca0a2aab9cd010878d7c
+# ---- script ----
+# | # #1000 rerun with the final elfmachine1000 (accurate dlopen column), plus the kernel path: a copy of
+# | # the legacy "poke" driver with e_machine patched to x86_64, installed in non-packaged drivers and
+# | # probed by listing /dev/misc, so the kernel's ELF loader (verify_eheader) sees it.
+# | cd /boot/home/bfA
+# | wget -q -O elfmachine1000.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/elfmachine1000.c?<PRESIGNED>"
+# | echo '48a9b40fc0f6461dd167a4b7bc2dce693d3923dc1ee0d376e8d524376fab1e0d  elfmachine1000.c' | sha256sum -c - || exit 1
+# | gcc -O2 -Wall -o elfmachine1000 elfmachine1000.c 2>/dev/null || exit 1
+# | SL=$(wc -l < /var/log/syslog)
+# | rm -rf e && mkdir e && cd e && ../elfmachine1000 /boot/system/bin/true /boot/system/lib/libbsd.so ../hello.x86_64; echo "rc=$?"; cd ..
+# | echo '=== the x86_64 binary from bash:'; bash -c ./hello.x86_64; echo "rc=$?"
+# | echo '=== kernel path: poke driver copy with e_machine 62'
+# | D=/boot/home/config/non-packaged/add-ons/kernel/drivers
+# | mkdir -p $D/bin $D/dev/misc
+# | cp /boot/system/add-ons/kernel/drivers/bin/poke $D/bin/poke1000
+# | printf '\076\000' | dd of=$D/bin/poke1000 bs=1 seek=18 conv=notrunc 2>/dev/null
+# | od -A d -t u2 -j 18 -N 2 $D/bin/poke1000 | head -1
+# | ln -sf ../../bin/poke1000 $D/dev/misc/poke1000
+# | ls /dev/misc; sleep 2; ls /dev/misc
+# | echo '=== syslog lines since the start of this run (runtime_loader/elf/poke):'
+# | tail -n +$((SL + 1)) /var/log/syslog | grep -iE "runtime_loader|elf:|poke|refusing" | sed 's/^.*KERN: //' | sort | uniq -c | head -40
+# | rm -f $D/dev/misc/poke1000 $D/bin/poke1000
+# ---- raw output ----
+elfmachine1000.c: OK
+execve ./exe.native                          ran, exit 0                              ok
+dlopen ./lib.native.so                       loaded                                   ok
+execve ./exe.x86_64                          ran, exit 0                              FAIL
+dlopen ./lib.x86_64.so                       loaded                                   FAIL
+execve ./exe.i386                            ran, exit 0                              FAIL
+dlopen ./lib.i386.so                         loaded                                   FAIL
+execve ./exe.em7777                          ran, exit 0                              FAIL
+dlopen ./lib.em7777.so                       loaded                                   FAIL
+execve ./exe.bigendian                       ran, exit 0                              FAIL
+dlopen ./lib.bigendian.so                    loaded                                   FAIL
+execve ../hello.x86_64                       ran, killed by signal 4                  FAIL
+failures: 9
+rc=1
+=== the x86_64 binary from bash:
+rc=132
+=== kernel path: poke driver copy with e_machine 62
+0000018    62
+mem
+poke
+mem
+poke
+=== syslog lines since the start of this run (runtime_loader/elf/poke):
+      1 devfs: reload driver "poke1000" (3, 4194343)
+      1 driver "poke1000" added
+      1 loaded driver /boot/home/config/non-packaged/add-ons/kernel/drivers/dev/misc/poke1000
+      1 loaded driver /boot/system/add-ons/kernel/drivers/dev/misc/poke
+/tmp/run-40974-180453.sh: line 10:   792 Illegal instruction        bash -c ./hello.x86_64

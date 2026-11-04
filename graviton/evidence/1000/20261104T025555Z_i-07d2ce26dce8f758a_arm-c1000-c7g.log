@@ -1,0 +1,119 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: arm-c1000-c7g
+# instance: i-07d2ce26dce8f758a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1000 on c7g.4xlarge (AMI ami-0ff1b86104b8eb0e1): idreg979, rng980, elfmachine1000, openssl3 3.5.9-3 speed -evp aes-256-gcm x3
+# start: 20261104T025555Z   end: 20261104T025723Z   rc: 0
+# script sha256: 589cbfa6cd0fb9668eaf83d281ac0a35c324e236024200bb762b56a8d046dbf5
+# ---- script ----
+# | # One DeBeOS arm: toolchain, the three repros, openssl identity + speed (3 runs), loader messages.
+# | # ARM label is in the first line of output.
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -1
+# | command -v gcc wget > /dev/null || exit 1
+# | uname -a
+# | sha256sum /boot/system/packages/haiku-r1*.hpkg
+# | mkdir -p /boot/home/bfA && cd /boot/home/bfA && rm -rf e && mkdir e
+# | wget -q -O idreg979.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/idreg979.c?<PRESIGNED>"
+# | wget -q -O rng980.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/rng980.c?<PRESIGNED>"
+# | wget -q -O elfmachine1000.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/elfmachine1000.c?<PRESIGNED>"
+# | wget -q -O hello.x86_64 "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/hello.x86_64?<PRESIGNED>"
+# | cat > sums <<'SUMS'
+# | 56aa0e300b20aaffb8e7915e41b589693772779b299577d39b6a9878a959e8a1  elfmachine1000.c
+# | ef776604ea0bea63a69d070c16873f17b3c01726e5aa8e9d7753319fc9dd07c1  idreg979.c
+# | 093b798d35e31db587044f9ba598a55cc5a0059e6c629c4b25839126f746fc9a  rng980.c
+# | a3942dd5247b08fdcebf23664b5a45a1dfc68697b98adb0c27cada6875463276  hello.x86_64
+# | SUMS
+# | sha256sum -c sums || exit 1
+# | chmod +x hello.x86_64
+# | for p in idreg979 rng980 elfmachine1000; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | echo '=== idreg979'; ./idreg979; echo "rc=$?"
+# | echo '=== idreg979 -f'; ./idreg979 -f 2>&1 | head -12; echo "rc=$?"
+# | echo '=== rng980'; ./rng980; echo "rc=$?"
+# | echo '=== elfmachine1000'
+# | SL=$(wc -l < /var/log/syslog)
+# | cd e && ../elfmachine1000 /boot/system/bin/true /boot/system/lib/libbsd.so ../hello.x86_64; echo "rc=$?"; cd ..
+# | echo '=== the x86_64 binary from a shell (bash):'; ./hello.x86_64; echo "rc=$?"
+# | echo '=== syslog lines written during elfmachine1000 (runtime_loader/elf):'
+# | tail -n +$((SL + 1)) /var/log/syslog | grep -E "runtime_loader|elf:" | sed 's/^.*KERN: //' | sort | uniq -c | head -40
+# | O=$(command -v openssl); echo "openssl: $O"; $O version; $O info -cpusettings
+# | for i in 1 2 3; do echo "--- run $i"; $O speed -evp aes-256-gcm 2>&1 | tail -2; done
+# | echo "--- forced OPENSSL_armcap=0x1e7d (#979's Linux mask test)"; OPENSSL_armcap=0x1e7d $O speed -evp aes-256-gcm 2>&1 | tail -1
+# ---- raw output ----
+[system] Done.
+Haiku ip-10-128-4-144.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 02:45:30 arm64 other Haiku
+4704b11365a5110c3c82bc1745002fbc6e1a69a4ad5d82cfa1d663f09c1ace68  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+elfmachine1000.c: OK
+idreg979.c: OK
+rng980.c: OK
+hello.x86_64: OK
+=== idreg979
+AT_HWCAP  0x000000000cbff7fb
+AT_HWCAP2 0x0000000000006001
+HWCAP_CPUID clear
+HWCAP_CPUID is clear, so ID registers are not readable; -f reads them anyway
+failures: 1
+rc=1
+=== idreg979 -f
+AT_HWCAP  0x000000000cbff7fb
+AT_HWCAP2 0x0000000000006001
+HWCAP_CPUID clear
+reg MIDR_EL1           signal 4
+reg S3_0_C0_C0_1       signal 4
+reg S3_0_C0_C0_2       signal 4
+reg S3_0_C0_C0_3       signal 4
+reg S3_0_C0_C0_4       signal 4
+reg MPIDR_EL1          signal 4
+reg REVIDR_EL1         signal 4
+reg S3_0_C0_C0_7       signal 4
+reg ID_PFR0_EL1        signal 4
+rc=1
+=== rng980
+AT_HWCAP  0x000000000cbff7fb
+AT_HWCAP2 0x0000000000006001
+HWCAP2_RNG clear
+RNDR   executes: 10000/10000 reads succeeded, 0 repeated
+RNDRRS executes: 10000/10000 reads succeeded, 0 repeated
+HWCAP2_RNG agrees with whether RNDR executes               FAIL
+RNDR: most reads succeed, no value repeats                 ok
+RNDRRS: most reads succeed, no value repeats               ok
+failures: 1
+rc=1
+=== elfmachine1000
+execve ./exe.native                          ran, exit 0                              ok
+dlopen ./lib.native.so                       loaded                                   ok
+execve ./exe.x86_64                          execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.x86_64.so                       refused                                  ok
+execve ./exe.i386                            execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.i386.so                         refused                                  ok
+execve ./exe.em7777                          execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.em7777.so                       refused                                  ok
+execve ./exe.bigendian                       execve: Not an executable                ok
+    dlerror: Not an executable
+dlopen ./lib.bigendian.so                    refused                                  ok
+execve ../hello.x86_64                       execve: Not an executable                ok
+failures: 0
+rc=0
+=== the x86_64 binary from a shell (bash):
+rc=126
+=== syslog lines written during elfmachine1000 (runtime_loader/elf):
+      1 runtime_loader: /boot/home/bfA/e/lib.bigendian.so: ELF image has the wrong byte order (EI_DATA 2) for this system
+      1 runtime_loader: /boot/home/bfA/e/lib.em7777.so: ELF image is for an unknown machine (e_machine 30583), but this system is arm64
+      1 runtime_loader: /boot/home/bfA/e/lib.i386.so: ELF image is for x86 (e_machine 3), but this system is arm64
+      1 runtime_loader: /boot/home/bfA/e/lib.x86_64.so: ELF image is for x86_64 (e_machine 62), but this system is arm64
+openssl: /boot/system/bin/openssl
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+OPENSSL_armcap=0xe7d
+--- run 1
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      69314.10k   256238.57k   837803.42k  2041877.68k  3468390.43k  3650138.62k
+--- run 2
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      68813.84k   254358.03k   833698.96k  2034739.37k  3469069.13k  3651703.72k
+--- run 3
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      68764.35k   254738.70k   833421.11k  2032050.11k  3465281.21k  3652133.55k
+--- forced OPENSSL_armcap=0x1e7d (#979's Linux mask test)
+AES-256-GCM      69194.35k   257266.08k   837197.03k  2075539.89k  4715354.49k  5124439.09k
+/tmp/run-37197-be3161.sh: line 27: ./hello.x86_64: cannot execute binary file: Not an executable
