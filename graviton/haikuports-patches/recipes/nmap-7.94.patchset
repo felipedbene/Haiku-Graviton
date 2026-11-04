@@ -1,7 +1,7 @@
 From bb7f4247efc3d019c5c89426562194bfd25036fc Mon Sep 17 00:00:00 2001
 From: Augustin Cavalier <waddlesplash@gmail.com>
 Date: Fri, 22 Sep 2023 17:37:28 -0400
-Subject: [PATCH 1/2] Build fixes for Haiku.
+Subject: [PATCH 1/4] Build fixes for Haiku.
 
 ---
  libdnet-stripped/include/dnet/route.h | 3 +++
@@ -98,7 +98,7 @@ index 34c2602..cd47296 100644
 From cd7afa50a32b3b710406eb532d1d2d889a078606 Mon Sep 17 00:00:00 2001
 From: Felipe De Bene <benfelip@amazon.com>
 Date: Tue, 3 Nov 2026 20:36:17 -0600
-Subject: [PATCH 2/2] libdnet: add a Haiku route backend
+Subject: [PATCH 2/4] libdnet: add a Haiku route backend
 
 Haiku has neither a BSD routing socket nor /proc/net/route, so configure
 picked route-none.c, route_open() failed with ENOSYS, and every nmap scan
@@ -612,6 +612,330 @@ index 0000000..b63721d
 +	}
 +	return (NULL);
 +}
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 5862e58c1e7c00bb6f90eaf28dbc9b3328c25df7 Mon Sep 17 00:00:00 2001
+From: Felipe De Bene <benfelip@amazon.com>
+Date: Tue, 3 Nov 2026 21:08:56 -0600
+Subject: [PATCH 3/4] libdnet: add a Haiku Ethernet backend
+
+configure picked eth-none.c on Haiku, so eth_open() always failed: nmap
+could not read an interface's MAC (intf.c falls back to eth_get() without
+SIOCGIFHWADDR) and quit any scan that sends frames. eth-haiku.c reads the
+link address with SIOCGIFADDR on an AF_LINK socket, as ifconfig does, and
+sends through an AF_LINK socket bound per frame type, from the
+device's own address.
+
+The stack refuses that bind for a frame type it handles itself (IPv4, ARP,
+IPv6), so those frames still cannot be sent.
+---
+ libdnet-stripped/configure       |   8 ++
+ libdnet-stripped/configure.in    |   3 +
+ libdnet-stripped/src/eth-haiku.c | 225 +++++++++++++++++++++++++++++++
+ 3 files changed, 236 insertions(+)
+ create mode 100644 libdnet-stripped/src/eth-haiku.c
+
+diff --git a/libdnet-stripped/configure b/libdnet-stripped/configure
+index 3a86761..6e4a9a2 100755
+--- a/libdnet-stripped/configure
++++ b/libdnet-stripped/configure
+@@ -12068,6 +12068,14 @@ if test "$ac_cv_header_Iphlpapi_h" = yes ; then
+  ;;
+ esac
+ 
++elif test "$ac_cv_header_sys_sockio_h" = yes && \
++     echo "$host_os" | grep -q haiku ; then
++	case " $LIBOBJS " in
++  *" eth-haiku.$ac_objext "* ) ;;
++  *) LIBOBJS="$LIBOBJS eth-haiku.$ac_objext"
++ ;;
++esac
++
+ elif test "$ac_cv_header_net_pfilt_h" = yes ; then
+ 	case " $LIBOBJS " in
+   *" eth-pfilt.$ac_objext "* ) ;;
+diff --git a/libdnet-stripped/configure.in b/libdnet-stripped/configure.in
+index 9e50809..2aeffd5 100644
+--- a/libdnet-stripped/configure.in
++++ b/libdnet-stripped/configure.in
+@@ -237,6 +237,9 @@ fi
+ dnl Check for Ethernet interface.
+ if test "$ac_cv_header_Iphlpapi_h" = yes ; then
+ 	AC_LIBOBJ([eth-win32])
++elif test "$ac_cv_header_sys_sockio_h" = yes && \
++     echo "$host_os" | grep -q haiku ; then
++	AC_LIBOBJ([eth-haiku])
+ elif test "$ac_cv_header_net_pfilt_h" = yes ; then
+ 	AC_LIBOBJ([eth-pfilt])
+ elif test "$ac_cv_dnet_bsd_bpf" = yes ; then
+diff --git a/libdnet-stripped/src/eth-haiku.c b/libdnet-stripped/src/eth-haiku.c
+new file mode 100644
+index 0000000..f0f046d
+--- /dev/null
++++ b/libdnet-stripped/src/eth-haiku.c
+@@ -0,0 +1,225 @@
++/*
++ * eth-haiku.c
++ *
++ * Haiku Ethernet access through AF_LINK datagram sockets, the interface
++ * libpcap's Haiku backend uses. The link address comes from SIOCGIFADDR on
++ * an AF_LINK socket, as ifconfig(8) reads it.
++ *
++ * Sending: a link socket bound to an interface with sdl_type IFT_ETHER and a
++ * frame type has the stack's ethernet_frame module build the header from
++ * that bound address (type and source address) and the destination given to
++ * sendto(). So eth_send() strips the caller's header and passes it back as
++ * those two addresses, keeping a bound socket per frame type. The source
++ * must be the device's own address.
++ * The bind also registers the socket as the receiver for its frame type,
++ * which the stack refuses for a type it already handles itself -- IPv4, ARP
++ * and IPv6 -- so for those frames eth_send() fails with the bind's error.
++ *
++ * Copyright (c) 2000 Dug Song <dugsong@monkey.org>
++ */
++
++#include "config.h"
++
++#include <sys/types.h>
++#include <sys/ioctl.h>
++#include <sys/socket.h>
++#include <sys/sockio.h>
++
++#include <net/if.h>
++#include <net/if_dl.h>
++#include <net/if_types.h>
++
++#include <errno.h>
++#include <stddef.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include "dnet.h"
++
++/* Bound senders kept open per handle; nmap sends one or two frame types. */
++#define ETH_SENDERS	4
++
++struct eth_sender {
++	int		 fd;
++	uint16_t	 type;		/* network byte order */
++};
++
++struct eth_handle {
++	int			 fd;	/* unbound, for ioctls */
++	char			 name[IF_NAMESIZE];
++	eth_addr_t		 addr;
++	struct eth_sender	 senders[ETH_SENDERS];
++	int			 next;	/* sender slot to recycle */
++};
++
++static int
++_link_addr(int fd, const char *name, struct sockaddr_dl *sdl)
++{
++	struct ifreq ifr;
++
++	memset(&ifr, 0, sizeof(ifr));
++	strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
++	if (ioctl(fd, SIOCGIFADDR, &ifr, sizeof(ifr)) < 0)
++		return (-1);
++	memcpy(sdl, &ifr.ifr_addr, sizeof(*sdl) < sizeof(ifr.ifr_addr) ?
++	    sizeof(*sdl) : sizeof(ifr.ifr_addr));
++	if (sdl->sdl_family != AF_LINK || sdl->sdl_type != IFT_ETHER ||
++	    sdl->sdl_alen != ETH_ADDR_LEN) {
++		errno = ENODEV;
++		return (-1);
++	}
++	return (0);
++}
++
++eth_t *
++eth_open(const char *device)
++{
++	struct sockaddr_dl sdl;
++	eth_t *e;
++	int i;
++
++	if (strlen(device) >= sizeof(e->name)) {
++		errno = ENAMETOOLONG;
++		return (NULL);
++	}
++	if ((e = calloc(1, sizeof(*e))) == NULL)
++		return (NULL);
++	for (i = 0; i < ETH_SENDERS; i++)
++		e->senders[i].fd = -1;
++	strlcpy(e->name, device, sizeof(e->name));
++
++	if ((e->fd = socket(AF_LINK, SOCK_DGRAM, 0)) < 0 ||
++	    _link_addr(e->fd, e->name, &sdl) < 0)
++		return (eth_close(e));
++	memcpy(&e->addr, LLADDR(&sdl), ETH_ADDR_LEN);
++
++	return (e);
++}
++
++int
++eth_get(eth_t *e, eth_addr_t *ea)
++{
++	struct sockaddr_dl sdl;
++
++	if (_link_addr(e->fd, e->name, &sdl) < 0)
++		return (-1);
++	memcpy(&e->addr, LLADDR(&sdl), ETH_ADDR_LEN);
++	memcpy(ea, &e->addr, sizeof(*ea));
++	return (0);
++}
++
++int
++eth_set(eth_t *e, const eth_addr_t *ea)
++{
++	/* The stack has no ioctl that changes a device's link address. */
++	errno = EOPNOTSUPP;
++	return (-1);
++}
++
++/* Fills sdl with the AF_LINK address a sender binds to. The stack picks the
++ * interface by this address (get_interface_for_link()), and ethernet_frame
++ * copies the frame's source from LLADDR() of the same address, so a sender
++ * can only use the device's own address: a different one selects no
++ * interface, and a named address cannot carry one, because the stack compares
++ * the name with strcmp() and the link address follows it unterminated. */
++static void
++_bind_addr(const eth_t *e, uint16_t type, struct sockaddr_dl *sdl)
++{
++	memset(sdl, 0, sizeof(*sdl));
++	sdl->sdl_len = sizeof(*sdl);
++	sdl->sdl_family = AF_LINK;
++	sdl->sdl_e_type = type;
++	sdl->sdl_type = IFT_ETHER;
++	sdl->sdl_alen = ETH_ADDR_LEN;
++	memcpy(LLADDR(sdl), &e->addr, ETH_ADDR_LEN);
++}
++
++/* Returns a socket bound for frames of this type. The bind claims the frame
++ * type for receiving, so two sockets cannot both be bound to one type. */
++static int
++_sender(eth_t *e, uint16_t type)
++{
++	struct eth_sender *s;
++	struct sockaddr_dl sdl;
++	int i, fd;
++
++	for (i = 0; i < ETH_SENDERS; i++) {
++		if (e->senders[i].fd >= 0 && e->senders[i].type == type)
++			return (e->senders[i].fd);
++	}
++
++	_bind_addr(e, type, &sdl);
++	if ((fd = socket(AF_LINK, SOCK_DGRAM, 0)) < 0)
++		return (-1);
++	if (bind(fd, (struct sockaddr *)&sdl, sizeof(sdl)) < 0) {
++		int saved = errno;
++
++		close(fd);
++		errno = saved;
++		return (-1);
++	}
++
++	s = &e->senders[e->next];
++	e->next = (e->next + 1) % ETH_SENDERS;
++	if (s->fd >= 0)
++		close(s->fd);
++	s->fd = fd;
++	s->type = type;
++
++	return (fd);
++}
++
++ssize_t
++eth_send(eth_t *e, const void *buf, size_t len)
++{
++	const struct eth_hdr *eh = (const struct eth_hdr *)buf;
++	struct sockaddr_dl dst;
++	ssize_t n;
++	int fd;
++
++	if (len < ETH_HDR_LEN) {
++		errno = EINVAL;
++		return (-1);
++	}
++	/* The stack frames with the device's own address only (_bind_addr()). */
++	if (memcmp(&eh->eth_src, &e->addr, sizeof(e->addr)) != 0) {
++		errno = EADDRNOTAVAIL;
++		return (-1);
++	}
++	if ((fd = _sender(e, eh->eth_type)) < 0)
++		return (-1);
++
++	memset(&dst, 0, sizeof(dst));
++	dst.sdl_len = sizeof(dst);
++	dst.sdl_family = AF_LINK;
++	dst.sdl_e_type = eh->eth_type;
++	dst.sdl_type = IFT_ETHER;
++	dst.sdl_alen = ETH_ADDR_LEN;
++	memcpy(LLADDR(&dst), &eh->eth_dst, ETH_ADDR_LEN);
++
++	n = sendto(fd, (const u_char *)buf + ETH_HDR_LEN, len - ETH_HDR_LEN, 0,
++	    (struct sockaddr *)&dst, sizeof(dst));
++	if (n < 0)
++		return (-1);
++
++	/* Report the frame length, as the other backends do. */
++	return (n + ETH_HDR_LEN);
++}
++
++eth_t *
++eth_close(eth_t *e)
++{
++	int i;
++
++	if (e != NULL) {
++		for (i = 0; i < ETH_SENDERS; i++) {
++			if (e->senders[i].fd >= 0)
++				close(e->senders[i].fd);
++		}
++		if (e->fd >= 0)
++			close(e->fd);
++		free(e);
++	}
++	return (NULL);
++}
+-- 
+2.54.0 (Apple Git-157)
+
+
+From eb6f1cecadf2da01780b6672c8302f11320f6cf1 Mon Sep 17 00:00:00 2001
+From: Felipe De Bene <benfelip@amazon.com>
+Date: Tue, 3 Nov 2026 20:50:11 -0600
+Subject: [PATCH 4/4] nmap: send at the IP layer by default on Haiku
+
+Haiku's stack refuses to bind an AF_LINK socket to IPv4, ARP or IPv6 frames,
+so libdnet's eth_send() cannot send any frame nmap builds. With the default
+PACKET_SEND_IP_WEAK, a directly connected Ethernet target still gets an
+implicit ARP ping and next-hop MAC lookup, and the scan quits. Default to
+--send-ip instead; --send-eth still selects the link layer explicitly.
+---
+ NmapOps.cc | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/NmapOps.cc b/NmapOps.cc
+index 612b6e4..b8cf2db 100644
+--- a/NmapOps.cc
++++ b/NmapOps.cc
+@@ -428,6 +428,12 @@ administrator privileges.";
+  if (sendpref == PACKET_SEND_NOPREF) {
+ #ifdef WIN32
+    sendpref = PACKET_SEND_ETH_STRONG;
++#elif defined(__HAIKU__)
++   /* Haiku's network stack will not let an AF_LINK socket send IPv4, ARP
++      or IPv6 frames (see libdnet's eth-haiku.c), so every frame nmap builds
++      fails to send. Behave as --send-ip, which also skips the implicit ARP
++      ping that would otherwise abort a directly connected scan. */
++   sendpref = PACKET_SEND_IP_STRONG;
+ #else
+    sendpref = PACKET_SEND_IP_WEAK;
+ #endif
 -- 
 2.54.0 (Apple Git-157)
 
