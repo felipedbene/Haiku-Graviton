@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r4-Q3-close1063-100k
+# instance: i-0a32c4af49952620f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 4, arm Q3 (fresh boot): close1063, 100000 iterations per phase
+# start: 20261104T062643Z   end: 20261104T063656Z   rc: 137
+# script sha256: 4d6f4cee6b21efdf8fee42d95dda887e7fcfd2667b0df5f8ed4d9bd47f5ad439
+# ---- script ----
+# | # Round 4: close1063, 100000 iterations per phase (bind/close, capture start/stop, the two-thread
+# | # start/stop race, and a typed bind during a capture stop), 0x88b5 into tap/0 ~20 us apart.
+# | cd /boot/home/j
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sha256sum close1063
+# | ifconfig tap/0 up; ifconfig tap/0 | head -1
+# | (./close1063 100000 20 > close.out 2>&1; echo "close1063 exit=$?" >> close.out) &
+# | for i in $(seq 1 60); do sleep 5; grep -q "exit=\|HANG" close.out && break; done
+# | cat close.out
+# | ( ifconfig tap/0 | grep Receive ) & sleep 3; echo "(ifconfig tap/0 above if it returned within 3 s)"
+# ---- raw output ----
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+854e4a75a798d6cb339aaec08d8db88bef9c318172fa610b9d5934e856934f2e  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ab494890f4000722556d61003589eb4e267d7f13ec314fc31a7cf7b4be4128dc  close1063
+tap/0	Hardware type: Ethernet, Address: 36:81:fc:05:7c:aa
+tap/0: mac 36:81:fc:05:7c:aa, 100000 iterations per phase
+bind-close       PASS  100000/100000 bound, 100000 received a frame before close, 22.0s, frames written 650966
+capture-stop     PASS  100000/100000 started, 100000 received, 100000 stopped, 22.5s, frames written 1320030
+capture-race     PASS  2 threads x 100000 start/stop on one socket: 96201 + 98583 started, 3.0s; a fresh capture afterwards received = 1, frames written 1407764
+HANG phase bind-during-stop: no progress for 15 s at iteration 400072 (frames written 1409084)
+(ifconfig tap/0 above if it returned within 3 s)
