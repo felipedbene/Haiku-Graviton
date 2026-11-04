@@ -265,6 +265,14 @@ so those 10 are not attributed one by one; the final run's skip list, each with 
   - `perf-hooks-sliding-window-histogram`: intermittent, about 5% (1/1 suite, 1/10 and 2/40 alone,
     2/48 under load). Linux passes 296/296. `uv_hrtime()` is monotonic on Haiku: 0 backward steps in
     2.4 G reads (`010139Z…hrtime-sliding-window-probe`). The cause is not established; filed as **#997**.
+    **Resolved as a test race (#997):** generations count from the histogram's creation, and the
+    test's `delay(200)` wakes within about a millisecond of `origin + 200` (p5 −0.30 ms, p95
+    +1.00 ms), so a 100 ms boundary can fall between `record()` and `snapshot()`. All five
+    instrumented failures woke 12–32 µs before the boundary. In sequential runs, 32/320 Haiku
+    wakeups land within 50 µs of it and 0/320 Linux ones do, because the Linux wakeup sits
+    about 0.58 ms past the boundary. The DeBeOS patchset now carries
+    upstream's deflake (nodejs/node 147ade5ff9), which takes it from 3/320 alone and 18/320
+    under `-j 16` to 0/320 and 0/320 (`graviton/evidence/997/`).
 - **22 still fail, unchanged:** the same list as the rev-3 run.
 - **Baseline (openssl 3.5.9-2) vs staged (3.5.9-3):** the same failures, apart from the
   intermittent `sliding-window-histogram` and the #946 timeout, plus 1 more skip. The baseline's

@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-wake-phase-probe (Linux control: Ubuntu 24.04 arm64, c8g.4xlarge, official node-v24.22.2-linux-arm64)
+# instance: i-0f1c6489ec848075a   region: us-west-2   transport: ssm (graviton/scripts/ssm-run)
+# start: 20261104T025245Z   rc: 0
+# ---- script ----
+# | echo "== measurement script /tmp/m997p.sh"; cat /tmp/m997p.sh; echo "== log /root/m997p.log"; cat /root/m997p.log
+# ---- raw output ----
+== measurement script /tmp/m997p.sh
+# m997p.sh <node> <label> <N>  -- issue 997: where the delay(200) wakeup lands vs the window origin
+set -u
+NODE=$1; LABEL=$2; N=$3; P=/tmp/node-sliding-window-phase.js
+echo "## host: $(uname -a)"; echo "## node: $($NODE --version) label=$LABEL N=$N"; sha256sum $P
+stats() {  # $1 file, $2 delay
+  echo "RESULT $3: pass=$(grep -c PASS $1) fail=$(grep -c FAIL $1) of $(grep -c wake_ms $1)"
+  sed -n 's/^wake_ms=\([0-9.]*\).*/\1/p' $1 | awk -v d=$2 '{print $1-d}' | sort -g > /tmp/w.txt
+  awk '{a[NR]=$1} END{n=NR; printf "  wake - %d ms: min=%.3f p5=%.3f p25=%.3f p50=%.3f p75=%.3f p95=%.3f max=%.3f (ms, n=%d)\n", d, a[1], a[int(n*.05)+1], a[int(n*.25)+1], a[int(n*.5)+1], a[int(n*.75)+1], a[int(n*.95)+1], a[n], n}' d=$2 /tmp/w.txt
+  awk '{if ($1<0) neg++; if ($1>=-0.05 && $1<0.05) near++} END{printf "  woke before origin+delay: %d; within 50 us of the boundary: %d\n", neg, near}' /tmp/w.txt
+  awk '{split($2,a,"="); s+=a[2]; if (a[2]>m) m=a[2]} END{printf "  record..snapshot: mean %.1f us, max %.1f us\n", s/NR, m}' $1
+  grep FAIL $1 | head -5
+}
+for args in "200 1" "250 2"; do d=${args% *}
+  : > /tmp/ps.txt; i=0; while [ $i -lt $N ]; do i=$((i+1)); timeout 60 $NODE $P $args >> /tmp/ps.txt 2>&1; done
+  stats /tmp/ps.txt $d "probe($args) sequential"
+  : > /tmp/pl.txt; r=0; while [ $r -lt $((N/16)) ]; do r=$((r+1)); j=0
+    while [ $j -lt 16 ]; do j=$((j+1)); timeout 60 $NODE $P $args > /tmp/pl.$j 2>&1 & done; wait; cat /tmp/pl.[0-9]* >> /tmp/pl.txt; rm -f /tmp/pl.[0-9]*; done
+  stats /tmp/pl.txt $d "probe($args) 16-way"
+done
+echo M997P_DONE
+== log /root/m997p.log
+## host: Linux ip-10-128-14-203 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+## node: v24.22.2 label=linux-c8g4xl N=320
+c19e9b56a463529afaadbc2c3836ecab2bd2b6337ac9fe219c2e3d4950b4f9c5  /tmp/node-sliding-window-phase.js
+RESULT probe(200 1) sequential: pass=320 fail=0 of 320
+  wake - 200 ms: min=-0.480 p5=-0.435 p25=0.527 p50=0.535 p75=0.545 p95=0.559 max=0.606 (ms, n=320)
+  woke before origin+delay: 17; within 50 us of the boundary: 0
+  record..snapshot: mean 5.3 us, max 16.7 us
+RESULT probe(200 1) 16-way: pass=320 fail=0 of 320
+  wake - 200 ms: min=-0.475 p5=0.374 p25=0.518 p50=0.534 p75=0.551 p95=0.603 max=0.917 (ms, n=320)
+  woke before origin+delay: 15; within 50 us of the boundary: 0
+  record..snapshot: mean 6.5 us, max 20.3 us
+RESULT probe(250 2) sequential: pass=320 fail=0 of 320
+  wake - 250 ms: min=-0.425 p5=0.552 p25=0.573 p50=0.581 p75=0.589 p95=0.603 max=1.626 (ms, n=320)
+  woke before origin+delay: 16; within 50 us of the boundary: 0
+  record..snapshot: mean 7.4 us, max 22.4 us
+RESULT probe(250 2) 16-way: pass=320 fail=0 of 320
+  wake - 250 ms: min=-0.427 p5=0.361 p25=0.569 p50=0.584 p75=0.602 p95=0.691 max=0.830 (ms, n=320)
+  woke before origin+delay: 13; within 50 us of the boundary: 1
+  record..snapshot: mean 9.4 us, max 35.6 us
+M997P_DONE
