@@ -1,0 +1,77 @@
+#!/bin/bash
+#
+# oven-crossbuild-repro -- run the haiku-oven-cross-build CodeBuild stage
+# (install, pre_build and build phases of graviton/pipeline/buildspecs/
+# cross-build.yml, verbatim) for one git ref on an Ubuntu 24.04 arm64 EC2 host,
+# so a branch can be baked without a pipeline. post_build is skipped: it only
+# writes caches back to S3. Each command runs the CodeBuild way: in its own
+# bash, with exported variables and the working directory carried forward and
+# shell options not (method of graviton/evidence/1008 and 986).
+#
+# Usage (as root on the build host):
+#   WORK_BUCKET=<bucket>[/<prefix>] oven-crossbuild-repro <ref>
+#   WORK_BUCKET=... oven-crossbuild-repro <ref> build:22    # resume a phase at a command
+#
+# WORK_BUCKET must hold cache/cross-tools-arm64-<buildtools sha>.tar.zst and
+# hpkg-pool/, e.g. a copy of the oven pipeline's work bucket under your own
+# prefix. The result is /opt/src/haiku/haiku-ec2.raw; the log goes to stdout.
+set -uo pipefail
+REF=${1:?usage: oven-crossbuild-repro <ref> [phase[:index]...]}; shift
+: "${WORK_BUCKET:?set WORK_BUCKET}"
+export WORK_BUCKET
+export DEBIAN_FRONTEND=noninteractive
+export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2} HAIKU_REVISION=${HAIKU_REVISION:-hrev59996}
+export HG_SSH_DIR=/opt/haiku/ssh IMPORT_PREFIX=import CACHE_PREFIX=cache
+export BUILDTOOLS_REPO=https://github.com/felipedbene/buildtools.git BUILDTOOLS_BRANCH=master
+export HAIKU_ON_EC2_REPO=https://github.com/felipedbene/haiku-on-ec2.git HAIKU_ON_EC2_BRANCH=main
+export ROOT_VOLUME_BYTES=21474836480 AMI_NAME_PREFIX=haiku-oven HG_BAKE_LANE=oven
+export GEN_SUBDIR=generated.arm64
+export CODEBUILD_SRC_DIR=/opt/src/haiku
+STATE=/opt/cb-state.sh
+RUNPHASE=/opt/runphase.py
+
+cat > "$RUNPHASE" <<'PY'
+import os, subprocess, sys, yaml
+spec = yaml.safe_load(open(sys.argv[1]))
+state = sys.argv[2]
+if not os.path.exists(state):
+    open(state, "w").write("cd \"$CODEBUILD_SRC_DIR\"\n")
+for arg in sys.argv[3:]:
+    ph, _, start = arg.partition(":")
+    start = int(start or 0)
+    for i, cmd in enumerate(spec["phases"][ph]["commands"]):
+        if i < start:
+            continue
+        print(f"######## {ph}[{i}]: {cmd.splitlines()[0][:100]}", flush=True)
+        script = (f". {state} 2>/dev/null\n" + cmd + "\n__rc=$?\n"
+                  f"{{ declare -p | grep -vE '^declare -[a-zA-Z]*r' | grep -vE '^declare -[-a-zA-Z]* (BASH[A-Z_]*|FUNCNAME|GROUPS|DIRSTACK|PIPESTATUS|_|__rc)='; printf 'cd %q\\n' \"$PWD\"; }} > {state}.new\nexit $__rc\n")
+        rc = subprocess.call(["bash", "-c", script])
+        if os.path.exists(state + ".new"):
+            os.replace(state + ".new", state)
+        if rc != 0:
+            print(f"######## {ph}[{i}] FAILED rc={rc}", flush=True)
+            sys.exit(rc)
+    print(f"######## phase {ph} rc=0", flush=True)
+PY
+
+date -u +"start %Y%m%dT%H%M%SZ"
+BUILDSPEC="$CODEBUILD_SRC_DIR/graviton/pipeline/buildspecs/cross-build.yml"
+if [ $# -eq 0 ]; then
+	apt-get update -qq && apt-get install -y -qq git python3-yaml > /dev/null
+	# A fresh CodeBuild container has no awscli; the install phase's
+	# `./aws/install` fails on a host that already has one.
+	rm -rf /usr/local/aws-cli /usr/local/bin/aws /usr/local/bin/aws_completer \
+		/tmp/aws /tmp/awscliv2.zip /opt/haiku /opt/src "$STATE" /tmp/ct.env /tmp/ct.tar.zst
+	mkdir -p /opt/src
+	git clone -q https://github.com/felipedbene/Haiku-Graviton.git "$CODEBUILD_SRC_DIR"
+	git -C "$CODEBUILD_SRC_DIR" fetch -q origin "$REF"
+	git -C "$CODEBUILD_SRC_DIR" checkout -q FETCH_HEAD
+	git -C "$CODEBUILD_SRC_DIR" log --oneline -1
+	python3 -I "$RUNPHASE" "$BUILDSPEC" "$STATE" install pre_build build
+else
+	python3 -I "$RUNPHASE" "$BUILDSPEC" "$STATE" "$@"
+fi
+rc=$?
+echo "xb rc=$rc"
+date -u +"end %Y%m%dT%H%M%SZ"
+exit $rc
