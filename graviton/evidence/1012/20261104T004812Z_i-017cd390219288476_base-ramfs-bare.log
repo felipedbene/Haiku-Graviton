@@ -1,0 +1,16 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-ramfs-bare
+# instance: i-017cd390219288476   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: trunk-baseline arm (same kernel as the #1012 candidate, ramfs.trunk): bare mount -t ramfs + unmount (expect KDL)
+# start: 20261104T004812Z   end: 20261104T005018Z   rc: 1
+# script sha256: 95413f86f4eaba32a6ef0f97be816f55a6fe009414976a264161f839cf9b4de2
+# ---- script ----
+# | # Issue 1012 on the trunk-baseline arm (ami-0ba190b7b95475bb9): the same kernel, libroot, bfs
+# | # and ext2 as the candidate, only ramfs differs (trunk). Bare mount + unmount. Expected: KDL.
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ramfs
+# | mkdir -p /boot/home/r1012 && mount -t ramfs /boot/home/r1012 && echo "mounted rc=$?"
+# | df /boot/home/r1012 | grep -E "Mounted|File System"
+# | sync; echo "unmounting at $(date -u +%H:%M:%S)"; sleep 1
+# | unmount /boot/home/r1012; echo "unmount rc=$?"
+# | echo "still alive"
+# ---- raw output ----

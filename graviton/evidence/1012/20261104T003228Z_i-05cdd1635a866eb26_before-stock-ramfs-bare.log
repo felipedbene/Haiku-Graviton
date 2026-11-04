@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-stock-ramfs-bare
+# instance: i-05cdd1635a866eb26   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm (stock canonical): bare mount -t ramfs + unmount (expect KDL; serial console captured separately)
+# start: 20261104T003228Z   end: 20261104T003435Z   rc: 1
+# script sha256: bbe58f03a4b5cf3b02aaf9f0bb21983633cce9fa182d29b928b864fdad19e065
+# ---- script ----
+# | # Issue 1012 before arm (stock canonical ami-010361cfdaa9d22e1): a bare ramfs mount and unmount,
+# | # nothing done on the volume. Expected: KDL (ASSERT vnodes.IsEmpty() in ~fs_mount); the serial
+# | # console is captured with get-console-output.
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ramfs
+# | mkdir -p /boot/home/r1012 && mount -t ramfs /boot/home/r1012 && echo "mounted rc=$?"
+# | df /boot/home/r1012 | grep -E "Mounted|File System"
+# | sync; echo "unmounting at $(date -u +%H:%M:%S)"; sleep 1
+# | unmount /boot/home/r1012; echo "unmount rc=$?"
+# | echo "still alive"
+# ---- raw output ----

@@ -221,6 +221,13 @@ Volume::Mount(uint32 flags)
 status_t
 Volume::Unmount()
 {
+	// Give back the reference publish_vnode() gave the root at mount time:
+	// fs_unmount() leaves the root vnode on the mount's list for us to put,
+	// and asserts that list is empty afterwards. When mounting failed, or
+	// this is the Unmount() at the start of Mount(), it was never published.
+	if (fMounted && fRootDirectory != NULL)
+		put_vnode(FSVolume(), fRootDirectory->GetID());
+
 	fMounted = false;
 	// delete the root directory
 	if (fRootDirectory) {

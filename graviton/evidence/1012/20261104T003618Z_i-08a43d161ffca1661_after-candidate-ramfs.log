@@ -1,0 +1,103 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-ramfs
+# instance: i-08a43d161ffca1661   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #1012 candidate (ami-00a73ce1b79b17d99: trunk-baseline set + ramfs.fix1012): bare, remount, workload + held-open fd, 50x workload loop, 500x bare loop, /tmp and boot unaffected
+# start: 20261104T003618Z   end: 20261104T003629Z   rc: 0
+# script sha256: c4db5ef34bf290ac4e263c8e6ba485defddc58d1d23753e8a1b43dff95b400a2
+# ---- script ----
+# | # Issue 1012 on the candidate (trunk-baseline set + ramfs.fix1012): ramfs mount/unmount
+# | # lifecycle. Each step prints its rc; the box KDLs if the root vnode is still on the
+# | # mount's list at ~fs_mount, so getting to the end of this script is itself the result.
+# | R=/boot/home/r1012
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ramfs
+# | mkdir -p $R
+# | mem() { sysinfo -mem 2>/dev/null | grep -iE "used|max" | tr -s ' ' | tr '\n' ' '; echo; }
+# | echo "--- 1. bare mount + unmount"
+# | mount -t ramfs $R; echo "mount rc=$?"; df $R | grep -E "Mounted|File System"
+# | unmount $R; echo "unmount rc=$?"
+# | df $R | grep -E "Mounted|File System"
+# | echo "--- 2. remount at the same path after the unmount"
+# | mount -t ramfs $R; echo "mount rc=$?"; df $R | grep -E "File System"; : > $R/probe && ls -l $R/probe
+# | unmount $R; echo "unmount rc=$?"
+# | echo "--- 3. mount + workload (files with data, nested dirs, symlink, attributes, rename, unlink, a held-open fd) + unmount"
+# | mount -t ramfs $R; echo "mount rc=$?"
+# | mkdir -p $R/a/b/c $R/d && for i in 1 2 3 4 5; do head -c 100000 /dev/urandom > $R/a/b/c/f$i; done
+# | echo hello > $R/d/g; ln -s ../d/g $R/a/sym; mv $R/a/b/c/f5 $R/d/f5; rm $R/a/b/c/f4
+# | addattr -t string test:attr "value-1012" $R/d/g; catattr test:attr $R/d/g
+# | listattr $R/d/g | grep test:attr
+# | find $R | sort | tr '\n' ' '; echo; du -s $R
+# | exec 3< $R/a/b/c/f1
+# | echo "unmount while fd 3 holds a/b/c/f1 open (expected: refused busy, no KDL):"
+# | unmount $R; echo "unmount-with-open-fd rc=$?"
+# | df $R | grep -E "File System"
+# | exec 3<&-
+# | echo "fd 3 closed"
+# | unmount $R; echo "unmount rc=$?"
+# | df $R | grep -E "File System"
+# | echo "--- 4. 50 x (mount, workload, unmount)"
+# | mem
+# | ok=0; s=$(date +%s)
+# | for n in $(seq 1 50); do
+# | 	mount -t ramfs $R || { echo "mount $n failed"; break; }
+# | 	mkdir -p $R/x/y && for i in 1 2 3; do head -c 20000 /dev/urandom > $R/x/y/f$i; done
+# | 	addattr -t int32 n $n $R/x/y/f1; exec 3< $R/x/y/f2; exec 3<&-
+# | 	unmount $R || { echo "unmount $n failed"; break; }
+# | 	ok=$((ok + 1))
+# | done
+# | echo "workload loop: $ok/50 mount+unmount cycles in $(( $(date +%s) - s ))s"
+# | mem
+# | echo "--- 5. 500 x bare mount + unmount"
+# | ok=0; s=$(date +%s)
+# | for n in $(seq 1 500); do mount -t ramfs $R && unmount $R && ok=$((ok + 1)) || { echo "cycle $n failed"; break; }; done
+# | echo "bare loop: $ok/500 cycles in $(( $(date +%s) - s ))s"
+# | mem
+# | echo "--- 6. boot volume and /tmp unaffected"
+# | df /boot | grep -E "Mounted|File System"; ls -ld /tmp; df /tmp/. | grep -E "Mounted|File System"
+# | echo tmp-ok > /tmp/t1012 && cat /tmp/t1012 && rm /tmp/t1012
+# | mount | head -0; df | grep -cE "ramfs" ; echo "(ramfs volumes still mounted, from df)"
+# | echo "end of script, still alive"
+# ---- raw output ----
+a9173dbaa0584b102e22a8f56d7134c5c6d51f23634ec2d0b02045985bf13105  /boot/system/kernel_arm64
+962ffd941436354ccd4318698f3945d1acb5c4c0bc020d6ba054fc75b5c09960  /boot/system/add-ons/kernel/file_systems/ramfs
+--- 1. bare mount + unmount
+mount rc=0
+   Mounted at: /boot/home/r1012
+  File System: ramfs
+unmount rc=0
+   Mounted at: /boot
+  File System: bfs
+--- 2. remount at the same path after the unmount
+mount rc=0
+  File System: ramfs
+-rw-r--r-- 1 baron root 0 Nov  4 00:36 /boot/home/r1012/probe
+unmount rc=0
+--- 3. mount + workload (files with data, nested dirs, symlink, attributes, rename, unlink, a held-open fd) + unmount
+mount rc=0
+/boot/home/r1012/d/g : string : value-1012
+        Text        11  "test:attr"
+/boot/home/r1012 /boot/home/r1012/a /boot/home/r1012/a/b /boot/home/r1012/a/b/c /boot/home/r1012/a/b/c/f1 /boot/home/r1012/a/b/c/f2 /boot/home/r1012/a/b/c/f3 /boot/home/r1012/a/sym /boot/home/r1012/d /boot/home/r1012/d/f5 /boot/home/r1012/d/g 
+393	/boot/home/r1012
+unmount while fd 3 holds a/b/c/f1 open (expected: refused busy, no KDL):
+unmount-with-open-fd rc=1
+  File System: ramfs
+fd 3 closed
+unmount rc=0
+  File System: bfs
+--- 4. 50 x (mount, workload, unmount)
+16007401472 bytes free (used/max 865366016 / 16872767488) 
+workload loop: 50/50 mount+unmount cycles in 2s
+16019173376 bytes free (used/max 853594112 / 16872767488) 
+--- 5. 500 x bare mount + unmount
+bare loop: 500/500 cycles in 2s
+16018743296 bytes free (used/max 854024192 / 16872767488) 
+--- 6. boot volume and /tmp unaffected
+   Mounted at: /boot
+  File System: bfs
+lrwxrwxrwx 1 baron root 22 Nov  4 00:35 /tmp -> /boot/system/cache/tmp
+   Mounted at: /boot
+  File System: bfs
+tmp-ok
+0
+(ramfs volumes still mounted, from df)
+end of script, still alive
+unmount: unmounting failed: Device/File/Resource busy
