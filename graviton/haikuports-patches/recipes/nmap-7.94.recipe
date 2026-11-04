@@ -23,13 +23,14 @@ LICENSE="GNU GPL v2"
 # haiku-aarch64, which widens BN_ULONG in the public headers from 32 to 64 bits
 # under the same soname (lib:libcrypto = 3). This package imports BN_div_word, BN_set_word, BN_sub_word,
 # so a build against the older headers passes its BN_ULONG argument as 32-bit.
-REVISION="2"
+# 3, not 2: the patchset (carried in this overlay) adds a Haiku route backend to the
+# bundled libdnet, without which route_open() fails and every scan aborts (issue 1003).
+REVISION="3"
 SOURCE_URI="https://nmap.org/dist/nmap-$portVersion.tar.bz2"
 CHECKSUM_SHA256="d71be189eec43d7e099bac8571509d316c4577ca79491832ac3e1217bc8f92cc"
 PATCHES="nmap-$portVersion.patchset"
 
-# disabled: doesn't really work, needs route code
-ARCHITECTURES="?all !x86_gcc2"
+ARCHITECTURES="all !x86_gcc2"
 SECONDARY_ARCHITECTURES="?x86_gcc2 ?x86"
 
 PROVIDES="

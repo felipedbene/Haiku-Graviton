@@ -1,0 +1,109 @@
+# 20261104T024717Z instance=i-0676f26f658f9db67 label=1003-after-repro-nmap-7.94-3
+# script:
+#   sha256sum /boot/home/nmap-7.94-3-arm64.hpkg
+#   printf 'y\n' | pkgman install /boot/home/nmap-7.94-3-arm64.hpkg 2>&1 | tail -5
+#   catattr SYS:PACKAGE_FILE /boot/system/bin/nmap
+#   route 2>&1 | sed -n 1,8p
+#   sh /boot/home/nmap1003-repro.sh 10.128.9.200 10.128.13.64
+# output:
+ssm-run: command 0a4d6c93-195a-48d0-bac3-77ee0748463a on i-0676f26f658f9db67 (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-25413-9ebdaa)
+7496b4e3801bfe78ec69fffc3ff079d5a9c7399f1991f82fd70901a2a11eb054  /boot/home/nmap-7.94-3-arm64.hpkg
+    upgrade package nmap-7.94-2 to 7.94-3 from local file
+Continue? [yes/no] (yes) : [system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_02:37:58-1"
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/nmap : string : nmap-7.94-3-arm64.hpkg
+IPv4 routing table:
+    Destination         Netmask         Gateway Flags  Interface
+      127.0.0.1               -               - --HL-- loop
+   10.128.10.31               -               - --HL-- /dev/net/ena/0
+     10.128.8.0   255.255.252.0               - ------ /dev/net/ena/0
+      127.0.0.0       255.0.0.0               - ------ loop
+        0.0.0.0         0.0.0.0      10.128.8.1 D----- /dev/net/ena/0
+
+== nmap --iflist
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:47 GMT
+************************INTERFACES************************
+DEV            (SHORT)          IP/MASK         TYPE     UP MTU   MAC
+loop           (loop)           127.0.0.1/8     loopback up 65536
+/dev/net/ena/0 (/dev/net/ena/0) 10.128.10.31/22 ethernet up 9001  00:00:00:00:00:00
+
+**************************ROUTES**************************
+DST/MASK        DEV            METRIC GATEWAY
+127.0.0.1/32    loop           0
+10.128.10.31/32 /dev/net/ena/0 0
+10.128.8.0/22   /dev/net/ena/0 0
+127.0.0.0/8     loop           0
+0.0.0.0/0       /dev/net/ena/0 0      10.128.8.1
+
+rc=0
+== nmap -Pn -sT -p 22,23,8080 10.128.13.64
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:47 GMT
+mass_dns: warning: Unable to open /etc/resolv.conf. Try using --system-dns or specify valid servers with --dns-servers: No such file or directory (-2147459069)
+mass_dns: warning: Unable to determine any DNS servers. Reverse DNS is disabled. Try using --system-dns or specify valid servers with --dns-servers
+Nmap scan report for 10.128.13.64
+Host is up (0.00042s latency).
+
+PORT     STATE  SERVICE
+22/tcp   open   ssh
+23/tcp   closed telnet
+8080/tcp open   http-proxy
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+== nmap -Pn -sT -p 22,23 10.128.9.200
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:47 GMT
+mass_dns: warning: Unable to open /etc/resolv.conf. Try using --system-dns or specify valid servers with --dns-servers: No such file or directory (-2147459069)
+mass_dns: warning: Unable to determine any DNS servers. Reverse DNS is disabled. Try using --system-dns or specify valid servers with --dns-servers
+Nmap scan report for 10.128.9.200
+Host is up (0.00029s latency).
+
+PORT   STATE  SERVICE
+22/tcp open   ssh
+23/tcp closed telnet
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+== nmap -sn 10.128.13.64 10.128.9.200
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:47 GMT
+mass_dns: warning: Unable to open /etc/resolv.conf. Try using --system-dns or specify valid servers with --dns-servers: No such file or directory (-2147459069)
+mass_dns: warning: Unable to determine any DNS servers. Reverse DNS is disabled. Try using --system-dns or specify valid servers with --dns-servers
+Nmap scan report for 10.128.13.64
+Host is up (0.00035s latency).
+dnet: Failed to open device /dev/net/ena/0
+QUITTING!
+rc=1
+== nmap -Pn -p 22,23 10.128.9.200
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:47 GMT
+dnet: Failed to open device /dev/net/ena/0
+QUITTING!
+rc=1
+== nmap -Pn -p 22,23,8080 10.128.13.64
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:47 GMT
+mass_dns: warning: Unable to open /etc/resolv.conf. Try using --system-dns or specify valid servers with --dns-servers: No such file or directory (-2147459069)
+mass_dns: warning: Unable to determine any DNS servers. Reverse DNS is disabled. Try using --system-dns or specify valid servers with --dns-servers
+Nmap scan report for 10.128.13.64
+Host is up (0.00036s latency).
+
+PORT     STATE  SERVICE
+22/tcp   open   ssh
+23/tcp   closed telnet
+8080/tcp open   http-proxy
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+== nmap -Pn -p 22 127.0.0.1
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:47 GMT
+mass_dns: warning: Unable to open /etc/resolv.conf. Try using --system-dns or specify valid servers with --dns-servers: No such file or directory (-2147459069)
+mass_dns: warning: Unable to determine any DNS servers. Reverse DNS is disabled. Try using --system-dns or specify valid servers with --dns-servers
+Nmap scan report for 127.0.0.1
+Host is up (0.000067s latency).
+
+PORT   STATE SERVICE
+22/tcp open  ssh
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+ssm-run: Success
+# ssm-run rc=0

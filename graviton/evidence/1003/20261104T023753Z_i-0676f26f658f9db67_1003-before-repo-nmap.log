@@ -1,0 +1,100 @@
+# 20261104T023753Z instance=i-0676f26f658f9db67 label=1003-before-repo-nmap
+# script:
+#   uname -a
+#   ifconfig 2>&1 | head -30
+#   route 2>&1
+#   printf '1\ny\n' | pkgman install nmap 2>&1 | tail -6
+#   pkgman search -i -a -D nmap 2>&1 | grep -i nmap
+#   catattr SYS:PACKAGE_FILE /boot/system/bin/nmap
+#   echo "== --iflist"; nmap --iflist 2>&1; echo "rc=$?"
+#   echo "== -sT peer(other subnet)"; nmap -Pn -sT -p 22,23,8080 10.128.13.64 2>&1; echo "rc=$?"
+#   echo "== -sT lscan(same subnet)"; nmap -Pn -sT -p 22,23 10.128.9.200 2>&1; echo "rc=$?"
+#   echo "== -sn"; nmap -sn 10.128.13.64 10.128.9.200 2>&1; echo "rc=$?"
+#   echo "== loopback"; nmap -Pn -p 22 127.0.0.1 2>&1; echo "rc=$?"
+# output:
+ssm-run: command d1b290f6-342b-4905-92ee-e19a965a4975 on i-0676f26f658f9db67 (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-15227-aa21a9)
+Haiku ip-10-128-10-31.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+loop	Hardware type: Local Loopback, Address: none
+	inet addr: 127.0.0.1, Mask: 255.0.0.0
+	inet6 addr: ::1, Prefix Length: 128
+	MTU: 65536, Metric: 0, up loopback link
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Collisions: 0
+
+/dev/net/ena/0
+	Hardware type: Ethernet, Address: 02:ff:e4:a0:f7:cd
+	Media type: Auto-select
+	inet addr: 10.128.10.31, Bcast: 10.128.11.255, Mask: 255.255.252.0
+	MTU: 9001, Metric: 0, up broadcast link auto-configured
+	Receive: 719 packets, 0 errors, 234237 bytes, 0 mcasts, 0 dropped
+	Transmit: 880 packets, 0 errors, 172930 bytes, 0 mcasts, 0 dropped
+	Collisions: 0
+
+IPv4 routing table:
+    Destination         Netmask         Gateway Flags  Interface
+      127.0.0.1               -               - --HL-- loop
+   10.128.10.31               -               - --HL-- /dev/net/ena/0
+     10.128.8.0   255.255.252.0               - ------ /dev/net/ena/0
+      127.0.0.0       255.0.0.0               - ------ loop
+        0.0.0.0         0.0.0.0      10.128.8.1 D----- /dev/net/ena/0
+
+IPv6 routing table:
+                            Destination                                     Gateway Flags  Interface
+                                    ::1                                           - --HL-- loop
+                                    ::1/128                                       - ------ loop
+
+       nmap-7.94-2-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/nmap-7.94-2-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_02:37:58"
+[system] Cleaning up ...
+[system] Done.
+<system>    nmap                   7.94-2                         arm64
+/boot/system/bin/nmap : string : nmap-7.94-2-arm64.hpkg
+== --iflist
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:37 GMT
+************************INTERFACES************************
+DEV            (SHORT)          IP/MASK         TYPE     UP MTU   MAC
+loop           (loop)           127.0.0.1/8     loopback up 65536
+/dev/net/ena/0 (/dev/net/ena/0) 10.128.10.31/22 ethernet up 9001  00:00:00:00:00:00
+
+ROUTES: NONE FOUND(!)
+rc=0
+== -sT peer(other subnet)
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:37 GMT
+mass_dns: warning: Unable to open /etc/resolv.conf. Try using --system-dns or specify valid servers with --dns-servers: No such file or directory (-2147459069)
+mass_dns: warning: Unable to determine any DNS servers. Reverse DNS is disabled. Try using --system-dns or specify valid servers with --dns-servers
+Nmap scan report for 10.128.13.64
+Host is up (0.0021s latency).
+
+PORT     STATE  SERVICE
+22/tcp   open   ssh
+23/tcp   closed telnet
+8080/tcp open   http-proxy
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+== -sT lscan(same subnet)
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:37 GMT
+mass_dns: warning: Unable to open /etc/resolv.conf. Try using --system-dns or specify valid servers with --dns-servers: No such file or directory (-2147459069)
+mass_dns: warning: Unable to determine any DNS servers. Reverse DNS is disabled. Try using --system-dns or specify valid servers with --dns-servers
+Nmap scan report for 10.128.9.200
+Host is up (0.0021s latency).
+
+PORT   STATE  SERVICE
+22/tcp open   ssh
+23/tcp closed telnet
+
+Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+rc=0
+== -sn
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:37 GMT
+route_dst_generic: Failed to obtain system routes: getsysroutes_dnet: route_open() failed
+rc=1
+== loopback
+Starting Nmap 7.94 ( https://nmap.org ) at 2026-11-04 02:37 GMT
+route_dst_generic: Failed to obtain system routes: getsysroutes_dnet: route_open() failed
+rc=1
+ssm-run: Success
+# ssm-run rc=0
