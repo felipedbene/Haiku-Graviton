@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-S-https-download
+# instance: i-0a0edf248f575e8c7   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3, arm S: HTTPS download over ENA, checksummed
+# start: 20261104T060309Z   end: 20261104T060320Z   rc: 0
+# script sha256: 2cb18608f91ef1bcf5c2474731957e30b0b184fe9e01cf1910cfeac72a576f3e
+# ---- script ----
+# | # Round 3, arm S: the HTTPS-download regression (IPv4 TCP over ENA), checksummed
+# | cd /boot/home/j
+# | wget -q -O stack.dl 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/r3/mod/S/stack?<PRESIGNED>' && echo "9643497d3db020aa022f8235c30a2a050c24db1837536f19a2d8bf62b199c759  stack.dl" | sha256sum -c
+# ---- raw output ----
+stack.dl: OK
