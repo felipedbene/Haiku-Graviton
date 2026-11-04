@@ -15,8 +15,9 @@
  *     device, the frame leaves it from the device's MAC
  *   - loopback, by index or by name: selected, but AF_LINK cannot use it,
  *     so EAFNOSUPPORT (before #1059's status change, EINVAL like a miss)
- *   - an unknown index or name, a name prefix, an empty address, a name whose
- *     length runs past the address storage: EINVAL
+ *   - an unknown index or name, a name prefix, a name with a NUL inside its
+ *     sdl_nlen bytes, an empty address, a name whose length runs past the
+ *     address storage: EINVAL
  *   - a name with bytes after it that are not a NUL (no link address):
  *     bound -- sdl_nlen, not a terminator, ends the name
  *   - the device's name with another MAC: EINVAL, so no frame leaves with a
@@ -239,6 +240,12 @@ main(int argc, char** argv)
 	with_name(a, sIfName, nameLength);
 	memcpy(a->sdl_data + nameLength, "XYZ", 3);
 	try_address("name-ether-unterminated", a, BOUND_HERE);
+
+	/* "loop", a NUL, then another byte, all within sdl_nlen 6: the name is
+	 * not "loop" */
+	with_name(a, "loop", 6);
+	a->sdl_data[5] = 'X';
+	try_address("name-embedded-nul", a, REFUSED);
 
 	/* a prefix of the name, with the rest of the name after it */
 	with_name(a, sIfName, 4);
