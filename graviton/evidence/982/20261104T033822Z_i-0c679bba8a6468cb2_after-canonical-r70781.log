@@ -1,0 +1,11 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f, includes #948), openssl 3.5.9 + openssl3-3.5.9.patchset, ./Configure haiku-aarch64 enable-zlib enable-zstd shared -g
+# issue 982 evidence 2026-11-04T03:38:25Z
+Haiku ip-10-128-9-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+listener [::]:46342 IPV6_V6ONLY=0
+connect 127.0.0.1 -> [::]:46342  OK
+connect ::1       -> [::]:46342  OK
+PASS: [::] listener is dual-stack
+dualstack982 rc=0
+== getent-style lookup of localhost via openssl s_client target
+== last run, 82-test_ocsp_cert_chain output
+make test TESTS=test_ocsp_cert_chain x10: pass=10 fail=0

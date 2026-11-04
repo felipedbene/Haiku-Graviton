@@ -1,0 +1,20 @@
+# instance i-0f94c889d70f28a8e c7g.8xlarge, Ubuntu 24.04 ami-0dcf79589cb11e193, openssl 3.5.9 unpatched
+# Linux: 82-test_ocsp_cert_chain with and without a hosts file (private mount namespace), 2026-11-04T06:03:38Z
+Linux ip-10-128-9-243 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+== as configured
+Result: NOTESTS
+Result: PASS
+== empty /etc/hosts (resolv.conf unchanged)
+::1             STREAM localhost
+::1             DGRAM  
+::1             RAW    
+127.0.0.1       STREAM 
+127.0.0.1       DGRAM  
+127.0.0.1       RAW    
+Result: NOTESTS
+Result: PASS
+== empty /etc/hosts and resolv.conf (the haikuporter chroot shape)
+getent localhost: not found
+Result: NOTESTS
+not ok 3 - check s_server sent ocsp response
+Result: FAIL

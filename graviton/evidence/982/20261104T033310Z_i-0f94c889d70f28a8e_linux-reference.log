@@ -1,0 +1,11 @@
+# instance i-0f94c889d70f28a8e c7g.8xlarge, Ubuntu 24.04 ami-0dcf79589cb11e193, openssl 3.5.9 unpatched, ./Configure linux-aarch64 enable-zlib enable-zstd shared -g
+# issue 982 evidence 2026-11-04T03:33:13Z
+Linux ip-10-128-9-243 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+listener [::]:57967 IPV6_V6ONLY=0
+connect 127.0.0.1 -> [::]:57967  OK
+connect ::1       -> [::]:57967  OK
+PASS: [::] listener is dual-stack
+dualstack982 rc=0
+== getent-style lookup of localhost via openssl s_client target
+== last run, 82-test_ocsp_cert_chain output
+make test TESTS=test_ocsp_cert_chain x10: pass=10 fail=0
