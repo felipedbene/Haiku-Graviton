@@ -1,0 +1,69 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-send
+# instance: i-0c4b4a5ab16d64e68   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T025347Z   end: 20261104T025412Z   rc: 101
+# script sha256: 4c0eb35f1c5105b9f778cecc3eb697f3fbaf138897c6c3ab4576aac45c2e80d3
+# ---- script ----
+# | set -u
+# | mkdir -p /boot/home/wD && cd /boot/home/wD
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | curl -sSf -o ipv6frag965.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/ipv6frag965.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/tcp900.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o hoplimit958.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/hoplimit958.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/udp947.c?<PRESIGNED>' || exit 4
+# | sha256sum *.c
+# | for p in ipv6frag965 tcp900 hoplimit958 udp947; do gcc -O2 -Wall -o $p $p.c -lnetwork || exit 2; done
+# | consumer() { ps -a | grep -E "loop consumer" | grep -v grep; }
+# | for mtu in 9001 1280 65536; do
+# | 	ifconfig loop mtu $mtu; echo "=== $(ifconfig loop | grep -o 'MTU: [0-9]*')"
+# | 	./ipv6frag965 -s; rc=$?; echo "rc=$rc"
+# | 	if [ $rc -ge 100 ]; then consumer; sleep 2; consumer; exit $rc; fi
+# | done
+# ---- raw output ----
+Haiku ip-10-128-8-174.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2156 0xffff0000022bf000 0xffff0000022e1000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2177 0xffff0000020f1000 0xffff0000020f9000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2178 0xffff0000020fa000 0xffff000002105000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2185 0xffff0000022e3000 0xffff0000022ee000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2287 0xffff0000024cd000 0xffff0000024df000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2288 0xffff0000024e0000 0xffff0000024ee000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+101eddf2f54010d6157bf7a45dcada0ecfe6d3d7e837e99325fad5223cc6e1fc  hoplimit958.c
+1a327f64dcc2b02db81e360e9a3c5d7e4c2ad0d5b41bb452c01d28e157473d13  ipv6frag965.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+=== MTU: 9001
+  loopback alive
+send udp 127.0.0.1    100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp ::1          100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp 127.0.0.1   1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp ::1         1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp 127.0.0.1   8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp ::1         8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp 127.0.0.1   9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp ::1         9000 bytes                            FAIL  sent 9000, NOT DELIVERED within 1 s
+  LOOPBACK DEAD after: send udp ::1         9000 bytes
+rc=101
+loop consumer                            83      run   15        0     2003 
+loop consumer                            83      run   15        0     4008 
+failed to run commands: exit status 101
