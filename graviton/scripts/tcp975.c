@@ -26,6 +26,14 @@
  *   zerowin   the peer stops reading for 1000 s: the window closes, the peer
  *             keeps answering the probes, and the connection must survive and
  *             deliver everything once it reads again.
+ *   reopen    (issue 1044) the peer stops reading for 30 s, then reads again
+ *             while dropping its own segments to us for 10 s, so the window
+ *             update that reopens the window is lost. Only a window probe
+ *             the peer answers can find the window open again: time how long
+ *             the 64 MiB take after that, capped.
+ *   zerodead  (issue 1044) the peer stops reading, and once the window is
+ *             closed it is black-holed: a peer gone while its window is
+ *             closed. Time how long the blocked send() takes to fail.
  *
  * Every wait is bounded (cap, default 1200 s): a stack that never gives up is
  * reported as "no error after N s" instead of hanging the run.
@@ -181,6 +189,9 @@ send_all(int s, size_t total)
 		ssize_t n = send(s, buffer, chunk, 0);
 		if (n > 0) {
 			sent += n;
+			/* A cap that cut a send() short must still end the loop. */
+			if (sCapReached)
+				return EINTR;
 			continue;
 		}
 		return n < 0 ? errno : EIO;
@@ -392,12 +403,74 @@ mode_zerowin(int s, int c)
 	return 1;
 }
 
+static int
+mode_reopen(int s, int c)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	snprintf(command, sizeof(command), "SILENTREOPEN %d 30 10", port);
+	control(c, command, reply, sizeof(reply));
+	double start = now();
+	const size_t total = 64 << 20;
+	/* The peer reads again 30 s in, and can be heard again at 40 s. */
+	arm_cap(40 + sCap);
+	int error = send_all(s, total);
+	alarm(0);
+	if (error != 0) {
+		printf("RESULT %s FAIL send(): %s after %.1f s (%s)\n", sMode,
+			strerror(error), now() - start,
+			error == EINTR ? "the window never reopened" : "error");
+		return 1;
+	}
+	for (int i = 0; i < 120; i++) {
+		long count = peer_count(c, port);
+		if (count >= (long)total) {
+			printf("RESULT %s PASS 64 MiB delivered %.1f s after the peer "
+				"could be heard again (%.1f s in all)\n", sMode,
+				now() - start - 40, now() - start);
+			return 0;
+		}
+		sleep(1);
+	}
+	printf("RESULT %s FAIL 64 MiB not all delivered\n", sMode);
+	return 1;
+}
+
+static int
+mode_zerodead(int s, int c)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	snprintf(command, sizeof(command), "STOPREAD %d 100000", port);
+	control(c, command, reply, sizeof(reply));
+	/* Fill both buffers, so the window is closed, then lose the peer. */
+	struct pollfd p = { s, POLLOUT, 0 };
+	static char buffer[65536];
+	double filling = now();
+	while (now() - filling < 20) {
+		if (poll(&p, 1, 1000) == 1 && (p.revents & POLLOUT) != 0)
+			send(s, buffer, sizeof(buffer), MSG_DONTWAIT);
+	}
+	snprintf(command, sizeof(command), "DROP %d", port);
+	control(c, command, reply, sizeof(reply));
+	double start = now();
+	arm_cap(sCap);
+	for (;;) {
+		ssize_t n = send(s, buffer, sizeof(buffer), 0);
+		if (n > 0 && !sCapReached)
+			continue;
+		return report_error(start, n < 0 ? errno : sCapReached ? EINTR : EIO,
+			"send() on a closed window");
+	}
+}
+
 int
 main(int argc, char** argv)
 {
 	if (argc < 5) {
 		fprintf(stderr, "usage: %s <peer-ip> <data-port> <control-port> "
-			"<write|read|poll|close|recover|zerowin> [cap-seconds]\n", argv[0]);
+			"<write|read|poll|close|recover|zerowin|reopen|zerodead> "
+			"[cap-seconds]\n", argv[0]);
 		return 100;
 	}
 	sPeer = argv[1];
@@ -424,6 +497,10 @@ main(int argc, char** argv)
 		return mode_recover(s, c);
 	if (strcmp(sMode, "zerowin") == 0)
 		return mode_zerowin(s, c);
+	if (strcmp(sMode, "reopen") == 0)
+		return mode_reopen(s, c);
+	if (strcmp(sMode, "zerodead") == 0)
+		return mode_zerodead(s, c);
 	fprintf(stderr, "unknown mode %s\n", sMode);
 	return 100;
 }
