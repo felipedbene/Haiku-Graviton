@@ -283,6 +283,43 @@ rule UserBuildConfigRulePreImage
 		}
 	}
 
+	# --- non-bootstrap icu74, so ICU can find its data ---------------------
+	# Issue 1018, the issue-784 skew in a third bootstrap package. The data is
+	# on the image (/boot/system/data/icu/74.1/icudt74l.dat), but libicuuc's
+	# compiled-in data directory is built from portName=icu74_bootstrap --
+	# /packages/icu74_bootstrap-74.1-1/.self/data/icu/74.1 -- while the hpkg
+	# installs as /packages/icu74-74.1_bootstrap-1. Nothing sets ICU_DATA, so
+	# every ICU 74 consumer runs without locale data: ures_open/ucol_open/
+	# udatpg_open fail, libroot's ICU locale backend makes setlocale() return
+	# NULL for every non-C locale, and nodejs20 aborts on its first Intl call
+	# (issue 998). libbe and libbnetapi link libicuuc.so.74 too.
+	#
+	# icu74-74.1-6 is HaikuPorts' unmodified dev-libs/icu/icu74-74.1.recipe
+	# built natively; it bakes /packages/icu74-74.1-6/.self/data/icu/74.1,
+	# which is where it installs. Measured on a box launched from canonical
+	# ami-00632cb3ccefc53dc (nodejs20 added as a consumer): the same three
+	# consumers work once it replaces the bootstrap package, with the same
+	# binaries. Force-added for the reason the ncurses6 pin is: the image
+	# solver must not get the chance to pick the bootstrap build. It provides
+	# the same lib:libicu* = 74.1 (compat >= 74), and icu74_devel's bootstrap
+	# build requires only icu74 == 74.1, so it still resolves against it.
+	#
+	# Exact filename, as above: `icu74-*` would match the bootstrap file too.
+	if $(HG_POOL_DIR) {
+		local icuFileName = icu74-74.1-6-arm64.hpkg ;
+		if [ Glob $(HG_POOL_DIR) : $(icuFileName) ] {
+			local icuPackage = <hg-pool>$(icuFileName) ;
+			SEARCH on $(icuPackage) = $(HG_POOL_DIR) ;
+			Echo "haiku-graviton: baking non-bootstrap" $(icuFileName)
+				"so ICU finds its data (issue 1018)" ;
+			AddPackageFilesToHaikuImage system packages : $(icuPackage) ;
+		} else {
+			Echo "haiku-graviton: no" $(icuFileName) "in pool -- the image"
+				"will ship the bootstrap icu74, whose data directory does not"
+				"exist (issue 1018)" ;
+		}
+	}
+
 	# --- exactly one thing must own port 22 --------------------------------
 	# data/settings/network/services already contains
 	#     service ssh { launch /boot/system/bin/sshd -D  stand_alone }
