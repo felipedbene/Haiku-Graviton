@@ -1,0 +1,16 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-bfs-unmount
+# instance: i-0ca75dad52a57fb87   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base: BFS on diskimage, write 2 bytes, sync, unmount
+# start: 20261104T041143Z   end: 20261104T041514Z   rc: 1
+# script sha256: 6938213e952b7814231253d8c493c4e5db89470f3df306f3b4cde9fbfdecd052
+# ---- script ----
+# | # Step 2: mkfs -t bfs, mount, write a 2-byte file, sync, unmount. Never returns on a KDL.
+# | cd /boot/home/t1027
+# | B=$(diskimage list | awk '/bfs.img/{print $3}'); echo "bfs device: $B"
+# | mkfs -t bfs -q $B BFS1027 2>&1 | tail -1
+# | mkdir -p /b1027 && mount -t bfs $B /b1027 && printf 'x\n' > /b1027/h-2b && sync
+# | sleep 20
+# | echo "write-back failures: $(grep -c "failed to lock memory" /var/log/syslog)"
+# | unmount /b1027; echo "unmount rc=$?"
+# ---- raw output ----

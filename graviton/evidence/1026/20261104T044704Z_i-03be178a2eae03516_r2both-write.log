@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2both-write
+# instance: i-03be178a2eae03516   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm r2both: diskimage1027 write phase on FAT and ext2
+# start: 20261104T044704Z   end: 20261104T044826Z   rc: 0
+# script sha256: 880eb6fd75b0263b173fbf5fe1daad0b6fc87ba8b1b17720eee69adf80e42e59
+# ---- script ----
+# | # Phase "write" on FAT (/dev/disk/virtual/files/3/raw) and ext2 (.../4/raw).
+# | cd /boot/home/t1027
+# | sh diskimage1027.sh write /dev/disk/virtual/files/3/raw /f1027 fat
+# | sh diskimage1027.sh write /dev/disk/virtual/files/4/raw /e1027 ext2
+# | grep -E "failed to lock memory|PageWriteWrapper|writeback is making no progress" /var/log/syslog | sort | uniq -c | sort -rn | head -5
+# | true
+# ---- raw output ----
+276f241381e05d7ff5fee4fac7a6ca75  /f1027/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /f1027/lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+7a91172250e8dd9e08d65ef33169fd53  h-1m
+write-back failures logged during this phase: 0
+276f241381e05d7ff5fee4fac7a6ca75  /e1027/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /e1027/lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+a5f94560c717659e070eb400be50db58  h-1m
+write-back failures logged during this phase: 0

@@ -998,8 +998,66 @@ free_vnode(struct vnode* vnode, bool reenter)
 	// if the vnode won't be deleted, in which case the changes
 	// will be discarded
 
-	if (!vnode->IsRemoved() && HAS_FS_CALL(vnode, fsync))
+	if (!vnode->IsRemoved() && HAS_FS_CALL(vnode, fsync)) {
+		// File systems with asynchronous io() hooks (BFS, FAT, exFAT) take a
+		// vnode reference there and put it in the I/O's finished hook, as
+		// vfs_{read,write}_pages() can return before that hook has run. The
+		// flush can still find modified pages (when their write-back failed
+		// earlier, say), and acquire_vnode() on a node whose count is 0
+		// panics. So lend the node a reference for the flush, and wait for
+		// the hooks to return theirs: the file system frees the node in its
+		// put_vnode() hook below.
+		//
+		// The node is busy, so get_vnode() will not hand it out -- but its
+		// lockless fast path checks IsBusy() and then increments a count above
+		// 0 holding sVnodeLock only for reading, and the node may have become
+		// busy under a read lock too (dec_vnode_ref_count()). Taking the lock
+		// for writing waits out any such reader before the count is non-zero,
+		// and readers after it see the node busy. While the reference is lent,
+		// acquire_vnode() on the node succeeds; only the file system's own I/O
+		// may use that.
+		rw_lock_write_lock(&sVnodeLock);
+		atomic_set(&vnode->ref_count, 1);
+		rw_lock_write_unlock(&sVnodeLock);
+
 		FS_CALL(vnode, fsync, false);
+
+		// The hooks' put_vnode() needs sVnodeLock for reading, so wait
+		// without it. A reference that never comes back is a leak in the file
+		// system: say so, and stop in the debugger if it persists, rather
+		// than hang without a trace.
+		const bigtime_t waitStart = system_time();
+		bool reported = false;
+		bool panicked = false;
+		while (atomic_get(&vnode->ref_count) > 1) {
+			const bigtime_t waited = system_time() - waitStart;
+			if (!reported && waited > 5000000) {
+				dprintf("free_vnode(): vnode %p (%" B_PRIdDEV ":%" B_PRIdINO
+					") still has %" B_PRId32 " references 5 s after its "
+					"flush\n", vnode, vnode->device, vnode->id,
+					atomic_get(&vnode->ref_count));
+				reported = true;
+			}
+			if (!panicked && waited > 60000000) {
+				panicked = true;
+				panic("free_vnode(): vnode %p (%" B_PRIdDEV ":%" B_PRIdINO
+					") still has %" B_PRId32 " references 60 s after its "
+					"flush", vnode, vnode->device, vnode->id,
+					atomic_get(&vnode->ref_count));
+			}
+			snooze(1000);
+		}
+
+		rw_lock_write_lock(&sVnodeLock);
+		const int32 lentCount = atomic_test_and_set(&vnode->ref_count, 0, 1);
+		rw_lock_write_unlock(&sVnodeLock);
+		if (lentCount != 1) {
+			// Someone took a reference to a node on its way out: freeing it
+			// now would leave them with a dangling pointer.
+			panic("free_vnode(): vnode %p got %" B_PRId32 " references while "
+				"being flushed", vnode, lentCount);
+		}
+	}
 
 	// Note: If this vnode has a cache attached, there will still be two
 	// references to that cache at this point. The last one belongs to the vnode

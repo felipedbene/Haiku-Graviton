@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-bfs-register
+# instance: i-0ca75dad52a57fb87   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base: BFS diskimage file, register
+# start: 20261104T041132Z   end: 20261104T041143Z   rc: 0
+# script sha256: 318cfd69685957dbfb66127edd3307e29678dcb117cd5792493d308476e74bc3
+# ---- script ----
+# | # Arm base (trunk kernel and fat, unmodified), BFS on a diskimage file, step 1: make the file
+# | # and register it. Step 2 (a later command) formats, mounts, writes, unmounts.
+# | set -x
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/bfs
+# | mkdir -p /boot/home/t1027 && cd /boot/home/t1027
+# | dd if=/dev/zero of=bfs.img bs=1048576 count=64 2>/dev/null
+# | diskimage register /boot/home/t1027/bfs.img
+# ---- raw output ----
+cbfd80cd1ff6c1220b7b75abac1155aa341a963773727adfddefc91e12283243  /boot/system/kernel_arm64
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  /boot/system/add-ons/kernel/file_systems/bfs
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/bfs
++ mkdir -p /boot/home/t1027
++ cd /boot/home/t1027
++ dd if=/dev/zero of=bfs.img bs=1048576 count=64
++ diskimage register /boot/home/t1027/bfs.img

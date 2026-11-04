@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2c1026-bfs
+# instance: i-090d38da530c80a52   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm r2c1026: BFS on a diskimage file, 3 x write + unmount
+# start: 20261104T045321Z   end: 20261104T045333Z   rc: 0
+# script sha256: 46d77f5582470d1bec807ba6a11daecbf4bc71d70a561a70fdd8d02742268afe
+# ---- script ----
+# | # BFS on the diskimage file (device 5): mkfs -t bfs; 3 x (mount, write 2 B / 4 KiB / 1 MiB, sync,
+# | # unmount); then mount once more and md5 the small files from disk. Never returns on a KDL.
+# | cd /boot/home/t1027
+# | B=/dev/disk/virtual/files/5/raw
+# | mkfs -t bfs -q $B BFS1027 2>&1 | tail -1
+# | before=$(grep -c "failed to lock memory" /var/log/syslog)
+# | mkdir -p /b1027
+# | for i in 1 2 3; do
+# | 	mount -t bfs $B /b1027 || { echo "bfs mount $i failed"; break; }
+# | 	printf 'x\n' > /b1027/h-2b; dd if=/dev/zero bs=4096 count=1 2>/dev/null | tr '\0' 'k' > /b1027/h-4k
+# | 	dd if=/dev/urandom of=/b1027/h-1m bs=65536 count=16 2>/dev/null; sync
+# | 	unmount /b1027; echo "bfs round $i unmount rc=$?"
+# | done
+# | mount -t bfs $B /b1027 && md5sum /b1027/h-2b /b1027/h-4k; unmount /b1027; echo "final unmount rc=$?"
+# | echo "bfs write-back failures: $(( $(grep -c "failed to lock memory" /var/log/syslog) - before ))"
+# ---- raw output ----
+DiskDeviceJobQueue::Execute(): executing job: N8BPrivate13InitializeJobE
+bfs round 1 unmount rc=0
+bfs round 2 unmount rc=0
+bfs round 3 unmount rc=0
+final unmount rc=1
+bfs write-back failures: 20
+md5sum: /b1027/h-2b: Bad address
+md5sum: /b1027/h-4k: Bad address
+unmount: unmounting failed: Device/File/Resource busy

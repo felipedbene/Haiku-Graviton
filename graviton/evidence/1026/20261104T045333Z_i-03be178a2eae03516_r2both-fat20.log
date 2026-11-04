@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2both-fat20
+# instance: i-03be178a2eae03516   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm r2both: 20 x FAT mount + write + unmount
+# start: 20261104T045333Z   end: 20261104T045345Z   rc: 0
+# script sha256: 1ce4e1730e85544badb239a21d81abc75b5adc6f82655f8ae98daad2282ea8df
+# ---- script ----
+# | # Regressions, part 3: 20 x FAT mount + write + unmount on the Linux-made image.
+# | cd /boot/home/t1027
+# | mkdir -p /f1027
+# | ok=0; for i in $(seq 1 20); do
+# | 	mount -t fat /dev/disk/virtual/files/3/raw /f1027 || { echo "mount $i failed"; break; }
+# | 	printf "round $i\n" > /f1027/loop-$i; sync
+# | 	unmount /f1027 && ok=$((ok+1))
+# | done; echo "fat mount+write+unmount: $ok/20"
+# | echo "total write-back failures logged: $(grep -c "failed to lock memory" /var/log/syslog)"
+# ---- raw output ----
+mount 1 failed
+fat mount+write+unmount: 0/20
+total write-back failures logged: 0
+mount: Device/File/Resource busy

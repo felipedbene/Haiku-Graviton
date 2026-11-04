@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: bothc-regress-bfs
+# instance: i-0cac2eae8dd3efc90   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm bothc (kernel.both + fat.fix1026, fresh launch): BFS on a diskimage file, x3 write + unmount
+# start: 20261104T040635Z   end: 20261104T040646Z   rc: 0
+# script sha256: 93777577f3a1b635b55b75c39bd5a3038feae610b05a3f41191f9b8651d3bb43
+# ---- script ----
+# | # Regressions, part 2 (after the register in part 1): BFS on the diskimage file, x3 rounds.
+# | cd /boot/home/t1027
+# | B=$(diskimage list | awk '/bfs.img/{print $3}'); echo "bfs device: $B"
+# | mkfs -t bfs -q $B BFS1027 2>&1 | tail -1 || mkfs -t bfs $B BFS1027 2>&1 | tail -2
+# | before=$(grep -c "failed to lock memory" /var/log/syslog)
+# | for i in 1 2 3; do
+# | 	mkdir -p /b1027 && mount -t bfs $B /b1027 || { echo "bfs mount $i failed"; break; }
+# | 	printf 'x\n' > /b1027/h-2b; dd if=/dev/zero bs=4096 count=1 2>/dev/null | tr '\0' 'k' > /b1027/h-4k
+# | 	dd if=/dev/urandom of=/b1027/h-1m bs=65536 count=16 2>/dev/null; sync
+# | 	unmount /b1027; echo "bfs round $i unmount rc=$?"
+# | done
+# | mount -t bfs $B /b1027 && md5sum /b1027/h-2b /b1027/h-4k; unmount /b1027
+# | echo "bfs write-back failures: $(( $(grep -c "failed to lock memory" /var/log/syslog) - before ))"
+# ---- raw output ----
+bfs device: /dev/disk/virtual/files/5/raw
+DiskDeviceJobQueue::Execute(): executing job: N8BPrivate13InitializeJobE
+bfs round 1 unmount rc=0
+bfs round 2 unmount rc=0
+bfs round 3 unmount rc=0
+401b30e3b8b5d629635a5c613cdb7919  /b1027/h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  /b1027/h-4k
+bfs write-back failures: 0
+unmount: unmounting failed: Device/File/Resource busy

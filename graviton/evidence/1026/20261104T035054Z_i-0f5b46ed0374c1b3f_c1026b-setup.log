@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1026b-setup
+# instance: i-0f5b46ed0374c1b3f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1026b (kernel.fix1026 + fat.fix1026): checksums, test images, repro script, diskimage register
+# start: 20261104T035054Z   end: 20261104T035118Z   rc: 1
+# script sha256: 22daccfa6aff1676aa34ef87e5a2c51aee3b7b5fb7e9f45a2d25168d7a630809
+# ---- script ----
+# | # Arm setup for #1026/#1027: module checksums, the two test images (made by Ubuntu mkfs.vfat /
+# | # mkfs.ext2 with Linux-written files) and the repro script, all sha256 checked; register the
+# | # images with diskimage. Mounting is a later command.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ext2
+# | pkgman install -y wget 2>&1 | tail -1
+# | rm -rf /boot/home/t1027 && mkdir -p /boot/home/t1027 && cd /boot/home/t1027
+# | wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img2/fat.img?<PRESIGNED>
+# | wget -q -O ext2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img2/ext2.img?<PRESIGNED>
+# | wget -q -O diskimage1027.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/diskimage1027.sh?<PRESIGNED>
+# | printf '%s\n' '5b707ee57aeda7633e591f476c64a90c2b1da80fb9629bc1c67199d4c2e12cb1  fat.img' '0816a611c04430a1684a2648a0ed54a230037f2ea37460c0cfe956753c0ff497  ext2.img' '2567b4ff3cf0dce0fce99756bc4fe4793f2cb859ffe220657e422806471fb358  diskimage1027.sh' | sha256sum -c || exit 1
+# | sh diskimage1027.sh register /boot/home/t1027/fat.img /boot/home/t1027/ext2.img
+# | grep -c "failed to lock memory" /var/log/syslog
+# ---- raw output ----
+Haiku ip-10-128-5-112.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 03:26:52 arm64 other Haiku
+b29b97a45d2722c9a7a974068dcafeb25d17bb231bc3a9cc9edd89ab1fbb19d0  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+a58037848f1ca30e1c759781506c0d0790757e96a23a0f8397d151203b29b50c  /boot/system/add-ons/kernel/file_systems/fat
+d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  /boot/system/add-ons/kernel/file_systems/ext2
+Validating checksum for DeBeOS...done.
+fat.img: OK
+ext2.img: OK
+diskimage1027.sh: OK
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
+Registered file as disk device "/dev/disk/virtual/files/4/raw" with ID 4.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1027/fat.img           /dev/disk/virtual/files/3/raw
+     4  /boot/home/t1027/ext2.img          /dev/disk/virtual/files/4/raw
+0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ext2
++ pkgman install -y wget
++ tail -1
++ rm -rf /boot/home/t1027
++ mkdir -p /boot/home/t1027
++ cd /boot/home/t1027
++ wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img2/fat.img?<PRESIGNED>'
++ wget -q -O ext2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img2/ext2.img?<PRESIGNED>'
++ wget -q -O diskimage1027.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/diskimage1027.sh?<PRESIGNED>'
++ printf '%s\n' '5b707ee57aeda7633e591f476c64a90c2b1da80fb9629bc1c67199d4c2e12cb1  fat.img' '0816a611c04430a1684a2648a0ed54a230037f2ea37460c0cfe956753c0ff497  ext2.img' '2567b4ff3cf0dce0fce99756bc4fe4793f2cb859ffe220657e422806471fb358  diskimage1027.sh'
++ sha256sum -c
++ sh diskimage1027.sh register /boot/home/t1027/fat.img /boot/home/t1027/ext2.img
++ grep -c 'failed to lock memory' /var/log/syslog
+failed to run commands: exit status 1

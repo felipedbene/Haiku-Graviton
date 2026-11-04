@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1026b-regress2
+# instance: i-0f5b46ed0374c1b3f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1026b: BFS on diskimage x3, FAT x20, ramfs x50
+# start: 20261104T035401Z   end: 20261104T040914Z   rc: 1
+# script sha256: 59a57c0adec137526342fda2e9a4eeec7544002b5a22659c551a21e408430481
+# ---- script ----
+# | # Regressions, part 2 (after the register in part 1). Device numbers from "diskimage list".
+# | cd /boot/home/t1027
+# | B=$(diskimage list | awk '/bfs.img/{print $3}'); echo "bfs device: $B"
+# | mkfs -t bfs -q $B BFS1027 2>&1 | tail -1 || mkfs -t bfs $B BFS1027 2>&1 | tail -2
+# | before=$(grep -c "failed to lock memory" /var/log/syslog)
+# | for i in 1 2 3; do
+# | 	mkdir -p /b1027 && mount -t bfs $B /b1027 || { echo "bfs mount $i failed"; break; }
+# | 	printf 'x\n' > /b1027/h-2b; dd if=/dev/zero bs=4096 count=1 2>/dev/null | tr '\0' 'k' > /b1027/h-4k
+# | 	dd if=/dev/urandom of=/b1027/h-1m bs=65536 count=16 2>/dev/null; sync
+# | 	unmount /b1027; echo "bfs round $i unmount rc=$?"
+# | done
+# | mount -t bfs $B /b1027 && md5sum /b1027/h-2b /b1027/h-4k; unmount /b1027
+# | echo "bfs write-back failures: $(( $(grep -c "failed to lock memory" /var/log/syslog) - before ))"
+# | ok=0; for i in $(seq 1 20); do
+# | 	mount -t fat /dev/disk/virtual/files/3/raw /f1027 || break
+# | 	printf "round $i\n" > /f1027/loop-$i; sync
+# | 	unmount /f1027 && ok=$((ok+1))
+# | done; echo "fat mount+write+unmount: $ok/20"
+# | ok=0; for i in $(seq 1 50); do
+# | 	mkdir -p /r1027 && mount -t ramfs /r1027 || break
+# | 	echo x > /r1027/f; unmount /r1027 && ok=$((ok+1))
+# | done; echo "ramfs mount+file+unmount: $ok/50"
+# | echo "total write-back failures logged: $(grep -c "failed to lock memory" /var/log/syslog)"
+# ---- raw output ----
