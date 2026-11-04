@@ -3255,6 +3255,13 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 		action |= SEND_QUEUED;
 	}
 
+	// What the peer advertised before this segment. The duplicate ACK test
+	// below compares against it, and used to read fSendWindow after it had
+	// already been overwritten with this segment's window, so "the window is
+	// unchanged" always held and every window update that acknowledged
+	// nothing new counted as a duplicate.
+	const uint32 previousSendWindow = fSendWindow;
+
 	// Only a segment whose acknowledgement is one we would act on may end the
 	// probing. Anything else is dropped below (an old ACK, or one of data
 	// never sent), and that DROP discards the SEND_QUEUED this would set --
@@ -3304,7 +3311,9 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			// up fast retransmit without sending anything, after which
 			// recovery sends new data from SND.MAX and the lost segment is
 			// never sent again.
-			if (buffer->size == 0 && advertisedWindow == fSendWindow
+			// RFC 5681 2: a duplicate leaves the window as it was. One that
+			// changes it is a window update, and says nothing about loss.
+			if (buffer->size == 0 && advertisedWindow == previousSendWindow
 				&& advertisedWindow != 0
 				&& (segment.flags & TCP_FLAG_FINISH) == 0 && fSendUnacknowledged != fSendMax) {
 				TRACE("Receive(): duplicate ack!");
