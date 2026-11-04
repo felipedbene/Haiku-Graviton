@@ -1,0 +1,41 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: full-parallel-suite-with-nghttp2-1.70.0
+# instance: i-01d97a9fa6e0a2193   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T030448Z   end: 20261104T030452Z   rc: 0
+# script sha256: dd93cee08dbd6c5e16d0515a267489c92cb44d05d2e2f2b800cd7fa432f0c448
+# ---- script ----
+# | echo "== full parallel suite at -j 16 (run for issue 978 on this box, nghttp2-1.70.0-1 installed for issue 991)"
+# | ls /packages | grep -E "^(nghttp2|nodejs24|libuv)"
+# | echo "ok=$(grep -c '^ok ' /tmp/suite978.tap) (skip=$(grep -c '^ok .*# skip' /tmp/suite978.tap)) notok=$(grep -c '^not ok ' /tmp/suite978.tap)"
+# | echo "== http2 results in the suite"; grep -E "^(not )?ok .*test-http2-(sensitive-headers|misbehaving-flow-control)" /tmp/suite978.tap
+# | echo "== all not ok"; grep '^not ok' /tmp/suite978.tap
+# ---- raw output ----
+== full parallel suite at -j 16 (run for issue 978 on this box, nghttp2-1.70.0-1 installed for issue 991)
+libuv-1.52.1-6
+nghttp2-1.70.0-1
+nodejs24-24.22.2-1
+ok=4586 (skip=333) notok=19
+== http2 results in the suite
+ok 1987 parallel/test-http2-misbehaving-flow-control-paused
+ok 1993 parallel/test-http2-misbehaving-flow-control
+ok 2060 parallel/test-http2-sensitive-headers
+== all not ok
+not ok 176 parallel/test-child-process-default-options
+not ok 186 parallel/test-child-process-env
+not ok 188 parallel/test-child-process-exec-env
+not ok 608 parallel/test-cwd-enoent-improved-message
+not ok 635 parallel/test-debugger-probe-activation
+not ok 1164 parallel/test-fs-link
+not ok 1191 parallel/test-fs-promises
+not ok 1288 parallel/test-fs-rmSync-special-char-additional-error
+not ok 1304 parallel/test-fs-stat-date
+not ok 1837 parallel/test-http-writable-true-after-close
+not ok 2665 parallel/test-permission-fs-symlink-target-write
+not ok 2717 parallel/test-process-dlopen-error-message-crash
+not ok 2734 parallel/test-process-euid-egid
+not ok 3217 parallel/test-repl-underscore
+not ok 3326 parallel/test-setproctitle
+not ok 4063 parallel/test-util-exception-with-host-port
+not ok 4112 parallel/test-trace-events-fs-async
+not ok 4119 parallel/test-trace-events-fs-sync
+not ok 4544 parallel/test-worker-memory
