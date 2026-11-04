@@ -1,0 +1,81 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-a1049
+# instance: i-04b5137176a416234   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T040515Z   end: 20261104T040643Z   rc: 0
+# script sha256: e6e5f9302e099e929b2ae94a1402cd49c6d73e0b9973c70cb9dae2f7423e72f6
+# ---- script ----
+# | cd /boot/home/wL || exit 1
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols/ipv)'
+# | sha256sum ipfragconf.c
+# | ifconfig loop mtu 1280
+# | ifconfig loop | grep -i mtu
+# | ./ipfragconf -s -c -t
+# | echo "rc=$?"
+# | ifconfig loop mtu 65536
+# ---- raw output ----
+Haiku ip-10-128-14-201.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+24b94e3f5ee34f9ce1a4d32651fad3769a7776e31c58ce2e4aff273587c3c66c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+2ddd841658d2053b4b489f9251ff19f56809f17d2e1a08c6f24550b694ebeda1  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+--- loaded network images
+ 2034 0xffff000002297000 0xffff0000022b9000     0          0 /boot/system/add-ons/kernel/network/stack
+ 2053 0xffff0000022c4000 0xffff0000022cf000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2057 0xffff0000023aa000 0xffff0000023b6000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+5c563c815c527ddc438f7e531ce1170b377e977ee7371da416e332682f262f64  ipfragconf.c
+	MTU: 1280, Metric: 0, up loopback link
+  loopback alive after: start
+v4 send udp    100 bytes                           PASS  sent 100, received 100, intact
+v6 send udp    100 bytes                           PASS  sent 100, received 100, intact
+v4 send udp   1200 bytes                           PASS  sent 1200, received 1200, intact
+v6 send udp   1200 bytes                           PASS  sent 1200, received 1200, intact
+v4 send udp   3000 bytes                           PASS  sent 3000, received 3000, intact
+v6 send udp   3000 bytes                           PASS  sent 3000, received 3000, intact
+v4 send udp   9000 bytes                           PASS  sent 9000, received 9000, intact
+v6 send udp   9000 bytes                           PASS  sent 9000, received 9000, intact
+v4 send udp  20000 bytes                           PASS  sent 20000, received 20000, intact
+v6 send udp  20000 bytes                           PASS  sent 20000, received 20000, intact
+v4 send udp  65507 bytes                           PASS  sent 65507, received 65507, intact
+v6 send udp  65507 bytes                           PASS  sent 65507, received 65507, intact
+v6 send udp  65527 bytes                           PASS  sent 65527, received 65527, intact
+  loopback alive after: send rows
+v4 deliver in order                                PASS  received 2992 of 2992, intact
+v4 deliver reversed                                PASS  received 2992 of 2992, intact
+v4 deliver middle first                            PASS  received 2992 of 2992, intact
+v4 deliver duplicate middle                        PASS  received 2992 of 2992, intact
+v4 deliver last fragment first                     PASS  received 2992 of 2992, intact
+v4 drop gap (middle missing)                       PASS  not delivered, as required
+v4 drop past: data past the last fragment          PASS  not delivered, as required
+v4 drop short: last ends before received data      PASS  not delivered, as required
+v4 drop twoends: second last fragment, other end   PASS  not delivered, as required
+v4 deliver last fragment twice, then the middle    PASS  received 2992 of 2992, intact
+v4 drop last fragment inside held data             PASS  not delivered, as required
+v4 either last fragment overlapping held data      INFO  delivered intact
+v4 drop total length shorter than the header       PASS  not delivered, as required
+v6 deliver in order                                PASS  received 2992 of 2992, intact
+v6 deliver reversed                                PASS  received 2992 of 2992, intact
+v6 deliver middle first                            PASS  received 2992 of 2992, intact
+v6 deliver duplicate middle                        PASS  received 2992 of 2992, intact
+v6 deliver last fragment first                     PASS  received 2992 of 2992, intact
+v6 drop gap (middle missing)                       PASS  not delivered, as required
+v6 drop past: data past the last fragment          PASS  not delivered, as required
+v6 drop short: last ends before received data      PASS  not delivered, as required
+v6 drop twoends: second last fragment, other end   PASS  not delivered, as required
+v6 deliver last fragment twice, then the middle    PASS  received 2992 of 2992, intact
+v6 drop last fragment inside held data             PASS  not delivered, as required
+v6 drop last fragment overlapping held data        FAIL  DELIVERED 1008 bytes (the joined pieces), but must be dropped
+  loopback alive after: crafted rows
+  t=0s first fragments sent
+  t=40s
+  t=50s
+v4 timeout within: last fragment at 50 s           PASS  received 2992 of 2992, intact
+v6 timeout within: last fragment at 50 s           PASS  received 2992 of 2992, intact
+  t=70s
+v4 timeout refreshed: at 0, 40 and 70 s            FAIL  DELIVERED, but must have timed out 60 s after the first fragment
+v6 timeout refreshed: at 0, 40 and 70 s            FAIL  DELIVERED, but must have timed out 60 s after the first fragment
+  loopback alive after: timeout rows
+FAILURES 3
+rc=3
