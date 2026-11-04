@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-stock4-close-with-traffic
+# instance: i-0354d600786ffc072   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock arm (fresh boot): close1063 3000 iterations per phase, output to a file
+# start: 20261104T050745Z   end: 20261104T051253Z   rc: 137
+# script sha256: e54f24e8dd8eb3f9c0a28926bfee23ee156989a989a7de26e0b133e7f3a445af
+# ---- script ----
+# | # Stock canonical, fresh boot: close1063 in the background with its output in a file, so a hang
+# | # still leaves its last lines readable; then the threads' states.
+# | cd /boot/home/j
+# | ifconfig tap/0 up; ifconfig tap/0 | head -1
+# | (./close1063 3000 20 > close.out 2>&1; echo "close1063 exit=$?" >> close.out) &
+# | sleep 60
+# | cat close.out
+# | echo "--- teams and threads"
+# | ps -a 2>/dev/null | grep -A4 "^./close1063" | head -12
+# | ( ifconfig tap/0 | grep Receive ) & sleep 5; echo "(ifconfig tap/0 above if it returned within 5 s)"
+# ---- raw output ----
+tap/0	Hardware type: Ethernet, Address: 22:ef:43:0b:22:e5
+tap/0: mac 22:ef:43:0b:22:e5, 3000 iterations per phase
+HANG phase bind: no progress for 15 s at iteration 861 (frames written 481980)
+--- teams and threads
+./close1063 3000 20                                  443        2    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+close1063                               443     wait   10        2       17 
+close1063 pthread                       444      zzz   10      633    16705 
+(ifconfig tap/0 above if it returned within 5 s)
