@@ -18,6 +18,8 @@
  *            (so its handler is in use), closes it
  *   capture: starts a capture on the TAP interface, receives a frame, stops
  *            it with SIOCCPACKETCAP, closes the socket
+ *   capture-race: two threads start and stop a capture on one socket at
+ *            once; then a fresh capture must still receive
  * A third thread reports progress every second; a phase that stops making
  * progress for 15 s is reported as a HANG (a deadlocked thread cannot be
  * killed, so the process then stays behind).
@@ -126,6 +128,32 @@ receive_one(int fd)
 }
 
 
+struct race {
+	int		fd;
+	long	iterations;
+	long	started[2];
+};
+static struct race* sRace;
+
+
+static void*
+race_thread(void* arg)
+{
+	int id = *(int*)arg;
+	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(ifr));
+	strlcpy(ifr.ifr_name, kTap, sizeof(ifr.ifr_name));
+	for (long i = 0; i < sRace->iterations; i++) {
+		if (ioctl(sRace->fd, SIOCSPACKETCAP, &ifr, sizeof(ifr)) == 0)
+			sRace->started[id]++;
+		usleep(id == 0 ? 10 : 15);
+		ioctl(sRace->fd, SIOCCPACKETCAP, &ifr, sizeof(ifr));
+		sProgress++;
+	}
+	return NULL;
+}
+
+
 int
 main(int argc, char** argv)
 {
@@ -217,6 +245,42 @@ main(int argc, char** argv)
 		printf("%-16s %s  %ld/%ld started, %ld received, %ld stopped, %.1fs,"
 			" frames written %ld\n", "capture-stop", pass ? "PASS" : "FAIL",
 			started, iterations, received, stopped, now() - start, sWritten);
+		fflush(stdout);
+		failures += !pass;
+	}
+
+	/* Two threads start and stop a capture on the same socket at once: a
+	 * start must not slip in while a stop is still unregistering. Then a
+	 * fresh capture must still see frames, so the device's list is intact. */
+	{
+		sPhase = "capture-race";
+		struct race race;
+		race.fd = socket(AF_LINK, SOCK_DGRAM, 0);
+		race.iterations = iterations;
+		race.started[0] = race.started[1] = 0;
+		double start = now();
+		pthread_t threads[2];
+		int ids[2] = {0, 1};
+		sRace = &race;
+		for (int t = 0; t < 2; t++)
+			pthread_create(&threads[t], NULL, race_thread, &ids[t]);
+		for (int t = 0; t < 2; t++)
+			pthread_join(threads[t], NULL);
+		close(race.fd);
+
+		int s = socket(AF_LINK, SOCK_DGRAM, 0);
+		memset(&ifr, 0, sizeof(ifr));
+		strlcpy(ifr.ifr_name, kTap, sizeof(ifr.ifr_name));
+		int cap = ioctl(s, SIOCSPACKETCAP, &ifr, sizeof(ifr));
+		int got = cap == 0 && receive_one(s);
+		close(s);
+		long total = race.started[0] + race.started[1];
+		int pass = total > 0 && got;
+		printf("%-16s %s  2 threads x %ld start/stop on one socket: %ld + %ld"
+			" started, %.1fs; a fresh capture afterwards received = %d,"
+			" frames written %ld\n", "capture-race", pass ? "PASS" : "FAIL",
+			iterations, race.started[0], race.started[1], now() - start, got,
+			sWritten);
 		fflush(stdout);
 		failures += !pass;
 	}
