@@ -1,0 +1,263 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-06e4f6e4d2da94b63   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build kernels (trunk, fix1026, fix1027, both), fat (trunk, fix1026), ramfs (trunk) at a9954f424a / hrev59996
+# start: 20261104T043823Z   end: 20261104T043939Z   rc: 0
+# script sha256: 3153c685f4c3c0615841914ccfff67d8d8f4db1cca1c0c0dd5c6e8886aa7841c
+# ---- script ----
+# | # Review round 2. Build from trunk a9954f424a at hrev59996 (method of #898), forcing the touched
+# | # objects to rebuild each time (jam compares 1 s mtimes):
+# | #  kernel_arm64: trunk, fix1026 (reworked vfs commit), fix1027 (reworked FileDevice commit),
+# | #                both (the two together)
+# | #  fat: trunk, fix1026 (dosfs_release_vnode commit)
+# | #  ramfs: trunk (has #1016, so the ramfs regression loop can run; canonical's ramfs predates it)
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUTS=s3://haiku-graviton-$ACCT-us-west-2/bugfix/E/out3
+# | O=/opt/t/out; cd /opt/t/hg/generated
+# | REV=hrev59996; T=a9954f424a
+# | R=objects/haiku/arm64/release/system/kernel
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | build() {	# build <label> <target> <outfile> [patch...]
+# | 	l=$1; tg=$2; of=$3; shift 3
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	rm -f $R/revisioned/kernel_arm64 $R/kernel_arm64 $R/fs/vfs.o $R/device_manager/FileDevice.o
+# | 	rm -rf $A/fat $A/ramfs
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV "$tg" > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM $tg $l ok"
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep -E "fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp"
+# | 	cp $of $O/$l || return 1
+# | }
+# | build kernel_arm64.trunk "<revisioned>kernel_arm64" $R/revisioned/kernel_arm64 || exit 1
+# | build kernel_arm64.fix1026 "<revisioned>kernel_arm64" $R/revisioned/kernel_arm64 fix1026-vfs.patch || exit 1
+# | build kernel_arm64.fix1027 "<revisioned>kernel_arm64" $R/revisioned/kernel_arm64 fix1027.patch || exit 1
+# | build kernel_arm64.both "<revisioned>kernel_arm64" $R/revisioned/kernel_arm64 fix1026-vfs.patch fix1027.patch || exit 1
+# | build kernel_arm64.trunk2 "<revisioned>kernel_arm64" $R/revisioned/kernel_arm64 || exit 1
+# | build fat.trunk fat $A/fat/fat || exit 1
+# | build fat.fix1026 fat $A/fat/fat fix1026-fat.patch || exit 1
+# | build ramfs.trunk ramfs $A/ramfs/ramfs || exit 1
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | cmp kernel_arm64.trunk kernel_arm64.trunk2 && echo "kernel trunk rebuild identical"
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for l in trunk fix1026 fix1027 both; do echo "== kernel $l"; ${X}nm -S -C kernel_arm64.$l | grep -E " free_vnode\(|FileDevice::(Read|Write)\(void" | grep -v localalias; done
+# | sha256sum kernel_arm64.trunk kernel_arm64.fix1026 kernel_arm64.fix1027 kernel_arm64.both fat.trunk fat.fix1026 ramfs.trunk | tee SHA256SUMS3
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include 'fat.*' --include 'ramfs.*' --include SHA256SUMS3 . $OUTS/ && echo uploaded
+# ---- raw output ----
+JAM <revisioned>kernel_arm64 kernel_arm64.trunk ok
+ src/system/kernel/fs/vfs.cpp | 60 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 59 insertions(+), 1 deletion(-)
+JAM <revisioned>kernel_arm64 kernel_arm64.fix1026 ok
+ src/system/kernel/device_manager/FileDevice.cpp | 91 +++++++++++++++++++++----
+ 1 file changed, 77 insertions(+), 14 deletions(-)
+JAM <revisioned>kernel_arm64 kernel_arm64.fix1027 ok
+ src/system/kernel/device_manager/FileDevice.cpp | 91 +++++++++++++++++++++----
+ src/system/kernel/fs/vfs.cpp                    | 60 +++++++++++++++-
+ 2 files changed, 136 insertions(+), 15 deletions(-)
+JAM <revisioned>kernel_arm64 kernel_arm64.both ok
+JAM <revisioned>kernel_arm64 kernel_arm64.trunk2 ok
+JAM fat fat.trunk ok
+ src/add-ons/kernel/file_systems/fat/kernel_interface.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+JAM fat fat.fix1026 ok
+JAM ramfs ramfs.trunk ok
+kernel trunk rebuild identical
+== kernel trunk
+ffff00000012f0c8 00000000000002f0 t free_vnode(vnode*, bool)
+ffff0000000ffb20 0000000000000058 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb80 0000000000000058 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+== kernel fix1026
+ffff00000012f30c 000000000000048c t free_vnode(vnode*, bool)
+ffff0000000ffb20 0000000000000058 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb80 0000000000000058 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+== kernel fix1027
+ffff00000012f2a8 00000000000002f0 t free_vnode(vnode*, bool)
+ffff0000000ffc40 0000000000000118 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb20 0000000000000118 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+== kernel both
+ffff00000012f4ec 000000000000048c t free_vnode(vnode*, bool)
+ffff0000000ffc40 0000000000000118 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb20 0000000000000118 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+128325f6ab9732f1a97eb8f4c21572bb6d6dae7f15fb1589e8ce6770ab07295b  kernel_arm64.trunk
+aa44cc21c9fd5c691265025e181bd2f67ea97aee1914db563ff3808f30faf99d  kernel_arm64.fix1026
+4eedb4c494028414978bc81148990b0fd5edba65ce32a86ebd806d3c991bea14  kernel_arm64.fix1027
+2c4ad00b0bbe3b95ce31c8cd3299d4682b47fab8905019fef8c5c63ae0da62d7  kernel_arm64.both
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  fat.trunk
+a58037848f1ca30e1c759781506c0d0790757e96a23a0f8397d151203b29b50c  fat.fix1026
+962ffd941436354ccd4318698f3945d1acb5c4c0bc020d6ba054fc75b5c09960  ramfs.trunk
+uploaded
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUTS=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/out3
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ REV=hrev59996
++ T=a9954f424a
++ R=objects/haiku/arm64/release/system/kernel
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ build kernel_arm64.trunk '<revisioned>kernel_arm64' objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
++ l=kernel_arm64.trunk
++ tg='<revisioned>kernel_arm64'
++ of=objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM <revisioned>kernel_arm64 kernel_arm64.trunk ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-kernel_arm64.trunk.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk
++ build kernel_arm64.fix1026 '<revisioned>kernel_arm64' objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 fix1026-vfs.patch
++ l=kernel_arm64.fix1026
++ tg='<revisioned>kernel_arm64'
++ of=objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1026-vfs.patch
++ git -C .. apply /opt/t/out/fix1026-vfs.patch
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM <revisioned>kernel_arm64 kernel_arm64.fix1026 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-kernel_arm64.fix1026.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1026
++ build kernel_arm64.fix1027 '<revisioned>kernel_arm64' objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 fix1027.patch
++ l=kernel_arm64.fix1027
++ tg='<revisioned>kernel_arm64'
++ of=objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1027.patch
++ git -C .. apply /opt/t/out/fix1027.patch
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM <revisioned>kernel_arm64 kernel_arm64.fix1027 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-kernel_arm64.fix1027.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1027
++ build kernel_arm64.both '<revisioned>kernel_arm64' objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 fix1026-vfs.patch fix1027.patch
++ l=kernel_arm64.both
++ tg='<revisioned>kernel_arm64'
++ of=objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1026-vfs.patch
++ git -C .. apply /opt/t/out/fix1026-vfs.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1027.patch
++ git -C .. apply /opt/t/out/fix1027.patch
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM <revisioned>kernel_arm64 kernel_arm64.both ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-kernel_arm64.both.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.both
++ build kernel_arm64.trunk2 '<revisioned>kernel_arm64' objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
++ l=kernel_arm64.trunk2
++ tg='<revisioned>kernel_arm64'
++ of=objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM <revisioned>kernel_arm64 kernel_arm64.trunk2 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-kernel_arm64.trunk2.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk2
++ build fat.trunk fat objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat
++ l=fat.trunk
++ tg=fat
++ of=objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 fat
++ echo 'JAM fat fat.trunk ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-fat.trunk.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat /opt/t/out/fat.trunk
++ build fat.fix1026 fat objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat fix1026-fat.patch
++ l=fat.fix1026
++ tg=fat
++ of=objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1026-fat.patch
++ git -C .. apply /opt/t/out/fix1026-fat.patch
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 fat
++ echo 'JAM fat fat.fix1026 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-fat.fix1026.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat /opt/t/out/fat.fix1026
++ build ramfs.trunk ramfs objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs/ramfs
++ l=ramfs.trunk
++ tg=ramfs
++ of=objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs/ramfs
++ shift 3
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 ramfs
++ echo 'JAM ramfs ramfs.trunk ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-ramfs.trunk.log
++ grep -E 'fs/vfs.cpp|FileDevice.cpp|fat/kernel_interface.cpp'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs/ramfs /opt/t/out/ramfs.trunk
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
++ cmp kernel_arm64.trunk kernel_arm64.trunk2
++ echo 'kernel trunk rebuild identical'
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ for l in trunk fix1026 fix1027 both
++ echo '== kernel trunk'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C kernel_arm64.trunk
++ grep -E ' free_vnode\(|FileDevice::(Read|Write)\(void'
++ grep -v localalias
++ for l in trunk fix1026 fix1027 both
++ echo '== kernel fix1026'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C kernel_arm64.fix1026
++ grep -E ' free_vnode\(|FileDevice::(Read|Write)\(void'
++ grep -v localalias
++ for l in trunk fix1026 fix1027 both
++ echo '== kernel fix1027'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C kernel_arm64.fix1027
++ grep -E ' free_vnode\(|FileDevice::(Read|Write)\(void'
++ grep -v localalias
++ for l in trunk fix1026 fix1027 both
++ echo '== kernel both'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C kernel_arm64.both
++ grep -E ' free_vnode\(|FileDevice::(Read|Write)\(void'
++ grep -v localalias
++ sha256sum kernel_arm64.trunk kernel_arm64.fix1026 kernel_arm64.fix1027 kernel_arm64.both fat.trunk fat.fix1026 ramfs.trunk
++ tee SHA256SUMS3
++ aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include 'fat.*' --include 'ramfs.*' --include SHA256SUMS3 . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/out3/
++ echo uploaded

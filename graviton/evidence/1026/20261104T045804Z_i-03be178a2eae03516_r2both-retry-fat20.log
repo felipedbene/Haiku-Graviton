@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2both-retry-fat20
+# instance: i-03be178a2eae03516   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm r2both: retry the EBUSY unmounts, then 20 x FAT mount + write + unmount
+# start: 20261104T045804Z   end: 20261104T050146Z   rc: 0
+# script sha256: 7ed757b34469b9e3d3b55aaf0b9b274911726202c5edc20d2a19a8109814b08a
+# ---- script ----
+# | # Retry the unmounts that returned EBUSY (FAT after verify, BFS after the final md5), then
+# | # the 20 x FAT loop again (the first run found /f1027 still mounted).
+# | sleep 5
+# | df | grep -E "f1027|b1027"
+# | unmount /f1027; echo "retry unmount fat rc=$?"
+# | unmount /b1027; echo "retry unmount bfs rc=$?"
+# | cd /boot/home/t1027
+# | mkdir -p /f1027
+# | ok=0; for i in $(seq 1 20); do
+# | 	mount -t fat /dev/disk/virtual/files/3/raw /f1027 || { echo "mount $i failed"; break; }
+# | 	printf "round $i\n" > /f1027/loop-$i; sync
+# | 	unmount /f1027 && ok=$((ok+1))
+# | done; echo "fat mount+write+unmount: $ok/20"
+# | echo "total write-back failures logged: $(grep -c "failed to lock memory" /var/log/syslog)"
+# ---- raw output ----
+[1m/f1027            [0m
+[1m/b1027            [0m
+retry unmount fat rc=0
+retry unmount bfs rc=0
+fat mount+write+unmount: 20/20
+total write-back failures logged: 0

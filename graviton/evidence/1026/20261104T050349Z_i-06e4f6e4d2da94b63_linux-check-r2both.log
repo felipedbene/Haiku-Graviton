@@ -1,0 +1,105 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-check-r2both
+# instance: i-06e4f6e4d2da94b63   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux check of arm r2both's FAT and ext2 images: fsck and md5 through the Linux drivers
+# start: 20261104T050349Z   end: 20261104T050406Z   rc: 0
+# script sha256: 02d7e7ce7d53febc6087086a1b91dc626cc82c8ff76b83473239170e58703143
+# ---- script ----
+# | # Linux check of arm r2both's images after the Haiku run: sha256 matches what Haiku reported,
+# | # fsck.vfat -n / e2fsck -fn, and md5 of every file through the Linux drivers.
+# | set -x
+# | mkdir -p /opt/back && cd /opt/back && rm -rf ./*
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/E/back3
+# | aws s3 cp --quiet $B/fat.img fat.img && aws s3 cp --quiet $B/ext2.img ext2.img || exit 1
+# | sha256sum fat.img ext2.img
+# | fsck.vfat -n fat.img; echo "fsck.vfat rc=$?"
+# | e2fsck -fn ext2.img; echo "e2fsck rc=$?"
+# | mkdir -p m
+# | mount -t vfat -o loop,ro fat.img m && (cd m && ls -l && md5sum lin-1m lin-small h-2b h-4k h-1m); umount m
+# | mount -t ext2 -o loop,ro ext2.img m && (cd m && ls -l && md5sum lin-1m lin-small h-2b h-4k h-1m); umount m
+# ---- raw output ----
+99c1624ab7c92fce4436a75fd58d9d9460e1a3bd8b0b8b4fffeb334cc1812abb  fat.img
+97f5753f04902f031cc4b33e9b9b0371b4bf81c0e2e094962454844de7d95ecb  ext2.img
+fsck.fat 4.2 (2021-01-31)
+fat.img: 28 files, 4132/516190 clusters
+fsck.vfat rc=0
+Pass 1: Checking inodes, blocks, and sizes
+Inode 16, i_blocks is 128, should be 2056.  Fix? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+
+ext2.img: ********** WARNING: Filesystem still has errors **********
+
+ext2.img: 16/65536 files (6.3% non-contiguous), 4657/65536 blocks
+e2fsck rc=4
+total 2064
+drwxr-xr-x 3 root root     512 Nov  4 04:47 RECYCLED
+-rwxr-xr-x 1 root root 1048576 Nov  4 04:47 h-1m
+-rwxr-xr-x 1 root root       2 Nov  4 04:47 h-2b
+-rwxr-xr-x 1 root root    4096 Nov  4 04:47 h-4k
+-rwxr-xr-x 1 root root 1048576 Nov  4 04:39 lin-1m
+-rwxr-xr-x 1 root root       3 Nov  4 04:39 lin-small
+-rwxr-xr-x 1 root root       8 Nov  4 04:58 loop-1
+-rwxr-xr-x 1 root root       9 Nov  4 04:59 loop-10
+-rwxr-xr-x 1 root root       9 Nov  4 05:00 loop-11
+-rwxr-xr-x 1 root root       9 Nov  4 05:00 loop-12
+-rwxr-xr-x 1 root root       9 Nov  4 05:00 loop-13
+-rwxr-xr-x 1 root root       9 Nov  4 05:00 loop-14
+-rwxr-xr-x 1 root root       9 Nov  4 05:00 loop-15
+-rwxr-xr-x 1 root root       9 Nov  4 05:00 loop-16
+-rwxr-xr-x 1 root root       9 Nov  4 05:01 loop-17
+-rwxr-xr-x 1 root root       9 Nov  4 05:01 loop-18
+-rwxr-xr-x 1 root root       9 Nov  4 05:01 loop-19
+-rwxr-xr-x 1 root root       8 Nov  4 04:58 loop-2
+-rwxr-xr-x 1 root root       9 Nov  4 05:01 loop-20
+-rwxr-xr-x 1 root root       8 Nov  4 04:58 loop-3
+-rwxr-xr-x 1 root root       8 Nov  4 04:58 loop-4
+-rwxr-xr-x 1 root root       8 Nov  4 04:59 loop-5
+-rwxr-xr-x 1 root root       8 Nov  4 04:59 loop-6
+-rwxr-xr-x 1 root root       8 Nov  4 04:59 loop-7
+-rwxr-xr-x 1 root root       8 Nov  4 04:59 loop-8
+-rwxr-xr-x 1 root root       8 Nov  4 04:59 loop-9
+276f241381e05d7ff5fee4fac7a6ca75  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+7a91172250e8dd9e08d65ef33169fd53  h-1m
+total 1120
+-rw-r--r-- 1 root root 1048576 Nov  4 04:47 h-1m
+-rw-r--r-- 1 root root       2 Nov  4 04:47 h-2b
+-rw-r--r-- 1 root root    4096 Nov  4 04:47 h-4k
+-rw-rw-rw- 1 root root 1048576 Nov  4 04:39 lin-1m
+-rw-rw-rw- 1 root root       3 Nov  4 04:39 lin-small
+drwx------ 2 root root   16384 Nov  4 04:39 lost+found
+276f241381e05d7ff5fee4fac7a6ca75  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+a5f94560c717659e070eb400be50db58  h-1m
++ mkdir -p /opt/back
++ cd /opt/back
++ rm -rf './*'
+++ aws sts get-caller-identity --query Account --output text
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back3
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back3/fat.img fat.img
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back3/ext2.img ext2.img
++ sha256sum fat.img ext2.img
++ fsck.vfat -n fat.img
++ echo 'fsck.vfat rc=0'
++ e2fsck -fn ext2.img
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck rc=4'
++ mkdir -p m
++ mount -t vfat -o loop,ro fat.img m
++ cd m
++ ls -l
++ md5sum lin-1m lin-small h-2b h-4k h-1m
++ umount m
++ mount -t ext2 -o loop,ro ext2.img m
++ cd m
++ ls -l
++ md5sum lin-1m lin-small h-2b h-4k h-1m
++ umount m

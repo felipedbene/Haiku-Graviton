@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2c1027-setup
+# instance: i-030bd588ff20bc58c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm r2c1027: checksums, images, repro script, diskimage register (FAT 3, ext2 4, BFS 5)
+# start: 20261104T044634Z   end: 20261104T044653Z   rc: 0
+# script sha256: 5915985c388409e1566c2697921024b6773e83e343463272302588ba7a260580
+# ---- script ----
+# | # Round-2 arm setup: module checksums; the FAT and ext2 test images (Ubuntu mkfs.vfat / mkfs.ext2,
+# | # Linux-written lin-1m and lin-small) and the repro script, sha256 checked; a 64 MiB file for BFS;
+# | # register all three with diskimage (FAT 3, ext2 4, BFS 5). Mounting is a later command.
+# | set -x
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ramfs /boot/system/add-ons/kernel/file_systems/bfs
+# | pkgman install -y wget 2>&1 | tail -1
+# | rm -rf /boot/home/t1027 && mkdir -p /boot/home/t1027 && cd /boot/home/t1027
+# | wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img3/fat.img?<PRESIGNED>
+# | wget -q -O ext2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img3/ext2.img?<PRESIGNED>
+# | wget -q -O diskimage1027.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/diskimage1027.sh?<PRESIGNED>
+# | printf '%s\n' 'c6e71e352d62599dc8e6c4e502cd51b08a23ed8af47f10d747e736b1b23a06eb  fat.img' 'a1e05c96614e9bd90b81021b66300b6e779bc020f34007b1e801e64c962fc6fe  ext2.img' '2567b4ff3cf0dce0fce99756bc4fe4793f2cb859ffe220657e422806471fb358  diskimage1027.sh' | sha256sum -c || exit 1
+# | dd if=/dev/zero of=bfs.img bs=1048576 count=64 2>/dev/null
+# | sh diskimage1027.sh register /boot/home/t1027/fat.img /boot/home/t1027/ext2.img /boot/home/t1027/bfs.img
+# ---- raw output ----
+4eedb4c494028414978bc81148990b0fd5edba65ce32a86ebd806d3c991bea14  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  /boot/system/add-ons/kernel/file_systems/fat
+962ffd941436354ccd4318698f3945d1acb5c4c0bc020d6ba054fc75b5c09960  /boot/system/add-ons/kernel/file_systems/ramfs
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  /boot/system/add-ons/kernel/file_systems/bfs
+Validating checksum for DeBeOS...done.
+fat.img: OK
+ext2.img: OK
+diskimage1027.sh: OK
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
+Registered file as disk device "/dev/disk/virtual/files/4/raw" with ID 4.
+Registered file as disk device "/dev/disk/virtual/files/5/raw" with ID 5.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1027/fat.img           /dev/disk/virtual/files/3/raw
+     4  /boot/home/t1027/ext2.img          /dev/disk/virtual/files/4/raw
+     5  /boot/home/t1027/bfs.img           /dev/disk/virtual/files/5/raw
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ramfs /boot/system/add-ons/kernel/file_systems/bfs
++ pkgman install -y wget
++ tail -1
++ rm -rf /boot/home/t1027
++ mkdir -p /boot/home/t1027
++ cd /boot/home/t1027
++ wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img3/fat.img?<PRESIGNED>'
++ wget -q -O ext2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img3/ext2.img?<PRESIGNED>'
++ wget -q -O diskimage1027.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/diskimage1027.sh?<PRESIGNED>'
++ printf '%s\n' 'c6e71e352d62599dc8e6c4e502cd51b08a23ed8af47f10d747e736b1b23a06eb  fat.img' 'a1e05c96614e9bd90b81021b66300b6e779bc020f34007b1e801e64c962fc6fe  ext2.img' '2567b4ff3cf0dce0fce99756bc4fe4793f2cb859ffe220657e422806471fb358  diskimage1027.sh'
++ sha256sum -c
++ dd if=/dev/zero of=bfs.img bs=1048576 count=64
++ sh diskimage1027.sh register /boot/home/t1027/fat.img /boot/home/t1027/ext2.img /boot/home/t1027/bfs.img
