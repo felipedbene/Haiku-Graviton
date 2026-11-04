@@ -3255,7 +3255,16 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 		action |= SEND_QUEUED;
 	}
 
-	if (fSendWindow == 0 && advertisedWindow != 0) {
+	// Only a segment whose acknowledgement is one we would act on may end the
+	// probing. Anything else is dropped below (an old ACK, or one of data
+	// never sent), and that DROP discards the SEND_QUEUED this would set --
+	// after the persist timer had been cancelled, leaving data owed with no
+	// timer at all: a reordered stale segment could stall the connection.
+	const bool acknowledgementUsable
+		= (segment.flags & TCP_FLAG_ACKNOWLEDGE) == 0
+			|| (fSendUnacknowledged <= tcp_sequence(segment.acknowledge)
+				&& tcp_sequence(segment.acknowledge) <= fSendMax);
+	if (fSendWindow == 0 && advertisedWindow != 0 && acknowledgementUsable) {
 		// The window has reopened: the probing is over, so stop its timer
 		// (Linux clears ICSK_TIME_PROBE0 the same way). Left running at a
 		// backed-off delay of up to a minute, it fired long after into a
