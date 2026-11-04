@@ -1,0 +1,74 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-0c44a853ab272675f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T032855Z   end: 20261104T032956Z   rc: 0
+# script sha256: c9332ddae60b56d7cbab7315cb9fa8337587e58cdedf4c734897614c9d09e9cd
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/L
+# | cd /opt/wL/hg/generated || exit 1
+# | BASE=$(git -C .. rev-parse HEAD)
+# | echo "base=$BASE"
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f --detach "$BASE" || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/wL/$patch || return 1
+# | 		sha256sum /opt/wL/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wL/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	rm -rf objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 ipv4 ipv6 > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	echo "-- warnings in ipv4.cpp/ipv6.cpp:"
+# | 	grep -A3 'warning:' jam-$label.log | grep -E 'protocols/(ipv6/ipv6|ipv4/ipv4)\.cpp' | head -20
+# | 	mkdir -p /opt/wL/out/$label
+# | 	for t in ipv4 ipv6; do
+# | 		cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/$t/$t /opt/wL/out/$label/$t && sha256sum /opt/wL/out/$label/$t | sed "s|/opt/wL/out/||"
+# | 		aws s3 cp --quiet /opt/wL/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build base none || exit 1
+# | build a1034 1034.patch || exit 1
+# | build a1035 1035.patch || exit 1
+# | build a1036 1036.patch || exit 1
+# | echo XBUILD-DONE
+# ---- raw output ----
+base=88e18b77a3181e20f0cf11021a006745b092c3ca
+JAM base patch=none rc=0 wall=14s failed=0 warnings=122
+-- warnings in ipv4.cpp/ipv6.cpp:
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  base/ipv4
+32bb4e4d36dbd25fd342248008929ae3510c2ac836c0cb7d87c32d617e8176a3  base/ipv6
+d9cdc487f24a4f20b06f49a066e1675e97684914af25ad7308360d6e9bd513f0  /opt/wL/1034.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 42 +++++++++++++++++++++-
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 42 +++++++++++++++++++++-
+ 2 files changed, 82 insertions(+), 2 deletions(-)
+JAM a1034 patch=1034.patch rc=0 wall=7s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+3544136993fa0a810bd0377f912ea96d4c9c5584402fec35331975f085b7235c  a1034/ipv4
+c79885f03792721bf6fd7e561f9a2f1b6b76f97147fc014066f85126aefb2e8f  a1034/ipv6
+c19087ed26c9d4f29c8b1f563511ec087b34da9070e8e4a60748f3bb762c5c56  /opt/wL/1035.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 92 ++++++++++++----------
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 77 ++++++++++--------
+ 2 files changed, 94 insertions(+), 75 deletions(-)
+JAM a1035 patch=1035.patch rc=0 wall=6s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+8da2046de5f6372e65ba528fb63d154de9e347679f3bc230608a2e42ee96716c  a1035/ipv4
+5be7c2db558a02f9d4b70ff3170046d3973b5839fe6354fefcac264884b927e1  a1035/ipv6
+9844d4be382a51e2a775e9f23c46cd59545ad84afe1ae22e9bd36ffe65aa3fa1  /opt/wL/1036.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 89 +++++++++++++++++++++-
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 89 +++++++++++++++++++++-
+ 2 files changed, 170 insertions(+), 8 deletions(-)
+JAM a1036 patch=1036.patch rc=0 wall=6s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+19ce0e39d5a995fb95dc5e81b50ed074b9d18da874f4ad26d12147eed595d2f8  a1036/ipv4
+75696ff11c808ef9888db380c62eaebb6790ad7309240b836b2ced49e80121f7  a1036/ipv6
+XBUILD-DONE
