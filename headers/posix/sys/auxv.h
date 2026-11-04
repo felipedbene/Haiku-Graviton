@@ -98,6 +98,8 @@
 #define HWCAP2_SVEBF16		(1UL << 12)
 #define HWCAP2_I8MM			(1UL << 13)
 #define HWCAP2_BF16			(1UL << 14)
+#define HWCAP2_DGH			(1UL << 15)
+#define HWCAP2_RNG			(1UL << 16)
 
 #endif	/* __aarch64__ */
 

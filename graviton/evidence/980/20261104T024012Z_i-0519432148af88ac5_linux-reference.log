@@ -1,0 +1,217 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-0519432148af88ac5   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux reference (Ubuntu 26.04, c7g.4xlarge): OpenSSL 3.5.9 build, idreg979/rng980/elfmachine1000, openssl speed -evp aes-256-gcm x3
+# start: 20261104T024012Z   end: 20261104T024253Z   rc: 0
+# script sha256: 3cd7b9039cc1d67d9b94605a56bd2e2123c9bf02651e503b508eca849d1ff012
+# ---- script ----
+# | # Linux reference on c7g.4xlarge (same type as the DeBeOS arms): OpenSSL 3.5.9 built as in #930
+# | # (graviton/evidence/930 linux-build-3.5.9), the three repros, and an x86_64 binary for #1000.
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | apt-get update -qq; apt-get install -y -qq --no-install-recommends build-essential perl zlib1g-dev libzstd-dev curl ca-certificates gcc-x86-64-linux-gnu libc6-dev-amd64-cross unzip > /dev/null; echo "apt rc=$?"
+# | command -v aws > /dev/null || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -a; cat /etc/os-release | grep PRETTY; nproc
+# | mkdir -p /opt/o930 && cd /opt/o930 && rm -rf openssl-3.5.9
+# | curl -sSfLo o.tgz https://www.openssl.org/source/openssl-3.5.9.tar.gz || exit 1
+# | echo '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a  o.tgz' | sha256sum -c - || exit 1
+# | tar xzf o.tgz && cd openssl-3.5.9
+# | ./Configure linux-aarch64 --prefix=/opt/o930/inst enable-zlib enable-zstd shared -g -O2 2>&1 | tail -1
+# | make -j16 > /opt/o930/make.log 2>&1; echo "make rc=$?"
+# | make install_sw > /opt/o930/install.log 2>&1; echo "install rc=$?"
+# | mkdir -p /opt/r && cd /opt/r
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet --recursive s3://haiku-graviton-$ACCT-us-west-2/bugfix/A/in/ . --exclude '*.patch'
+# | sha256sum *.c
+# | for p in idreg979 rng980 elfmachine1000; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | printf '#include <stdio.h>\nint main(void){puts("x86_64 hello");return 0;}\n' > hello.c
+# | x86_64-linux-gnu-gcc -static -O2 -o hello.x86_64 hello.c && file hello.x86_64
+# | echo '=== idreg979'; ./idreg979; echo "rc=$?"
+# | echo '=== rng980'; ./rng980; echo "rc=$?"
+# | echo '=== elfmachine1000'; mkdir -p e && cd e && ../elfmachine1000 /usr/bin/true /usr/lib/aarch64-linux-gnu/libz.so.1 ../hello.x86_64; echo "rc=$?"; cd ..
+# | aws s3 cp --quiet hello.x86_64 s3://haiku-graviton-$ACCT-us-west-2/bugfix/A/in/hello.x86_64 && sha256sum hello.x86_64
+# | export LD_LIBRARY_PATH=/opt/o930/inst/lib; O=/opt/o930/inst/bin/openssl
+# | $O version; $O info -cpusettings
+# | for i in 1 2 3; do echo "--- run $i"; $O speed -evp aes-256-gcm 2>&1 | tail -2; done
+# | echo "--- forced OPENSSL_armcap=0xe7d (DeBeOS's pre-fix value)"; OPENSSL_armcap=0xe7d $O speed -evp aes-256-gcm 2>&1 | tail -1
+# ---- raw output ----
+apt rc=0
+Linux ip-10-128-7-55 7.0.0-1016-aws #17-Ubuntu SMP PREEMPT Mon Oct 19 17:54:18 UTC 2026 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 26.04.1 LTS"
+16
+o.tgz: OK
+**********************************************************************
+make rc=0
+install rc=0
+4dde4230258fbc0cd44b593e30b1496d310c3042b9af048e2f624598cbb2bd9e  elfmachine1000.c
+ef776604ea0bea63a69d070c16873f17b3c01726e5aa8e9d7753319fc9dd07c1  idreg979.c
+093b798d35e31db587044f9ba598a55cc5a0059e6c629c4b25839126f746fc9a  rng980.c
+hello.x86_64: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, BuildID[sha1]=62cf6854723c0c2ea061c24dc795341652e20d02, for GNU/Linux 3.2.0, not stripped
+=== idreg979
+AT_HWCAP  0x00000000cfffffff
+AT_HWCAP2 0x000000000001f201
+HWCAP_CPUID set
+reg MIDR_EL1           0x00000000411fd401
+reg S3_0_C0_C0_1       signal 4
+reg S3_0_C0_C0_2       signal 4
+reg S3_0_C0_C0_3       signal 4
+reg S3_0_C0_C0_4       signal 4
+reg MPIDR_EL1          0x0000000080000000
+reg REVIDR_EL1         000000000000000000
+reg S3_0_C0_C0_7       signal 4
+reg ID_PFR0_EL1        signal 4
+reg S3_0_C0_C1_1       signal 4
+reg S3_0_C0_C1_2       signal 4
+reg S3_0_C0_C1_3       signal 4
+reg S3_0_C0_C1_4       signal 4
+reg S3_0_C0_C1_5       signal 4
+reg S3_0_C0_C1_6       signal 4
+reg S3_0_C0_C1_7       signal 4
+reg ID_ISAR0_EL1       000000000000000000
+reg S3_0_C0_C2_1       000000000000000000
+reg S3_0_C0_C2_2       000000000000000000
+reg S3_0_C0_C2_3       000000000000000000
+reg S3_0_C0_C2_4       000000000000000000
+reg S3_0_C0_C2_5       0x0000000000011120
+reg S3_0_C0_C2_6       000000000000000000
+reg S3_0_C0_C2_7       0x0000000001100110
+reg MVFR0_EL1          0x0000000000000200
+reg S3_0_C0_C3_1       0x0000000013211100
+reg S3_0_C0_C3_2       000000000000000000
+reg S3_0_C0_C3_3       000000000000000000
+reg S3_0_C0_C3_4       0x0000000000000010
+reg S3_0_C0_C3_5       000000000000000000
+reg S3_0_C0_C3_6       000000000000000000
+reg S3_0_C0_C3_7       000000000000000000
+reg ID_AA64PFR0_EL1    0x0001000100110011
+reg ID_AA64PFR1_EL1    000000000000000000
+reg ID_AA64PFR2_EL1    000000000000000000
+reg S3_0_C0_C4_3       000000000000000000
+reg ID_AA64ZFR0_EL1    0x0000100000100000
+reg ID_AA64SMFR0_EL1   000000000000000000
+reg S3_0_C0_C4_6       000000000000000000
+reg ID_AA64FPFR0_EL1   000000000000000000
+reg ID_AA64DFR0_EL1    0x0000000000000006
+reg ID_AA64DFR1_EL1    000000000000000000
+reg S3_0_C0_C5_2       000000000000000000
+reg S3_0_C0_C5_3       000000000000000000
+reg ID_AA64AFR0_EL1    000000000000000000
+reg ID_AA64AFR1_EL1    000000000000000000
+reg S3_0_C0_C5_6       000000000000000000
+reg S3_0_C0_C5_7       000000000000000000
+reg ID_AA64ISAR0_EL1   0x1011111110212120
+reg ID_AA64ISAR1_EL1   0x0011100001211032
+reg ID_AA64ISAR2_EL1   000000000000000000
+reg ID_AA64ISAR3_EL1   000000000000000000
+reg S3_0_C0_C6_4       000000000000000000
+reg S3_0_C0_C6_5       000000000000000000
+reg S3_0_C0_C6_6       000000000000000000
+reg S3_0_C0_C6_7       000000000000000000
+reg ID_AA64MMFR0_EL1   0x00000111ff000000
+reg ID_AA64MMFR1_EL1   000000000000000000
+reg ID_AA64MMFR2_EL1   0x0000000100000000
+reg ID_AA64MMFR3_EL1   000000000000000000
+reg ID_AA64MMFR4_EL1   000000000000000000
+reg S3_0_C0_C7_5       000000000000000000
+reg S3_0_C0_C7_6       000000000000000000
+reg S3_0_C0_C7_7       000000000000000000
+MRS into x29 reads MIDR_EL1                                ok
+MRS into x30 reads MIDR_EL1                                ok
+MRS into xzr is skipped, x19/x20/x28 untouched             ok
+ID_PFR0_EL1 (CRm 1, not emulated) raises SIGILL            ok
+SCTLR_EL1 (not an ID register) raises SIGILL               ok
+MIDR_EL1 stable over 100000 reads                          ok
+failures: 0
+rc=0
+=== rng980
+AT_HWCAP  0x00000000cfffffff
+AT_HWCAP2 0x000000000001f201
+HWCAP2_RNG set
+RNDR   executes: 10000/10000 reads succeeded, 0 repeated
+RNDRRS executes: 10000/10000 reads succeeded, 0 repeated
+HWCAP2_RNG agrees with whether RNDR executes               ok
+RNDR: most reads succeed, no value repeats                 ok
+RNDRRS: most reads succeed, no value repeats               ok
+failures: 0
+rc=0
+=== elfmachine1000
+execve ./exe.native                          ran, exit 0                              ok
+dlopen ./lib.native.so                       loaded                                   ok
+execve ./exe.x86_64                          execve: Exec format error                ok
+    dlerror: ./lib.x86_64.so: cannot open shared object file: No such file or directory
+dlopen ./lib.x86_64.so                       refused                                  ok
+execve ./exe.i386                            execve: Exec format error                ok
+    dlerror: ./lib.i386.so: cannot open shared object file: No such file or directory
+dlopen ./lib.i386.so                         refused                                  ok
+execve ./exe.em7777                          execve: Exec format error                ok
+    dlerror: ./lib.em7777.so: cannot open shared object file: No such file or directory
+dlopen ./lib.em7777.so                       refused                                  ok
+execve ./exe.bigendian                       ran, exit 0                              FAIL
+    dlerror: ./lib.bigendian.so: ELF file data encoding not little-endian
+dlopen ./lib.bigendian.so                    refused                                  ok
+execve ../hello.x86_64                       execve: Exec format error                ok
+failures: 1
+rc=1
+a3942dd5247b08fdcebf23664b5a45a1dfc68697b98adb0c27cada6875463276  hello.x86_64
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+OPENSSL_armcap=0x13ffd
+--- run 1
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      67716.89k   251130.18k   788877.99k  2068500.82k  4740489.22k  5162527.40k
+--- run 2
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      67778.84k   251472.23k   789685.50k  2068731.22k  4738356.57k  5166301.18k
+--- run 3
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      67809.03k   251772.25k   789077.33k  2066815.66k  4739604.48k  5161833.81k
+--- forced OPENSSL_armcap=0xe7d (DeBeOS's pre-fix value)
+AES-256-GCM      67186.62k   249222.72k   822570.72k  2015321.04k  3577820.50k  3784982.53k
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+elfmachine1000.c: In function ‘try_exec’:
+elfmachine1000.c:91:17: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   91 |                 write(pipeFDs[1], &error, sizeof(error));
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+elfmachine1000.c: In function ‘main’:
+elfmachine1000.c:128:46: warning: ‘%s’ directive output may be truncated writing up to 255 bytes into a region of size 89 [-Wformat-truncation=]
+  128 |         snprintf(what, sizeof(what), "dlopen %s", label);
+      |                                              ^~
+......
+  176 |                 check_dlopen(lib, lib, !native);
+      |                              ~~~              
+In file included from /usr/include/stdio.h:974,
+                 from elfmachine1000.c:25:
+In function ‘snprintf’,
+    inlined from ‘check_dlopen’ at elfmachine1000.c:128:2,
+    inlined from ‘main’ at elfmachine1000.c:176:3:
+/usr/include/aarch64-linux-gnu/bits/stdio2.h:68:10: note: ‘__builtin___snprintf_chk’ output between 8 and 263 bytes into a destination of size 96
+   68 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   69 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   70 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+elfmachine1000.c: In function ‘main’:
+elfmachine1000.c:128:46: warning: ‘%s’ directive output may be truncated writing up to 255 bytes into a region of size 89 [-Wformat-truncation=]
+  128 |         snprintf(what, sizeof(what), "dlopen %s", label);
+      |                                              ^~
+......
+  176 |                 check_dlopen(lib, lib, !native);
+      |                              ~~~              
+In function ‘snprintf’,
+    inlined from ‘check_dlopen’ at elfmachine1000.c:128:2,
+    inlined from ‘main’ at elfmachine1000.c:176:3:
+/usr/include/aarch64-linux-gnu/bits/stdio2.h:68:10: note: ‘__builtin___snprintf_chk’ output between 8 and 263 bytes into a destination of size 96
+   68 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   69 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   70 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~

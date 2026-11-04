@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-proof2
+# instance: i-08d7a8a5e483ffab4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: prove the relaunched build: trunk rebuild bit-identical, fix symbols/strings, warnings in touched files, SHA256SUMS
+# start: 20261104T024809Z   end: 20261104T024819Z   rc: 0
+# script sha256: 97093facfc89543553ec86c8121c74014075c420fc415883dff18954516565d9
+# ---- script ----
+# | cd /opt/t/out
+# | grep -E "^JAM|identical|trunk [0-9a-f]{40}|arm64_emulate|ELF image is for|refusing|files? changed|^runtime_loader at" xb.log
+# | for l in fix979 fix980 fix1000; do echo "== jam-$l.log warnings/errors in touched files:"; grep -nE "warning:|error:" jam-$l.log | grep -E "arch_cpu|arch_int|elf_load_image|kernel/elf|elf_private" || echo none; grep -cE "^C\+\+|^Cc" jam-$l.log; done
+# | cat SHA256SUMS
+# ---- raw output ----
+trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620 evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+JAM trunk ok wall=9s
+runtime_loader at objects/haiku/arm64/release/system/runtime_loader/runtime_loader
+ 3 files changed, 172 insertions(+), 5 deletions(-)
+ 3 files changed, 18 insertions(+)
+ 3 files changed, 119 insertions(+), 1 deletion(-)
++ echo 'runtime_loader trunk rebuild identical'
+runtime_loader trunk rebuild identical
++ echo 'arm64_emulate_id_register in trunk / fix979:'
+arm64_emulate_id_register in trunk / fix979:
++ grep -c arm64_emulate_id_register
++ grep arm64_emulate_id_register
+ffff000000183de0 T arm64_emulate_id_register
++ grep 'refusing an image'
+elf: refusing an image for e_machine %u, EI_DATA %u (this system: e_machine %u)
++ grep 'ELF image is for'
+runtime_loader: %s: ELF image is for %s (e_machine %u), but this system is %s
+== jam-fix979.log warnings/errors in touched files:
+103:../src/system/kernel/elf.cpp:1267:33: warning: taking address of packed member of 'preloaded_elf64_image' may result in an unaligned pointer value [-Waddress-of-packed-member]
+273
+== jam-fix980.log warnings/errors in touched files:
+103:../src/system/kernel/elf.cpp:1267:33: warning: taking address of packed member of 'preloaded_elf64_image' may result in an unaligned pointer value [-Waddress-of-packed-member]
+273
+== jam-fix1000.log warnings/errors in touched files:
+106:../src/system/kernel/elf.cpp:1281:33: warning: taking address of packed member of 'preloaded_elf64_image' may result in an unaligned pointer value [-Waddress-of-packed-member]
+299
+b14fb2d6330131b731ecd30d604065993d31e0d2265afc8108bf6f5a313e0504  kernel_arm64.fix1000
+b89d010b6340e79cf91abc0fa53bd414e912c6999bbe9b6c5a2a18afe80ae56f  kernel_arm64.fix979
+ed27d941a1b85333863bc47a004873f607615e4fc44bc3d49b1168545fe69bce  kernel_arm64.fix980
+deb1eeb6fb30ee91b5cd2b994372ef5dbf26e3fd69b3adbc8b10d908c8931ac9  kernel_arm64.trunk
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk
+ccfed2ec51c3f8da84eb5e1dbcc16cb85bd32bb61fd729e524b7e787b7abd4c0  runtime_loader.fix1000
+7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  runtime_loader.trunk
