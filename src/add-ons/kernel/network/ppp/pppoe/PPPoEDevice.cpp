@@ -32,25 +32,22 @@ dump_packet(net_buffer *packet)
 	if (!packet)
 		return;
 
-	BufferHeaderReader<uint8> bufferheader(packet);
-	if (bufferheader.Status() != B_OK)
-		return;
-	uint8 &buffer = bufferheader.Data();
-	uint8 *data = &buffer;
-	uint8 buffer[33];
-	uint8 bufferIndex = 0;
+	uint8 data[16];
+	char buffer[sizeof(data) * 2 + 1];
 
-	TRACE("Dumping packet;len=%ld;pkthdr.len=%d\n", packet->m_len,
-		packet->m_flags & M_PKTHDR ? packet->m_pkthdr.len : -1);
+	TRACE("Dumping packet;size=%" B_PRIu32 "\n", packet->size);
 
-	for (uint32 index = 0; index < packet->m_len; index++) {
-		buffer[bufferIndex++] = sDigits[data[index] >> 4];
-		buffer[bufferIndex++] = sDigits[data[index] & 0x0F];
-		if (bufferIndex == 32 || index == packet->m_len - 1) {
-			buffer[bufferIndex] = 0;
-			TRACE("%s\n", buffer);
-			bufferIndex = 0;
+	for (size_t offset = 0; offset < packet->size; offset += sizeof(data)) {
+		size_t chunk = min_c(packet->size - offset, sizeof(data));
+		if (gBufferModule->read(packet, offset, data, chunk) != B_OK)
+			return;
+
+		for (size_t index = 0; index < chunk; index++) {
+			buffer[index * 2] = sDigits[data[index] >> 4];
+			buffer[index * 2 + 1] = sDigits[data[index] & 0x0F];
 		}
+		buffer[chunk * 2] = 0;
+		TRACE("%s\n", buffer);
 	}
 }
 

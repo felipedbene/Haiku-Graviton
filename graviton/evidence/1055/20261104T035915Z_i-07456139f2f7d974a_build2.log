@@ -1,0 +1,42 @@
+start 20261104T035915Z
+combo2=73265b6d60839e3054ac991689313b6e9019db7a
+=== release (DEBUG off) ===
+7f4e2672c5 ipcp: print the uint32 StackControl op with B_PRIu32
+[rel-1055v2] jam modem rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/modem/modem
+445bef3d9a35fb8a7746f42c6c4c106a3b135a98cd585d6e62e45acabae73496  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/modem/modem
+    ...updated 2 target(s)...
+[rel-1055v2] jam ipcp rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ipcp/ipcp
+b0dfd6cfa406c678f20340de4ea0064bbc316a43fdd98256916fa6a0a22175b1  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ipcp/ipcp
+    ...updated 2 target(s)...
+[rel-1055v2] jam pppoe rc=1 errors=5 out=none
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+    ...failed updating 2 target(s)...
+    ...updated 1 target(s)...
+=== DEBUG=1 ===
+7f4e2672c5 ipcp: print the uint32 StackControl op with B_PRIu32
+[dbg-1055v2] jam modem rc=0 errors=0 out=none
+[dbg-1055v2] jam ipcp rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/ipcp/ipcp
+146a72527b8835db752e0577200c0ec41b89cb94e43c0b824618117465fcd351  /opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/ipcp/ipcp
+    ...updated 2 target(s)...
+[dbg-1055v2] jam pppoe rc=1 errors=5 out=none
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+    ...failed updating 2 target(s)...
+73265b6d60 Merge commit '4baaae5db6fd6d5368bd9e2f4de5c455db146cda' into combo2
+[dbg-combo2] jam modem rc=0 errors=0 out=none
+[dbg-combo2] jam ipcp rc=0 errors=0 out=none
+[dbg-combo2] jam pppoe rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe
+902046989651212b51e16d2992362e03b94dd2d2ba29c09a898213eff25b0728  /opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe
+    ...updated 3 target(s)...
+end 20261104T040000Z

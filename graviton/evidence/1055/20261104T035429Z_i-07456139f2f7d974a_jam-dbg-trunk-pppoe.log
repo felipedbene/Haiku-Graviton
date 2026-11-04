@@ -1,0 +1,157 @@
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type regular ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+AddHaikuImagePackages: package bzip2 not available! 
+AddHaikuImagePackages: package ffmpeg6 not available! 
+AddHaikuImagePackages: package glu not available! 
+AddHaikuImagePackages: package gutenprint9 not available! 
+AddHaikuImagePackages: package lame not available! 
+AddHaikuImagePackages: package mesa not available! 
+AddHaikuImagePackages: package mesa_devel not available! 
+AddHaikuImagePackages: package mesa_swpipe not available! 
+AddHaikuImagePackages: package netcat not available! 
+AddHaikuImagePackages: package sharutils not available! 
+AddHaikuImagePackages: package unzip not available! 
+AddHaikuImagePackages: package which not available! 
+AddHaikuImagePackages: package zip not available! 
+AddHaikuImagePackages: package diffutils not available! 
+AddHaikuImagePackages: package gzip not available! 
+AddHaikuImagePackages: package tar not available! 
+AddHaikuImagePackages: package tcpdump not available! 
+...patience...
+...found 8851 target(s)...
+...updating 5 target(s)...
+MkDir1 objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe 
+C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe.o 
+C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.o 
+C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o 
+../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp: In constructor 'DiscoveryPacket::DiscoveryPacket(net_buffer*, uint32)':
+../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+   33 |         uint16 length = ntohs(header.length);
+      |                         ^~~~~
+../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp: In member function 'net_buffer* DiscoveryPacket::ToNetBuffer(uint32)':
+../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+  161 |                 *((uint16*)(header->data + length)) = htons(tag->type);
+      |                                                       ^~~~~
+../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+  169 |         header->length = htons(length);
+      |                          ^~~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp: In function 'void dump_packet(net_buffer*)':
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:35:9: error: 'BufferHeaderReader' was not declared in this scope; did you mean 'NetBufferHeaderReader'?
+   35 |         BufferHeaderReader<uint8> bufferheader(packet);
+      |         ^~~~~~~~~~~~~~~~~~
+      |         NetBufferHeaderReader
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:35:33: error: expected primary-expression before '>' token
+   35 |         BufferHeaderReader<uint8> bufferheader(packet);
+      |                                 ^
+In file included from ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:20:
+../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp: In function 'status_t pppoe_input(void*, net_device*, net_buffer*)':
+../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+  201 |                                 ntohs(linkAddress.sdl_e_type));
+      |                                 ^~~~~
+../headers/private/net/net_stack.h:78:68: note: in definition of macro 'B_NET_FRAME_TYPE'
+   78 | #define B_NET_FRAME_TYPE(super, sub)    (((int32)(super) << 16) | (sub))
+      |                                                                    ^~~
+../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp: In function 'status_t control(uint32, void*, size_t)':
+../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+  313 |                                 if (current->type == IFT_ETHER && current->name) {
+      |                                                                   ~~~~~~~~~^~~~
+In file included from ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPInterface.h:34,
+                 from ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:23:
+../headers/private/net/net_device.h:37:17: note: 'net_device::name' declared here
+   37 |         char    name[IF_NAMESIZE];
+      |                 ^~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:35:35: error: 'bufferheader' was not declared in this scope
+   35 |         BufferHeaderReader<uint8> bufferheader(packet);
+      |                                   ^~~~~~~~~~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:40:15: error: conflicting declaration 'uint8 buffer [33]'
+   40 |         uint8 buffer[33];
+      |               ^~~~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:38:16: note: previous declaration as 'uint8& buffer'
+   38 |         uint8 &buffer = bufferheader.Data();
+      |                ^~~~~~
+In file included from ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPDevice.h:9,
+                 from ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.h:11,
+                 from ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:16:
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:43:65: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+   43 |         TRACE("Dumping packet;len=%ld;pkthdr.len=%d\n", packet->m_len,
+      |                                                                 ^~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPDefs.h:16:52: note: in definition of macro 'TRACE'
+   16 | #define TRACE(format, args...)  dprintf(format, ## args)
+      |                                                    ^~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:44:25: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_flags'; did you mean 'msg_flags'?
+   44 |                 packet->m_flags & M_PKTHDR ? packet->m_pkthdr.len : -1);
+      |                         ^~~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPDefs.h:16:52: note: in definition of macro 'TRACE'
+   16 | #define TRACE(format, args...)  dprintf(format, ## args)
+      |                                                    ^~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:44:35: error: 'M_PKTHDR' was not declared in this scope
+   44 |                 packet->m_flags & M_PKTHDR ? packet->m_pkthdr.len : -1);
+      |                                   ^~~~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPDefs.h:16:52: note: in definition of macro 'TRACE'
+   16 | #define TRACE(format, args...)  dprintf(format, ## args)
+      |                                                    ^~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:44:54: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_pkthdr'
+   44 |                 packet->m_flags & M_PKTHDR ? packet->m_pkthdr.len : -1);
+      |                                                      ^~~~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPDefs.h:16:52: note: in definition of macro 'TRACE'
+   16 | #define TRACE(format, args...)  dprintf(format, ## args)
+      |                                                    ^~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:46:48: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+   46 |         for (uint32 index = 0; index < packet->m_len; index++) {
+      |                                                ^~~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:47:23: error: invalid types 'uint8 {aka unsigned char}[uint8 {aka unsigned char}]' for array subscript
+   47 |                 buffer[bufferIndex++] = sDigits[data[index] >> 4];
+      |                       ^
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:48:23: error: invalid types 'uint8 {aka unsigned char}[uint8 {aka unsigned char}]' for array subscript
+   48 |                 buffer[bufferIndex++] = sDigits[data[index] & 0x0F];
+      |                       ^
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:49:59: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+   49 |                 if (bufferIndex == 32 || index == packet->m_len - 1) {
+      |                                                           ^~~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:50:31: error: invalid types 'uint8 {aka unsigned char}[uint8 {aka unsigned char}]' for array subscript
+   50 |                         buffer[bufferIndex] = 0;
+      |                               ^
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:51:31: error: format '%s' expects argument of type 'char*', but argument 2 has type 'int' [-Werror=format=]
+   51 |                         TRACE("%s\n", buffer);
+      |                               ^~~~~~  ~~~~~~
+      |                                       |
+      |                                       int
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPDefs.h:16:41: note: in definition of macro 'TRACE'
+   16 | #define TRACE(format, args...)  dprintf(format, ## args)
+      |                                         ^~~~~~
+../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:51:33: note: format string is defined here
+   51 |                         TRACE("%s\n", buffer);
+      |                                ~^
+      |                                 |
+      |                                 char*
+      |                                %d
+cc1plus: all warnings being treated as errors
+
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp" -O0 -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -ggdb -DDEBUG=1 -fno-rtti -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -fno-omit-frame-pointer -D_KERNEL_MODE -DARCH_arm64 -D__HAIKU_PRIMARY_PACKAGING_ARCH=\"arm64\" -DHAIKU_DISTRO_COMPATIBILITY_DEFAULT -DHAIKU_TARGET_PLATFORM_HAIKU -DHAIKU_REGULAR_BUILD -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/add-ons/kernel/network/ppp/pppoe -iquote objects/common/add-ons/kernel/network/ppp/pppoe -iquote objects/linux/arm64/common/add-ons/kernel/network/ppp/pppoe -iquote objects/haiku/arm64/common/add-ons/kernel/network/ppp/pppoe -I ../headers/private/. -I ../headers/private/kernel -I ../headers/private/libroot -I ../headers/private/shared -I ../headers/private/kernel/boot/platform/efi -I ../headers/private/kernel/arch/arm64 -I objects/haiku/arm64/common/system/kernel -I ../headers/private/. -I ../headers/private/system -I ../headers/private/system/arch/arm64 -I ../headers/private/net -I ../headers/private/kernel -I ../headers/private/kernel/util -I ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++ -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/aarch64-unknown-haiku -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/backward -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/ext -I ../headers/glibc -I ../headers/posix -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include-fixed -I ../headers -I ../headers/os -I ../headers/os/add-ons -I ../headers/os/add-ons/file_system -I ../headers/os/add-ons/graphics -I ../headers/os/add-ons/input_server -I ../headers/os/add-ons/registrar -I ../headers/os/add-ons/screen_saver -I ../headers/os/add-ons/tracker -I ../headers/os/app -I ../headers/os/device -I ../headers/os/drivers -I ../headers/os/game -I ../headers/os/interface -I ../headers/os/kernel -I ../headers/os/locale -I ../headers/os/media -I ../headers/os/mail -I ../headers/os/midi -I ../headers/os/midi2 -I ../headers/os/net -I ../headers/os/storage -I ../headers/os/support -I ../headers/os/translation -I ../headers/private/. -o "objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o"
+
+...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp" -O0 -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -ggdb -DDEBUG=1 -fno-rtti -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -fno-omit-frame-pointer -D_KERNEL_MODE -DARCH_arm64 -D__HAIKU_PRIMARY_PACKAGING_ARCH=\"arm64\" -DHAIKU_DISTRO_COMPATIBILITY_DEFAULT -DHAIKU_TARGET_PLATFORM_HAIKU -DHAIKU_REGULAR_BUILD -iquote ../build/user_config_headers -iquote ../build/config_headers -iquocc1plus: all warnings being treated as errors
+te ../src/add-ons/kernel/network/ppp/pppoe -iquote objects/common/add-ons/kernel/network/ppp/pppoe -iquote objects/linux/arm64/common/add-ons/kernel/network/ppp/pppoe -iquote objects/haiku/arm64/common/add-ons/kernel/network/ppp/pppoe -I ../headers/private/. -I ../headers/private/kernel -I ../headers/private/libroot -I ../headers/private/shared -I ../headers/private/kernel/boot/platform/efi -I ../headers/private/kernel/arch/arm64 -I objects/haiku/arm64/common/system/kernel -I ../headers/private/. -I ../headers/private/system -I ../headers/private/system/arch/arm64 -I ../headers/private/net -I ../headers/private/kernel -I ../headers/private/kernel/util -I ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++ -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/aarch64-unknown-haiku -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/backward -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/ext -I ../headers/glibc -I ../headers/posix -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include-fixed -I ../headers -I ../headers/os -I ../headers/os/add-ons -I ../headers/os/add-ons/file_system -I ../headers/os/add-ons/graphics -I ../headers/os/add-ons/input_server -I ../headers/os/add-ons/registrar -I ../headers/os/add-ons/screen_saver -I ../headers/os/add-ons/tracker -I ../headers/os/app -I ../headers/os/device -I ../headers/os/drivers -I ../headers/os/game -I ../headers/os/interface -I ../headers/os/kernel -I ../headers/os/locale -I ../headers/os/media -I ../headers/os/mail -I ../headers/os/midi -I ../headers/os/midi2 -I ../headers/os/net -I ../headers/os/storage -I ../headers/os/support -I ../headers/os/translation -I ../headers/private/. -o "objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe.o"
+
+...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp" -O0 -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -ggdb -DDEBUG=1 -fno-rtti -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -fno-omit-frame-pointer -D_KERNEL_MODE -DARCH_arm64 -D__HAIKU_PRIMARY_PACKAGING_ARCH=\"arm64\" -DHAIKU_DISTRO_COMPATIBILITY_DEFAULT -DHAIKU_TARGET_PLATFORM_HAIKU -DHAIKU_REGULAR_BUILD -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/add-ons/kernel/network/ppp/pppoe -iquote objects/common/add-ons/kernel/network/ppp/pppoe -iquote objects/linux/arm64/common/add-ons/kernel/network/ppp/pppoe -iquote objects/haiku/arm64/common/add-ons/kernel/network/ppp/pppoe -I ../headers/private/. -I ../headers/private/kernel -I ../headers/private/libroot -I ../headers/private/shared -I ../headers/private/kernel/boot/platform/efi -I ../headers/private/kernel/arch/arm64 -I objects/haiku/arm64/common/system/kernel -I ../headers/private/. -I ../headers/private/system -I ../headers/private/system/arch/arm64 -I ../headers/private/net -I ../headers/private/kernel -I ../headers/private/kernel/util -I ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++ -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/aarch64-unknown-haiku -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/backward -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/ext -I ../headers/glibc -I ../headers/posix -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include-fixed -I ../headers -I ../headers/os -I ../headers/os/add-ons -I ../headers/os/add-ons/file_system -I ../headers/os/add-ons/graphics -I ../headers/os/add-ons/input_server -I ../headers/os/add-ons/registrar -I ../headers/os/add-ons/screen_saver -I ../headers/os/add-ons/tracker -I ../headers/os/app -I ../headers/os/device -I ../headers/os/drivers -I ../headers/os/game -I ../headers/os/interface -I ../headers/os/kernel -I ../headers/os/locale -I ../headers/os/media -I ../headers/os/mail -I ../headers/os/midi -I ../headers/os/midi2 -I ../headers/os/net -I ../headers/os/storage -I ../headers/os/support -I ../headers/os/translation -I ../headers/private/. -o "objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.o"
+
+...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.o ...
+
+BUILD FAILURE:
+...failed updating 3 target(s)...
+...skipped 1 target(s)...
+...updated 1 target(s)...
