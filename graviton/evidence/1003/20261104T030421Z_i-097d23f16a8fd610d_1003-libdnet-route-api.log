@@ -1,0 +1,69 @@
++ uname -a
+Haiku ip-10-128-10-254.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 arm64 Haiku
+fb6a988030da35158d088f0e7aed04acd0da8d46273ab7f6d86752777fbcf06f  /boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/src/route-haiku.c
++ D=/boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped
++ sha256sum /boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/src/route-haiku.c
++ cd /tmp
++ gcc -Wall -o route1003 route1003.c -I/boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/include /boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/src/.libs/libdnet.a -lnetwork
++ ./route1003 10.128.13.64 10.128.9.200 127.0.0.1 ::1 8.8.8.8 -a 10.200.0.0/16 10.128.8.1 -a 10.201.1.1 10.128.8.1
+  loop             127.0.0.1            via 0.0.0.0
+  /dev/net/ena/0   10.128.10.254        via 0.0.0.0
+  /dev/net/ena/0   10.128.8.0/22        via 0.0.0.0
+  loop             127.0.0.0/8          via 0.0.0.0
+  /dev/net/ena/0   0.0.0.0/0            via 10.128.8.1
+  loop             ::1                  via ::
+  loop             ::1                  via ::
+route_loop rc=0
+route_get 10.128.13.64 -> /dev/net/ena/0 via 10.128.8.1
+route_get 10.128.9.200 -> /dev/net/ena/0 via 0.0.0.0
+route_get 127.0.0.1 -> loop via 0.0.0.0
+route_get ::1 -> loop via ::
+route_get 8.8.8.8 -> /dev/net/ena/0 via 10.128.8.1
+route_add 10.200.0.0/16 via 10.128.8.1 rc=0
+  loop             127.0.0.1            via 0.0.0.0
+  /dev/net/ena/0   10.128.10.254        via 0.0.0.0
+  /dev/net/ena/0   10.128.8.0/22        via 0.0.0.0
+  /dev/net/ena/0   10.200.0.0/16        via 10.128.8.1
+  loop             127.0.0.0/8          via 0.0.0.0
+  /dev/net/ena/0   0.0.0.0/0            via 10.128.8.1
+  loop             ::1                  via ::
+  loop             ::1                  via ::
+route_delete rc=0
+  loop             127.0.0.1            via 0.0.0.0
+  /dev/net/ena/0   10.128.10.254        via 0.0.0.0
+  /dev/net/ena/0   10.128.8.0/22        via 0.0.0.0
+  loop             127.0.0.0/8          via 0.0.0.0
+  /dev/net/ena/0   0.0.0.0/0            via 10.128.8.1
+  loop             ::1                  via ::
+  loop             ::1                  via ::
+route_add 10.201.1.1 via 10.128.8.1 rc=0
+  loop             127.0.0.1            via 0.0.0.0
+  /dev/net/ena/0   10.128.10.254        via 0.0.0.0
+  /dev/net/ena/0   10.201.1.1           via 10.128.8.1
+  /dev/net/ena/0   10.128.8.0/22        via 0.0.0.0
+  loop             127.0.0.0/8          via 0.0.0.0
+  /dev/net/ena/0   0.0.0.0/0            via 10.128.8.1
+  loop             ::1                  via ::
+  loop             ::1                  via ::
+route_delete rc=0
+  loop             127.0.0.1            via 0.0.0.0
+  /dev/net/ena/0   10.128.10.254        via 0.0.0.0
+  /dev/net/ena/0   10.128.8.0/22        via 0.0.0.0
+  loop             127.0.0.0/8          via 0.0.0.0
+  /dev/net/ena/0   0.0.0.0/0            via 10.128.8.1
+  loop             ::1                  via ::
+  loop             ::1                  via ::
++ route
+IPv4 routing table:
+    Destination         Netmask         Gateway Flags  Interface
+      127.0.0.1               -               - --HL-- loop
+  10.128.10.254               -               - --HL-- /dev/net/ena/0
+     10.128.8.0   255.255.252.0               - ------ /dev/net/ena/0
+      127.0.0.0       255.0.0.0               - ------ loop
+        0.0.0.0         0.0.0.0      10.128.8.1 D----- /dev/net/ena/0
+
+IPv6 routing table:
+                            Destination                                     Gateway Flags  Interface
+                                    ::1                                           - --HL-- loop
+                                    ::1/128                                       - ------ loop
+
