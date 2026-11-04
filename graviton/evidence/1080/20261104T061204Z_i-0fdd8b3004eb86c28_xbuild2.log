@@ -1,0 +1,173 @@
+# NOTE: c1080/c1079 in this build are the pre-review versions; superseded by xbuild3 (after the review fixes). b1064 is unchanged.
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2
+# instance: i-0fdd8b3004eb86c28   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ext2: b1064 (PR #1081 tip), c1080, c1079, b1064 again
+# start: 20261104T061204Z   end: 20261104T061245Z   rc: 0
+# script sha256: bddbebfae37c48ce26419c62c921312f2048edad72d4539ce73a1605596c2cdb
+# ---- script ----
+# | # Build the ext2 module (method of #1011's xbuild), revision pinned to canonical's hrev59996:
+# | #  b1064: the #1064 branch tip 0da661af9b (PR #1081), the base both changes stack on
+# | #  c1080: b1064 + fix1080.patch (sparse extent shrink)
+# | #  c1079: b1064 + fix1080.patch + fix1079.patch (fail a resize that can't get its blocks)
+# | # and b1064 again from a clean module dir to show the build reproduces bit for bit.
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | T=0da661af9b
+# | mbuild() {	# mbuild <label> [patch...]
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	rm -rf $A/ext2
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok wall=$(( $(date +%s) - s ))s"
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/" | grep -v "address-of-packed-member"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | mbuild b1064 || exit 1
+# | mbuild c1080 fix1080.patch || exit 1
+# | mbuild c1079 fix1080.patch fix1079.patch || exit 1
+# | mbuild b1064r || exit 1
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | cmp ext2.b1064 ext2.b1064r && echo "ext2 b1064 rebuild identical"
+# | cmp -s ext2.b1064 ext2.c1080 && { echo "c1080 identical to b1064?"; exit 1; }
+# | cmp -s ext2.c1080 ext2.c1079 && { echo "c1079 identical to c1080?"; exit 1; }
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for l in b1064 c1080 c1079; do echo "$l: ExtentStream::_Enlarge symbols: $(${X}nm -C ext2.$l | grep -c 'ExtentStream::_Enlarge(')"; done
+# | sha256sum ext2.b1064 ext2.b1064r ext2.c1080 ext2.c1079 | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/Q/out2/ && echo uploaded
+# ---- raw output ----
+JAM ext2 b1064 ok wall=13s
+ .../kernel/file_systems/ext2/ExtentStream.cpp      | 38 ++++++++++++++++++----
+ src/add-ons/kernel/file_systems/ext2/ext2.h        |  9 +++++
+ 2 files changed, 40 insertions(+), 7 deletions(-)
+JAM ext2 c1080 ok wall=5s
+ .../kernel/file_systems/ext2/DataStream.cpp        | 42 ++++++++--
+ .../kernel/file_systems/ext2/ExtentStream.cpp      | 92 ++++++++++++++++------
+ .../kernel/file_systems/ext2/ExtentStream.h        |  4 +
+ src/add-ons/kernel/file_systems/ext2/Inode.cpp     | 38 ++++++---
+ src/add-ons/kernel/file_systems/ext2/ext2.h        |  9 +++
+ 5 files changed, 143 insertions(+), 42 deletions(-)
+JAM ext2 c1079 ok wall=6s
+JAM ext2 b1064r ok wall=5s
+ext2 b1064 rebuild identical
+b1064: ExtentStream::_Enlarge symbols: 0
+c1080: ExtentStream::_Enlarge symbols: 0
+c1079: ExtentStream::_Enlarge symbols: 2
+cddf0caab37d389e7a3f8f6e0de0df2965a6693c3e7b8c461c71c4f6222a9e90  ext2.b1064
+cddf0caab37d389e7a3f8f6e0de0df2965a6693c3e7b8c461c71c4f6222a9e90  ext2.b1064r
+39451336b53ae1393547c5042d380fd0f9d213298c219bf3ab443868af430d5d  ext2.c1080
+2a617f3129503eae16011f10a075eaf82547b5bcf9750403f39ece885e110ee7  ext2.c1079
+uploaded
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ T=0da661af9b
++ mbuild b1064
++ l=b1064
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793772727
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 b1064 ok wall=13s'
++ grep -E 'warning:|error:' /opt/t/out/jam-b1064.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.b1064
++ mbuild c1080 fix1080.patch
++ l=c1080
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793772740
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 c1080 ok wall=5s'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1080.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1080
++ mbuild c1079 fix1080.patch fix1079.patch
++ l=c1079
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1079.patch
++ git -C .. apply /opt/t/out/fix1079.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793772745
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 c1079 ok wall=6s'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1079.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1079
++ mbuild b1064r
++ l=b1064r
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793772751
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 b1064r ok wall=5s'
++ grep -E 'warning:|error:' /opt/t/out/jam-b1064r.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.b1064r
++ git -C .. checkout -q -f 0da661af9b
++ cd /opt/t/out
++ cmp ext2.b1064 ext2.b1064r
++ echo 'ext2 b1064 rebuild identical'
++ cmp -s ext2.b1064 ext2.c1080
++ cmp -s ext2.c1080 ext2.c1079
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ for l in b1064 c1080 c1079
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C ext2.b1064
+++ grep -c 'ExtentStream::_Enlarge('
++ echo 'b1064: ExtentStream::_Enlarge symbols: 0'
++ for l in b1064 c1080 c1079
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C ext2.c1080
+++ grep -c 'ExtentStream::_Enlarge('
++ echo 'c1080: ExtentStream::_Enlarge symbols: 0'
++ for l in b1064 c1080 c1079
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C ext2.c1079
+++ grep -c 'ExtentStream::_Enlarge('
++ echo 'c1079: ExtentStream::_Enlarge symbols: 2'
++ sha256sum ext2.b1064 ext2.b1064r ext2.c1080 ext2.c1079
++ tee SHA256SUMS
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/Q/out2/
++ echo uploaded

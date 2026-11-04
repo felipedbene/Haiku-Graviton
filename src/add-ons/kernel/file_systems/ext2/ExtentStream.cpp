@@ -205,7 +205,13 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 				stream->extent_header.NumEntries() - 1];
 			TRACE("Enlarge() last %" B_PRIu64 " allocatedPos %" B_PRIu64 "\n",
 				last.PhysicalBlock() + last.Length(), fAllocatedPos);
+			// The blocks must follow on logically too: a sparse file (made
+			// by Linux) can end in a hole, and then the new blocks start a
+			// new extent past it. A preallocated (uninitialized) extent can't
+			// take written blocks either.
 			if (last.PhysicalBlock() + last.Length() == fAllocatedPos
+				&& last.LogicalBlock() + last.Length() == fNumBlocks
+				&& !last.IsUninitialized()
 				&& (last.Length() + allocated) <= EXT2_EXTENT_MAX_LENGTH) {
 				if (stream != fStream) {
 					stream = (ext2_extent_stream *)cached.SetToWritable(
@@ -421,24 +427,42 @@ ExtentStream::Shrink(Transaction& transaction, off_t& numBlocks)
 				panic("Shrink() invalid header\n");
 		}
 		
+		if (stream == fStream && stream->extent_header.NumEntries() == 0) {
+			// An empty tree: whatever is left above the target is a hole.
+			// (An empty leaf below the root is removed further down.)
+			fNumBlocks = targetBlocks;
+			break;
+		}
+
+		// fNumBlocks comes from the file size, and a sparse file (made by
+		// Linux, say) need not have an extent reaching up to it: the last
+		// extent can end below it, or below the target. Only the blocks of
+		// an extent that lie at or above the target are freed.
 		int32 index = stream->extent_header.NumEntries() - 1;
 		status_t status = B_OK;
 		while (index >= 0 && targetBlocks < fNumBlocks) {
 			ext2_extent_entry &last = stream->extent_entries[index];
-			if (last.LogicalBlock() + last.Length() < targetBlocks) {
-				status = B_BAD_DATA;
+			off_t start = last.LogicalBlock();
+			off_t end = start + last.Length();
+			if (end <= targetBlocks) {
+				// the rest, up to fNumBlocks, is a hole
+				fNumBlocks = targetBlocks;
 				break;
 			}
-			uint16 length = min_c(last.Length(), fNumBlocks - targetBlocks);
-			fsblock_t block = last.PhysicalBlock() + last.Length() - length;
+			if (start < targetBlocks)
+				start = targetBlocks;
+			uint16 length = end - start;
+			fsblock_t block = last.PhysicalBlock()
+				+ (start - last.LogicalBlock());
 			TRACE("Shrink() free block %" B_PRIu64 " length %d\n", block,
-				length); 
+				length);
 			status = fVolume->FreeBlocks(transaction, block, length);
 			if (status != B_OK)
 				break;
-			fNumBlocks -= length;
+			fNumBlocks = start;
 			numBlocks += length;
-			stream->extent_entries[index].SetLength(last.Length() - length);
+			stream->extent_entries[index].SetLength(last.Length() - length,
+				last.IsUninitialized());
 			TRACE("Shrink() new length for %" B_PRId32 ": %d\n", index, last.Length());
 			if (last.Length() != 0)
 				break;

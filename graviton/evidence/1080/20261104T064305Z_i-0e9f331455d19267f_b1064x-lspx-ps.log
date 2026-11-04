@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b1064x-lspx-ps
+# instance: i-0e9f331455d19267f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm b1064: is truncate still running in the kernel after the lspx command timed out
+# start: 20261104T064305Z   end: 20261104T064322Z   rc: 0
+# script sha256: cbec4c5fd2b390acd9c5619adb565f61735d385490d2f442cefeac6aeac36f97
+# ---- script ----
+# | # arm c1, after the lspx command timed out: is truncate still running (spinning in the kernel)?
+# | ps | grep -E "truncate|PID" | grep -v grep
+# | for i in 1 2 3; do ps -o 2>/dev/null; top -n 1 -i 1 2>/dev/null | head -12; sleep 2; done 2>&1 | grep -iE "truncate|kernel|cpu" | head -12
+# ---- raw output ----
+/boot/system/bin/truncate -s 3000 xa                 414        1    0    0 
+  THID   TOTAL    USER  KERNEL %CPU        TEAM NAME THREAD NAME      
+   414 1000.00    0.00 1000.00 12.5 truncate -s 3000 truncate 
+  THID   TOTAL    USER  KERNEL %CPU        TEAM NAME THREAD NAME      
+   414 1000.00    0.00  999.00 12.5 truncate -s 3000 truncate 
+  THID   TOTAL    USER  KERNEL %CPU        TEAM NAME THREAD NAME      
+   414  999.99    0.00  999.00 12.5 truncate -s 3000 truncate 
