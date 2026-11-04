@@ -1,0 +1,45 @@
+# 20261104T023420Z instance=i-03a86d3d76301b0ee label=987-before-canonical-inventory
+# script:
+#   uname -a
+#   pkgman search -i -a -D openssh 2>&1 | head -20
+#   ls -la /boot/system/settings/ssh/ 2>&1
+#   ls -la /boot/system/boot/post-install/ 2>&1 | head
+#   ps | grep -E "app_server|registrar|sshd" | grep -v grep
+# output:
+ssm-run: command e730acbf-3a73-494e-b83d-6dcf226bfc6c on i-03a86d3d76301b0ee (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-11061-d647e5)
+Haiku ip-10-128-9-169.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+Repository  Name                   Version                        Arch 
+-----------------------------------------------------------------------
+<system>    amazon_ssm_agent       3.3.3270.0-4                   arm64
+<system>    bash                   5.3_bootstrap-1                arm64
+<system>    ca_root_certificates   2026_07_16-1                   any  
+<system>    coreutils              9.9_bootstrap-1                arm64
+<system>    debeos_cloudwatch      0.1.0-1                        arm64
+<system>    findutils              4.9.0_bootstrap-1              arm64
+<system>    freetype               2.6.3_bootstrap-1              arm64
+<system>    gawk                   3.1.8_bootstrap-2              arm64
+<system>    gcc_syslibs            13.3.0_2026_03_29_bootstrap-1  arm64
+<system>    grep                   3.11_bootstrap-1               arm64
+<system>    haiku                  r1~beta6_hrev59996-1           arm64
+<system>    haiku_datatranslators  r1~beta6_hrev59996-1           arm64
+<system>    haiku_loader           r1~beta6_hrev59996-1           arm64
+<system>    icu74                  74.1_bootstrap-1               arm64
+<system>    jasper                 2.0.33-2                       arm64
+<system>    less                   668_bootstrap-1                arm64
+<system>    libjpeg_turbo          3.1.4.1-1                      arm64
+<system>    libpng16               1.6.53-1                       arm64
+total 36
+drwxr-xr-x 1 baron root 2048 Nov  4 02:32 .
+drwxr-xr-x 1 baron root 2048 Nov  4 02:32 ..
+-rw-r--r-- 1 baron root 1495 Nov  4 00:14 ssh_config
+-rw------- 1 baron root  411 Nov  4 02:32 ssh_host_ed25519_key
+-rw-r--r-- 1 baron root   96 Nov  4 02:32 ssh_host_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  4 02:32 ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 02:32 ssh_host_mldsa44-ed25519_key.pub
+-rw-r--r-- 1 baron root 2321 Nov  4 00:14 sshd_config
+ls: cannot access '/boot/system/boot/post-install/': No such file or directory
+/boot/system/servers/registrar                        55        6    0    0 
+/boot/system/bin/sshd -D                              85        1    0    0 
+/boot/system/servers/app_server                      151       16    0    0 
+ssm-run: Success
+# ssm-run rc=0

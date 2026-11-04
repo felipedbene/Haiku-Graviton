@@ -1,0 +1,162 @@
+# 20261104T024429Z instance=i-02131ca208825c095 label=987-after-local-install
+# script:
+#   uname -a
+#   sha256sum /boot/home/openssh-10.4p1-3-arm64.hpkg
+#   catattr SYS:PACKAGE_FILE /boot/system/bin/sshd
+#   ls -la /boot/system/settings/ssh/
+#   printf '1\ny\n' | pkgman install /boot/home/openssh-10.4p1-3-arm64.hpkg 2>&1 | tail -14
+#   echo "pkgman rc=$?"
+#   grep -i -E "sshd_keymaker|post-installation" /var/log/syslog | tail -5
+#   echo "== installed"
+#   pkgman search -i -a -D openssh 2>&1 | grep -i ssh
+#   ls -la /boot/system/boot/post-install/
+#   ls -la /boot/system/settings/ssh/ssh_host_*
+#   for k in /boot/system/settings/ssh/ssh_host_*_key.pub; do ssh-keygen -l -f $k; done
+#   echo "== re-run headless, all host keys removed"
+#   mkdir -p /tmp/k987 && mv /boot/system/settings/ssh/ssh_host_* /tmp/k987/
+#   /boot/system/boot/post-install/sshd_keymaker.sh; echo "keymaker rc=$?"
+#   ls -la /boot/system/settings/ssh/ssh_host_*
+#   echo "== re-run, keys present"
+#   /boot/system/boot/post-install/sshd_keymaker.sh; echo "keymaker rc=$?"
+#   echo "== failing ssh-keygen first on PATH"
+#   mkdir -p /tmp/fk && printf '#!/bin/sh\nexit 3\n' > /tmp/fk/ssh-keygen && chmod +x /tmp/fk/ssh-keygen
+#   PATH=/tmp/fk:$PATH /boot/system/boot/post-install/sshd_keymaker.sh; echo "keymaker rc=$?"
+# output:
+ssm-run: command b3e61f2e-4d50-4f18-a80b-f22d051d03f4 on i-02131ca208825c095 (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-21852-8e8d28)
+Haiku ip-10-128-13-48.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+991879e6b310f562162c160660898301bb5b4e7c4a62c2bfde875bbae13260eb  /boot/home/openssh-10.4p1-3-arm64.hpkg
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
+total 36
+drwxr-xr-x 1 baron root 2048 Nov  4 02:43 .
+drwxr-xr-x 1 baron root 2048 Nov  4 02:43 ..
+-rw-r--r-- 1 baron root 1495 Nov  4 00:14 ssh_config
+-rw------- 1 baron root  411 Nov  4 02:43 ssh_host_ed25519_key
+-rw-r--r-- 1 baron root   96 Nov  4 02:43 ssh_host_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  4 02:43 ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 02:43 ssh_host_mldsa44-ed25519_key.pub
+-rw-r--r-- 1 baron root 2321 Nov  4 00:14 sshd_config
+  solution 2:
+    - do not install "pkg:openssh-10.4p1-3-arm64"
+Please select a solution, skip the problem for now or quit.
+select [1...2/s/q]: The following changes will be made:
+  in system:
+    install package libedit-20230828_3.1-1 from repository DeBeOS
+    install package openssh-10.4p1-3 from local file
+    uninstall package openssh_debeos-10.4p1-1
+Continue? [yes/no] (yes) :        libedit-20230828_3.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libedit-20230828_3.1-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_02:44:32"
+[system] Cleaning up ...
+[system] Done.
+pkgman rc=0
+== installed
+<system>    openssh                10.4p1-3                       arm64
+total 3
+dr-xr-xr-x 1 baron root    0 Nov  4 02:41 .
+dr-xr-xr-x 1 baron root    0 Nov  4 00:14 ..
+-r-xr-xr-x 1 baron root  903 Nov  4 02:41 fix_openssh_config_paths.sh
+-r-xr-xr-x 1 baron root 1454 Nov  4 02:41 sshd_keymaker.sh
+-rw------- 1 baron root  545 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_ecdsa_key
+-rw-r--r-- 1 baron root  210 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_ecdsa_key.pub
+-rw------- 1 baron root  411 Nov  4 02:43 /boot/system/settings/ssh/ssh_host_ed25519_key
+-rw-r--r-- 1 baron root   96 Nov  4 02:43 /boot/system/settings/ssh/ssh_host_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  4 02:43 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 02:43 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root 4051 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1926 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-rw------- 1 baron root 2643 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_rsa_key
+-rw-r--r-- 1 baron root  602 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_rsa_key.pub
+256 SHA256:udl0bIBwmK38TSMvTAPIzjtC+34N9OGx+1oPABSPvNI baron@ip-10-128-13-48.us-west-2.compute.internal (ECDSA)
+256 SHA256:IK2BmlP3KzsKKCjrciveMm8X/6IM2MVAY6dWq8q/UFs baron@shredder (ED25519)
+256 SHA256:/18zoieW5pt11VPlSdzz33wZjqM6ar3+bOY8M2xA+Pg baron@shredder (MLDSA44-ED25519)
+256 SHA256:3lX9cTTWZGVJvMLQfroMhV6AmiZASuXSdRUtB7/LaCU baron@ip-10-128-13-48.us-west-2.compute.internal (MLDSA44-ED25519)
+3072 SHA256:bdYzT8n5q7RtPnR3wkI4reN/5nIlpEoajisXC+lK5GA baron@ip-10-128-13-48.us-west-2.compute.internal (RSA)
+== re-run headless, all host keys removed
+Generating public/private ecdsa key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_ecdsa_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_ecdsa_key.pub
+The key fingerprint is:
+SHA256:gtKUfVgQyedobFzD6hwACvlRuA9TyNIVF6P6AVATfmo baron@ip-10-128-13-48.us-west-2.compute.internal
+The key's randomart image is:
++---[ECDSA 256]---+
+|o==B+o**.        |
+|++*.o=o+=        |
+|.oo+=+o*..       |
+|  =B .O..        |
+|  E++=..S        |
+| . o..o.         |
+|    .            |
+|                 |
+|                 |
++----[SHA256]-----+
+Generating public/private rsa key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_rsa_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_rsa_key.pub
+The key fingerprint is:
+SHA256:/YXD1SzEq8iXONRbePSQWDHq2R1G7Sz97yAudzhiCH4 baron@ip-10-128-13-48.us-west-2.compute.internal
+The key's randomart image is:
++---[RSA 3072]----+
+|             +=+.|
+|            .o*+.|
+|           ..ooXo|
+|         ..oo=*o*|
+|        So.o**o.o|
+|      .   =.=o  .|
+|     . . . oo.. .|
+|      . E +.+....|
+|       . . +.o ..|
++----[SHA256]-----+
+Generating public/private ed25519 key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_ed25519_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_ed25519_key.pub
+The key fingerprint is:
+SHA256:tG+A0ci2w3FOMl8/xYJuN6j8RdY14Zvvj5BHb/CZH0g baron@ip-10-128-13-48.us-west-2.compute.internal
+The key's randomart image is:
++--[ED25519 256]--+
+|               . |
+|     . o   . .. .|
+|      O = o . oo.|
+|     o & + o + .+|
+|      = S + BE+o |
+|       o = +.=.++|
+|        o o +..+=|
+|         o . o +o|
+|          .   . =|
++----[SHA256]-----+
+Generating public/private mldsa44-ed25519 key pair.
+Your identification has been saved in /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+Your public key has been saved in /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+The key fingerprint is:
+SHA256:0+kawSq7qElpBXqBXsDLJ3zUeGgHz7iDXlU/hlbsx4c baron@ip-10-128-13-48.us-west-2.compute.internal
+The key's randomart image is:
++[MLDSA44-ED25519-+
+|.. .=  ...       |
+| o.=++. +.       |
+|+.=oo+ o.+. .    |
+|o=++o ...o.E .   |
+|.o==    S + .    |
+|..+ .  . +       |
+| =  . . . .      |
+|o. . o   o       |
+|o.. o.  .        |
++----[SHA256]-----+
+ssh-keygen: generating new host keys: MLDSA44-ED25519 
+keymaker rc=0
+-rw------- 1 baron root  557 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_ecdsa_key
+-rw-r--r-- 1 baron root  210 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_ecdsa_key.pub
+-rw------- 1 baron root  452 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_ed25519_key
+-rw-r--r-- 1 baron root  130 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_ed25519_key.pub
+-rw------- 1 baron root 4051 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1926 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root 4051 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1926 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-rw------- 1 baron root 2643 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_rsa_key
+-rw-r--r-- 1 baron root  602 Nov  4 02:44 /boot/system/settings/ssh/ssh_host_rsa_key.pub
+== re-run, keys present
+keymaker rc=0
+== failing ssh-keygen first on PATH
+keymaker rc=1
+sshd_keymaker: ssh-keygen -A failed
+ssm-run: Success
+# ssm-run rc=0

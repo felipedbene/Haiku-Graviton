@@ -20,7 +20,10 @@ LICENSE="OpenSSH"
 # in the public headers from 32 to 64 bits under the same soname (lib:libcrypto = 3);
 # ssh-keygen imports BN_add_word, BN_mod_word and BN_set_word. (b) the headless keymaker
 # fix for issue 987. Otherwise HaikuPorts abfcb50d's openssh-10.4p1.recipe unchanged.
-REVISION="2"
+# 3, not 2: 2 wrote the keymaker without its execute bit, so the package daemon,
+# which runs post-install scripts with system(3), got exit 126 and generated no
+# host keys at all (issue 987).
+REVISION="3"
 SOURCE_URI="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$portVersion.tar.gz"
 CHECKSUM_SHA256="ef6026dd2aea8d56059638d5d3262902c892ceba9f88395835e0d06d3fb63238"
 PATCHES="openssh-$portVersion.patchset"
@@ -132,7 +135,7 @@ _progress () {
 		--icon /system/kernel_`uname -p` \
 		--messageID $0_$$ \
 		--title "Generating ssh keys..." \
-		--progress "$1" "$2" >/dev/null
+		--progress "$1" "$2" >/dev/null 2>&1
 }
 
 status=0
@@ -176,6 +179,9 @@ _keygen -A
 _progress 1.0 ""
 exit $status
 KEYMAKER
+	# The package daemon runs a post-install script as a command, so it
+	# must be executable; cp of the additional file used to carry the mode.
+	chmod 755 $postInstallDir/sshd_keymaker.sh
 	cp -f $portDir/additional-files/fix_openssh_config_paths.sh $postInstallDir
 
 	install -m 755 contrib/ssh-copy-id $binDir
