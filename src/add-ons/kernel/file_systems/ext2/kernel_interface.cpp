@@ -1065,6 +1065,16 @@ ext2_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 		if (status != B_OK)
 			ERROR("Error while unlinking existing destination\n");
 
+		// The replaced directory's ".." held a link on its parent. A
+		// directory moved in from elsewhere gets that link back below.
+		if (existent->IsDirectory()) {
+			status = newDirectory->Unlink(transaction);
+			if (status != B_OK) {
+				ERROR("Error while decrementing hardlink count on the "
+					"destination folder\n");
+			}
+		}
+
 		entry_cache_remove(volume->ID(), newDirectory->ID(), newName);
 
 		notify_entry_removed(volume->ID(), newDirectory->ID(), newName,
