@@ -20,6 +20,8 @@
  *            it with SIOCCPACKETCAP, closes the socket
  *   capture-race: two threads start and stop a capture on one socket at
  *            once; then a fresh capture must still receive
+ *   bind-during-stop: one thread binds a socket to 0x88b5 while the main
+ *            thread stops that socket's capture
  * A third thread reports progress every second; a phase that stops making
  * progress for 15 s is reported as a HANG (a deadlocked thread cannot be
  * killed, so the process then stays behind).
@@ -154,6 +156,41 @@ race_thread(void* arg)
 }
 
 
+/* Binds the socket the main thread hands over, while the main thread stops
+ * that socket's capture. */
+static volatile int sBindFd = -1;
+static volatile int sBindDone;
+static volatile long sBindOk, sBindBusy;
+static uint8_t sMacCopy[6];
+
+
+static void*
+bind_thread(void* arg)
+{
+	struct sockaddr_dl b;
+	memset(&b, 0, sizeof(b));
+	b.sdl_len = sizeof(b);
+	b.sdl_family = AF_LINK;
+	b.sdl_type = IFT_ETHER;
+	b.sdl_e_type = htons(0x88b5);
+	b.sdl_alen = 6;
+	memcpy(LLADDR(&b), sMacCopy, 6);
+	while (!sStop) {
+		int fd = sBindFd;
+		if (fd < 0) {
+			continue;
+		}
+		if (bind(fd, (struct sockaddr*)&b, sizeof(b)) == 0)
+			sBindOk++;
+		else
+			sBindBusy++;
+		sBindFd = -1;
+		sBindDone = 1;
+	}
+	return NULL;
+}
+
+
 int
 main(int argc, char** argv)
 {
@@ -281,6 +318,40 @@ main(int argc, char** argv)
 			" frames written %ld\n", "capture-race", pass ? "PASS" : "FAIL",
 			iterations, race.started[0], race.started[1], now() - start, got,
 			sWritten);
+		fflush(stdout);
+		failures += !pass;
+	}
+
+	/* A typed bind while the socket's capture is being stopped. */
+	{
+		sPhase = "bind-during-stop";
+		memcpy(sMacCopy, sMac, 6);
+		pthread_t bindThread;
+		pthread_create(&bindThread, NULL, bind_thread, NULL);
+		long started = 0;
+		double start = now();
+		for (long i = 0; i < iterations; i++) {
+			int s = socket(AF_LINK, SOCK_DGRAM, 0);
+			memset(&ifr, 0, sizeof(ifr));
+			strlcpy(ifr.ifr_name, kTap, sizeof(ifr.ifr_name));
+			if (ioctl(s, SIOCSPACKETCAP, &ifr, sizeof(ifr)) == 0)
+				started++;
+			receive_one(s);
+			sBindDone = 0;
+			sBindFd = s;
+			if (i % 3 != 0)
+				usleep(i % 7);
+			ioctl(s, SIOCCPACKETCAP, &ifr, sizeof(ifr));
+			while (!sBindDone)
+				;
+			close(s);
+			sProgress++;
+		}
+		int pass = started == iterations;
+		printf("%-16s %s  %ld/%ld captures stopped while another thread bound"
+			" the socket: bind ok %ld, refused %ld, %.1fs, frames written %ld\n",
+			"bind-during-stop", pass ? "PASS" : "FAIL", started, iterations,
+			sBindOk, sBindBusy, now() - start, sWritten);
 		fflush(stdout);
 		failures += !pass;
 	}
