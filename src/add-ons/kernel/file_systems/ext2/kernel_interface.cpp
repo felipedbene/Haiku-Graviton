@@ -297,6 +297,7 @@ ext2_read_pages(fs_volume* _volume, fs_vnode* _node, void* _cookie,
 
 	rw_lock_read_lock(inode->Lock());
 
+	off_t start = pos;
 	uint32 vecIndex = 0;
 	size_t vecOffset = 0;
 	size_t bytesLeft = *_numBytes;
@@ -321,6 +322,11 @@ ext2_read_pages(fs_volume* _volume, fs_vnode* _node, void* _cookie,
 
 		pos += bytes;
 		bytesLeft -= bytes;
+	}
+
+	if (status == B_OK) {
+		// if this fails, the caller must not get the stale blocks
+		status = inode->ZeroUninitialized(start, *_numBytes, vecs, count);
 	}
 
 	rw_lock_read_unlock(inode->Lock());

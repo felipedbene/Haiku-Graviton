@@ -9,7 +9,11 @@
 
 #include "ExtentStream.h"
 
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#include <Drivers.h>
 
 #include "CachedBlock.h"
 #include "Inode.h"
@@ -526,6 +530,210 @@ ExtentStream::Shrink(Transaction& transaction, off_t& numBlocks)
 	}
 
 	return B_OK;
+}
+
+
+status_t
+ExtentStream::_LookUp(fileblock_t first, CachedBlock& cached,
+	ext2_extent_stream*& stream, fsblock_t& leafBlock, int32& index,
+	fileblock_t& next)
+{
+	// Finds the leaf that would hold logical block "first", and in it the
+	// first extent that ends after it (index == the entry count if there is
+	// none). "next" is where the following leaf starts, or ~0.
+	stream = fStream;
+	leafBlock = 0;
+	next = ~(fileblock_t)0;
+	while (stream->extent_header.Depth() != 0) {
+		int32 count = stream->extent_header.NumEntries();
+		if (count == 0)
+			return B_BAD_DATA;
+		int32 i = 0;
+		while (i + 1 < count
+			&& stream->extent_index[i + 1].LogicalBlock() <= first) {
+			i++;
+		}
+		if (i + 1 < count && stream->extent_index[i + 1].LogicalBlock() < next)
+			next = stream->extent_index[i + 1].LogicalBlock();
+		leafBlock = stream->extent_index[i].PhysicalBlock();
+		stream = (ext2_extent_stream*)cached.SetTo(leafBlock);
+		if (stream == NULL)
+			return B_IO_ERROR;
+		if (!stream->extent_header.IsValid()
+			|| !fInode->VerifyExtentChecksum(stream)) {
+			return B_BAD_DATA;
+		}
+	}
+
+	int32 count = stream->extent_header.NumEntries();
+	index = 0;
+	while (index < count && stream->extent_entries[index].LogicalBlock()
+			+ stream->extent_entries[index].Length() <= first) {
+		index++;
+	}
+	return B_OK;
+}
+
+
+status_t
+ExtentStream::MarkWritten(Transaction& transaction, off_t pos, off_t length,
+	bool& changed)
+{
+	changed = false;
+	if (length <= 0)
+		return B_OK;
+
+	// The file cache writes whole pages, so every block of the pages the
+	// write touches has to be written data on disk.
+	uint32 shift = fVolume->BlockShift();
+	fileblock_t first = (pos & ~(off_t)(B_PAGE_SIZE - 1)) >> shift;
+	fileblock_t end = ((pos + length + B_PAGE_SIZE - 1)
+		& ~(off_t)(B_PAGE_SIZE - 1)) >> shift;
+	if (end > (fileblock_t)fNumBlocks)
+		end = fNumBlocks;
+
+	bool zeroed = false;
+	status_t status = B_OK;
+	while (first < end) {
+		CachedBlock cached(fVolume);
+		ext2_extent_stream* stream;
+		fsblock_t leafBlock;
+		int32 i;
+		fileblock_t next;
+		status = _LookUp(first, cached, stream, leafBlock, i, next);
+		if (status != B_OK)
+			break;
+		if (i == stream->extent_header.NumEntries()) {
+			// a hole up to the next leaf
+			first = next;
+			continue;
+		}
+
+		const ext2_extent_entry& extent = stream->extent_entries[i];
+		if (extent.LogicalBlock() >= end)
+			break;
+		if (extent.IsUninitialized()) {
+			// Zero the whole extent on disk, then flag it written: the
+			// blocks the write doesn't cover must still read as zeros.
+			// (Splitting the extent instead would avoid the zeroing, but
+			// can need room in the tree that isn't there.)
+			status = _ZeroBlocks(extent.PhysicalBlock(), extent.Length());
+			if (status != B_OK)
+				break;
+			zeroed = true;
+
+			if (leafBlock != 0) {
+				stream = (ext2_extent_stream*)cached.SetToWritable(
+					transaction, leafBlock);
+				if (stream == NULL) {
+					status = B_IO_ERROR;
+					break;
+				}
+			}
+			ext2_extent_entry& written = stream->extent_entries[i];
+			written.SetLength(written.Length(), false);
+			fInode->SetExtentChecksum(stream);
+			changed = true;
+		}
+		first = (fileblock_t)stream->extent_entries[i].LogicalBlock()
+			+ stream->extent_entries[i].Length();
+	}
+
+	if (zeroed) {
+		// the zeros must be on the disk before the flag change can be
+		ioctl(fVolume->Device(), B_FLUSH_DRIVE_CACHE);
+	}
+	return status;
+}
+
+
+status_t
+ExtentStream::ZeroUninitialized(off_t pos, size_t length, const iovec* vecs,
+	size_t count)
+{
+	// Called after a read of [pos, pos + length) into vecs: the parts that
+	// lie in preallocated (uninitialized) extents must read as zeros, not
+	// as whatever their blocks hold.
+	if (length == 0)
+		return B_OK;
+
+	uint32 shift = fVolume->BlockShift();
+	fileblock_t first = pos >> shift;
+	fileblock_t end = (pos + length + fVolume->BlockSize() - 1) >> shift;
+
+	while (first < end) {
+		CachedBlock cached(fVolume);
+		ext2_extent_stream* stream;
+		fsblock_t leafBlock;
+		int32 i;
+		fileblock_t next;
+		status_t status = _LookUp(first, cached, stream, leafBlock, i, next);
+		if (status != B_OK)
+			return status;
+		if (i == stream->extent_header.NumEntries()) {
+			first = next;
+			continue;
+		}
+
+		const ext2_extent_entry& extent = stream->extent_entries[i];
+		if (extent.LogicalBlock() >= end)
+			return B_OK;
+		off_t extentEnd = ((off_t)extent.LogicalBlock() + extent.Length())
+			<< shift;
+		if (extent.IsUninitialized()) {
+			off_t from = max_c(pos, (off_t)extent.LogicalBlock() << shift);
+			off_t to = min_c(pos + (off_t)length, extentEnd);
+			_ZeroVecs(vecs, count, from - pos, to - from);
+		}
+		first = extentEnd >> shift;
+	}
+	return B_OK;
+}
+
+
+/*static*/ void
+ExtentStream::_ZeroVecs(const iovec* vecs, size_t count, off_t offset,
+	off_t length)
+{
+	for (size_t i = 0; i < count && length > 0; i++) {
+		if (offset >= (off_t)vecs[i].iov_len) {
+			offset -= vecs[i].iov_len;
+			continue;
+		}
+		size_t chunk = min_c(vecs[i].iov_len - offset, (size_t)length);
+		memset((uint8*)vecs[i].iov_base + offset, 0, chunk);
+		length -= chunk;
+		offset = 0;
+	}
+}
+
+
+status_t
+ExtentStream::_ZeroBlocks(fsblock_t start, uint32 count)
+{
+	// File data does not go through the block cache, so this writes to
+	// the device directly. The buffer spans several pages (see #1069).
+	const size_t kBufferSize = 256 * 1024;
+	uint8* buffer = (uint8*)calloc(1, kBufferSize);
+	if (buffer == NULL)
+		return B_NO_MEMORY;
+
+	off_t offset = (off_t)start << fVolume->BlockShift();
+	off_t left = (off_t)count << fVolume->BlockShift();
+	status_t status = B_OK;
+	while (left > 0) {
+		size_t chunk = left > (off_t)kBufferSize ? kBufferSize : left;
+		ssize_t written = write_pos(fVolume->Device(), offset, buffer, chunk);
+		if (written != (ssize_t)chunk) {
+			status = written < 0 ? (status_t)written : B_IO_ERROR;
+			break;
+		}
+		offset += chunk;
+		left -= chunk;
+	}
+
+	free(buffer);
+	return status;
 }
 
 

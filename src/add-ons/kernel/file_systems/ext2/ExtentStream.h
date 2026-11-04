@@ -9,10 +9,13 @@
 #define EXTENTSTREAM_H
 
 
+#include <sys/uio.h>
+
 #include "ext2.h"
 #include "Transaction.h"
 
 
+class CachedBlock;
 class Inode;
 class Volume;
 
@@ -28,6 +31,10 @@ public:
 						uint32 *_count = NULL);
 	status_t		Enlarge(Transaction& transaction, off_t& numBlocks);
 	status_t		Shrink(Transaction& transaction, off_t& numBlocks);
+	status_t		MarkWritten(Transaction& transaction, off_t pos,
+						off_t length, bool& changed);
+	status_t		ZeroUninitialized(off_t pos, size_t length,
+						const iovec* vecs, size_t count);
 	void			Init();
 	
 	bool			Check();
@@ -38,6 +45,12 @@ private:
 
 	status_t		_Enlarge(Transaction& transaction, off_t targetBlocks,
 						off_t& numBlocks);
+	status_t		_LookUp(fileblock_t first, CachedBlock& cached,
+						ext2_extent_stream*& stream, fsblock_t& leafBlock,
+						int32& index, fileblock_t& next);
+	status_t		_ZeroBlocks(fsblock_t start, uint32 count);
+	static	void	_ZeroVecs(const iovec* vecs, size_t count, off_t offset,
+						off_t length);
 	status_t		_Check(ext2_extent_stream *stream, fileblock_t &block);
 	status_t		_CheckBlock(ext2_extent_stream *stream, fsblock_t block);
 
