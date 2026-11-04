@@ -222,9 +222,11 @@ arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
 	// and the result is published through the commpage. The bit layout mirrors
 	// Linux's AT_HWCAP so ported crypto/atomics dispatch keeps working.
 	//
-	// A homogeneous ISA across CPUs is assumed (as Linux does with its
-	// boot-CPU-sanitised values); every core on the supported SoCs advertises
-	// the same feature set.
+	// Only the current (boot) CPU's registers are read, so a homogeneous ISA
+	// across CPUs is assumed: every core on the supported SoCs advertises the
+	// same feature set. Linux instead sanitises each field across all CPUs
+	// (the safest value any of them reports); doing the same would only matter
+	// on a heterogeneous SoC.
 	uint64 caps = 0;
 	uint64 caps2 = 0;
 
