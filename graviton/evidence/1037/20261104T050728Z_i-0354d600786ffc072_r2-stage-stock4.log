@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-stage-stock4
+# instance: i-0354d600786ffc072   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: fresh stock canonical box (stock4): gcc and the repros
+# start: 20261104T050728Z   end: 20261104T050744Z   rc: 0
+# script sha256: 629c4cf43e2057994897646c568acedf0064e6e9501fe47902d6943945cd5c50
+# ---- script ----
+# | # Stage arm stock4 on canonical: gcc and the repros built natively; this arm's modules as non-packaged
+# | # overrides (method of #947). A fresh launch of an image of this box is the arm.
+# | set -e
+# | pkgman install -y wget gcc binutils haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/j && cd /boot/home/j
+# | wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/linksend1037.c?<PRESIGNED>'
+# | wget -q -O close1063.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/close1063.c?<PRESIGNED>'
+# | wget -q -O link1059.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/link1059.c?<PRESIGNED>'
+# | wget -q -O tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/tcp900.c?<PRESIGNED>'
+# | wget -q -O udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/udp947.c?<PRESIGNED>'
+# | wget -q -O linksend1019.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/linksend1019.c?<PRESIGNED>'
+# | for p in linksend1037 close1063 link1059; do gcc -O2 -Wall -Wextra -Wno-unused-parameter -o $p $p.c -lnetwork; done
+# | gcc -O2 -o linksend1019 linksend1019.c -lnetwork; gcc -O2 -Wall -o tcp900 tcp900.c -lnetwork; gcc -O2 -Wall -o udp947 udp947.c -lnetwork
+# | sha256sum *.c linksend1037 close1063 link1059 linksend1019 tcp900 udp947
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network; mkdir -p $D/datalink_protocols
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f 2>/dev/null | xargs -r sha256sum
+# | sync; sync; echo STAGE-DONE
+# ---- raw output ----
+[system] Done.
+7ca4f27651fdd326f84afeed9aef08687ae9c1330e09ff6f6da2eb8f31c59e74  close1063.c
+256e86c8490cf165dc4153ab4feeccc6a1d7d1ef5446672473ac97737ad8ec8b  link1059.c
+de0a3a0aa7b863261ceb0d7a3942d3f5ca85a4e322f6750d9f51dc417348ab14  linksend1019.c
+40d4a161ce2a8a7a05995817e7c6d9db60a5cbff56fd825161f058c32d84ea0d  linksend1037.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+6a15d7268cc9dc722d959d79fb4f37f185b5516299caac3fb17564f940efa4d7  linksend1037
+c32948e487b39e8493190098453c700987635088ba34ed724a27190c3969487a  close1063
+e0bc98142d20a53de9486fb1115c5f57e12d17b95b8f0019389d7cda0875ea39  link1059
+9a28a177e3e50e099a9fa9abf755b6bb6f5f7a0645a4eede45b03004780ccb9d  linksend1019
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+STAGE-DONE

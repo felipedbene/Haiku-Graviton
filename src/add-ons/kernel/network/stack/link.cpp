@@ -15,6 +15,7 @@
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <new>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/sockio.h>
@@ -71,6 +72,9 @@ private:
 									net_buffer* buffer);
 
 private:
+			mutex				fMonitorLock;
+				// serializes starting and stopping a capture, and binding;
+				// never taken by the device's callbacks, always before fLock
 			net_device_monitor	fMonitor;
 			net_device_interface* fMonitoredDevice;
 			net_device_interface* fBoundToDevice;
@@ -87,6 +91,7 @@ LinkProtocol::LinkProtocol(net_socket* socket)
 	fMonitoredDevice(NULL),
 	fBoundToDevice(NULL)
 {
+	mutex_init(&fMonitorLock, "link capture");
 	fMonitor.cookie = this;
 	fMonitor.receive = _MonitorData;
 	fMonitor.event = _MonitorEvent;
@@ -98,14 +103,20 @@ LinkProtocol::~LinkProtocol()
 	if (fMonitoredDevice != NULL) {
 		unregister_device_monitor(fMonitoredDevice->device, &fMonitor);
 		put_device_interface(fMonitoredDevice);
-	} else
-		Unbind();
+	}
+
+	// A bound socket may also have started capturing; its receive handler
+	// must go either way, or the device calls into a deleted protocol.
+	Unbind();
+
+	mutex_destroy(&fMonitorLock);
 }
 
 
 status_t
 LinkProtocol::StartMonitoring(const char* deviceName)
 {
+	MutexLocker monitorLocker(fMonitorLock);
 	MutexLocker locker(fLock);
 
 	if (fMonitoredDevice != NULL)
@@ -129,13 +140,26 @@ LinkProtocol::StartMonitoring(const char* deviceName)
 status_t
 LinkProtocol::StopMonitoring(const char* deviceName)
 {
+	// Held until the monitor is unregistered: fMonitor stays linked into the
+	// device's list until then, and a capture started in between would link
+	// it again.
+	MutexLocker monitorLocker(fMonitorLock);
 	MutexLocker locker(fLock);
 
 	if (fMonitoredDevice == NULL
 		|| strcmp(fMonitoredDevice->device->name, deviceName) != 0)
 		return B_BAD_VALUE;
 
-	return _Unregister();
+	net_device_interface* monitored = fMonitoredDevice;
+	fMonitoredDevice = NULL;
+
+	// As in Unbind(): the device holds its monitor lock while it calls
+	// _MonitorData(), which takes fLock, so unregister without fLock.
+	locker.Unlock();
+
+	status_t status = unregister_device_monitor(monitored->device, &fMonitor);
+	put_device_interface(monitored);
+	return status;
 }
 
 
@@ -146,6 +170,11 @@ LinkProtocol::Bind(const sockaddr* address)
 	if (address == NULL || geteuid() != 0)
 		return B_NOT_ALLOWED;
 
+	// A stop may be unregistering a capture of this socket, holding the
+	// device list lock while it waits for the monitor lock, whose holder
+	// may be waiting for fLock; registering a handler below takes the device
+	// list lock, so do not hold fLock across it while a stop is in progress.
+	MutexLocker monitorLocker(fMonitorLock);
 	MutexLocker locker(fLock);
 
 	if (fMonitoredDevice != NULL)
@@ -154,6 +183,24 @@ LinkProtocol::Bind(const sockaddr* address)
 	Interface* interface = get_interface_for_link(sDomain, address);
 	if (interface == NULL)
 		return B_BAD_VALUE;
+
+	// The bound link address is the source of every frame this socket sends
+	// (ethernet_frame_send_data()), so it must be the device's own: a socket
+	// selected by name or index may not carry another one.
+	// The address must also hold its link address: Bind() keeps it as a
+	// whole sockaddr_storage, whose rest is zeroed.
+	const sockaddr_dl& boundAddress = *(const sockaddr_dl*)address;
+	const net_hardware_address& deviceAddress = interface->device->address;
+	if (boundAddress.sdl_alen != 0
+		&& (boundAddress.sdl_alen != deviceAddress.length
+			|| offsetof(sockaddr_dl, sdl_data) + boundAddress.sdl_nlen
+				+ boundAddress.sdl_alen
+					> min_c(boundAddress.sdl_len, sizeof(sockaddr_storage))
+			|| memcmp(LLADDR(&boundAddress), deviceAddress.data,
+				deviceAddress.length) != 0)) {
+		interface->ReleaseReference();
+		return B_BAD_VALUE;
+	}
 
 	net_device_interface* boundTo
 		= acquire_device_interface(interface->DeviceInterface());
@@ -174,10 +221,17 @@ LinkProtocol::Bind(const sockaddr* address)
 		// based handlers!
 		status_t status = register_device_handler(boundTo->device, fBoundType,
 			&LinkProtocol::_ReceiveData, this);
-		if (status != B_OK)
+		if (status != B_OK) {
+			put_device_interface(boundTo);
 			return status;
-	} else
+		}
+	} else {
+		// Bound to the device only: the socket receives nothing, and sends
+		// frames of the type each destination address names (see
+		// ethernet_frame_send_data()). This is how to send a type the stack
+		// already receives itself, such as IPv4, ARP or IPv6.
 		fBoundType = 0;
+	}
 
 	fBoundToDevice = boundTo;
 	socket->bound_to_device = boundTo->device->index;
@@ -197,11 +251,23 @@ LinkProtocol::Unbind()
 	if (fBoundToDevice == NULL)
 		return B_BAD_VALUE;
 
-	unregister_device_handler(fBoundToDevice->device, fBoundType);
-	put_device_interface(fBoundToDevice);
+	net_device_interface* boundTo = fBoundToDevice;
+	uint32 boundType = fBoundType;
+	fBoundToDevice = NULL;
+	fBoundType = 0;
 
 	socket->bound_to_device = 0;
 	socket->address.ss_len = 0;
+
+	// The device's receive thread holds its receive lock while it calls
+	// _ReceiveData(), which takes fLock; unregistering takes the receive
+	// lock, so it must not be done with fLock held. Once it returns, no
+	// receive is in progress and no other one can start.
+	locker.Unlock();
+
+	if (boundType != 0)
+		unregister_device_handler(boundTo->device, boundType);
+	put_device_interface(boundTo);
 	return B_OK;
 }
 

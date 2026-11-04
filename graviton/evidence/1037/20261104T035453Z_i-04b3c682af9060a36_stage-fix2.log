@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-fix2
+# instance: i-04b3c682af9060a36   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stage the fix2 arm: revised ethernet_frame override, final linksend1037
+# start: 20261104T035453Z   end: 20261104T035504Z   rc: 0
+# script sha256: 7ae8e965af4658ea4ed3db24bfceafd719b00ff13789fa1816bceee5168170b8
+# ---- script ----
+# | # Stage the fix2 arm on the fix arm box: swap in the revised ethernet_frame override (stack is
+# | # bit-identical), rebuild linksend1037 from its final source; a fresh launch of an image of
+# | # this box is the fix2 arm.
+# | set -e
+# | cd /boot/home/j
+# | wget -q -O ethernet_frame.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/mod/fix2/ethernet_frame?<PRESIGNED>'
+# | echo "31c2904afd3e7da590d129433026e21515a003d9839ccbc02aa10d3b694a8957  ethernet_frame.mod" | sha256sum -c
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | cp ethernet_frame.mod $D/datalink_protocols/ethernet_frame.new && mv $D/datalink_protocols/ethernet_frame.new $D/datalink_protocols/ethernet_frame
+# | wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>'
+# | gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c -lnetwork
+# | rm -f tcp900.out udp947*.out stack.dl
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | sha256sum linksend1037.c linksend1037 linksend1019 tcp900 udp947
+# | sync; sync; echo STAGE-DONE
+# ---- raw output ----
+ethernet_frame.mod: OK
+31c2904afd3e7da590d129433026e21515a003d9839ccbc02aa10d3b694a8957  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+57fcecbcd50b381940524dcc7a2e19c86b11828b73e84170178fc313c4e2a1ca  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+0e6ab75343297ed29c5efb87ebc0e52cb9cf4f3723611395ec5e7c6263b94355  linksend1037.c
+bc3f110b09d9687f90e19aab2bdc16fba79df1fc42d0d2814f73de0fcb6f9a80  linksend1037
+9a28a177e3e50e099a9fa9abf755b6bb6f5f7a0645a4eede45b03004780ccb9d  linksend1019
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+STAGE-DONE

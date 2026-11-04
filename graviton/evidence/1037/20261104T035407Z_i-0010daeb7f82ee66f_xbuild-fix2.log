@@ -1,0 +1,76 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-fix2
+# instance: i-0010daeb7f82ee66f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: rebuild the fix arm from the revised series (has_ether_address bounded by sdl_len)
+# start: 20261104T035407Z   end: 20261104T035426Z   rc: 0
+# script sha256: 97a4e4855dfd097324b43ed80b6da3bee38f0499f1ac583bd2222a2ab870fb82
+# ---- script ----
+# | # Rebuild the fix arm from the revised series (fix2.patch: has_ether_address() bounded by sdl_len).
+# | set -x
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/J
+# | cd /opt/j/hg/generated || exit 1
+# | aws s3 cp --quiet $OUT/fix2.patch /opt/j/fix2.patch && sha256sum /opt/j/fix2.patch
+# | N=objects/haiku/arm64/release/add-ons/kernel/network
+# | git -C .. checkout -q -f a9954f424a; git -C .. clean -q -fd -- src headers
+# | git -C .. apply /opt/j/fix2.patch || exit 1; git -C .. diff --stat
+# | rm -rf $N/stack $N/datalink_protocols/ethernet_frame
+# | jam -q -j$(nproc) stack ethernet_frame > /opt/j/out/jam-fix2.log 2>&1; rc=$?
+# | echo "JAM fix2 rc=$rc"; grep -E "warning:|error:" /opt/j/out/jam-fix2.log | grep -E "link\.cpp|ethernet_frame\.cpp" | head
+# | [ $rc = 0 ] || { tail -40 /opt/j/out/jam-fix2.log; exit 1; }
+# | mkdir -p /opt/j/out/fix2 && cp $N/stack/stack $N/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/fix2/
+# | git -C .. checkout -q -f a9954f424a
+# | cd /opt/j/out && sha256sum base/* fix/* fix2/*
+# | cmp fix/stack fix2/stack && echo "stack unchanged from fix (link.cpp identical)"
+# | for f in stack ethernet_frame; do aws s3 cp --quiet fix2/$f $OUT/mod/fix2/$f || exit 6; done
+# | aws s3 ls --recursive $OUT/mod/fix2/
+# ---- raw output ----
+424cfa5de726bf312d5b9de728a62e3fe63836b3da7891ac9dbed7b1f12f2cd3  /opt/j/fix2.patch
+ .../ethernet_frame/ethernet_frame.cpp              | 49 ++++++++++++++++++++--
+ src/add-ons/kernel/network/stack/link.cpp          | 22 +++++++---
+ 2 files changed, 63 insertions(+), 8 deletions(-)
+JAM fix2 rc=0
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  base/ethernet_frame
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  base/stack
+92c06419a19e7bef74b6fe269cb02277115fe30e957ae830705d9af3b4d1140a  fix/ethernet_frame
+57fcecbcd50b381940524dcc7a2e19c86b11828b73e84170178fc313c4e2a1ca  fix/stack
+31c2904afd3e7da590d129433026e21515a003d9839ccbc02aa10d3b694a8957  fix2/ethernet_frame
+57fcecbcd50b381940524dcc7a2e19c86b11828b73e84170178fc313c4e2a1ca  fix2/stack
+stack unchanged from fix (link.cpp identical)
+2026-11-04 03:54:20      12907 bugfix/J/mod/fix2/ethernet_frame
+2026-11-04 03:54:20     193267 bugfix/J/mod/fix2/stack
++ export HOME=/root
++ HOME=/root
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J
++ cd /opt/j/hg/generated
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/fix2.patch /opt/j/fix2.patch
++ sha256sum /opt/j/fix2.patch
++ N=objects/haiku/arm64/release/add-ons/kernel/network
++ git -C .. checkout -q -f a9954f424a
++ git -C .. clean -q -fd -- src headers
++ git -C .. apply /opt/j/fix2.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/network/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame
+++ nproc
++ jam -q -j32 stack ethernet_frame
++ rc=0
++ echo 'JAM fix2 rc=0'
++ grep -E 'warning:|error:' /opt/j/out/jam-fix2.log
++ grep -E 'link\.cpp|ethernet_frame\.cpp'
++ head
++ '[' 0 = 0 ']'
++ mkdir -p /opt/j/out/fix2
++ cp objects/haiku/arm64/release/add-ons/kernel/network/stack/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/fix2/
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/j/out
++ sha256sum base/ethernet_frame base/stack fix/ethernet_frame fix/stack fix2/ethernet_frame fix2/stack
++ cmp fix/stack fix2/stack
++ echo 'stack unchanged from fix (link.cpp identical)'
++ for f in stack ethernet_frame
++ aws s3 cp --quiet fix2/stack s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/mod/fix2/stack
++ for f in stack ethernet_frame
++ aws s3 cp --quiet fix2/ethernet_frame s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/mod/fix2/ethernet_frame
++ aws s3 ls --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/mod/fix2/

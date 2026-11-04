@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-build-repro
+# instance: i-02dd61be87eb2be2b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock canonical Haiku: pkgman gcc+binutils, build linksend1037/linksend1019 natively, upload the binaries for the other arms
+# start: 20261104T034425Z   end: 20261104T034436Z   rc: 8
+# script sha256: d47d738dd11d43f26528b52580d3b2cfab211f7e9afbb25d3e2d46ec70c79534
+# ---- script ----
+# | cd /boot/home/j && wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>' || exit 7
+# | pkgman install -y gcc binutils haiku_devel 2>&1 | tail -2
+# | gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c -lnetwork 2>&1; echo "compile linksend1037 rc=$?"
+# | gcc -O2 -o linksend1019 linksend1019.c -lnetwork 2>&1; echo "compile linksend1019 rc=$?"
+# | gcc --version | head -1
+# | sha256sum linksend1037.c linksend1037 linksend1019.c linksend1019
+# | wget -q --method=PUT --body-file=linksend1037 -O /dev/null 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/bugfix/J/bin/linksend1037?<PRESIGNED>' && echo up1
+# | wget -q --method=PUT --body-file=linksend1019 -O /dev/null 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/bugfix/J/bin/linksend1019?<PRESIGNED>' && echo up2
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+compile linksend1037 rc=0
+compile linksend1019 rc=0
+gcc (2026_03_29) 13.3.0
+22a830b19f55e9aaecd4fa8e397a3fe0c1a6b3e1967cc064896e2e2538aa44ce  linksend1037.c
+bd74fd4812cc14a981e733d1ab6f5a68b24f5fd6be37a8181d71f53c904848c7  linksend1037
+de0a3a0aa7b863261ceb0d7a3942d3f5ca85a4e322f6750d9f51dc417348ab14  linksend1019.c
+9a28a177e3e50e099a9fa9abf755b6bb6f5f7a0645a4eede45b03004780ccb9d  linksend1019
+failed to run commands: exit status 8

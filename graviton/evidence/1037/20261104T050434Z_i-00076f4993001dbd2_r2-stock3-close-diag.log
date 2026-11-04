@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-stock3-close-diag
+# instance: i-00076f4993001dbd2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock arm: thread states of the close1063 run that did not return
+# start: 20261104T050434Z   end: 20261104T050646Z   rc: 137
+# script sha256: d1057191d133111a7c87488e32093cf594401e174d3a62e0345a995ff28cd3b8
+# ---- script ----
+# | # The stock arm's close1063 run has not returned: what state are its threads in?
+# | ps | grep -E "close1063|r2-close" | grep -v grep
+# | for t in $(ps | awk '/close1063/ && !/grep/ {print $2}'); do ps -a | awk -v t=$t '$0 ~ "^"t" " || 1' >/dev/null; done
+# | ps -a 2>/dev/null | grep -A6 "close1063" | head -20
+# | ifconfig tap/0 2>&1 | grep -E "Receive" &
+# | sleep 5; echo "(ifconfig tap/0 above, if it returned within 5 s)"
+# ---- raw output ----
+./close1063 3000 20                                  902        2    0    0 
+./close1063 3000 20                                  902        2    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+close1063                               902     wait   10        1        5 
+close1063 pthread                       903      run   10    12258   334782 
+---------------------------------------------------------------------------
+Team                                                  Id #Threads  Gid  Uid 
+/bin/sleep 30                                       1017        1    0    0 
+
+Thread                                   Id    State Prio    UTime    KTime
+sleep                                  1017     wait   10        0        0 
+(ifconfig tap/0 above, if it returned within 5 s)

@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: tapcheck-stock
+# instance: i-0119de9daa289cdca   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock canonical: TAP injection paced and flat out, with close1063, to see whether the flood alone wedges the box
+# start: 20261104T043626Z   end: 20261104T044637Z   rc: 137
+# script sha256: 6e1fdaa31396fdab962a75d605434be066a1f74ab010d545f44a43c7af5ebc34
+# ---- script ----
+# | # Stock canonical: is a flat-out TAP injection on its own enough to wedge the box (no link socket fix involved)?
+# | pkgman install -y wget gcc binutils haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/j && cd /boot/home/j && wget -q -O close1063.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/close1063.c?<PRESIGNED>' && gcc -O2 -Wall -Wextra -Wno-unused-parameter -o close1063 close1063.c -lnetwork; sha256sum close1063.c close1063
+# | ifconfig tap/0 up; ifconfig tap/0 | head -2
+# | echo "--- paced 50us, 20 iterations"; ./close1063 20 50; echo "exit=$?"
+# | ifconfig tap/0 | grep -E "Receive"; vmstat 2>/dev/null | head -3 || true
+# | echo "--- flat out, 20 iterations"; ./close1063 20 0; echo "exit=$?"
+# ---- raw output ----
+[system] Done.
+7ca4f27651fdd326f84afeed9aef08687ae9c1330e09ff6f6da2eb8f31c59e74  close1063.c
+c32948e487b39e8493190098453c700987635088ba34ed724a27190c3969487a  close1063
+tap/0	Hardware type: Ethernet, Address: 62:d8:f6:b1:35:ff
+	inet addr: --, Bcast: --, Mask: --
+--- paced 50us, 20 iterations
+tap/0: mac 62:d8:f6:b1:35:ff, 20 iterations per phase
+bind-close       PASS  20/20 bound, 20 received a frame before close, 0.0s, frames written 82
+capture-stop     PASS  20/20 started, 20 received, 20 stopped, 0.0s, frames written 146
+RESULT failures=0
+exit=0
+	Receive: 147 packets, 0 errors, 6762 bytes, 0 mcasts, 0 dropped
+max memory:		4189192192
+free memory:		3729084416
+needed memory:		0
+--- flat out, 20 iterations
+tap/0: mac 62:d8:f6:b1:35:ff, 20 iterations per phase
+HANG phase bind: no progress for 15 s at iteration 9 (frames written 1061426)

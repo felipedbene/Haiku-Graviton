@@ -1,0 +1,43 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-peer-setup
+# instance: i-0a996cb927484deed   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux peer: gcc + tcpdump, build linksend1037 (AF_PACKET backend)
+# start: 20261104T034114Z   end: 20261104T034151Z   rc: 0
+# script sha256: 8548f68bc15061554a50df20009a3399ca06626e6acad16e1679fb32b389d60f
+# ---- script ----
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive
+# | apt-get update -qq; apt-get install -y -qq gcc libc6-dev tcpdump > /tmp/apt.log 2>&1; echo apt rc=$?
+# | mkdir -p /opt/j && cd /opt/j
+# | curl -sSf -o linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>'
+# | gcc -O2 -Wall -Wextra -o linksend1037 linksend1037.c 2>&1; echo "compile rc=$?"
+# | sha256sum linksend1037.c linksend1037
+# | ip -br addr; ip -br link; uname -r
+# ---- raw output ----
+apt rc=0
+linksend1037.c: In function ‘match_arp_reply’:
+linksend1037.c:628:52: warning: unused parameter ‘cookie’ [-Wunused-parameter]
+  628 | match_arp_reply(const uint8_t* b, ssize_t n, void* cookie)
+      |                                              ~~~~~~^~~~~~
+compile rc=0
+289d4240094827b275c2b53a2f25c2b90d6b7e4896594f742f382766d92790ad  linksend1037.c
+25828413af7d2e6fa77719b9a1b5cbc67c3ceb837cba121f9f935177fd06aa32  linksend1037
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+ens5             UP             10.128.7.84/22 metric 100 fe80::4ff:ccff:fefd:bb01/64 
+lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
+ens5             UP             06:ff:cc:fd:bb:01 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+7.0.0-1014-aws
++ export DEBIAN_FRONTEND=noninteractive
++ DEBIAN_FRONTEND=noninteractive
++ apt-get update -qq
++ apt-get install -y -qq gcc libc6-dev tcpdump
++ echo apt rc=0
++ mkdir -p /opt/j
++ cd /opt/j
++ curl -sSf -o linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>'
++ gcc -O2 -Wall -Wextra -o linksend1037 linksend1037.c
++ echo 'compile rc=0'
++ sha256sum linksend1037.c linksend1037
++ ip -br addr
++ ip -br link
++ uname -r

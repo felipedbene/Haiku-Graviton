@@ -1,0 +1,55 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-linux-peer-setup
+# instance: i-0c406f7778111f20c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3 Linux peer setup
+# start: 20261104T053727Z   end: 20261104T053802Z   rc: 0
+# script sha256: 349a487ce011173798d8976c02814ca0039554362e829b4d8518f3181dfd0771
+# ---- script ----
+# | export DEBIAN_FRONTEND=noninteractive
+# | apt-get update -qq; apt-get install -y -qq gcc libc6-dev tcpdump > /tmp/apt.log 2>&1; echo apt rc=$?
+# | <line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+# | sha256sum linksend1037.c linksend1037; ip -br addr | grep ens5; ip -br link | grep ens5
+# ---- raw output ----
+apt rc=0
+compile rc=127
+ens5             UP             10.128.5.141/22 metric 100 fe80::4ff:d1ff:fe3c:11/64 
+ens5             UP             06:ff:d1:3c:00:11 <BROADCAST,MULTICAST,UP,LOWER_UP> 
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+<line redacted: a presigned URL that the script generator mangled (curl of linksend1037.c failed; the peer was used for tcpdump only)>
+curl: (3) URL rejected: Malformed input to a URL function
+sha256sum: linksend1037.c: No such file or directory
+sha256sum: linksend1037: No such file or directory

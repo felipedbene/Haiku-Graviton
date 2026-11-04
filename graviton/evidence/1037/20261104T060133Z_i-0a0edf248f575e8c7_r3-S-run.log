@@ -1,0 +1,144 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-S-run
+# instance: i-0a0edf248f575e8c7   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3, arm S (PR 1063 + #1078 + #1059 + #1061, fresh boot): link1059, linksend1019, linksend1037 against the peer 10.128.5.141, regressions
+# start: 20261104T060133Z   end: 20261104T060151Z   rc: 0
+# script sha256: 2efc56d8a48ae3d7bc4b7fcee743197ed6a7e2500de921d0b868230f548c6f3e
+# ---- script ----
+# | # Round 3 run on one arm (fresh boot). Linux peer 10.128.5.141 runs tcpdump meanwhile.
+# | cd /boot/home/j
+# | echo "--- modules (non-packaged overrides win over the packaged ones)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f 2>/dev/null | xargs -r sha256sum
+# | sha256sum linksend1037 link1059 close1063
+# | echo "--- link1059 (#1059/#1061: which interface an AF_LINK address selects)"
+# | ./link1059 /dev/net/ena/0; echo "link1059 exit=$?"
+# | echo "--- linksend1019 (the #1037 probe)"
+# | ./linksend1019 /dev/net/ena/0 | tail -2
+# | echo "--- linksend1037"
+# | ./linksend1037 /dev/net/ena/0 10.128.5.141 2000; echo "linksend1037 exit=$?"
+# | echo "--- regression: the stack's own ARP + IPv4 to the peer, ARP entry flushed first"
+# | arp -d 10.128.5.141 2>&1; ping -c 5 10.128.5.141 2>&1 | tail -2; arp -a 2>&1 | grep 10.128.5.141
+# | echo "--- regression: IPv4 TCP over ENA (HTTPS download, checksummed)"
+# | <line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+# | echo "--- regression: DHCP lease at boot"
+# | grep -h "DHCP status\|DHCP_ACK" /var/log/syslog | tail -2
+# | echo "--- regression: tcp900 and udp947"
+# | ./tcp900 $(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\),.*/\1/p') > tcp900.out 2>&1; echo "tcp900 exit=$?"; tail -1 tcp900.out
+# | ./udp947 > udp947.out 2>&1; echo "udp947 exit=$?"; tail -1 udp947.out
+# | ./udp947 -t > udp947t.out 2>&1; echo "udp947 -t exit=$?"; tail -1 udp947t.out
+# | echo "--- interface counters"; ifconfig /dev/net/ena/0 | grep -E "Receive|Transmit"
+# | exit 0
+# ---- raw output ----
+--- modules (non-packaged overrides win over the packaged ones)
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+9643497d3db020aa022f8235c30a2a050c24db1837536f19a2d8bf62b199c759  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+6a15d7268cc9dc722d959d79fb4f37f185b5516299caac3fb17564f940efa4d7  linksend1037
+17fd03b2714ce6281a344590b7b00c2c9a979cbc4f1ab0533ff21fef63c5c647  link1059
+90e782f600224ddcdcc97deb2b876591093684bd6cb9e2a4ae9d239a8813a67a  close1063
+--- link1059 (#1059/#1061: which interface an AF_LINK address selects)
+/dev/net/ena/0: mac 06:ff:f6:5e:72:65, device index 2, interface index 2; loop: interface index 1
+index-ether                PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:f6:5e:72:65; expected bound here
+index-loop                 PASS  bind=-1 -> selected loopback (EAFNOSUPPORT); source -; expected loopback
+index-unknown              PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-ether                 PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:f6:5e:72:65; expected bound here
+name-loop                  PASS  bind=-1 -> selected loopback (EAFNOSUPPORT); source -; expected loopback
+name-unknown               PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-ether-unterminated    PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:f6:5e:72:65; expected bound here
+name-embedded-nul          PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-prefix                PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+mac-own                    PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:f6:5e:72:65; expected bound here
+name-ether+mac-own         PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:f6:5e:72:65; expected bound here
+name-ether+mac-foreign00   PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-ether+mac-foreign0a   PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+empty                      PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-length-past-end       PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+RESULT failures=0
+link1059 exit=0
+--- linksend1019 (the #1037 probe)
+ethertype 0x0000: bind=0 (ok)
+ethertype 0x0000: sendto=64 (ok)
+--- linksend1037
+send-only-bind         PASS  bind(sdl_type 0, own MAC) = 0 (ok)
+interface /dev/net/ena/0 mac 06:ff:f6:5e:72:65 ip 10.128.4.125 peer 10.128.5.141
+arp-request-tx         PASS  ARP who-has peer: send = 60 (ok), seen leaving = 1, source 06:ff:f6:5e:72:65
+arp-reply-rx           PASS  send = 60 (ok), reply from peer: 06:ff:d1:3c:00:11
+icmp-echo-tx           PASS  ICMP echo to peer: send = 67 (ok), seen leaving = 1, source 06:ff:f6:5e:72:65
+icmp-echo-reply-rx     PASS  send = 67 (ok), echo reply = 1
+udp-tx                 PASS  UDP to peer:9 marker J1037-LINKSEND-UDP: send = 60 (ok), seen leaving = 1, source 06:ff:f6:5e:72:65
+ipv6-tx                PASS  ICMPv6 echo to ff02::1: send = 83 (ok), seen leaving = 1, source 06:ff:f6:5e:72:65
+x88b5-tx               PASS  ethertype 0x88b5 broadcast: send = 60 (ok), seen leaving = 1, source 06:ff:f6:5e:72:65
+typed-bind-0806        PASS  bind(IFT_ETHER, 0x0806) = -1 (General system error); expected refused
+typed-bind-0806-x1000  PASS  1000/1000 refused
+typed-bind-88b5        PASS  bind = 0, sendto = 60 (ok)
+typed-bind-88b5-x1000  PASS  1000/1000 bound
+bound-capture-close    PASS  bind = 0, SIOCSPACKETCAP = 0, close, bind again = 0 (ok)
+bind-by-name+mac       PASS  bind(nlen 14 + MAC) = 0 (ok), sendto = 60 (ok), seen leaving = 1, source 06:ff:f6:5e:72:65
+foreign-mac-bind-typed PASS  bind(name + MAC 00:10:37:10:37:01) = -1 (Invalid Argument); expected refused; sendto = -1, seen leaving = 0, source 00:00:00:00:00:00
+foreign-mac-bind       PASS  bind(name + MAC 00:10:37:10:37:01) = -1 (Invalid Argument); expected refused; sendto = -1, seen leaving = 0, source 00:00:00:00:00:00
+bad-dst-no-type        PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-no-addr        PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-long-name      PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-family         PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-short          PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-short-bcast    PASS  sendto(2-byte address, MSG_BCAST) = -1 (Invalid Argument); expected EINVAL
+bad-bind-short         PASS  bind(name, alen 6, 26-byte address) = -1 (Invalid Argument); expected EINVAL
+nonroot-bind           PASS  uid 1000: bind = -1 (Operation not allowed)
+nonroot-send           PASS  uid 1000: sendto unbound = -1 (Operation not allowed)
+burst                  PASS  2000/2000 ARP, 2000/2000 ICMP sent in 0.090s
+after-burst-echo       PASS  echo reply = 1
+RESULT failures=0
+linksend1037 exit=0
+--- regression: the stack's own ARP + IPv4 to the peer, ARP entry flushed first
+5 packets transmitted, 5 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 0.382/0.405/0.473/0.034 ms
+   10.128.5.141  06:ff:d1:3c:00:11  valid
+--- regression: IPv4 TCP over ENA (HTTPS download, checksummed)
+--- regression: DHCP lease at boot
+DAEMON 'DHCP': /dev/net/ena/0: Received DHCP_ACK from 10.128.4.1
+DAEMON 'DHCP': /dev/net/ena/0: DHCP status = No error
+--- regression: tcp900 and udp947
+tcp900 exit=0
+total 3.0s, 0 FAIL
+udp947 exit=4
+udp947: 14 passed, 4 failed
+udp947 -t exit=3
+udp947 -t: 0 passed, 3 failed
+--- interface counters
+	Receive: 5493 packets, 0 errors, 614696 bytes, 0 mcasts, 0 dropped
+	Transmit: 53449 packets, 0 errors, 273788859 bytes, 0 mcasts, 0 dropped
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
+<line redacted: a presigned URL that the script generator mangled; the HTTPS-download regression did not run in this log>
