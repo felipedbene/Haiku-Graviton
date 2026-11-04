@@ -15,6 +15,7 @@
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <new>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/sockio.h>
@@ -157,6 +158,24 @@ LinkProtocol::Bind(const sockaddr* address)
 	Interface* interface = get_interface_for_link(sDomain, address);
 	if (interface == NULL)
 		return B_BAD_VALUE;
+
+	// The bound link address is the source of every frame this socket sends
+	// (ethernet_frame_send_data()), so it must be the device's own: a socket
+	// selected by name or index may not carry another one.
+	// The address must also hold its link address: Bind() keeps it as a
+	// whole sockaddr_storage, whose rest is zeroed.
+	const sockaddr_dl& boundAddress = *(const sockaddr_dl*)address;
+	const net_hardware_address& deviceAddress = interface->device->address;
+	if (boundAddress.sdl_alen != 0
+		&& (boundAddress.sdl_alen != deviceAddress.length
+			|| offsetof(sockaddr_dl, sdl_data) + boundAddress.sdl_nlen
+				+ boundAddress.sdl_alen
+					> min_c(boundAddress.sdl_len, sizeof(sockaddr_storage))
+			|| memcmp(LLADDR(&boundAddress), deviceAddress.data,
+				deviceAddress.length) != 0)) {
+		interface->ReleaseReference();
+		return B_BAD_VALUE;
+	}
 
 	net_device_interface* boundTo
 		= acquire_device_interface(interface->DeviceInterface());
