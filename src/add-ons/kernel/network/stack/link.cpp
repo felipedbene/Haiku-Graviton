@@ -180,9 +180,11 @@ LinkProtocol::Bind(const sockaddr* address)
 	if (fMonitoredDevice != NULL)
 		return B_BUSY;
 
-	Interface* interface = get_interface_for_link(sDomain, address);
+	status_t lookupStatus;
+	Interface* interface = get_interface_for_link(sDomain, address,
+		&lookupStatus);
 	if (interface == NULL)
-		return B_BAD_VALUE;
+		return lookupStatus;
 
 	// The bound link address is the source of every frame this socket sends
 	// (ethernet_frame_send_data()), so it must be the device's own: a socket

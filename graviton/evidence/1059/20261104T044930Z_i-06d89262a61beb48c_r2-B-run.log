@@ -1,0 +1,105 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-B-run
+# instance: i-06d89262a61beb48c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 2, arm B (fresh boot): link1059, linksend1019, linksend1037 against the Linux peer 10.128.5.150, regressions
+# start: 20261104T044930Z   end: 20261104T044947Z   rc: 0
+# script sha256: 8736d475abbdb3f445f78dd1de183ea7f8ce29c7b107a232ecd5a73840a25854
+# ---- script ----
+# | # Round 2 run on one arm (fresh boot). Linux peer 10.128.5.150 runs tcpdump meanwhile.
+# | cd /boot/home/j
+# | echo "--- modules (non-packaged overrides win over the packaged ones)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f 2>/dev/null | xargs -r sha256sum
+# | sha256sum linksend1037 link1059 close1063
+# | echo "--- link1059 (#1059/#1061: which interface an AF_LINK address selects)"
+# | ./link1059 /dev/net/ena/0; echo "link1059 exit=$?"
+# | echo "--- linksend1019 (the #1037 probe)"
+# | ./linksend1019 /dev/net/ena/0 | tail -2
+# | echo "--- linksend1037"
+# | ./linksend1037 /dev/net/ena/0 10.128.5.150 2000; echo "linksend1037 exit=$?"
+# | echo "--- regression: the stack's own ARP + IPv4 to the peer, ARP entry flushed first"
+# | arp -d 10.128.5.150 2>&1; ping -c 5 10.128.5.150 2>&1 | tail -2; arp -a 2>&1 | grep 10.128.5.150
+# | echo "--- regression: IPv4 TCP over ENA (HTTPS download, checksummed)"
+# | wget -q -O stack.dl 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/r2/mod/D/stack?<PRESIGNED>' && echo "25eaaceed4d14cb699e34876bf59d9de65c5e40e77fa90348a4f23e47f8e3a12  stack.dl" | sha256sum -c
+# | echo "--- regression: DHCP lease at boot"
+# | grep -h "DHCP status\|DHCP_ACK" /var/log/syslog | tail -2
+# | echo "--- regression: tcp900 and udp947"
+# | ./tcp900 $(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\),.*/\1/p') > tcp900.out 2>&1; echo "tcp900 exit=$?"; tail -1 tcp900.out
+# | ./udp947 > udp947.out 2>&1; echo "udp947 exit=$?"; tail -1 udp947.out
+# | ./udp947 -t > udp947t.out 2>&1; echo "udp947 -t exit=$?"; tail -1 udp947t.out
+# | echo "--- interface counters"; ifconfig /dev/net/ena/0 | grep -E "Receive|Transmit"
+# | exit 0
+# ---- raw output ----
+--- modules (non-packaged overrides win over the packaged ones)
+666caf37f9d67017c62426a49ec4c49814c8c97be077fe5d4e62129598bf89fa  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+6a15d7268cc9dc722d959d79fb4f37f185b5516299caac3fb17564f940efa4d7  linksend1037
+e0bc98142d20a53de9486fb1115c5f57e12d17b95b8f0019389d7cda0875ea39  link1059
+aa801ba2fd0be4f2bf555fa96d6e52f188d3c321b15dea3892f82fb359d90474  close1063
+--- link1059 (#1059/#1061: which interface an AF_LINK address selects)
+/dev/net/ena/0: mac 06:ff:d6:d2:5d:49, device index 2, interface index 2; loop: interface index 1
+index-ether                FAIL  bind=0 -> bound, left the device from ANOTHER MAC; source 00:00:00:00:00:00; expected bound here
+index-loop                 PASS  bind=-1 -> selected loopback (EAFNOSUPPORT); source -; expected loopback
+index-unknown              PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-ether                 FAIL  bind=0 -> bound, left the device from ANOTHER MAC; source 00:00:00:00:00:00; expected bound here
+name-loop                  PASS  bind=-1 -> selected loopback (EAFNOSUPPORT); source -; expected loopback
+name-unknown               PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-ether-unterminated    FAIL  bind=-1 -> Invalid Argument; source -; expected bound here
+name-prefix                FAIL  bind=0 -> bound, left the device from ANOTHER MAC; source 2f:6e:65:74:2f:65; expected EINVAL
+mac-own                    PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:d6:d2:5d:49; expected bound here
+name-ether+mac-own         PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:d6:d2:5d:49; expected bound here
+name-ether+mac-foreign00   FAIL  bind=0 -> bound, left the device from ANOTHER MAC; source 00:10:59:10:61:01; expected EINVAL
+name-ether+mac-foreign0a   PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+empty                      PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+name-length-past-end       PASS  bind=-1 -> Invalid Argument; source -; expected EINVAL
+RESULT failures=5
+link1059 exit=5
+--- linksend1019 (the #1037 probe)
+ethertype 0x0000: bind=0 (ok)
+ethertype 0x0000: sendto=-1 (General system error)
+--- linksend1037
+send-only-bind         PASS  bind(sdl_type 0, own MAC) = 0 (ok)
+interface /dev/net/ena/0 mac 06:ff:d6:d2:5d:49 ip 10.128.5.230 peer 10.128.5.150
+arp-request-tx         FAIL  ARP who-has peer: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+arp-reply-rx           FAIL  send = -1 (General system error), reply from peer: none
+icmp/udp               FAIL  skipped: no peer MAC
+ipv6-tx                FAIL  ICMPv6 echo to ff02::1: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+x88b5-tx               FAIL  ethertype 0x88b5 broadcast: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+typed-bind-0806        PASS  bind(IFT_ETHER, 0x0806) = -1 (General system error); expected refused
+typed-bind-0806-x1000  PASS  1000/1000 refused
+typed-bind-88b5        PASS  bind = 0, sendto = 60 (ok)
+typed-bind-88b5-x1000  PASS  1000/1000 bound
+bound-capture-close    FAIL  bind = 0, SIOCSPACKETCAP = 0, close, bind again = -1 (General system error)
+bind-by-name+mac       FAIL  bind(nlen 14 + MAC) = 0 (ok), sendto = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+foreign-mac-bind-typed PASS  bind(name + MAC 00:10:37:10:37:01) = -1 (General system error); expected refused; sendto = -1, seen leaving = 0, source 00:00:00:00:00:00
+foreign-mac-bind       FAIL  bind(name + MAC 00:10:37:10:37:01) = 0 (ok); expected refused; sendto = -1, seen leaving = 0, source 00:00:00:00:00:00
+bad-dst-no-type        PASS  sendto = -1 (General system error); expected refused
+bad-dst-no-addr        PASS  sendto = -1 (General system error); expected refused
+bad-dst-long-name      PASS  sendto = -1 (General system error); expected refused
+bad-dst-family         PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-short          PASS  sendto = -1 (General system error); expected refused
+bad-dst-short-bcast    FAIL  sendto(2-byte address, MSG_BCAST) = -1 (General system error); expected EINVAL
+bad-bind-short         FAIL  bind(name, alen 6, 26-byte address) = 0 (ok); expected EINVAL
+nonroot-bind           PASS  uid 1000: bind = -1 (Operation not allowed)
+nonroot-send           PASS  uid 1000: sendto unbound = -1 (Operation not allowed)
+burst                  FAIL  0/2000 ARP, 0/0 ICMP sent in 0.003s
+RESULT failures=11
+linksend1037 exit=11
+--- regression: the stack's own ARP + IPv4 to the peer, ARP entry flushed first
+arp: Could not delete ARP entry: No such file or directory
+5 packets transmitted, 5 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 0.350/0.661/1.860/0.600 ms
+   10.128.5.150  06:ff:d0:85:92:d9  valid
+--- regression: IPv4 TCP over ENA (HTTPS download, checksummed)
+stack.dl: OK
+--- regression: DHCP lease at boot
+DAEMON 'DHCP': /dev/net/ena/0: Received DHCP_ACK from 10.128.4.1
+DAEMON 'DHCP': /dev/net/ena/0: DHCP status = No error
+--- regression: tcp900 and udp947
+tcp900 exit=0
+total 3.0s, 0 FAIL
+udp947 exit=4
+udp947: 14 passed, 4 failed
+udp947 -t exit=3
+udp947 -t: 0 passed, 3 failed
+--- interface counters
+	Receive: 1108 packets, 0 errors, 547947 bytes, 0 mcasts, 0 dropped
+	Transmit: 48969 packets, 0 errors, 273435940 bytes, 0 mcasts, 0 dropped
