@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fix-write
+# instance: i-07916b45a57744f79   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fix: diskimage1027 write phase on FAT (files/3) and ext2 (files/4): md5 of Linux-written files, write 2 B/4 KiB/1 MiB, sync, 30 s, count write-back failures
+# start: 20261104T045448Z   end: 20261104T051000Z   rc: 1
+# script sha256: 12f4c04ac8c08554b1e5829df06f9020feb780f040684f4f4889b61fd4d81ee6
+# ---- script ----
+# | cd /boot/home/t1069
+# | sh diskimage1027.sh write /dev/disk/virtual/files/3/raw /f1069 fat
+# | sh diskimage1027.sh write /dev/disk/virtual/files/4/raw /e1069 ext2
+# | echo "--- this boot's lock / page-writer failures"
+# | grep -E "failed to lock memory|PageWriteWrapper|writeback is making no progress" /var/log/syslog | sed 's/0xffff[0-9a-f]*/ADDR/' | sort | uniq -c | sort -rn | head -5
+# | true
+# ---- raw output ----

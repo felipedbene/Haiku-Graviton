@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: basedh-boot
+# instance: i-04092cfcb0ee68094   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm basedh (trunk kernel + kernel_malloc debug): it boots; where the debug heap's early areas went
+# start: 20261104T060453Z   end: 20261104T060505Z   rc: 0
+# script sha256: 2951c776a3ea0ebd913ccfa4ed2ff2fdcc16d74eba2c272d25ef23d0b090ae4d
+# ---- script ----
+# | sha256sum /boot/system/kernel_arm64; tail -1 /boot/home/config/settings/kernel/drivers/kernel
+# | grep -E "kernel malloc: using|grow heap|VIP heap|mark_page_range_in_use" /var/log/syslog | tail -6
+# | listarea 1 | grep -E "heap|physical map" | head
+# ---- raw output ----
+f2f188f966d070c30bb77a2b5bed7a7ca096d2331d6475563e92394cc023329c  /boot/system/kernel_arm64
+kernel_malloc debug
+KERN: mark_page_range_in_use(0x0, 0x40000): start page is before free list
+KERN: kernel malloc: using debug_heap
+KERN: mark_page_range_in_use(0x0, 0x40000): start page is before free list
+KERN: heap_add_area: area -1 added to grow heap 0xffff000027900000 - usable range 0xffff000027904000 - 0xffff000027a00000
+KERN: heap_add_area: area -1 added to VIP heap heap 0xffff000027a00000 - usable range 0xffff000027a04000 - 0xffff000027b00000
+KERN: heap_init_post_area(): created VIP heap: 0xffff000027a00000
+  142            heap grower_16_kstack  0xffff0000002a8000     5000     4000     0     0     0    2   b0
+    1                      kernel heap  0xffff000001000000  1000000  1000000     0     0     0    7   30
+  128                      kdebug heap  0xffff0000278eb000    10000    10000     0     0     0    2   30
+    2              dedicated grow heap  0xffff000027900000   100000   100000     0     0     0    2   30
+    3                         VIP heap  0xffff000027a00000   100000   100000     0     0     0    2   30
+  173             per cpu initial heap  0xffff000027b00000   c00000   c00000     0     0     0    2   30
+  174             per cpu initial heap  0xffff000028700000   c00000   c00000     0     0     0    2   30
+  175             per cpu initial heap  0xffff000029300000   c00000   c00000     0     0     0    2   30
+  176             per cpu initial heap  0xffff000029f00000   c00000   c00000     0     0     0    2   30
+  177             per cpu initial heap  0xffff00002ab00000   c00000   c00000     0     0     0    2   30

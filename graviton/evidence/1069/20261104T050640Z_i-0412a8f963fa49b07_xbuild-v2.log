@@ -1,0 +1,130 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-v2
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build kernel_arm64 for fix1069 v2 (both commits: Query() block support + the physical map area) at a9954f424a, hrev59996, mtimes forced; built twice
+# start: 20261104T050640Z   end: 20261104T050715Z   rc: 0
+# script sha256: bc69d7194c4109a915bcbec73c07f4877a8ae5781d9ec3611104224e5f3893fe
+# ---- script ----
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUTS=s3://haiku-graviton-$ACCT-us-west-2/bugfix/R/out
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | echo '<base64 of the git format-patch of this PR's commits at that stage, elided; its sha256 is the first line of the raw output>' | base64 -d > $O/fix1069v2.patch; sha256sum $O/fix1069v2.patch
+# | REV=hrev59996
+# | R=objects/haiku/arm64/release/system/kernel
+# | T=a9954f424a
+# | F="headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp"
+# | kbuild() {
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	sleep 2; (cd .. && touch $F); sleep 2
+# | 	rm -rf $R
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" > $O/jam-k-$l.log 2>&1 || { tail -40 $O/jam-k-$l.log; return 1; }
+# | 	echo "JAM kernel $l ok"
+# | 	grep -E "warning:|error:" $O/jam-k-$l.log | grep -E "arch_vm_translation_map|arch_kernel.h|VMSAv8TranslationMap" | head
+# | 	cp $R/revisioned/kernel_arm64 $O/kernel_arm64.$l
+# | }
+# | kbuild fix1069v2 fix1069v2.patch || exit 1
+# | kbuild fix1069v2b fix1069v2.patch || exit 1
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | echo "bytes differing between the two v2 builds: $(cmp -l kernel_arm64.fix1069v2 kernel_arm64.fix1069v2b | wc -l) (build time string)"
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | echo "Query() size trunk / v2: $(${X}nm -S -C kernel_arm64.trunk | grep 'VMSAv8TranslationMap::Query(' | awk '{print $2}') / $(${X}nm -S -C kernel_arm64.fix1069v2 | grep 'VMSAv8TranslationMap::Query(' | awk '{print $2}')"
+# | sha256sum kernel_arm64.fix1069v2 kernel_arm64.fix1069v2b | tee -a SHA256SUMS
+# | aws s3 cp --quiet kernel_arm64.fix1069v2 $OUTS/kernel_arm64.fix1069v2 && echo uploaded
+# ---- raw output ----
+6ff63f280d39cecb05bd61a181ac1dbacc06a15fc885558ea8ac43469ff3df66  /opt/t/out/fix1069v2.patch
+ headers/private/kernel/arch/arm64/arch_kernel.h    |  6 +-
+ .../kernel/arch/arm64/VMSAv8TranslationMap.cpp     | 88 ++++++++++++++--------
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp  | 19 ++++-
+ 3 files changed, 80 insertions(+), 33 deletions(-)
+JAM kernel fix1069v2 ok
+ headers/private/kernel/arch/arm64/arch_kernel.h    |  6 +-
+ .../kernel/arch/arm64/VMSAv8TranslationMap.cpp     | 88 ++++++++++++++--------
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp  | 19 ++++-
+ 3 files changed, 80 insertions(+), 33 deletions(-)
+JAM kernel fix1069v2b ok
+bytes differing between the two v2 builds: 6 (build time string)
+Query() size trunk / v2: 0000000000000448
+0000000000000560
+0000000000000560 / 0000000000000304
+0000000000000304
+c1de2ed518bf5b5055816efc95f51973cb32b077161ca2ff16e6664f3a2af945  kernel_arm64.fix1069v2
+438bc7db61d3bc9501bd4079474c69117bf15bb8121fa359a8733b15b6ba15b8  kernel_arm64.fix1069v2b
+uploaded
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUTS=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ base64 -d
++ echo RnJvbSBiODAwMjFjMDUyOGY0MWU1OGQzNzk5ODQwYzU4ZjE5NWFiMWRlMTk3IE1vbiBTZXAgMTcgMDA6...<base64 elided, see the script section>
++ sha256sum /opt/t/out/fix1069v2.patch
++ REV=hrev59996
++ R=objects/haiku/arm64/release/system/kernel
++ T=a9954f424a
++ F='headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp'
++ kbuild fix1069v2 fix1069v2.patch
++ l=fix1069v2
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1069v2.patch
++ git -C .. apply /opt/t/out/fix1069v2.patch
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM kernel fix1069v2 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1069v2.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h|VMSAv8TranslationMap'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1069v2
++ kbuild fix1069v2b fix1069v2.patch
++ l=fix1069v2b
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1069v2.patch
++ git -C .. apply /opt/t/out/fix1069v2.patch
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM kernel fix1069v2b ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1069v2b.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h|VMSAv8TranslationMap'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1069v2b
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
+++ cmp -l kernel_arm64.fix1069v2 kernel_arm64.fix1069v2b
+++ wc -l
++ echo 'bytes differing between the two v2 builds: 6 (build time string)'
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C kernel_arm64.trunk
+++ grep 'VMSAv8TranslationMap::Query('
+++ awk '{print $2}'
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C kernel_arm64.fix1069v2
+++ grep 'VMSAv8TranslationMap::Query('
+++ awk '{print $2}'
++ echo 'Query() size trunk / v2: 0000000000000448
+0000000000000560
+0000000000000560 / 0000000000000304
+0000000000000304'
++ sha256sum kernel_arm64.fix1069v2 kernel_arm64.fix1069v2b
++ tee -a SHA256SUMS
++ aws s3 cp --quiet kernel_arm64.fix1069v2 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out/kernel_arm64.fix1069v2
++ echo uploaded

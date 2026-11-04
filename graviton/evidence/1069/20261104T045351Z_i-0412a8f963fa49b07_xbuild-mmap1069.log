@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-mmap1069
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-build graviton/scripts/mmap1069.c for haiku/arm64 with jam (no gcc on the image): a throwaway Application target in the builder's tree, reverted afterwards
+# start: 20261104T045351Z   end: 20261104T045408Z   rc: 0
+# script sha256: 81df352745abf240c8177493d7253e55dde8ab2af36cf6bdef0d1a118dc4873a
+# ---- script ----
+# | set -e
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/R
+# | cd /opt/t/hg
+# | git checkout -q -f a9954f424a
+# | mkdir -p src/bin/mmap1069 && cp /opt/t/out/mmap1069.c src/bin/mmap1069/
+# | printf 'SubDir HAIKU_TOP src bin mmap1069 ;\nApplication mmap1069 : mmap1069.c ;\n' > src/bin/mmap1069/Jamfile
+# | echo 'SubInclude HAIKU_TOP src bin mmap1069 ;' >> src/bin/Jamfile
+# | cd generated
+# | jam -q -j$(nproc) mmap1069 > /opt/t/out/jam-mmap1069.log 2>&1 || { tail -30 /opt/t/out/jam-mmap1069.log; exit 1; }
+# | grep -E "warning|error" /opt/t/out/jam-mmap1069.log | grep mmap1069 || true
+# | f=$(find objects -name mmap1069 -type f | head -1); file $f; cp $f /opt/t/out/mmap1069; sha256sum /opt/t/out/mmap1069
+# | cd .. && git checkout -q -f a9954f424a && rm -rf src/bin/mmap1069 && git status --short | head -3
+# | aws s3 cp --quiet /opt/t/out/mmap1069 $B/src/mmap1069 && echo uploaded
+# ---- raw output ----
+objects/haiku/arm64/release/bin/mmap1069/mmap1069: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, not stripped
+08d18d3b318b4688d0cd35f623177a2004ef836257cba84372ed16f09f393556  /opt/t/out/mmap1069
+uploaded

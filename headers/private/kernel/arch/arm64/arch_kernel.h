@@ -10,8 +10,12 @@
 
 
 // memory layout
+// The kernel address space is the whole TTBR1 half (48-bit VAs), as on x86_64.
+// It has to reach KERNEL_PMAP_BASE, or the "physical map area" cannot be
+// created, and lock_memory_etc() on a vm_get_physical_page() address fails
+// with B_BAD_ADDRESS for want of an area to look up.
 #define KERNEL_BASE		0xffff000000000000
-#define KERNEL_SIZE		0x8000000000
+#define KERNEL_SIZE		0x1000000000000
 #define KERNEL_TOP		(KERNEL_BASE + (KERNEL_SIZE - 1))
 
 #define USER_BASE		0x1000

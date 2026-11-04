@@ -1,0 +1,143 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build trunk / fix1069 / trunk2 kernel_arm64 at a9954f424a (revision pinned to canonical's hrev59996, method of #898/#1027)
+# start: 20261104T044328Z   end: 20261104T044409Z   rc: 0
+# script sha256: e8cc123eb5b12bf9388053262d999bc8e0f50617102df5030311ee1d41c9a6d4
+# ---- script ----
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUTS=s3://haiku-graviton-$ACCT-us-west-2/bugfix/R/out
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | REV=hrev59996
+# | R=objects/haiku/arm64/release/system/kernel
+# | T=a9954f424a
+# | kbuild() {	# kbuild <label> [patch...]
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	# jam compares 1 s mtimes; drop the kernel objects so every label rebuilds them
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" > $O/jam-k-$l.log 2>&1 || { tail -40 $O/jam-k-$l.log; return 1; }
+# | 	echo "JAM kernel $l ok wall=$(( $(date +%s) - s ))s"
+# | 	grep -E "warning:|error:" $O/jam-k-$l.log | grep -E "arch_vm_translation_map|arch_kernel.h" | head
+# | 	cp $R/revisioned/kernel_arm64 $O/kernel_arm64.$l
+# | }
+# | kbuild trunk || exit 1
+# | kbuild fix1069 fix1069.patch || exit 1
+# | kbuild trunk2 || exit 1
+# | cmp $O/kernel_arm64.trunk $O/kernel_arm64.trunk2 && echo "kernel trunk rebuild identical"
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for l in trunk fix1069; do echo "$l: strings"; strings kernel_arm64.$l | grep -E "physical map area|failed to create the physical map" ; done
+# | for l in trunk fix1069; do echo "$l: vm_unreserve_address_range calls in arch_vm_translation_map_init_post_area: $(${X}objdump -d --no-show-raw-insn kernel_arm64.$l | awk '/<arch_vm_translation_map_init_post_area>:/{f=1} f&&/^$/{f=0} f' | grep -c 'bl.*vm_unreserve_address_range')"; done
+# | sha256sum kernel_arm64.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include SHA256SUMS . $OUTS/ && echo uploaded
+# ---- raw output ----
+JAM kernel trunk ok wall=12s
+ headers/private/kernel/arch/arm64/arch_kernel.h       |  6 +++++-
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp     | 19 ++++++++++++++++++-
+ 2 files changed, 23 insertions(+), 2 deletions(-)
+JAM kernel fix1069 ok wall=9s
+JAM kernel trunk2 ok wall=9s
+/opt/t/out/kernel_arm64.trunk /opt/t/out/kernel_arm64.trunk2 differ: byte 1749035, line 4879
+trunk: strings
+physical map area
+fix1069: strings
+physical map area
+arch_vm_translation_map_init_post_area(): failed to create the physical map area: %s
+trunk: vm_unreserve_address_range calls in arch_vm_translation_map_init_post_area: 0
+fix1069: vm_unreserve_address_range calls in arch_vm_translation_map_init_post_area: 1
+de1567e28a4ecb3833efc85e7a92180c2578b0b83d87b419abff809ca7001b7f  kernel_arm64.fix1069
+30faa39d735aeaffc6f9aee5ab16559b29da8c0a27470323083363536bde2064  kernel_arm64.trunk
+c6f64ebff8592c321fcc0a75dc87bdb254ae3213bc57f5642e0f555effbe4366  kernel_arm64.trunk2
+uploaded
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUTS=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ REV=hrev59996
++ R=objects/haiku/arm64/release/system/kernel
++ T=a9954f424a
++ kbuild trunk
++ l=trunk
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793767413
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel trunk ok wall=12s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-trunk.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk
++ kbuild fix1069 fix1069.patch
++ l=fix1069
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1069.patch
++ git -C .. apply /opt/t/out/fix1069.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793767425
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel fix1069 ok wall=9s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1069.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1069
++ kbuild trunk2
++ l=trunk2
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793767434
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel trunk2 ok wall=9s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-trunk2.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk2
++ cmp /opt/t/out/kernel_arm64.trunk /opt/t/out/kernel_arm64.trunk2
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ for l in trunk fix1069
++ echo 'trunk: strings'
++ strings kernel_arm64.trunk
++ grep -E 'physical map area|failed to create the physical map'
++ for l in trunk fix1069
++ echo 'fix1069: strings'
++ strings kernel_arm64.fix1069
++ grep -E 'physical map area|failed to create the physical map'
++ for l in trunk fix1069
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn kernel_arm64.trunk
+++ awk '/<arch_vm_translation_map_init_post_area>:/{f=1} f&&/^$/{f=0} f'
+++ grep -c 'bl.*vm_unreserve_address_range'
++ echo 'trunk: vm_unreserve_address_range calls in arch_vm_translation_map_init_post_area: 0'
++ for l in trunk fix1069
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn kernel_arm64.fix1069
+++ awk '/<arch_vm_translation_map_init_post_area>:/{f=1} f&&/^$/{f=0} f'
+++ grep -c 'bl.*vm_unreserve_address_range'
++ echo 'fix1069: vm_unreserve_address_range calls in arch_vm_translation_map_init_post_area: 1'
++ sha256sum kernel_arm64.fix1069 kernel_arm64.trunk kernel_arm64.trunk2
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out/
++ echo uploaded

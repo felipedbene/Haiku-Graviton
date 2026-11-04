@@ -1,0 +1,60 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-tool-check
+# instance: i-03c5dc747f219f92c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base: are nettput and disktput present; disktput usage
+# start: 20261104T050815Z   end: 20261104T050826Z   rc: 0
+# script sha256: 81862309212e3e969d5cd07b045f3113b892cd5c77e1e1089966f83a6b4f32b7
+# ---- script ----
+# | nettput -h 2>&1 | head -5
+# | disktput -h 2>&1 | head -40
+# | sha256sum $(finddir B_SYSTEM_BIN_DIRECTORY)/disktput $(finddir B_SYSTEM_BIN_DIRECTORY)/nettput 2>&1
+# | df -h /boot | tail -1
+# ---- raw output ----
+Usage: nettput -c <host> [options]
+
+Measure bulk TCP throughput and CPU cost per byte against
+graviton/scripts/nettput-peer.py running on <host>.
+
+Usage: disktput -f <path> [options]
+
+Measure disk throughput, IOPS, latency and CPU cost per byte, either
+on a raw device (/dev/disk/nvme/0/raw) or through the file system.
+
+  -f <path>     device or file to measure (required)
+  -m <mode>     seqread | seqwrite | randread | randwrite | verify
+                (default seqread)
+  -b <bytes>    block size per operation, K/M suffixes ok (default 64K)
+  -n <bytes>    total bytes to move across all threads (default 512M)
+  -t <n>        concurrent threads, which is the request depth the
+                device sees (default 1, max 256)
+  -s <bytes>    span to operate within (default: -n, or the whole
+                device). Make this much larger than RAM for random
+                reads, or the page cache answers instead of the disk
+  -o <bytes>    offset the span starts at (default 0)
+  -D            open with O_NOCACHE, bypassing the file cache
+  -S            fsync once at the end and report its cost separately
+  -F            fsync after every write (durability, not throughput)
+  -e <n>        random seed, so a random run is repeatable (default 1)
+  -T <secs>     run for this long instead of for -n bytes. Use this for
+                any concurrency sweep: a fixed -n makes high thread
+                counts finish too fast for the EBS token bucket to
+                bind, and throughput then appears to exceed the
+                instance's own documented ceiling
+  -A <bytes>    I/O buffer alignment, power of two (default one page).
+                Below a page, nvme_disk bounces the request through a
+                16 KiB buffer, so this is not a cosmetic knob
+  -U <bytes>    deliberately offset the buffer this far past its
+                alignment, to measure the bounce path on purpose
+  -i <secs>     trace progress every <secs>, so a path that stalls can
+                be told apart from one that is merely slow, and a
+                wedge from either
+  -P            stamp every written block with its own offset, so a
+                later -m verify can prove the data is the data that
+                belongs there -- not zeros, and not some other
+                block. Use for durability tests across a stop/start
+  -y            confirm writing to a raw device, destroying its contents
+  -J            also print one tab-separated line for a harness
+  -L <label>    label echoed into the result
+f0f8285551e9407cd35a67dd89ca9afc9d6847dd7a3cfb0c41caca47fbc55c48  /boot/system/bin/disktput
+6bf64fc27baeb23133779215631ce3367228749c912d0ae4d0f7057669612706  /boot/system/bin/nettput
+   Root Inode: 524288

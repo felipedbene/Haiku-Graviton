@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4-unmount-verify
+# instance: i-03041483120410e2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4: unmount the diskimage FAT and ext2 volumes, mount each again and md5 every file from disk, unmount
+# start: 20261104T062433Z   end: 20261104T062450Z   rc: 0
+# script sha256: 29b9fb01df8d074697c58ed910c9bf6f6589d446c4e0abe647d621f2d1fd23e7
+# ---- script ----
+# | cd /boot/home/t1069
+# | D3=$(diskimage list | awk '/fat.img/{print $3}'); D4=$(diskimage list | awk '/ext2.img/{print $3}')
+# | sh diskimage1027.sh unmount /f1069
+# | sh diskimage1027.sh unmount /e1069
+# | sh diskimage1027.sh verify $D3 /f1069 fat
+# | sh diskimage1027.sh verify $D4 /e1069 ext2
+# | sh diskimage1027.sh unmount /f1069
+# | sh diskimage1027.sh unmount /e1069
+# | echo "lock/unmapped failures this boot: $(grep -cE 'failed to lock memory|unmapped memory' /var/log/syslog)"
+# | true
+# ---- raw output ----
+unmount /f1069 rc=0
+unmount /e1069 rc=0
+05f30910592f99ac5cc4dabcfd2126a2  /f1069/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /f1069/lin-small
+h-2b: OK
+h-4k: OK
+h-1m: OK
+verify rc=0
+05f30910592f99ac5cc4dabcfd2126a2  /e1069/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /e1069/lin-small
+h-2b: OK
+h-4k: OK
+h-1m: OK
+verify rc=0
+unmount /f1069 rc=1
+unmount /e1069 rc=0
+lock/unmapped failures this boot: 0
+unmount: unmounting failed: Device/File/Resource busy

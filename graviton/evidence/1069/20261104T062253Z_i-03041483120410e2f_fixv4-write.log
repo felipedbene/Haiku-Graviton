@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4-write
+# instance: i-03041483120410e2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4: diskimage1027 write phase on FAT (files/3) and ext2 (files/4)
+# start: 20261104T062253Z   end: 20261104T062414Z   rc: 0
+# script sha256: 60ebea2fa7d4e452a671953582f92a8d48a36fa5ccbaa51f465863891644aa4d
+# ---- script ----
+# | cd /boot/home/t1069
+# | D3=$(diskimage list | awk '/fat.img/{print $3}'); D4=$(diskimage list | awk '/ext2.img/{print $3}'); echo "$D3 $D4"
+# | sh diskimage1027.sh write $D3 /f1069 fat
+# | sh diskimage1027.sh write $D4 /e1069 ext2
+# | echo "--- this boot's lock / page-writer failures"
+# | grep -E "failed to lock memory|PageWriteWrapper|writeback is making no progress|unmapped memory" /var/log/syslog | sed 's/0xffff[0-9a-f]*/ADDR/' | sort | uniq -c | sort -rn | head -5
+# | true
+# ---- raw output ----
+/dev/disk/virtual/files/4/raw /dev/disk/virtual/files/5/raw
+05f30910592f99ac5cc4dabcfd2126a2  /f1069/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /f1069/lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+3292db600ca8b03858bb3c2b914e9677  h-1m
+write-back failures logged during this phase: 0
+05f30910592f99ac5cc4dabcfd2126a2  /e1069/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /e1069/lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+2c50bd579cbd1f748a61bccc99c3ebe4  h-1m
+write-back failures logged during this phase: 0
+--- this boot's lock / page-writer failures

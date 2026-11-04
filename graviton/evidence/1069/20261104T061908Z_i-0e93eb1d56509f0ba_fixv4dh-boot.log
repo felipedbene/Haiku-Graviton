@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4dh-boot
+# instance: i-0e93eb1d56509f0ba   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4dh (v4 kernel + kernel_malloc debug): it boots; where the debug heap's early areas went; physical map area
+# start: 20261104T061908Z   end: 20261104T061918Z   rc: 0
+# script sha256: b6f32e7a4b0e8df6c27cb27fb9e244b1dcc559f659e5e25c6650480fff4ac45f
+# ---- script ----
+# | sha256sum /boot/system/kernel_arm64; tail -1 /boot/home/config/settings/kernel/drivers/kernel
+# | grep -E "kernel malloc: using|grow heap|VIP heap" /var/log/syslog | tail -3
+# | listarea 1 | grep -E "dedicated grow heap|VIP heap|physical map|kdebug heap"
+# ---- raw output ----
+9969097b342e5f3539ae2dafa2103745df8dd75df418332c69035f0671693b87  /boot/system/kernel_arm64
+kernel_malloc debug
+KERN: heap_add_area: area -1 added to grow heap 0xffffff8000000000 - usable range 0xffffff8000004000 - 0xffffff8000100000
+KERN: heap_add_area: area -1 added to VIP heap heap 0xffffff8000100000 - usable range 0xffffff8000104000 - 0xffffff8000200000
+KERN: heap_init_post_area(): created VIP heap: 0xffffff8000100000
+  128                      kdebug heap  0xffff0000ccf64000    10000    10000     0     0     0    2   30
+    4                physical map area  0xffffff0000000000 8000000000        0     0     0     0    1   10
+    2              dedicated grow heap  0xffffff8000000000   100000   100000     0     0     0    2   30
+    3                         VIP heap  0xffffff8000100000   100000   100000     0     0     0    2   30

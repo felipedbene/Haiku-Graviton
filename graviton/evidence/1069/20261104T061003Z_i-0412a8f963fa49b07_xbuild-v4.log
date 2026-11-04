@@ -1,0 +1,113 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-v4
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build kernel_arm64 for fix1069 v4 (final: Query() block support; ProcessRange() top-slot wrap; the physical map area, window reserved in one piece) at a9954f424a, hrev59996, mtimes forced; built twice
+# start: 20261104T061003Z   end: 20261104T061038Z   rc: 0
+# script sha256: dc4ec99bac106c5cf1ce9ef5609be16af8c36926adcd3b0b0024f4c9982a0e55
+# ---- script ----
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUTS=s3://haiku-graviton-$ACCT-us-west-2/bugfix/R/out
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | echo '<base64 of the git format-patch of this PR's commits at that stage, elided; its sha256 is the first line of the raw output>' | base64 -d > $O/fix1069v4.patch; sha256sum $O/fix1069v4.patch
+# | REV=hrev59996
+# | R=objects/haiku/arm64/release/system/kernel
+# | T=a9954f424a
+# | F="headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp"
+# | kbuild() {
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	sleep 2; (cd .. && touch $F); sleep 2
+# | 	rm -rf $R
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" > $O/jam-k-$l.log 2>&1 || { tail -40 $O/jam-k-$l.log; return 1; }
+# | 	echo "JAM kernel $l ok"
+# | 	grep -E "warning:|error:" $O/jam-k-$l.log | grep -E "arch_vm_translation_map|arch_kernel.h|VMSAv8TranslationMap" | head
+# | 	cp $R/revisioned/kernel_arm64 $O/kernel_arm64.$l
+# | }
+# | kbuild fix1069v4 fix1069v4.patch || exit 1
+# | kbuild fix1069v4b fix1069v4.patch || exit 1
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | echo "bytes differing between the two v4 builds: $(cmp -l kernel_arm64.fix1069v4 kernel_arm64.fix1069v4b | wc -l) (build time string)"
+# | sha256sum kernel_arm64.fix1069v4 kernel_arm64.fix1069v4b | tee -a SHA256SUMS
+# | aws s3 cp --quiet kernel_arm64.fix1069v4 $OUTS/kernel_arm64.fix1069v4 && echo uploaded
+# ---- raw output ----
+4f224cfada1a71d45d3a134ba63c3bc2c0b1d6445b89b77f2e817db2d3410457  /opt/t/out/fix1069v4.patch
+ headers/private/kernel/arch/arm64/arch_kernel.h    |   6 +-
+ .../kernel/arch/arm64/VMSAv8TranslationMap.cpp     | 143 +++++++++++++--------
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp  |  64 ++++++++-
+ 3 files changed, 157 insertions(+), 56 deletions(-)
+JAM kernel fix1069v4 ok
+ headers/private/kernel/arch/arm64/arch_kernel.h    |   6 +-
+ .../kernel/arch/arm64/VMSAv8TranslationMap.cpp     | 143 +++++++++++++--------
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp  |  64 ++++++++-
+ 3 files changed, 157 insertions(+), 56 deletions(-)
+JAM kernel fix1069v4b ok
+bytes differing between the two v4 builds: 4 (build time string)
+9969097b342e5f3539ae2dafa2103745df8dd75df418332c69035f0671693b87  kernel_arm64.fix1069v4
+f339609985f602149c212a4cad1f478b6cc564d3f8073a7b1919b57d85d053d4  kernel_arm64.fix1069v4b
+uploaded
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUTS=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ base64 -d
++ echo RnJvbSA5YjJjMTMzOTRjODRiNTcxYmUwOWIyMjZiZWY2N2UwYzcyYmZkNGNiIE1vbiBTZXAgMTcgMDA6...<base64 elided, see the script section>
++ sha256sum /opt/t/out/fix1069v4.patch
++ REV=hrev59996
++ R=objects/haiku/arm64/release/system/kernel
++ T=a9954f424a
++ F='headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp'
++ kbuild fix1069v4 fix1069v4.patch
++ l=fix1069v4
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1069v4.patch
++ git -C .. apply /opt/t/out/fix1069v4.patch
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM kernel fix1069v4 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1069v4.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h|VMSAv8TranslationMap'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1069v4
++ kbuild fix1069v4b fix1069v4.patch
++ l=fix1069v4b
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1069v4.patch
++ git -C .. apply /opt/t/out/fix1069v4.patch
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ echo 'JAM kernel fix1069v4b ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1069v4b.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h|VMSAv8TranslationMap'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1069v4b
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
+++ cmp -l kernel_arm64.fix1069v4 kernel_arm64.fix1069v4b
+++ wc -l
++ echo 'bytes differing between the two v4 builds: 4 (build time string)'
++ sha256sum kernel_arm64.fix1069v4 kernel_arm64.fix1069v4b
++ tee -a SHA256SUMS
++ aws s3 cp --quiet kernel_arm64.fix1069v4 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out/kernel_arm64.fix1069v4
++ echo uploaded

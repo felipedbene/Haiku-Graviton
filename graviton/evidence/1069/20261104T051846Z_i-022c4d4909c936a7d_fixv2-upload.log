@@ -1,0 +1,16 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv2-upload
+# instance: i-022c4d4909c936a7d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv2: upload the two images, as Haiku left them, for a Linux fsck and md5 cross-check (wget PUT; no curl on the image)
+# start: 20261104T051846Z   end: 20261104T051903Z   rc: 0
+# script sha256: 9436ea5f26197558c4aaaa8201db17aeb0b32c636db14a85141e9ee269ee96fa
+# ---- script ----
+# | cd /boot/home/t1069
+# | sha256sum fat.img ext2.img
+# | wget -q --method=PUT --body-file=fat.img -O /dev/null 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/bugfix/R/up/fat-fixv2.img?<PRESIGNED>' && echo fat uploaded
+# | wget -q --method=PUT --body-file=ext2.img -O /dev/null 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/bugfix/R/up/ext2-fixv2.img?<PRESIGNED>' && echo ext2 uploaded
+# ---- raw output ----
+4c1c2e4125a01c3fe3af3752f95b2732d123e16c57f3319d4f5956d6f7679a99  fat.img
+8a61b1a0222813f619989822f6f7aca435dbb36c62613455408e9de504cdef4f  ext2.img
+fat uploaded
+ext2 uploaded

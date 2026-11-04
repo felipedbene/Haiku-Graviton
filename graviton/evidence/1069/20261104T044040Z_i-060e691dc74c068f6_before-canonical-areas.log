@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-canonical-areas
+# instance: i-060e691dc74c068f6   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: canonical: kernel area list, looking for the physical map area and the debug uart area; boot log lines about the physmap ranges
+# start: 20261104T044040Z   end: 20261104T044051Z   rc: 0
+# script sha256: 636c4f7654f0eb75c3b354959ea68702cdd741653a9bb7df1229394024fcf65d
+# ---- script ----
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- listarea 1 (kernel team), areas at or above 0xffff008000000000"
+# | listarea 1 | awk 'NR<=3 || /physical map|uart|overflow/'
+# | echo "--- count of kernel areas"; listarea 1 | wc -l
+# | echo "--- physical map area present?"; listarea 1 | grep -c "physical map area"
+# | echo "--- boot log mentions"
+# | grep -E "reserve_boot_loader_ranges|physical map|post_area" /var/log/syslog | head -20
+# ---- raw output ----
+Haiku ip-10-128-12-107.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+--- listarea 1 (kernel team), areas at or above 0xffff008000000000
+memory: total: 16477312KB, used: 835508KB, left: 15641804KB
+
+KERNEL SPACE (team 1)
+    2              debug uart map area  0xffff00000268a000     1000        0     0     0     0    1   10
+--- count of kernel areas
+380
+--- physical map area present?
+0
+--- boot log mentions
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff0040000000, 946012160
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff0078730000, 55377920
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff007bfe0000, 67239936
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff0400000000, 15804137472
+KERN: arch_vm_translation_map_init_post_area

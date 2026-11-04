@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-mmap1069
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-compile graviton/scripts/mmap1069.c for haiku/arm64 (no gcc on the image)
+# start: 20261104T045326Z   end: 20261104T045338Z   rc: 255
+# script sha256: ae508fd124175e47d82216b60a76989bb6f4e8da0fae94a775b9b5e5640a7f19
+# ---- script ----
+# | set -e
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/R
+# | cd /opt/t/out && aws s3 cp --quiet $B/src/mmap1069.c . && sha256sum mmap1069.c
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | ls /opt/t/hg/generated/cross-tools-arm64/ | head; ls /opt/t/hg/generated/cross-tools-arm64/sysroot/boot/system/develop/lib 2>/dev/null | head
+# | ${X}gcc -O2 -Wall -o mmap1069 mmap1069.c && file mmap1069 && sha256sum mmap1069
+# | aws s3 cp --quiet mmap1069 $B/src/mmap1069 && echo uploaded
+# ---- raw output ----
+16623d9720c40d3b3694e9ed1d644cd61022836143dfbe9ad376a9bdeae98e9d  mmap1069.c
+aarch64-unknown-haiku
+bin
+include
+lib
+libexec
+share
+sysroot
+/opt/t/hg/generated/cross-tools-arm64/sysroot/boot/system/develop/lib
+mmap1069.c:16:10: fatal error: errno.h: No such file or directory
+   16 | #include <errno.h>
+      |          ^~~~~~~~~
+compilation terminated.
+
+aws: [ERROR]: The user-provided path mmap1069 does not exist.
+failed to run commands: exit status 255

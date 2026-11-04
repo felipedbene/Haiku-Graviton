@@ -1,0 +1,519 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv2dh-console (kernel_malloc debug in the kernel settings file)
+# instance: i-05f5bffc9e3df38f0   region: us-west-2   transport: ec2 get-console-output --latest
+# captured: 20261104T055546Z
+# ---- raw output ----
+i-05f5bffc9e3df38f0	UEFI firmware (version  built at 09:00:00 on Nov  1 2018)
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[0m[35m[40m[2J[01;01H[=3h[2J[01;01H[2J[01;01Hacpi_init: found ACPI RSDP signature at 0x00000000786e0014
+acpi: found rsdp at 0x00000000786e0014 oem id: AMAZON, rev 2
+acpi: rsdp points to rsdt at 0x786d0074
+acpi: found valid XSDT at 0x00000000786d00e8
+acpi: searching 8 entries for table 'SPCR'
+acpi: Looking for 'SPCR'. Skipping 'FACP'
+acpi: Looking for 'SPCR'. Skipping 'APIC'
+acpi: Found 'SPCR' @ 0x00000000786d011c
+acpi: spcr pci check: revision 2, length 80, pci 1d0f:8250 at 0:00:01.0
+acpi: spcr pci check: LocateHandleBuffer(PciRootBridgeIo) status 0x0, 1 handle(s)
+acpi: spcr pci check: bridge 0: segment 0, id read ok 0x82501d0f
+acpi: spcr pci check: id 0x82501d0f, command 0x10, BAR 0 0x80108000, BAR 1 0x0
+acpi: spcr pci check: enabled memory decode (command 0x10 -> 0x12)
+acpi: spcr pci check: uart at BAR 0 reads LCR 0x3, LSR 0x60
+acpi: spcr console 0x90a0000, pci 1d0f:8250 at 0:00:01.0 has BAR 0 0x80108000; spcr address is not that device, using the BAR
+discovered uart from acpi: base=80108000, irq=37, clock=0, reg_shift=0
+acpi: searching 8 entries for table 'APIC'
+acpi: Looking for 'APIC'. Skipping 'FACP'
+acpi: Found 'APIC' @ 0x00000000786d0114
+discovered gic from acpi: version=3, gicd=10000000, gicr=10200000 (size fdf0000), its=10080000, 8 pes
+acpi: pmu overflow gsiv (madt gicc performance interrupt) = 23
+acpi: searching 8 entries for table 'GTDT'
+acpi: Looking for 'GTDT'. Skipping 'FACP'
+acpi: Looking for 'GTDT'. Skipping 'APIC'
+acpi: Looking for 'GTDT'. Skipping 'SPCR'
+acpi: Found 'GTDT' @ 0x00000000786d0124
+generic timer from acpi gtdt (revision 2, 96 bytes):
+  frequency: not stated by this table; kernel uses CNTFRQ_EL0
+  counter block: 0xffffffffffffffff (not provided)
+  sec-phys timer interrupt: 29
+  phys timer interrupt: 30
+  virt timer interrupt: 27
+  hyp-phys timer interrupt: 26
+acpi: searching 8 entries for table 'FACP'
+acpi: Found 'FACP' @ 0x00000000786d010c
+discovered psci from acpi: conduit=hvc
+efi/fdt: Probing for device trees from UEFI...
+GOP protocol not found
+Welcome to the DeBeOS boot loader! (based on Haiku)
+Haiku revision: hrev59996
+efi/network: EFI reports network unavaiable
+add_partitions_for(0x000000007842a558, mountFS = no)
+add_partitions_for(fd = 0, mountFS = no)
+0x000000007842a5b0 Partition::Partition
+0x000000007842a5b0 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 8ee17e9b
+absolute block: 1
+alternate block: 41943039
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 6060a215
+absolute block: 41943039
+alternate block: 1
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 41943007
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+[  0] partition type: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+      unique id: 4706d44c-3e8b-4911-b94e-fde03f9289b5
+      start block: 8192
+      end block: 73727
+      size: 31.999 MB
+      attributes: 0
+      name: EFI system partition
+[  1] partition type: 42465331-3ba3-10f1-802a-4861696b7521
+      unique id: 30f27487-a12a-4440-b6fc-8756a5b34972
+      start block: 73728
+      end block: 41943006
+      size: 20443.983 MB
+      attributes: 0
+      name: Haiku BFS
+  priority: 960
+check for partitioning_system: Intel Partition Map
+intel: Found GPT signature, ignoring.
+check for partitioning_system: Intel Extended Partition
+efi_gpt_scan_partition(cookie = 0x000000007842a6b8)
+0x000000007842e798 Partition::Partition
+0x000000007842a5b0 Partition::AddChild 0x000000007842e798
+0x000000007842e798 Partition::SetParent 0x000000007842a5b0
+new child partition!
+0x000000007842e898 Partition::Partition
+0x000000007842a5b0 Partition::AddChild 0x000000007842e898
+0x000000007842e898 Partition::SetParent 0x000000007842a5b0
+new child partition!
+0x000000007842a5b0 Partition::Scan(): scan child 0x000000007842e798 (start = 4194304, size = 33554432, parent = 0x000000007842a5b0)!
+0x000000007842e798 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+check for partitioning_system: Intel Partition Map
+check for partitioning_system: Intel Extended Partition
+0x000000007842a5b0 Partition::Scan(): scan child 0x000000007842e898 (start = 37748736, size = 21437070848, parent = 0x000000007842a5b0)!
+0x000000007842e898 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+check for partitioning_system: Intel Partition Map
+check for partitioning_system: Intel Extended Partition
+0x000000007842a5b0 Partition::~Partition
+0x000000007842e798 Partition::SetParent 0x0000000000000000
+0x000000007842e898 Partition::SetParent 0x0000000000000000
+0x000000007842e898 Partition::_Mount check for file_system: BFS Filesystem
+PackageVolumeInfo::SetTo()
+load kernel kernel_arm64...
+smbios: found v2 at 0x000000007bed0000
+smbios: found v3 at 0x000000007beb0000
+Chosen UART:
+  kind: 8250
+  regs: 0x80108000, 0x1000
+  irq: 37
+  clock: 0
+Chosen interrupt controller:
+  kind: gicv3
+  regs: 0x10000000, 0x10000
+        0x10200000, 0xfdf0000
+Generic timer from fdt:
+  frequency: 0 Hz (not stated; kernel uses CNTFRQ_EL0)
+  sec-phys: INTID 29
+  phys: INTID 30
+  virt: INTID 27
+  hyp-phys: INTID 26
+kernel:
+  text: 0xffff000000000000, 0x1cc000
+  data: 0xffff0000001dc000, 0xb3000
+  entry: 0xffff000000092fa0
+rtc: firmware time is 2026-11-04 05:44:09 (1793771049)
+Kernel stack at 0xffff000002685000
+System provided memory map:
+  phys: 0x40000000-0x77b11000, virt: 0x00000000-0x37b11000, size = 0x37b11000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x77b11000-0x785aa000, virt: 0x00000000-0x00a99000, size = 0x00a99000, type: EfiLoaderData (0x2), attr: 0x8
+  phys: 0x785aa000-0x78630000, virt: 0x00000000-0x00086000, size = 0x00086000, type: EfiLoaderCode (0x1), attr: 0x8
+  phys: 0x78630000-0x78640000, virt: 0x00000000-0x00010000, size = 0x00010000, type: EfiACPIMemoryNVS (0xa), attr: 0x8
+  phys: 0x78640000-0x786f0000, virt: 0x00000000-0x000b0000, size = 0x000b0000, type: EfiACPIReclaimMemory (0x9), attr: 0x8
+  phys: 0x786f0000-0x78730000, virt: 0x00000000-0x00040000, size = 0x00040000, type: EfiRuntimeServicesCode (0x5), attr: 0x8000000000000008
+  phys: 0x78730000-0x7a58c000, virt: 0x00000000-0x01e5c000, size = 0x01e5c000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7a58c000-0x7a58d000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7a58d000-0x7a614000, virt: 0x00000000-0x00087000, size = 0x00087000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7a614000-0x7b624000, virt: 0x00000000-0x01010000, size = 0x01010000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7b624000-0x7b912000, virt: 0x00000000-0x002ee000, size = 0x002ee000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7b912000-0x7bc00000, virt: 0x00000000-0x002ee000, size = 0x002ee000, type: EfiBootServicesCode (0x3), attr: 0x8
+  phys: 0x7bc00000-0x7bd90000, virt: 0x00000000-0x00190000, size = 0x00190000, type: EfiRuntimeServicesCode (0x5), attr: 0x8000000000000008
+  phys: 0x7bd90000-0x7bfe0000, virt: 0x00000000-0x00250000, size = 0x00250000, type: EfiRuntimeServicesData (0x6), attr: 0x8000000000000008
+  phys: 0x7bfe0000-0x7bfff000, virt: 0x00000000-0x0001f000, size = 0x0001f000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7bfff000-0x7c000000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7c000000-0x7f28f000, virt: 0x00000000-0x0328f000, size = 0x0328f000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7f28f000-0x7f2c4000, virt: 0x00000000-0x00035000, size = 0x00035000, type: EfiBootServicesCode (0x3), attr: 0x8
+  phys: 0x7f2c4000-0x80000000, virt: 0x00000000-0x00d3c000, size = 0x00d3c000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x400000000-0x7ae000000, virt: 0x00000000-0x3ae000000, size = 0x3ae000000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x09010000-0x09011000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiMemoryMappedIO (0xb), attr: 0x8000000000000001
+  phys: 0x09050000-0x09051000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiMemoryMappedIO (0xb), attr: 0x8000000000000001
+Efi loader symbols offset: 0x785aa000:
+Current Exception Level EL1
+TTBR0: 7fffb000 TTBRx: 1de7ec7edbadc0dc SCTLR: 30d5187d TCR: 580803510
+MMU Enabled, Granularity 4KB, bits 48
+Kernel entry accessibility W: 0 R: 0
+kernel_args: version 1, 4209 bytes
+Calling ExitBootServices. So long, EFI!
+Welcome to kernel debugger output!
+DeBeOS -- ARM-first, descended from Haiku/BeOS
+Haiku revision: hrev59996, debug level: 2
+kernel build roottable-guard-1, compiled Nov  4 2026 05:06:53
+PSCI conduit: hvc
+arm64_pmu: overflow interrupt gsiv from madt = 23 (architected PPI 7)
+arm64_pmu: PMUv3 present (PMUVer 5), 32 bit event counters, enabled by boot setting
+arm64: cpu 0 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64_pmu: 1 of 2 event counters programmed on all CPUs (1 reserved for sampling)
+arm64_pmu:   [0] 0x0008 inst-retired
+arm64_pmu:   [1] 0x0011 cpu-cycles -- sampling, period 10000000 cycles
+early: pulling page 400002000
+early: pulling page 400203000
+early: pulling page 400404000
+early: pulling page 400605000
+kernel malloc: using debug_heap
+early: pulling page 400806000
+early: pulling page 400a07000
+early: pulling page 400c08000
+early: pulling page 400e09000
+early: pulling page 40100a000
+early: pulling page 40120b000
+early: pulling page 40140c000
+early: pulling page 40160d000
+heap_add_area: area -1 added to small heap 0xffff000001000000 - usable range 0xffff000001019000 - 0xffff000001800000
+heap_add_area: area -1 added to medium heap 0xffff000001800000 - usable range 0xffff000001802000 - 0xffff000001ccc000
+heap_add_area: area -1 added to large heap 0xffff000001cccccc - usable range 0xffff000001cce000 - 0xffff000002000000
+early: pulling page 401983000
+early: pulling page 401b84000
+early: pulling page 401d85000
+early: pulling page 401f86000
+early: pulling page 402187000
+early: pulling page 402388000
+early: pulling page 402589000
+early: pulling page 40278a000
+early: pulling page 40298b000
+early: pulling page 402b8c000
+early: pulling page 402d8d000
+early: pulling page 402f8e000
+early: pulling page 40318f000
+early: pulling page 403390000
+early: pulling page 403591000
+early: pulling page 403792000
+early: pulling page 403993000
+early: pulling page 403b94000
+early: pulling page 403d95000
+early: pulling page 403f96000
+early: pulling page 404197000
+early: pulling page 404398000
+early: pulling page 404599000
+early: pulling page 40479a000
+early: pulling page 40499b000
+early: pulling page 404b9c000
+early: pulling page 404d9d000
+early: pulling page 404f9e000
+early: pulling page 40519f000
+early: pulling page 4053a0000
+early: pulling page 4055a1000
+early: pulling page 4057a2000
+early: pulling page 4059a3000
+early: pulling page 405ba4000
+early: pulling page 405da5000
+early: pulling page 405fa6000
+early: pulling page 4061a7000
+early: pulling page 4063a8000
+early: pulling page 4065a9000
+early: pulling page 4067aa000
+early: pulling page 4069ab000
+early: pulling page 406bac000
+early: pulling page 406dad000
+early: pulling page 406fae000
+early: pulling page 4071af000
+early: pulling page 4073b0000
+early: pulling page 4075b1000
+early: pulling page 4077b2000
+early: pulling page 4079b3000
+early: pulling page 407bb4000
+early: pulling page 407db5000
+early: pulling page 407fb6000
+early: pulling page 4081b7000
+early: pulling page 4083b8000
+early: pulling page 4085b9000
+early: pulling page 4087ba000
+early: pulling page 4089bb000
+early: pulling page 408bbc000
+early: pulling page 408dbd000
+early: pulling page 408fbe000
+early: pulling page 4091bf000
+early: pulling page 4093c0000
+early: pulling page 4095c1000
+early: pulling page 4097c2000
+early: pulling page 4099c3000
+early: pulling page 409bc4000
+early: pulling page 409dc5000
+early: pulling page 409fc6000
+early: pulling page 40a1c7000
+early: pulling page 40a3c8000
+early: pulling page 40a5c9000
+early: pulling page 40a7ca000
+early: pulling page 40a9cb000
+early: pulling page 40abcc000
+early: pulling page 40adcd000
+early: pulling page 40afce000
+early: pulling page 40b1cf000
+early: pulling page 40b3d0000
+early: pulling page 40b5d1000
+early: pulling page 40b7d2000
+early: pulling page 40b9d3000
+early: pulling page 40bbd4000
+early: pulling page 40bdd5000
+early: pulling page 40bfd6000
+early: pulling page 40c1d7000
+early: pulling page 40c3d8000
+early: pulling page 40c5d9000
+early: pulling page 40c7da000
+early: pulling page 40c9db000
+early: pulling page 40cbdc000
+early: pulling page 40cddd000
+early: pulling page 40cfde000
+early: pulling page 40d1df000
+early: pulling page 40d3e0000
+early: pulling page 40d5e1000
+early: pulling page 40d7e2000
+early: pulling page 40d9e3000
+early: pulling page 40dbe4000
+early: pulling page 40dde5000
+early: pulling page 40dfe6000
+early: pulling page 40e1e7000
+early: pulling page 40e3e8000
+early: pulling page 40e5e9000
+early: pulling page 40e7ea000
+early: pulling page 40e9eb000
+early: pulling page 40ebec000
+early: pulling page 40eded000
+early: pulling page 40efee000
+early: pulling page 40f1ef000
+early: pulling page 40f3f0000
+early: pulling page 40f5f1000
+early: pulling page 40f7f2000
+early: pulling page 40f9f3000
+early: pulling page 40fbf4000
+early: pulling page 40fdf5000
+early: pulling page 40fff6000
+early: pulling page 4101f7000
+early: pulling page 4103f8000
+early: pulling page 4105f9000
+early: pulling page 4107fa000
+early: pulling page 4109fb000
+early: pulling page 410bfc000
+early: pulling page 410dfd000
+early: pulling page 410ffe000
+early: pulling page 4111ff000
+early: pulling page 411400000
+early: pulling page 411601000
+early: pulling page 411802000
+early: pulling page 411a03000
+early: pulling page 411c04000
+early: pulling page 411e05000
+early: pulling page 412006000
+early: pulling page 412207000
+early: pulling page 412408000
+early: pulling page 412609000
+early: pulling page 41280a000
+early: pulling page 412a0b000
+early: pulling page 412c0c000
+early: pulling page 412e0d000
+early: pulling page 41300e000
+early: pulling page 41320f000
+early: pulling page 413410000
+early: pulling page 413611000
+early: pulling page 413812000
+early: pulling page 413a13000
+early: pulling page 413c14000
+early: pulling page 413e15000
+early: pulling page 414016000
+early: pulling page 414217000
+early: pulling page 414418000
+early: pulling page 414619000
+early: pulling page 41481a000
+early: pulling page 414a1b000
+early: pulling page 414c1c000
+early: pulling page 414e1d000
+early: pulling page 41501e000
+early: pulling page 41521f000
+early: pulling page 415420000
+early: pulling page 415621000
+early: pulling page 415822000
+early: pulling page 415a23000
+early: pulling page 415c24000
+early: pulling page 415e25000
+early: pulling page 416026000
+early: pulling page 416227000
+early: pulling page 416428000
+early: pulling page 416629000
+early: pulling page 41682a000
+early: pulling page 416a2b000
+early: pulling page 416c2c000
+early: pulling page 416e2d000
+early: pulling page 41702e000
+early: pulling page 41722f000
+early: pulling page 417430000
+early: pulling page 417631000
+early: pulling page 417832000
+early: pulling page 417a33000
+early: pulling page 417c34000
+early: pulling page 417e35000
+early: pulling page 418036000
+early: pulling page 418237000
+early: pulling page 418438000
+early: pulling page 418639000
+early: pulling page 41883a000
+early: pulling page 418a3b000
+early: pulling page 418c3c000
+early: pulling page 418e3d000
+early: pulling page 41903e000
+early: pulling page 41923f000
+early: pulling page 419440000
+early: pulling page 419641000
+early: pulling page 419842000
+early: pulling page 419a43000
+early: pulling page 419c44000
+early: pulling page 419e45000
+early: pulling page 41a046000
+early: pulling page 41a247000
+early: pulling page 41a448000
+early: pulling page 41a649000
+early: pulling page 41a84a000
+early: pulling page 41aa4b000
+early: pulling page 41ac4c000
+early: pulling page 41ae4d000
+early: pulling page 41b04e000
+early: pulling page 41b24f000
+early: pulling page 41b450000
+early: pulling page 41b651000
+early: pulling page 41b852000
+early: pulling page 41ba53000
+early: pulling page 41bc54000
+early: pulling page 41be55000
+early: pulling page 41c056000
+early: pulling page 41c257000
+early: pulling page 41c458000
+early: pulling page 41c659000
+early: pulling page 41c85a000
+early: pulling page 41ca5b000
+early: pulling page 41cc5c000
+early: pulling page 41ce5d000
+early: pulling page 41d05e000
+early: pulling page 41d25f000
+early: pulling page 41d460000
+early: pulling page 41d661000
+early: pulling page 41d862000
+early: pulling page 41da63000
+early: pulling page 41dc64000
+early: pulling page 41de65000
+early: pulling page 41e066000
+early: pulling page 41e267000
+early: pulling page 41e468000
+early: pulling page 41e669000
+early: pulling page 41e86a000
+early: pulling page 41ea6b000
+early: pulling page 41ec6c000
+early: pulling page 41ee6d000
+early: pulling page 41f06e000
+early: pulling page 41f26f000
+early: pulling page 41f470000
+early: pulling page 41f671000
+early: pulling page 41f872000
+early: pulling page 41fa73000
+early: pulling page 41fc74000
+early: pulling page 41fe75000
+early: pulling page 420076000
+early: pulling page 420277000
+early: pulling page 420478000
+early: pulling page 420679000
+early: pulling page 42087a000
+early: pulling page 420a7b000
+early: pulling page 420c7c000
+early: pulling page 420e7d000
+early: pulling page 42107e000
+early: pulling page 42127f000
+early: pulling page 421480000
+early: pulling page 421681000
+early: pulling page 421882000
+early: pulling page 421a83000
+early: pulling page 421c84000
+early: pulling page 421e85000
+early: pulling page 422086000
+early: pulling page 422287000
+early: pulling page 422488000
+early: pulling page 422689000
+early: pulling page 42288a000
+early: pulling page 422a8b000
+early: pulling page 422c8c000
+early: pulling page 422e8d000
+early: pulling page 42308e000
+early: pulling page 42328f000
+early: pulling page 423490000
+early: pulling page 423691000
+early: pulling page 423892000
+early: pulling page 423a93000
+early: pulling page 423c94000
+early: pulling page 423e95000
+early: pulling page 424096000
+early: pulling page 424297000
+early: pulling page 424498000
+early: pulling page 424699000
+early: pulling page 42489a000
+early: pulling page 424a9b000
+early: pulling page 424c9c000
+early: pulling page 424e9d000
+early: pulling page 42509e000
+early: pulling page 42529f000
+early: pulling page 4254a0000
+early: pulling page 4256a1000
+early: pulling page 4258a2000
+early: pulling page 425aa3000
+early: pulling page 425ca4000
+early: pulling page 425ea5000
+early: pulling page 4260a6000
+early: pulling page 4262a7000
+early: pulling page 4264a8000
+early: pulling page 4266a9000
+early: pulling page 4268aa000
+early: pulling page 426aab000
+mark_page_range_in_use(0x0, 0x40000): start page is before free list
+heap_add_area: area -1 added to grow heap 0xffffff007bc00000 - usable range 0xffffff007bc04000 - 0xffffff007bd00000
+heap_add_area: area -1 added to VIP heap heap 0xffffff0078630000 - usable range 0xffffff0078634000 - 0xffffff0078730000
+heap_init_post_area(): created VIP heap: 0xffffff0078630000
+arch_vm_translation_map_init_post_area
+PANIC: arch_vm_translation_map_init_post_area(): failed to create the physical map area: Invalid Argument
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 0 "" running on CPU 0
+stack trace for thread 0x0 ""
+    kernel stack: 0x0000000000000000 to 0x0000000000000000
+frame            caller     <image>:function + offset
+ 0 ffff000002689c50 (+ 336) ffff0000000ddcc4   
+ 1 ffff000002689ca0 (+  80) ffff0000000df4e0   
+ 2 ffff000002689d10 (+ 112) ffff0000000df878   
+ 3 ffff000002689dd0 (+ 192) ffff0000000dfcf8   
+ 4 ffff000002689ef0 (+ 288) ffff000000187128   
+ 5 ffff000002689f50 (+  96) ffff000000164c70   
+ 6 ffff000002689fc0 (+ 112) ffff0000000930e0   
+ 7 0000000000000000 (+   0) 00000000785addd8   
+	2026-11-04T05:54:32+00:00

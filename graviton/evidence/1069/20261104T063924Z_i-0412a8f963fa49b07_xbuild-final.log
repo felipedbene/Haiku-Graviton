@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-final
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build kernel_arm64 from the PR's final three commits (v4 plus a one-line comment change) and compare its code with v4
+# start: 20261104T063924Z   end: 20261104T063947Z   rc: 0
+# script sha256: 9a30ebb7ecaa9ff4bffc07f1c371006304a603b88c42fd59c37a5f23470ed99c
+# ---- script ----
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | echo '<base64 of the git format-patch of this PR's commits at that stage, elided; its sha256 is the first line of the raw output>' | base64 -d > $O/fix1069final.patch; sha256sum $O/fix1069final.patch
+# | R=objects/haiku/arm64/release/system/kernel
+# | F="headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp"
+# | git -C .. checkout -q -f a9954f424a && git -C .. apply $O/fix1069final.patch && git -C .. diff --stat
+# | sleep 2; (cd .. && touch $F); sleep 2; rm -rf $R
+# | jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 "<revisioned>kernel_arm64" > $O/jam-k-final.log 2>&1 || { tail -30 $O/jam-k-final.log; exit 1; }
+# | grep -cE "warning:" $O/jam-k-final.log; grep -E "warning:|error:" $O/jam-k-final.log | grep -E "arch_vm_translation_map|arch_kernel.h|VMSAv8TranslationMap" | head
+# | cp $R/revisioned/kernel_arm64 $O/kernel_arm64.final
+# | git -C .. checkout -q -f a9954f424a
+# | cd $O; echo "bytes differing final vs v4: $(cmp -l kernel_arm64.final kernel_arm64.fix1069v4 | wc -l) (build time string)"
+# | sha256sum kernel_arm64.final
+# ---- raw output ----
+caae8875f58891ba27639e975ef0788e3257cfcee57e8761563f9606fe20a3cf  /opt/t/out/fix1069final.patch
+ headers/private/kernel/arch/arm64/arch_kernel.h    |   6 +-
+ .../kernel/arch/arm64/VMSAv8TranslationMap.cpp     | 143 +++++++++++++--------
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp  |  64 ++++++++-
+ 3 files changed, 157 insertions(+), 56 deletions(-)
+52
+bytes differing final vs v4: 6 (build time string)
+db4c769182d62cf626d84e29993a66f5f235e7b119c54f3a3f047557341f92ec  kernel_arm64.final

@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-proof
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: explain the rebuild difference (embedded build date/time) and show the two trunk kernels equal apart from it
+# start: 20261104T044542Z   end: 20261104T044553Z   rc: 0
+# script sha256: 29c4247472db46b6847d83a3f5a7fce21532a14ca4916896702ddea7d588ca3a
+# ---- script ----
+# | cd /opt/t/out
+# | cmp -l kernel_arm64.trunk kernel_arm64.trunk2 | wc -l
+# | for f in kernel_arm64.trunk kernel_arm64.trunk2 kernel_arm64.fix1069 kernel_arm64.fix1069b; do echo "$f: $(dd if=$f bs=1 skip=1749000 count=80 2>/dev/null | tr -c '[:print:]' '.')"; done
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | ${X}objdump -d --no-show-raw-insn kernel_arm64.trunk | sed 's/^ *[0-9a-f]*://' > /tmp/d1; ${X}objdump -d --no-show-raw-insn kernel_arm64.trunk2 | sed 's/^ *[0-9a-f]*://' > /tmp/d2
+# | cmp /tmp/d1 /tmp/d2 && echo "trunk/trunk2: .text disassembly identical"
+# | ${X}objdump -d --no-show-raw-insn kernel_arm64.fix1069 | sed 's/^ *[0-9a-f]*://' > /tmp/d3; ${X}objdump -d --no-show-raw-insn kernel_arm64.fix1069b | sed 's/^ *[0-9a-f]*://' > /tmp/d4
+# | cmp /tmp/d3 /tmp/d4 && echo "fix1069/fix1069b: .text disassembly identical"
+# | echo "trunk vs fix1069 disassembly diff lines: $(diff /tmp/d1 /tmp/d3 | wc -l)"
+# ---- raw output ----
+6
+kernel_arm64.trunk: g level: %d.....Nov  4 2026 04:44:42....roottable-guard-1.......kernel build %s,
+kernel_arm64.trunk2: g level: %d.....Nov  4 2026 04:45:08....roottable-guard-1.......kernel build %s,
+kernel_arm64.fix1069: g level: %d.....Nov  4 2026 04:44:55....roottable-guard-1.......kernel build %s,
+kernel_arm64.fix1069b: g level: %d.....Nov  4 2026 04:45:21....roottable-guard-1.......kernel build %s,
+/tmp/d1 /tmp/d2 differ: byte 20, line 2
+/tmp/d3 /tmp/d4 differ: byte 22, line 2
+trunk vs fix1069 disassembly diff lines: 181310
