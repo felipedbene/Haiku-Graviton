@@ -581,10 +581,10 @@ VMSAv8TranslationMap::ProcessRange(phys_addr_t ptPa, int level, addr_t va, size_
 	// covers all of them at once and cannot rot as callers are added -- riscv64
 	// centralises the same check in RISCV64VMTranslationMap::LookupPte(). Recursive
 	// calls cannot arrive with zero, because GetOrMakeTable() returning 0 is
-	// filtered by the `continue` below, so this only fires for a top-level call on
+	// never recursed into by the loop below, so this only fires for a top-level call on
 	// an empty map. Map() is unaffected: it allocates the root table at first use
 	// before walking.
-	if (ptPa == 0)
+	if (ptPa == 0 || size == 0)
 		return;
 
 	uint64_t pageMask = (1UL << fPageBits) - 1;
@@ -604,7 +604,12 @@ VMSAv8TranslationMap::ProcessRange(phys_addr_t ptPa, int level, addr_t va, size_
 	if (level == 3)
 		ASSERT(alignedDownVa == va);
 
-    for (uint64_t effectiveVa = alignedDownVa; effectiveVa < end; effectiveVa += entrySize) {
+	// Stop at the slot that holds the end of the range rather than stepping on
+	// and comparing: the step after the top slot of the address space (the
+	// kernel's 0xffffff8000000000 and up) wraps to 0, which is below the end, so
+	// the walk would carry on through every slot of the table -- and with a
+	// reservation, populate them until the reservation runs dry.
+	for (uint64_t effectiveVa = alignedDownVa;; effectiveVa += entrySize) {
 		int index = ((effectiveVa & vaMask) >> shift) & tableMask;
 		uint64_t* ptePtr = TableFromPa(ptPa) + index;
 
@@ -615,30 +620,34 @@ VMSAv8TranslationMap::ProcessRange(phys_addr_t ptPa, int level, addr_t va, size_
 
 			// When reservation is null, we can't create a new subtable. This can be intentional,
 			// for example when called from Unmap().
-			if (subTable == 0)
-				continue;
-
-			if (effectiveVa < va) {
-				// The range begins inside the slot.
-				if (effectiveVa + entrySize - 1 > end) {
-					// The range ends within the slot.
-					ProcessRange(subTable, level + 1, va, size, reservation, updatePte);
+			if (subTable != 0) {
+				if (effectiveVa < va) {
+					// The range begins inside the slot.
+					if (effectiveVa + entrySize - 1 > end) {
+						// The range ends within the slot.
+						ProcessRange(subTable, level + 1, va, size, reservation, updatePte);
+					} else {
+						// The range extends past the end of the slot.
+						ProcessRange(subTable, level + 1, va, effectiveVa + entrySize - va,
+							reservation, updatePte);
+					}
 				} else {
-					// The range extends past the end of the slot.
-					ProcessRange(subTable, level + 1, va, effectiveVa + entrySize - va, reservation, updatePte);
-				}
-			} else {
-				// The range beginning is aligned to the slot.
-				if (effectiveVa + entrySize - 1 > end) {
-					// The range ends within the slot.
-					ProcessRange(subTable, level + 1, effectiveVa, end - effectiveVa + 1,
-						reservation, updatePte);
-				} else {
-					// The range extends past the end of the slot.
-					ProcessRange(subTable, level + 1, effectiveVa, entrySize, reservation, updatePte);
+					// The range beginning is aligned to the slot.
+					if (effectiveVa + entrySize - 1 > end) {
+						// The range ends within the slot.
+						ProcessRange(subTable, level + 1, effectiveVa, end - effectiveVa + 1,
+							reservation, updatePte);
+					} else {
+						// The range extends past the end of the slot.
+						ProcessRange(subTable, level + 1, effectiveVa, entrySize, reservation,
+							updatePte);
+					}
 				}
 			}
 		}
+
+		if (effectiveVa + entryMask >= end)
+			break;
 	}
 }
 
