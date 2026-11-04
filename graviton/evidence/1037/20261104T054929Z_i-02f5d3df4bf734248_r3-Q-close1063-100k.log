@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-Q-close1063-100k
+# instance: i-02f5d3df4bf734248   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3, arm Q: close1063, 100000 iterations per phase
+# start: 20261104T054929Z   end: 20261104T055030Z   rc: 0
+# script sha256: 3de8086b9b182d3d0ee159363b323031c9d7658f86622623ea07bdf4b4273047
+# ---- script ----
+# | # Round 3 (100000 iterations per phase): close1063 (bind/close, capture start/stop, and the two-thread start/stop race) with
+# | # 0x88b5 frames written into tap/0 about 20 us apart. A HANG line means the run stopped moving.
+# | cd /boot/home/j
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sha256sum close1063
+# | ifconfig tap/0 up; ifconfig tap/0 | head -1
+# | (./close1063 100000 20 > close.out 2>&1; echo "close1063 exit=$?" >> close.out) &
+# | for i in $(seq 1 40); do sleep 5; grep -q "exit=\|HANG" close.out && break; done
+# | cat close.out
+# | ( ifconfig tap/0 | grep Receive ) & sleep 3; echo "(ifconfig tap/0 above if it returned within 3 s)"
+# ---- raw output ----
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+854e4a75a798d6cb339aaec08d8db88bef9c318172fa610b9d5934e856934f2e  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+90e782f600224ddcdcc97deb2b876591093684bd6cb9e2a4ae9d239a8813a67a  close1063
+tap/0	Hardware type: Ethernet, Address: 32:18:e9:a7:1e:5e
+tap/0: mac 32:18:e9:a7:1e:5e, 100000 iterations per phase
+bind-close       PASS  100000/100000 bound, 100000 received a frame before close, 22.0s, frames written 660050
+capture-stop     PASS  100000/100000 started, 100000 received, 100000 stopped, 22.5s, frames written 1325998
+capture-race     PASS  2 threads x 100000 start/stop on one socket: 96280 + 98190 started, 3.0s; a fresh capture afterwards received = 1, frames written 1411859
+RESULT failures=0
+close1063 exit=0
+	Receive: 1454042 packets, 0 errors, 66885932 bytes, 0 mcasts, 0 dropped
+(ifconfig tap/0 above if it returned within 3 s)

@@ -1,0 +1,43 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-stage-R
+# instance: i-0fa81249dcf0f16c9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3: stage arm R
+# start: 20261104T053414Z   end: 20261104T053431Z   rc: 0
+# script sha256: 0a487547d7e11aa793eeb603acf8a211bf8d45f2bb9a81cef2de7521f7ef930b
+# ---- script ----
+# | # Stage round-3 arm R on canonical: gcc and the repros built natively; the arm's stack and
+# | # ethernet_frame as non-packaged overrides (method of #947). A fresh launch of an image of this box is the arm.
+# | set -e
+# | pkgman install -y wget gcc binutils haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/j && cd /boot/home/j
+# | wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/linksend1037.c?<PRESIGNED>'
+# | wget -q -O close1063.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/close1063.c?<PRESIGNED>'
+# | wget -q -O link1059.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/link1059.c?<PRESIGNED>'
+# | wget -q -O down1078.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/down1078.c?<PRESIGNED>'
+# | wget -q -O tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/tcp900.c?<PRESIGNED>'
+# | wget -q -O udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/udp947.c?<PRESIGNED>'
+# | wget -q -O linksend1019.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/linksend1019.c?<PRESIGNED>'
+# | for p in linksend1037 close1063 link1059 down1078; do gcc -O2 -Wall -Wextra -Wno-unused-parameter -o $p $p.c -lnetwork; done
+# | gcc -O2 -o linksend1019 linksend1019.c -lnetwork; gcc -O2 -Wall -o tcp900 tcp900.c -lnetwork; gcc -O2 -Wall -o udp947 udp947.c -lnetwork
+# | sha256sum *.c linksend1037 close1063 link1059 down1078
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network; mkdir -p $D/datalink_protocols
+# | wget -q -O stack.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/r3/mod/R/stack?<PRESIGNED>'; cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | wget -q -O ef.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/r3/mod/R/ethernet_frame?<PRESIGNED>'; cp ef.mod $D/datalink_protocols/ethernet_frame.new && mv $D/datalink_protocols/ethernet_frame.new $D/datalink_protocols/ethernet_frame
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | sync; sync; echo STAGE-DONE
+# ---- raw output ----
+[system] Done.
+332843490486a88592006376cb5c7ee5489d9756a65016d4169d0d47f672ca44  close1063.c
+754c3d8a40b9b1283c3c2bed4ca3d23380c3c33ba5fc92dd817d8c2be2e117fa  down1078.c
+8ee7c0a88191bb5b4aee7225b2fb53287848442dd5d7c3c6b85048fa72125206  link1059.c
+de0a3a0aa7b863261ceb0d7a3942d3f5ca85a4e322f6750d9f51dc417348ab14  linksend1019.c
+40d4a161ce2a8a7a05995817e7c6d9db60a5cbff56fd825161f058c32d84ea0d  linksend1037.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+6a15d7268cc9dc722d959d79fb4f37f185b5516299caac3fb17564f940efa4d7  linksend1037
+90e782f600224ddcdcc97deb2b876591093684bd6cb9e2a4ae9d239a8813a67a  close1063
+17fd03b2714ce6281a344590b7b00c2c9a979cbc4f1ab0533ff21fef63c5c647  link1059
+27c306459ebc0402e3c798c8255451ee5dffdf1702514504b54343845db08774  down1078
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+35114d71dea05ea4c09d34d5899597b083914bedcf8181543800322954a108fb  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+STAGE-DONE

@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-R-down1078
+# instance: i-0658ac4dd2dff5714   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3, arm R (#1078): down1078, 300 cycles
+# start: 20261104T054935Z   end: 20261104T054953Z   rc: 0
+# script sha256: c8e1b564e51b7f51c412678cf6a818a8c0cb6b688507808636fb1de3cbf98d98
+# ---- script ----
+# | # Round 3: down1078 -- tap/0 down and up 300 times while one socket captures on it and another
+# | # starts and stops a capture on it (paced). A HANG line means the run stopped moving.
+# | cd /boot/home/j
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sha256sum down1078
+# | ifconfig tap/0 up 2>/dev/null; ifconfig tap/0 | head -1
+# | (./down1078 300 > down.out 2>&1; echo "down1078 exit=$?" >> down.out) &
+# | for i in $(seq 1 60); do sleep 5; grep -q "exit=\|HANG" down.out && break; done
+# | cat down.out
+# | ( ifconfig tap/0 | grep Receive ) & sleep 3; echo "(ifconfig tap/0 above if it returned within 3 s)"
+# ---- raw output ----
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+35114d71dea05ea4c09d34d5899597b083914bedcf8181543800322954a108fb  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+27c306459ebc0402e3c798c8255451ee5dffdf1702514504b54343845db08774  down1078
+tap/0	Hardware type: Ethernet, Address: ea:17:e9:70:78:f0
+down-up      FAIL  300 cycles in 2.2s: capture (re)started 300, a frame before down 300, capture ended at down 48, down 300, up 300; toggler starts 5179; frames written 35466
+RESULT failures=1
+down1078 exit=1
+	Receive: 77680 packets, 155 errors, 3573280 bytes, 0 mcasts, 0 dropped
+(ifconfig tap/0 above if it returned within 3 s)

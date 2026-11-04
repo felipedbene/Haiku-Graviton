@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-Q-close1063
+# instance: i-02f5d3df4bf734248   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3, arm Q (fresh boot): close1063 incl. the capture start/stop race
+# start: 20261104T053821Z   end: 20261104T053838Z   rc: 0
+# script sha256: e3901c30ec7299efedd8496ab72ae03d2dca2592e73c7ae5f084b8f780982cee
+# ---- script ----
+# | # Round 3: close1063 (bind/close, capture start/stop, and the two-thread start/stop race) with
+# | # 0x88b5 frames written into tap/0 about 20 us apart. A HANG line means the run stopped moving.
+# | cd /boot/home/j
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sha256sum close1063
+# | ifconfig tap/0 up; ifconfig tap/0 | head -1
+# | (./close1063 3000 20 > close.out 2>&1; echo "close1063 exit=$?" >> close.out) &
+# | for i in $(seq 1 24); do sleep 5; grep -q "exit=\|HANG" close.out && break; done
+# | cat close.out
+# | ( ifconfig tap/0 | grep Receive ) & sleep 3; echo "(ifconfig tap/0 above if it returned within 3 s)"
+# ---- raw output ----
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+854e4a75a798d6cb339aaec08d8db88bef9c318172fa610b9d5934e856934f2e  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+90e782f600224ddcdcc97deb2b876591093684bd6cb9e2a4ae9d239a8813a67a  close1063
+tap/0	Hardware type: Ethernet, Address: 32:18:e9:a7:1e:5e
+tap/0: mac 32:18:e9:a7:1e:5e, 3000 iterations per phase
+bind-close       PASS  3000/3000 bound, 3000 received a frame before close, 0.7s, frames written 19552
+capture-stop     PASS  3000/3000 started, 3000 received, 3000 stopped, 0.7s, frames written 39497
+capture-race     PASS  2 threads x 3000 start/stop on one socket: 2885 + 2904 started, 0.1s; a fresh capture afterwards received = 1, frames written 42181
+RESULT failures=0
+close1063 exit=0
+	Receive: 42182 packets, 0 errors, 1940372 bytes, 0 mcasts, 0 dropped
+(ifconfig tap/0 above if it returned within 3 s)
