@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed3b-extents
+# instance: i-0847105fe134dbedd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: debugfs ex of the crafted gx and gy
+# start: 20261104T074213Z   end: 20261104T074225Z   rc: 0
+# script sha256: 098c7472cd8f0450d16f9323c0a426998d9add3ff0f193e4bf38511818de3378
+# ---- script ----
+# | D=/dev/$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0e298e160ef60b0f1 '$9 == v { print $11 }' | sed "s|.*/||")
+# | debugfs -R "ex gx" ${D}p2 2>/dev/null; debugfs -R "ex gy" ${D}p2 2>/dev/null
+# ---- raw output ----
+Level Entries       Logical        Physical Length Flags
+ 0/ 0   1/  1     0 - 12304  86000 -  98304  12305 
+Level Entries       Logical        Physical Length Flags
+ 0/ 0   1/  1     0 -  6000 120000 - 126000   6001 

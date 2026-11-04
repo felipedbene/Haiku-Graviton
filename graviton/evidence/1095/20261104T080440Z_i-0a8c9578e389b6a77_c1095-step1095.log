@@ -1,0 +1,75 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1095-step1095
+# instance: i-0a8c9578e389b6a77   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1095, step 1095
+# start: 20261104T080440Z   end: 20261104T080457Z   rc: 0
+# script sha256: b4da418338ee91c0ccd4ab25493d3564b7aba260badb04f5ce41ac6414f05af1
+# ---- script ----
+# | # step 1 (#1095), arm c1095: on x1k (ext4, 1 KiB blocks), remove gx, whose one extent crosses
+# | # from group 10 into 11 and ends on group 11's last block, and gy (crosses, ends mid-group).
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | mount -t ext2 $DD/1 /ex1k || exit 1
+# | cd /ex1k && ls -ls
+# | echo "gx md5 $(md5sum < gx)"
+# | rm gx gy; echo "rm rc=$?"
+# | ls -ls; df -k . | tail -1; sync; cd /
+# | unmount /ex1k; echo "unmount x1k rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-7-221.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+ec1ed53ec3373cc5b8bc9237d2f750edbbe1ef30bf69f9d5adfe030516f7d617  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw 
+total 38432
+15619 -rw-rw-rw- 1 baron root 15992832 Nov  4 07:40 gb
+ 4495 -rw-rw-rw- 1 baron root  4602880 Nov  4 07:40 gc
+12305 -rw-rw-rw- 1 baron root 12600320 Nov  4 07:41 gx
+ 6001 -rw-rw-rw- 1 baron root  6145024 Nov  4 07:41 gy
+   12 drw-rw-rw- 2 baron root    12288 Nov  4 07:40 lost+found
+gx md5 0f779e371ccc7c5832a23fbe81b8ef20  -
+rm rc=0
+total 20126
+15619 -rw-rw-rw- 1 baron root 15992832 Nov  4 07:40 gb
+ 4495 -rw-rw-rw- 1 baron root  4602880 Nov  4 07:40 gc
+   12 drw-rw-rw- 2 baron root    12288 Nov  4 07:40 lost+found
+   Root Inode: 2
+unmount x1k rc=0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw '
++ mkdir -p /ex4k /ex1k
++ mount -t ext2 /dev/disk/nvme/1/1 /ex1k
++ cd /ex1k
++ ls -ls
+++ md5sum
++ echo 'gx md5 0f779e371ccc7c5832a23fbe81b8ef20  -'
++ rm gx gy
++ echo 'rm rc=0'
++ ls -ls
++ tail -1
++ df -k .
++ sync
++ cd /
++ unmount /ex1k
++ echo 'unmount x1k rc=0'
