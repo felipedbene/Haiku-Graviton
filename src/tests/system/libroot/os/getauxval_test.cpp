@@ -77,6 +77,8 @@ static const cap_name kHwcap2[] = {
 	{ HWCAP2_SVEBF16, "svebf16" },
 	{ HWCAP2_I8MM, "i8mm" },
 	{ HWCAP2_BF16, "bf16" },
+	{ HWCAP2_DGH, "dgh" },
+	{ HWCAP2_RNG, "rng" },
 };
 
 
