@@ -1,0 +1,69 @@
+# evidence: peer-before
+# instance: i-0e8f5dbc1d66d1e5f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T075314Z   end: 20261104T075502Z   rc: 0
+# script sha256: b308cb46dd60ab1e5f9354da1a89ab0625092347dd4cee852fc96d0a5a5ed6e7
+# ---- script ----
+# | # ENA peer for issue 1099: tcpdump on UDP 9981 and TCP 9982, a TCP listener on
+# | # 9982, for ~100 s while the DeBeOS instance runs its rows.
+# | cd /opt/wS/t 2>/dev/null || { mkdir -p /opt/wS/t && cd /opt/wS/t; }
+# | IF=$(ip route show default | awk '{print $5}')
+# | ip -4 -o addr show dev $IF | awk '{print "peer", $2, $4}'
+# | T=/tmp/td.$$.txt
+# | tcpdump -n -l -i $IF 'udp port 9981 or tcp port 9982' > $T 2>$T.err < /dev/null &
+# | TD=$!
+# | timeout 100 python3 -c '
+# | import socket
+# | s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+# | s.bind(("0.0.0.0", 9982)); s.listen(8)
+# | while True:
+# |     c, a = s.accept(); print("tcp accept from", a, flush=True); c.close()
+# | ' > /tmp/acc.txt 2>&1 &
+# | sleep 100
+# | kill -INT $TD; sleep 1
+# | echo "--- tcpdump, by source"
+# | awk '{print $3}' $T | sed 's/\.[0-9]*$//' | sort | uniq -c
+# | echo "--- tcpdump"; head -60 $T; tail -2 $T.err
+# | echo "--- tcp listener"; cat /tmp/acc.txt
+# ---- raw output ----
+peer ens5 10.128.7.125/22
+--- tcpdump, by source
+      1 
+      2 10.128.7.125
+     29 10.128.9.114
+--- tcpdump
+07:53:51.806937 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.806937 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.806938 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.806938 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.806938 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.806938 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.806938 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.806938 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807010 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807026 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807026 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807026 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:51.807026 IP 10.128.9.114.56244 > 10.128.7.125.9981: UDP, length 6
+07:53:52.859257 IP 10.128.9.114.56245 > 10.128.7.125.9981: UDP, length 6
+07:53:52.859301 IP 10.128.9.114.56245 > 10.128.7.125.9981: UDP, length 6
+07:53:52.859301 IP 10.128.9.114.56245 > 10.128.7.125.9981: UDP, length 6
+07:53:52.859301 IP 10.128.9.114.56245 > 10.128.7.125.9981: UDP, length 6
+07:53:52.859301 IP 10.128.9.114.56245 > 10.128.7.125.9981: UDP, length 6
+07:53:53.910390 IP 10.128.9.114.42036 > 10.128.7.125.9982: Flags [S], seq 23935113, win 255, options [mss 8961,sackOK,TS val 382961 ecr 0,nop,wscale 8], length 0
+07:53:53.910410 IP 10.128.7.125.9982 > 10.128.9.114.42036: Flags [S.], seq 3213566841, ack 23935114, win 62643, options [mss 8961,sackOK,TS val 431512678 ecr 382961,nop,wscale 10], length 0
+07:53:53.911038 IP 10.128.9.114.42036 > 10.128.7.125.9982: Flags [.], ack 1, win 255, options [nop,nop,TS val 382962 ecr 431512678], length 0
+07:53:53.911087 IP 10.128.9.114.42036 > 10.128.7.125.9982: Flags [F.], seq 1, ack 1, win 255, options [nop,nop,TS val 382962 ecr 431512678], length 0
+07:53:53.911206 IP 10.128.7.125.9982 > 10.128.9.114.42036: Flags [F.], seq 1, ack 2, win 62, options [nop,nop,TS val 431512679 ecr 382962], length 0
+07:53:53.911785 IP 10.128.9.114.42036 > 10.128.7.125.9982: Flags [.], ack 2, win 255, options [nop,nop,TS val 382963 ecr 431512679], length 0
+
+31 packets received by filter
+0 packets dropped by kernel
+--- tcp listener
+tcp accept from ('10.128.9.114', 42036)

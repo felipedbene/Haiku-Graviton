@@ -1,0 +1,118 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-0e8f5dbc1d66d1e5f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T075222Z   end: 20261104T075251Z   rc: 0
+# script sha256: 63d8a81df01575aeb7d38694accd1ec7b034eb6768d7f42195a4597ab298e31d
+# ---- script ----
+# | # Linux reference for issue 1099: the same harness (run1099.sh) on Ubuntu
+# | # 24.04 / Linux 7.0, c7g.8xlarge, with the DeBeOS instance as the peer.
+# | export HOME=/root
+# | mkdir -p /opt/wS/t && cd /opt/wS/t
+# | aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/S/src/lo1099.c . && aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/S/src/run1099.sh . || exit 3
+# | sha256sum lo1099.c run1099.sh
+# | cc -Wall -o lo1099 lo1099.c || exit 4
+# | bash run1099.sh 10.128.9.114
+# ---- raw output ----
+41d169212707ac3056f9cf592f8a669ef665ba31fac640fdc59e2595a05e9d02  lo1099.c
+5f6261e7541e94cb6ea2cc2302fb07227cd82faa4551c38b74d3c06e5568027b  run1099.sh
+7.0.0-1014-aws
+local 10.128.7.125 (ens5), peer 10.128.9.114
+=== control: idle for the length of a row
+  [idle] ENA tx delta: 0
+=== a loopback source to an off-host destination: must fail, nothing sent
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.9.114.9981: sendto=-1 EINVAL
+  [v4-lo-to-peer] ENA tx delta: 1
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+udp ::1 -> fd00:981::99.9981: sendto=6 0
+  [v6-lo-to-ula] ENA tx delta: 1
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=6 0
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=6 0
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=6 0
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=6 0
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=6 0
+  [v4-lo-to-mcast] ENA tx delta: 1
+tcp 127.0.0.1 -> 10.128.9.114.9982: connect EINVAL after 0.00 s
+  [v4-lo-tcp] ENA tx delta: 1
+tcp ::1 -> fd00:981::99.9982: connect EHOSTUNREACH after 0.05 s
+  [v6-lo-tcp] ENA tx delta: 0
+=== a loopback source on this host: must work
+self 127.0.0.1 -> 127.0.0.1: sendto=6 0 recv=6 from 127.0.0.1
+  [v4-lo-self] ENA tx delta: 0
+self ::1 -> ::1: sendto=6 0 recv=6 from ::1
+  [v6-lo-self] ENA tx delta: 0
+self 127.0.0.1 -> 10.128.7.125: sendto=6 0 recv=6 from 127.0.0.1
+  [v4-lo-to-own] ENA tx delta: 0
+self ::1 -> fd00:981::7: sendto=6 0 recv=6 from ::1
+  [v6-lo-to-own] ENA tx delta: 1
+=== normal ENA traffic: must work
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.9.114.9981: sendto=6 0
+  [v4-any-to-peer] ENA tx delta: 20
+udp 10.128.7.125 -> 10.128.9.114.9981: sendto=6 0
+udp 10.128.7.125 -> 10.128.9.114.9981: sendto=6 0
+udp 10.128.7.125 -> 10.128.9.114.9981: sendto=6 0
+udp 10.128.7.125 -> 10.128.9.114.9981: sendto=6 0
+udp 10.128.7.125 -> 10.128.9.114.9981: sendto=6 0
+  [v4-own-to-peer] ENA tx delta: 5
+tcp 0.0.0.0 -> 10.128.9.114.9982: connect ECONNREFUSED after 0.00 s
+  [v4-tcp-to-peer] ENA tx delta: 1
+udp fd00:981::7 -> fd00:981::99.9981: sendto=6 0
+udp fd00:981::7 -> fd00:981::99.9981: sendto=6 0
+udp fd00:981::7 -> fd00:981::99.9981: sendto=6 0
+  [v6-ula-to-ula] ENA tx delta: 1
+RUN-DONE

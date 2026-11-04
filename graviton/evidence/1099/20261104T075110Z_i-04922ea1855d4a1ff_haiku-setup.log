@@ -1,0 +1,34 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: haiku-setup
+# instance: i-04922ea1855d4a1ff   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T075110Z   end: 20261104T075128Z   rc: 0
+# script sha256: 802bdb10bc14b09eee499d1a6c2c9be79a936a7bc3fa25b70ec4940df6153a26
+# ---- script ----
+# | # Test tools for issue 1099 on the before arm (the after arm is this disk,
+# | # imaged, so it runs the same binaries): lo1099, udp947, tcp900, addaddr.
+# | W=/boot/home/w1099
+# | mkdir -p $W && cd $W
+# | uname -a
+# | pkgman install -y gcc binutils haiku_devel curl 2>&1 | tail -1
+# | fetch() { curl -sSf -o "$1" "$2" || { echo "fetch $1 failed"; exit 4; }; }
+# | fetch lo1099.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/lo1099.c?<PRESIGNED>'
+# | fetch udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/udp947.c?<PRESIGNED>'
+# | fetch tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/tcp900.c?<PRESIGNED>'
+# | fetch addaddr.cpp 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/addaddr.cpp?<PRESIGNED>'
+# | sha256sum lo1099.c udp947.c tcp900.c addaddr.cpp
+# | gcc -Wall -o lo1099 lo1099.c -lnetwork && gcc -O2 -o udp947 udp947.c -lnetwork && gcc -O2 -o tcp900 tcp900.c -lnetwork && g++ -o addaddr addaddr.cpp -lbnetapi -lnetwork || exit 5
+# | sha256sum lo1099 udp947 tcp900 addaddr
+# | sync
+# | echo SETUP-DONE
+# ---- raw output ----
+Haiku ip-10-128-9-114.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+[system] Done.
+41d169212707ac3056f9cf592f8a669ef665ba31fac640fdc59e2595a05e9d02  lo1099.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+aad0c2e5006482c2201794037ae2733ba861d66e303b436711f1367d71181482  addaddr.cpp
+8137a430349de065715f67a7cf65dd0c95234deb11ea9d7873ba2724c0b51f8d  lo1099
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+a4bcfc5f32324797925faafc571dd5fb212ced12eaba21421f0aa3da53d4c294  addaddr
+SETUP-DONE

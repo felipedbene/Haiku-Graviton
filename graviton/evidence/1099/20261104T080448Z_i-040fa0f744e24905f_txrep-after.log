@@ -1,0 +1,22 @@
+# evidence: txrep-after
+# instance: i-040fa0f744e24905f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T080448Z   end: 20261104T080512Z   rc: 0
+# script sha256: ee4ac26771746f37c8b34f6895d7601d03c833776183d91f599e56f406512b8a
+# ---- script ----
+# | # ENA tx counter, five times over: an idle second against 20 loopback-sourced
+# | # sendto()s to the peer, so background traffic is measured beside the row.
+# | cd /boot/home/w1099 || exit 1
+# | tx() { ifconfig /dev/net/ena/0 | grep Transmit | sed 's/.*Transmit: *\([0-9]*\) packets.*/\1/'; }
+# | listimage 1 | grep -E "network/protocols/ipv4" | awk '{print $NF}'
+# | for k in 1 2 3 4 5; do
+# | 	t=$(tx); sleep 1; i=$(( $(tx) - t ))
+# | 	t=$(tx); r=$(./lo1099 udp 127.0.0.1 10.128.7.125 9981 20 | awk '{print $4,$5}' | sort | uniq -c | tr -s ' '); sleep 1; l=$(( $(tx) - t ))
+# | 	echo "round $k: idle tx +$i; 20 x 127.0.0.1->peer tx +$l [$r]"
+# | done
+# ---- raw output ----
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+round 1: idle tx +0; 20 x 127.0.0.1->peer tx +0 [ 20 10.128.7.125.9981: sendto=-1]
+round 2: idle tx +0; 20 x 127.0.0.1->peer tx +29 [ 20 10.128.7.125.9981: sendto=-1]
+round 3: idle tx +0; 20 x 127.0.0.1->peer tx +0 [ 20 10.128.7.125.9981: sendto=-1]
+round 4: idle tx +0; 20 x 127.0.0.1->peer tx +0 [ 20 10.128.7.125.9981: sendto=-1]
+round 5: idle tx +0; 20 x 127.0.0.1->peer tx +0 [ 20 10.128.7.125.9981: sendto=-1]

@@ -1,0 +1,201 @@
+# evidence: haiku-after
+# instance: i-040fa0f744e24905f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T080232Z   end: 20261104T080300Z   rc: 0
+# script sha256: 9b5b68806d9e96ce14330e10cbc154d44b4b76e523b29f089d37bc91aea21bb4
+# ---- script ----
+# | set -- 10.128.7.125
+# | # One arm of issue 1099 (DeBeOS or Linux): loopback-sourced sends to the ENA
+# | # peer and to an off-host IPv6 neighbour, each bracketed by the ENA transmit
+# | # counter; loopback and own-address deliveries that must keep working; normal
+# | # ENA traffic; then (DeBeOS) the regressions udp947 and tcp900.
+# | P=$1
+# | if [ "$(uname)" = Haiku ]; then
+# | 	W=/boot/home/w1099; cd $W || exit 1
+# | 	IF=/dev/net/ena/0
+# | 	tx() { ifconfig $IF | grep Transmit | sed 's/.*Transmit: *\([0-9]*\) packets.*/\1/'; }
+# | 	IP=$(ifconfig $IF | grep "inet addr:" | head -1 | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | 	echo "--- modules loaded"
+# | 	listimage 1 | grep -E "network/protocols/(ipv4|ipv6)" | awk '{print $NF}' | sort -u
+# | 	find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	sha256sum /boot/system/add-ons/kernel/network/protocols/ipv4 /boot/system/add-ons/kernel/network/protocols/ipv6 lo1099 udp947 tcp900
+# | 	# ENA has no IPv6 address here, so ifconfig adds (not replaces) this one
+# | 	ifconfig $IF inet6 fd00:981::7 prefixlen 64; echo "ifconfig inet6 rc=$?"
+# | 	route list inet6 | grep ena
+# | else
+# | 	cd /opt/wS/t || exit 1
+# | 	IF=$(ip route show default | awk '{print $5}')
+# | 	tx() { cat /sys/class/net/$IF/statistics/tx_packets; }
+# | 	IP=$(ip -4 -o addr show dev $IF | awk '{print $4}' | cut -d/ -f1)
+# | 	ip -6 addr add fd00:981::7/64 dev $IF nodad 2>&1
+# | 	uname -r
+# | fi
+# | echo "local $IP ($IF), peer $P"
+# | sleep 3
+# | row() {
+# | 	# row <label> <command...>: the command's output and the ENA tx delta
+# | 	local label=$1; shift
+# | 	local before=$(tx)
+# | 	"$@"
+# | 	sleep 1
+# | 	echo "  [$label] ENA tx delta: $(( $(tx) - before ))"
+# | }
+# | echo "=== control: idle for the length of a row"
+# | row idle sleep 1
+# | echo "=== a loopback source to an off-host destination: must fail, nothing sent"
+# | row v4-lo-to-peer ./lo1099 udp 127.0.0.1 $P 9981 20
+# | # (DeBeOS: off-link IPv6 neighbour resolution never completes on this VPC, so
+# | # an accepted datagram waits for NDP and the tx counter stays put either way;
+# | # the sendto() result is what tells the arms apart)
+# | row v6-lo-to-ula ./lo1099 udp ::1 fd00:981::99 9981 20
+# | row v4-lo-to-mcast ./lo1099 udp 127.0.0.1 224.0.0.251 5353 5
+# | row v4-lo-tcp ./lo1099 tcp 127.0.0.1 $P 9982
+# | row v6-lo-tcp ./lo1099 tcp ::1 fd00:981::99 9982
+# | echo "=== a loopback source on this host: must work"
+# | row v4-lo-self ./lo1099 self 127.0.0.1 127.0.0.1
+# | row v6-lo-self ./lo1099 self ::1 ::1
+# | row v4-lo-to-own ./lo1099 self 127.0.0.1 $IP
+# | row v6-lo-to-own ./lo1099 self ::1 fd00:981::7
+# | echo "=== normal ENA traffic: must work"
+# | row v4-any-to-peer ./lo1099 udp 0.0.0.0 $P 9981 20
+# | row v4-own-to-peer ./lo1099 udp $IP $P 9981 5
+# | row v4-tcp-to-peer ./lo1099 tcp 0.0.0.0 $P 9982
+# | row v6-ula-to-ula ./lo1099 udp fd00:981::7 fd00:981::99 9981 3
+# | if [ "$(uname)" = Haiku ]; then
+# | 	echo "=== udp947"; ./udp947 | tail -1; echo "udp947 rc=$?"
+# | 	./udp947 > /tmp/u.txt; echo "udp947 rc=$?"; grep FAIL /tmp/u.txt
+# | 	./udp947 -t > /tmp/u.txt; echo "udp947 -t rc=$?"; grep FAIL /tmp/u.txt
+# | 	echo "=== tcp900"; ./tcp900 2>&1 | tail -3
+# | else
+# | 	ip -6 addr del fd00:981::7/64 dev $IF
+# | fi
+# | echo RUN-DONE
+# ---- raw output ----
+--- modules loaded
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+22f124a8ab6512baeaa6910d822ff7798afa2253f46f73fdbcff1221d0648eb8  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+79924c22d56969252a25f4656877390c144233f16d4494ea0bc60d554e74b053  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/system/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/system/add-ons/kernel/network/protocols/ipv6
+8137a430349de065715f67a7cf65dd0c95234deb11ea9d7873ba2724c0b51f8d  lo1099
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+ifconfig inet6 rc=0
+                            fd00:981::7                                           - --HL-- /dev/net/ena/0
+                             fd00:981::/64                                        - ------ /dev/net/ena/0
+local 10.128.4.220 (/dev/net/ena/0), peer 10.128.7.125
+=== control: idle for the length of a row
+  [idle] ENA tx delta: 3
+=== a loopback source to an off-host destination: must fail, nothing sent
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+udp 127.0.0.1 -> 10.128.7.125.9981: sendto=-1 EINVAL
+  [v4-lo-to-peer] ENA tx delta: 27
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+udp ::1 -> fd00:981::99.9981: sendto=-1 EINVAL
+  [v6-lo-to-ula] ENA tx delta: 0
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=-1 EINVAL
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=-1 EINVAL
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=-1 EINVAL
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=-1 EINVAL
+udp 127.0.0.1 -> 224.0.0.251.5353: sendto=-1 EINVAL
+  [v4-lo-to-mcast] ENA tx delta: 0
+tcp 127.0.0.1 -> 10.128.7.125.9982: connect EINVAL after 0.00 s
+  [v4-lo-tcp] ENA tx delta: 0
+tcp ::1 -> fd00:981::99.9982: connect EINVAL after 0.00 s
+  [v6-lo-tcp] ENA tx delta: 0
+=== a loopback source on this host: must work
+self 127.0.0.1 -> 127.0.0.1: sendto=6 0 recv=6 from 127.0.0.1
+  [v4-lo-self] ENA tx delta: 0
+self ::1 -> ::1: sendto=6 0 recv=6 from ::1
+  [v6-lo-self] ENA tx delta: 0
+self 127.0.0.1 -> 10.128.4.220: sendto=6 0 recv=6 from 127.0.0.1
+  [v4-lo-to-own] ENA tx delta: 1
+self ::1 -> fd00:981::7: sendto=6 0 recv=6 from ::1
+  [v6-lo-to-own] ENA tx delta: 1
+=== normal ENA traffic: must work
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+udp 0.0.0.0 -> 10.128.7.125.9981: sendto=6 0
+  [v4-any-to-peer] ENA tx delta: 21
+udp 10.128.4.220 -> 10.128.7.125.9981: sendto=6 0
+udp 10.128.4.220 -> 10.128.7.125.9981: sendto=6 0
+udp 10.128.4.220 -> 10.128.7.125.9981: sendto=6 0
+udp 10.128.4.220 -> 10.128.7.125.9981: sendto=6 0
+udp 10.128.4.220 -> 10.128.7.125.9981: sendto=6 0
+  [v4-own-to-peer] ENA tx delta: 5
+tcp 0.0.0.0 -> 10.128.7.125.9982: connect 0 after 0.00 s
+  [v4-tcp-to-peer] ENA tx delta: 4
+udp fd00:981::7 -> fd00:981::99.9981: sendto=-1 ENETUNREACH
+udp fd00:981::7 -> fd00:981::99.9981: sendto=-1 ENETUNREACH
+udp fd00:981::7 -> fd00:981::99.9981: sendto=6 0
+  [v6-ula-to-ula] ENA tx delta: 0
+=== udp947
+udp947: 14 passed, 4 failed
+udp947 rc=4
+udp947 rc=4
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+udp947 -t rc=3
+ipv4 IP_RECVDSTADDR, 4-byte control buffer                 FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+ipv6 IPV6_RECVPKTINFO, 4-byte control buffer               FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+=== tcp900
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, delivered 65488
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 2.2s, 0 FAIL
+RUN-DONE

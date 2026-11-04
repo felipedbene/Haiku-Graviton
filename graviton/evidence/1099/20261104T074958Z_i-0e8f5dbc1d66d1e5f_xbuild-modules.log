@@ -1,0 +1,52 @@
+# evidence: xbuild-modules
+# instance: i-0e8f5dbc1d66d1e5f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T074958Z   end: 20261104T075034Z   rc: 0
+# script sha256: b39ff6d797d239607091f4811df829cab409500579eedcd2df9cb88b571c700b
+# ---- script ----
+# | # Build trunk's and the 1099 candidate's ipv4 and ipv6 modules (method of #959).
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S/1099
+# | cd /opt/wS/hg/generated || exit 1
+# | path_of() { echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1; }
+# | build() {
+# | 	local label=$1 patch=$2; shift 2
+# | 	git -C .. checkout -q -f --detach origin/graviton || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/S/patch/$patch /opt/wS/$patch || return 1
+# | 		sha256sum /opt/wS/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wS/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error' jam-$label.log | head -40; }
+# | 	echo "--- warnings in send_routed_data's files"
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/(ipv4/ipv4|ipv6/ipv6)\.cpp:' | sort -u | head
+# | 	mkdir -p /opt/wS/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/wS/out/$label/$t && sha256sum /opt/wS/out/$label/$t | sed "s|/opt/wS/out/||"
+# | 		aws s3 cp --quiet /opt/wS/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build trunk none ipv4 ipv6
+# | build f1099 1099-v1.patch ipv4 ipv6
+# ---- raw output ----
+JAM trunk head=a9954f42 patch=none rc=0 wall=14s failed=0
+--- warnings in send_routed_data's files
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  trunk/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  trunk/ipv6
+8f1176614615ca8ca7b55da3007eb7e5e019d78b7e3040658afbc686ae2d47c0  /opt/wS/1099-v1.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 9 +++++++++
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 7 +++++++
+ 2 files changed, 16 insertions(+)
+JAM f1099 head=a9954f42 patch=1099-v1.patch rc=0 wall=6s failed=0
+--- warnings in send_routed_data's files
+22f124a8ab6512baeaa6910d822ff7798afa2253f46f73fdbcff1221d0648eb8  f1099/ipv4
+79924c22d56969252a25f4656877390c144233f16d4494ea0bc60d554e74b053  f1099/ipv6
