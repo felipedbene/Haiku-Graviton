@@ -1,0 +1,489 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: a2b-linux-check
+# instance: i-0d0dc1e4705977484   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux check of arm a2b's data volume vol-0a63dd5ca0de3bd5c
+# start: 20261104T141409Z   end: 20261104T141427Z   rc: 0
+# script sha256: efe018b36c2bae6e05ce98c969454a8d17b83a3587857f01fe9bae7aa31bfb3c
+# ---- script ----
+# | # #1108 Linux check of arm a2b's data volume vol-0a63dd5ca0de3bd5c: ext2split1108.sh check (e2fsck -fn, tree shapes, contents)
+# | cat > /opt/ext2split1108.sh <<'SCRIPT_EOF'
+# | #!/bin/sh
+# | #
+# | # ext2split1108.sh -- issue 1108: writes into holes under full extent nodes, and appends that grow
+# | # the tree, on files whose extent trees Linux filled.
+# | #
+# | #   ext2split1108.sh seed  <volume-id>     on Linux: partition and seed the data volume
+# | #   ext2split1108.sh haiku [step...]       on Haiku, with the data volume attached
+# | #   ext2split1108.sh check <volume-id>     on Linux, afterwards: e2fsck -fn, the tree shapes, and
+# | #                                          the contents (each written range, and the rest unchanged)
+# | #
+# | # The volume: one 2 GiB EBS volume, GPT, three ext4 file systems made by Ubuntu mke2fs, without
+# | # journal or orphan_file (as in #1105's seed). Linux appends extents in logical order, so ext4
+# | # splits each full leaf at its end and every node but the last on each level stays full.
+# | #  p1 x4k  4 KiB blocks (340 entries per node), no metadata_csum:
+# | #     fa   2000 written 1-block extents at even blocks, size 4000 blocks: depth 2, 5 full leaves
+# | #     fu   the same with preallocated (unwritten) extents. A hole next to one can't merge into it,
+# | #          so every fill there needs a new extent.
+# | #     gh   1360 unwritten extents at even blocks: depth 1, the root and all 4 leaves full
+# | #     gd   the same, size = the end of the last extent: an append must grow the tree
+# | #     gk   the same at odd blocks (a leading hole): the grown root's key must be 1, not 0
+# | #     tf4  4 written 64 KiB extents: a full root in the inode
+# | #  p2 x1k  1 KiB blocks (84 entries per node), no metadata_csum:
+# | #     kd   28224 unwritten extents at even blocks: depth 2, every node full (4 x 84 x 84), so one
+# | #          new extent splits a leaf and an index node, and grows the root to depth 3
+# | #     ku   3000 unwritten extents at even blocks: depth 2; 1 MiB written over 512 holes
+# | #  p3 c4k  4 KiB blocks, metadata_csum:
+# | #     cu   1360 unwritten extents at even blocks: depth 1, root and leaves full
+# | #     cw   700 written extents at even blocks: depth 1, 2 full leaves
+# | #  p4 e4k  ext2, 4 KiB blocks, indirect-mapped (regression: the goal change reaches DataStream):
+# | #     ix   truncate -s 40M, 4 KiB at 0 and at 39 MiB (holes with missing indirect blocks)
+# | #     iy   8 MiB of data, for an append
+# | #  p5 fx   ext4, 4 KiB blocks, 48 MiB (regression: ENOSPC):
+# | #     fz   700 written extents at even blocks; Haiku fills the volume, then writes into fz's holes
+# | #
+# | # Haiku steps (each one mounts, writes, syncs and unmounts):
+# | #   fa / fu: 8 KiB at block 1 (first leaf), 8 KiB at block 1001 (third leaf), 1 MiB at block 2001
+# | #   gh: 8 KiB at block 681 (second leaf)
+# | #   gd / gk: append 64 KiB
+# | #   tf4: 64 KiB at 1 MiB (between the root's extents)
+# | #   kd: 8 KiB at 1 KiB-block 20000;  ku: 1 MiB at 2 MiB
+# | #   cu: 64 KiB at block 681, 8 KiB at block 1101;  cw: 64 KiB at block 341
+# | #   ix: 64 KiB at 32 KiB and at 20 MiB (indirect holes); iy: append 64 KiB
+# | #   nospc: fill fx, write into fz's holes (ENOSPC expected), remove the filler
+# | #   rd: read every test file back (md5)
+# | # The chunks are random, made on Haiku; their md5s are in the Haiku log, to compare with the md5
+# | # of each written range that "check" prints.
+# | #
+# | # Writes are at least two pages, and both arms must run a kernel with #1086 (#1069): one-page
+# | # disk I/O to a plain EBS volume otherwise fails ("failed to lock memory"), which a file this
+# | # fragmented hits on almost every block.
+# | 
+# | seed() {
+# | 	set -x
+# | 	D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) \
+# | 		'$9 == v { print $11 }' | sed 's|.*/||')
+# | 	D=/dev/$D; echo "seed device $D"; lsblk $D || exit 1
+# | 	sgdisk -Z $D > /dev/null
+# | 	sgdisk -n1:0:+700M -n2:0:+500M -n3:0:+400M -n4:0:+200M -n5:0:+48M $D || exit 1
+# | 	partprobe $D; sleep 2; P=${D}p
+# | 	X="-O ^has_journal,^orphan_file,^metadata_csum"
+# | 	mkfs.ext4 -q -F $X -L x4k ${P}1 && mkfs.ext4 -q -F -b 1024 $X -L x1k ${P}2 \
+# | 		&& mkfs.ext4 -q -F -O ^has_journal,^orphan_file,metadata_csum -L c4k ${P}3 \
+# | 		&& mkfs.ext2 -q -F -b 4096 -L e4k ${P}4 && mkfs.ext4 -q -F $X -L fx ${P}5 || exit 1
+# | 	cat > /opt/mk.py <<'PY'
+# | import os, sys
+# | # mk.py <path> <written|unwritten> <count> <first block> <step> <block size> [size in blocks]
+# | path, kind = sys.argv[1], sys.argv[2]
+# | count, first, step, bs = (int(x) for x in sys.argv[3:7])
+# | fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0o666)
+# | for n in range(count):
+# | 	off = (first + n * step) * bs
+# | 	if kind == 'written':
+# | 		os.pwrite(fd, os.urandom(bs), off)
+# | 		if n % 64 == 63:
+# | 			os.fsync(fd)
+# | 	else:
+# | 		os.posix_fallocate(fd, off, bs)
+# | if len(sys.argv) > 7:
+# | 	os.ftruncate(fd, int(sys.argv[7]) * bs)
+# | os.fsync(fd)
+# | os.close(fd)
+# | PY
+# | 	mkdir -p /opt/seed/m && cd /opt/seed
+# | 	mount ${P}1 m && (chmod 777 m
+# | 		python3 /opt/mk.py m/fa written 2000 0 2 4096 4000
+# | 		python3 /opt/mk.py m/fu unwritten 2000 0 2 4096 4000
+# | 		python3 /opt/mk.py m/gh unwritten 1360 0 2 4096
+# | 		python3 /opt/mk.py m/gd unwritten 1360 0 2 4096
+# | 		python3 /opt/mk.py m/gk unwritten 1360 1 2 4096
+# | 		python3 /opt/mk.py m/tf4 written 4 0 32 65536 128
+# | 		sync; chmod 666 m/*); umount m
+# | 	mount ${P}2 m && (chmod 777 m
+# | 		python3 /opt/mk.py m/kd unwritten 28224 0 2 1024
+# | 		python3 /opt/mk.py m/ku unwritten 3000 0 2 1024
+# | 		sync; chmod 666 m/*); umount m
+# | 	mount ${P}3 m && (chmod 777 m
+# | 		python3 /opt/mk.py m/cu unwritten 1360 0 2 4096
+# | 		python3 /opt/mk.py m/cw written 700 0 2 4096
+# | 		sync; chmod 666 m/*); umount m
+# | 	mount ${P}4 m && (chmod 777 m
+# | 		truncate -s 40M m/ix
+# | 		dd if=/dev/urandom of=m/ix bs=4096 count=1 conv=notrunc status=none
+# | 		dd if=/dev/urandom of=m/ix bs=4096 count=1 seek=9984 conv=notrunc status=none
+# | 		head -c 8M /dev/urandom > m/iy
+# | 		sync; chmod 666 m/*); umount m
+# | 	mount ${P}5 m && (chmod 777 m
+# | 		python3 /opt/mk.py m/fz written 700 0 2 4096
+# | 		sync; chmod 666 m/*); umount m
+# | 	set +x
+# | 	shapes $P
+# | 	for n in 1 2 3 4 5; do e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck p$n rc=$?"; tail -1 /tmp/f.out; done
+# | 	# the Linux-made files, to check the contents against afterwards
+# | 	rm -rf /opt/seed/orig; mkdir -p /opt/seed/orig
+# | 	for n in 1 2 3 4 5; do mount -o ro ${P}$n m && cp --sparse=always m/[a-z]* /opt/seed/orig/; umount m; done
+# | 	ls -ls /opt/seed/orig; sync
+# | }
+# | 
+# | shapes() {
+# | 	# every file's size, md5, and its index nodes (debugfs ex -n: level/depth, entries/max)
+# | 	P=$1
+# | 	for n in 1 2 3 4 5; do
+# | 		mount -o ro ${P}$n /opt/seed/m || continue
+# | 		for f in $(ls /opt/seed/m | grep -v lost); do
+# | 			echo "== p$n $f $(stat -c '%s %b' /opt/seed/m/$f) md5 $(md5sum < /opt/seed/m/$f | cut -d' ' -f1)"
+# | 			echo "   leaves: $(debugfs -R "ex -l /$f" ${P}$n 2>/dev/null | awk 'NR > 1 { print $2 }' | sort | uniq -c | sort -rn | head -4 | tr '\n' ' ')"
+# | 			debugfs -R "ex -n /$f" ${P}$n 2>/dev/null | head -12 | sed 's/^/   /'
+# | 		done
+# | 		umount /opt/seed/m
+# | 	done
+# | }
+# | 
+# | check() {
+# | 	D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) \
+# | 		'$9 == v { print $11 }' | sed 's|.*/||')
+# | 	P=/dev/${D}p; echo "volume /dev/$D"
+# | 	for n in 1 2 3 4 5; do
+# | 		echo "== p$n"; e2fsck -fn ${P}$n > /tmp/fsck.out 2>&1; r=$?
+# | 		grep -v "^Pass\|^e2fsck 1" /tmp/fsck.out | cut -c1-200 | head -20; echo "e2fsck p$n rc=$r"
+# | 	done
+# | 	shapes $P
+# | 	cat > /tmp/regions.py <<'PY'
+# | import hashlib, sys
+# | path, orig = sys.argv[1], sys.argv[2]
+# | regions = [tuple(int(x) for x in r.split(':')) for r in sys.argv[3:]]
+# | a = open(path, 'rb').read(); b = open(orig, 'rb').read()
+# | print('%s size=%d (orig %d) md5=%s' % (path.split('/')[-1], len(a), len(b), hashlib.md5(a).hexdigest()))
+# | rest_a = bytearray(a); rest_b = bytearray(b)
+# | end = len(b)
+# | for off, ln in regions:
+# | 	print('  [%d,+%d) md5 %s' % (off, ln, hashlib.md5(a[off:off + ln]).hexdigest()))
+# | 	rest_a[off:off + ln] = b'\0' * ln
+# | 	if off + ln > len(rest_b):
+# | 		rest_b.extend(b'\0' * (off + ln - len(rest_b)))
+# | 	rest_b[off:off + ln] = b'\0' * ln
+# | same = rest_a == rest_b
+# | print('  outside the written ranges: %s' % ('same as the Linux original' if same else 'DIFFERS from the Linux original'))
+# | PY
+# | 	mkdir -p /opt/chk/m
+# | 	chk() {
+# | 		n=$1; shift; mount -o ro ${P}$n /opt/chk/m || return
+# | 		while [ $# -gt 0 ]; do
+# | 			f=$1; r=$2; shift 2
+# | 			[ -f /opt/chk/m/$f ] && python3 /tmp/regions.py /opt/chk/m/$f /opt/seed/orig/$f $r
+# | 		done
+# | 		umount /opt/chk/m
+# | 	}
+# | 	B=4096
+# | 	chk 1 fa "$((B * 1)):8192 $((B * 1001)):8192 $((B * 2001)):1048576" \
+# | 		fu "$((B * 1)):8192 $((B * 1001)):8192 $((B * 2001)):1048576" \
+# | 		gh "$((B * 681)):8192" gd "11137024:65536" gk "11141120:65536" tf4 "1048576:65536"
+# | 	chk 2 kd "$((1024 * 20000)):8192" ku "2097152:1048576"
+# | 	chk 3 cu "$((B * 681)):65536 $((B * 1101)):8192" cw "$((B * 341)):65536"
+# | 	chk 4 ix "32768:65536 20971520:65536" iy "8388608:65536"
+# | 	chk 5 fz "$((B * 101)):65536 $((B * 501)):8192 $((B * 1201)):8192 $((B * 1301)):8192"
+# | }
+# | 
+# | step() {
+# | 	lockbefore=$(grep -c "failed to lock memory" /var/log/syslog)
+# | 	SEEKS="1201 1301"
+# | 	case $1 in
+# | 	nospc2) SEEKS="101 501"; set -- nospc ;;
+# | 	esac
+# | 	case $1 in
+# | 	fa|fu)
+# | 		mount -t ext2 $DD/0 /hx4k || exit 1
+# | 		dd if=/boot/home/c8k of=/hx4k/$1 bs=4096 seek=1 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "$1 write1 rc=$r"
+# | 		dd if=/boot/home/c8k of=/hx4k/$1 bs=4096 seek=1001 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "$1 write2 rc=$r"
+# | 		dd if=/boot/home/c1m of=/hx4k/$1 bs=4096 seek=2001 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "$1 write3 rc=$r"
+# | 		ls -ls /hx4k/$1; sync; unmount /hx4k; echo "unmount rc=$?"
+# | 		;;
+# | 	gh)
+# | 		mount -t ext2 $DD/0 /hx4k || exit 1
+# | 		dd if=/boot/home/c8k of=/hx4k/gh bs=4096 seek=681 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "gh write rc=$r"
+# | 		ls -ls /hx4k/gh; sync; unmount /hx4k; echo "unmount rc=$?"
+# | 		;;
+# | 	gd|gk)
+# | 		mount -t ext2 $DD/0 /hx4k || exit 1
+# | 		cat /boot/home/c64k >> /hx4k/$1; echo "$1 append rc=$?"
+# | 		ls -ls /hx4k/$1; sync; unmount /hx4k; echo "unmount rc=$?"
+# | 		;;
+# | 	tf4)
+# | 		mount -t ext2 $DD/0 /hx4k || exit 1
+# | 		dd if=/boot/home/c64k of=/hx4k/tf4 bs=65536 seek=16 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "tf4 write rc=$r"
+# | 		ls -ls /hx4k/tf4; sync; unmount /hx4k; echo "unmount rc=$?"
+# | 		;;
+# | 	kd)
+# | 		mount -t ext2 $DD/1 /hx1k || exit 1
+# | 		dd if=/boot/home/c8k of=/hx1k/kd bs=1024 seek=20000 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "kd write rc=$r"
+# | 		ls -ls /hx1k/kd; sync; unmount /hx1k; echo "unmount rc=$?"
+# | 		;;
+# | 	ku)
+# | 		mount -t ext2 $DD/1 /hx1k || exit 1
+# | 		dd if=/boot/home/c1m of=/hx1k/ku bs=1048576 seek=2 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "ku write rc=$r"
+# | 		ls -ls /hx1k/ku; sync; unmount /hx1k; echo "unmount rc=$?"
+# | 		;;
+# | 	cu)
+# | 		mount -t ext2 $DD/2 /hc4k || exit 1
+# | 		dd if=/boot/home/c64k of=/hc4k/cu bs=4096 seek=681 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "cu write1 rc=$r"
+# | 		dd if=/boot/home/c8k of=/hc4k/cu bs=4096 seek=1101 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "cu write2 rc=$r"
+# | 		ls -ls /hc4k/cu; sync; unmount /hc4k; echo "unmount rc=$?"
+# | 		;;
+# | 	cw)
+# | 		mount -t ext2 $DD/2 /hc4k || exit 1
+# | 		dd if=/boot/home/c64k of=/hc4k/cw bs=4096 seek=341 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "cw write rc=$r"
+# | 		ls -ls /hc4k/cw; sync; unmount /hc4k; echo "unmount rc=$?"
+# | 		;;
+# | 	ix)
+# | 		mount -t ext2 $DD/3 /he4k || exit 1
+# | 		dd if=/boot/home/c64k of=/he4k/ix bs=4096 seek=8 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "ix write1 rc=$r"
+# | 		dd if=/boot/home/c64k of=/he4k/ix bs=65536 seek=320 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "ix write2 rc=$r"
+# | 		cat /boot/home/c64k >> /he4k/iy; echo "iy append rc=$?"
+# | 		ls -ls /he4k; sync; unmount /he4k; echo "unmount rc=$?"
+# | 		;;
+# | 	nospc)
+# | 		# fill fx (1 MiB, then 4 KiB writes, until ENOSPC), then write into holes of fz (in a
+# | 		# full leaf): each write must fail cleanly (no KDL) and the volume stay consistent; then
+# | 		# remove the filler. Holes at blocks 1201 and 1301 (blocks 101 and 501 on a rerun: "nospc2").
+# | 		mount -t ext2 $DD/4 /hfx || exit 1
+# | 		dd if=/dev/zero of=/hfx/big bs=1048576 2>&1 | tail -1; echo "fill rc=${PIPESTATUS[0]}"
+# | 		dd if=/dev/zero of=/hfx/big2 bs=4096 2>&1 | tail -1; echo "fill2 rc=${PIPESTATUS[0]}"
+# | 		ls -ls /hfx; df /hfx | tail -3; sync
+# | 		for b in $SEEKS; do
+# | 			dd if=/boot/home/c8k of=/hfx/fz bs=4096 seek=$b conv=notrunc 2>&1 | tail -1
+# | 			echo "fz write at block $b (ENOSPC expected) rc=${PIPESTATUS[0]}"
+# | 		done
+# | 		sync; rm -f /hfx/big /hfx/big2; echo "rm rc=$?"; sync
+# | 		echo "fz md5 $(md5sum < /hfx/fz)"; unmount /hfx; echo "unmount rc=$?"
+# | 		;;
+# | 	rd)
+# | 		mount -t ext2 $DD/0 /hx4k || exit 1
+# | 		for f in fa fu gh gd gk tf4; do echo "$f md5 $(md5sum < /hx4k/$f)"; done
+# | 		unmount /hx4k
+# | 		mount -t ext2 $DD/1 /hx1k || exit 1
+# | 		for f in kd ku; do echo "$f md5 $(md5sum < /hx1k/$f)"; done
+# | 		unmount /hx1k
+# | 		mount -t ext2 $DD/2 /hc4k || exit 1
+# | 		for f in cu cw; do echo "$f md5 $(md5sum < /hc4k/$f)"; done
+# | 		unmount /hc4k
+# | 		mount -t ext2 $DD/3 /he4k || exit 1
+# | 		for f in ix iy; do echo "$f md5 $(md5sum < /he4k/$f)"; done
+# | 		unmount /he4k
+# | 		;;
+# | 	esac
+# | 	echo "lock-memory failures during step $1 (#1069): $(( $(grep -c 'failed to lock memory' /var/log/syslog) - lockbefore ))"
+# | }
+# | 
+# | haiku() {
+# | 	uname -a
+# | 	sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | 	BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | 	DD=""
+# | 	for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/4 ] && DD=$d; done
+# | 	[ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | 	mkdir -p /hx4k /hx1k /hc4k /he4k /hfx
+# | 	[ -f /boot/home/c1m ] || { dd if=/dev/urandom of=/boot/home/c1m bs=65536 count=16
+# | 		dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1
+# | 		dd if=/dev/urandom of=/boot/home/c8k bs=8192 count=1; } 2>/dev/null
+# | 	for c in c1m c64k c8k; do echo "$c md5 $(md5sum < /boot/home/$c)"; done
+# | 	for s in ${@:-fa fu gh gd gk tf4 kd ku cu cw ix nospc rd}; do echo "=== step $s"; step $s; done
+# | 	echo "=== KDL/panic lines in syslog: $(grep -ciE 'kernel debugger|panic' /var/log/syslog)"
+# | 	grep "ext2" /var/log/syslog | tail -20
+# | }
+# | 
+# | mode=$1; shift
+# | case $mode in
+# | 	seed) seed "$@" ;;
+# | 	check) check "$@" ;;
+# | 	haiku) haiku "$@" ;;
+# | 	*) echo "usage: $0 seed <vol> | haiku [step...] | check <vol>"; exit 1 ;;
+# | esac
+# | SCRIPT_EOF
+# | sha256sum /opt/ext2split1108.sh
+# | partprobe 2>/dev/null; sleep 2; sh /opt/ext2split1108.sh check vol-0a63dd5ca0de3bd5c 2>&1
+# ---- raw output ----
+8528c2473b278870108cafc460b96e26e902f5351efaebdc03d5080792369ea8  /opt/ext2split1108.sh
+volume /dev/nvme4n1
+== p1
+Inode 12 extent tree (at level 2) could be narrower.  Optimize? no
+
+Inode 13 extent tree (at level 2) could be narrower.  Optimize? no
+
+x4k: 17/44832 files (35.3% non-contiguous), 11670/179200 blocks
+e2fsck p1 rc=0
+== p2
+Inode 13 extent tree (at level 2) could be narrower.  Optimize? no
+
+x1k: 13/128016 files (7.7% non-contiguous), 66621/512000 blocks
+e2fsck p2 rc=0
+== p3
+c4k: 13/102400 files (15.4% non-contiguous), 8653/102400 blocks
+e2fsck p3 rc=0
+== p4
+e4k: 13/51200 files (15.4% non-contiguous), 5345/51200 blocks
+e2fsck p4 rc=0
+== p5
+Inode 12 extent tree (at level 1) could be narrower.  Optimize? no
+
+fx: 12/12288 files (8.3% non-contiguous), 1496/12288 blocks
+e2fsck p5 rc=0
+== p1 fa 16384000 17128 md5 a045870e69aa6ff0c07247b237f035c4
+   leaves:    2130 2 
+   Level Entries       Logical        Physical Length Flags
+    0/ 2   1/  1     0 -  3999   3038            4000
+    1/ 2   1/ 10     0 -   339   3037             340
+    1/ 2   2/ 10   340 -   679   6328             340
+    1/ 2   3/ 10   680 -  1019  32857             340
+    1/ 2   4/ 10  1020 -  1359  39441             340
+    1/ 2   5/ 10  1360 -  1699  32858             340
+    1/ 2   6/ 10  1700 -  2039  39444             340
+    1/ 2   7/ 10  2040 -  2379  32859             340
+    1/ 2   8/ 10  2380 -  2719  39466             340
+    1/ 2   9/ 10  2720 -  3399  32860             680
+    1/ 2  10/ 10  3400 -  3999  32861             600
+== p1 fu 16384000 17128 md5 468c7a7fead0220acfad842d8395bb85
+   leaves:    2130 2 
+   Level Entries       Logical        Physical Length Flags
+    0/ 2   1/  1     0 -  3999  32915            4000
+    1/ 2   1/ 10     0 -   339  32907             340
+    1/ 2   2/ 10   340 -   679  39576             340
+    1/ 2   3/ 10   680 -  1019   3308             340
+    1/ 2   4/ 10  1020 -  1359   6331             340
+    1/ 2   5/ 10  1360 -  1699   3649             340
+    1/ 2   6/ 10  1700 -  2039   6334             340
+    1/ 2   7/ 10  2040 -  2379   3990             340
+    1/ 2   8/ 10  2380 -  2719   6356             340
+    1/ 2   9/ 10  2720 -  3399   4331             680
+    1/ 2  10/ 10  3400 -  3999   4672             600
+== p1 gd 11202560 11056 md5 bbdcd13204244b34e066e6ceb2158920
+   leaves:    1362 2 
+   Level Entries       Logical        Physical Length Flags
+    0/ 2   1/  1     0 -  2734  39582            2735
+    1/ 2   1/  5     0 -   679  35655             680
+    1/ 2   2/  5   680 -  1359   5305             680
+    1/ 2   3/  5  1360 -  2039   5646             680
+    1/ 2   4/  5  2040 -  2718   5987             679
+    1/ 2   5/  5  2719 -  2734  39583              16
+== p1 gh 11137024 10936 md5 58a02b41f328f061af6b5035588c8c09
+   leaves:    1361 2 
+   Level Entries       Logical        Physical Length Flags
+    0/ 2   1/  1     0 -  2718  39579            2719
+    1/ 2   1/  5     0 -   679  32927             680
+    1/ 2   2/  5   680 -  1019  33601             340
+    1/ 2   3/  5  1020 -  1359  39580             340
+    1/ 2   4/  5  1360 -  2039  34283             680
+    1/ 2   5/  5  2040 -  2718  34965             679
+== p1 gk 11206656 11056 md5 4d0b556a7cf4e3dbc357df056c401834
+   leaves:    1361 2 
+   Level Entries       Logical        Physical Length Flags
+    0/ 2   1/  1     1 -  2735  39584            2735
+    1/ 2   1/  5     1 -   680  35673             680
+    1/ 2   2/  5   681 -  1360  36347             680
+    1/ 2   3/  5  1361 -  2040  36864             680
+    1/ 2   4/  5  2041 -  2719  37205             679
+    1/ 2   5/  5  2720 -  2735  39585              16
+== p1 tf4 8388608 648 md5 410db1a69b27eae7d72f760309e40a8e
+   leaves:       5 1 
+   Level Entries       Logical        Physical Length Flags
+    0/ 1   1/  1     0 -  2047  39586            2048
+== p2 kd 57801728 57142 md5 1672d745f711a9e7e1902ff1c231666a
+   leaves:   28228 3 
+   Level Entries       Logical        Physical Length Flags
+    0/ 3   1/  1     0 - 56446  40560           56447
+    1/ 3   1/  5     0 - 14111   9038           14112
+    2/ 3   1/ 84     0 -   167   8967             168
+    2/ 3   2/ 84   168 -   335   8005             168
+    2/ 3   3/ 84   336 -   503   8090             168
+    2/ 3   4/ 84   504 -   671   8175             168
+    2/ 3   5/ 84   672 -   839   9039             168
+    2/ 3   6/ 84   840 -  1007   9124             168
+    2/ 3   7/ 84  1008 -  1175   9209             168
+    2/ 3   8/ 84  1176 -  1343   9294             168
+    2/ 3   9/ 84  1344 -  1511   9379             168
+== p2 ku 6142976 7112 md5 96883201e28bdfd5543be94dd156535b
+   leaves:    3512 2 
+   Level Entries       Logical        Physical Length Flags
+    0/ 2   1/  1     0 -  5998  37863            5999
+    1/ 2   1/ 43     0 -   167  37527             168
+    1/ 2   2/ 43   168 -   335  37608             168
+    1/ 2   3/ 43   336 -   503  37693             168
+    1/ 2   4/ 43   504 -   671  37778             168
+    1/ 2   5/ 43   672 -   839  37864             168
+    1/ 2   6/ 43   840 -  1007  37949             168
+    1/ 2   7/ 43  1008 -  1175  38034             168
+    1/ 2   8/ 43  1176 -  1343  38119             168
+    1/ 2   9/ 43  1344 -  1511  38204             168
+    1/ 2  10/ 43  1512 -  1679  38289             168
+== p3 cu 11137024 11000 md5 41dc8913c7287255021ce1556c396c23
+   leaves:    1369 2 
+   Level Entries       Logical        Physical Length Flags
+    0/ 2   1/  1     0 -  2718  35191            2719
+    1/ 2   1/  5     0 -   679  32824             680
+    1/ 2   2/  5   680 -  1019   6798             340
+    1/ 2   3/  5  1020 -  1359   7821             340
+    1/ 2   4/  5  1360 -  2039   7139             680
+    1/ 2   5/  5  2040 -  2718   7480             679
+== p3 cw 5730304 5688 md5 f1b269e621cf7b01d4bf0491b3e7d6c5
+   leaves:     700 1 
+   Level Entries       Logical        Physical Length Flags
+    0/ 1   1/  3     0 -   679  32828             680
+    0/ 1   2/  3   680 -  1359  32829             680
+    0/ 1   3/  3  1360 -  1398  32830              39
+== p4 ix 41943040 312 md5 082d72a98aa179be403efe75b7fbd109
+   leaves: 
+== p4 iy 8454144 16544 md5 0cc22d878547fc6d9af0fb99323960f6
+   leaves: 
+== p5 fz 5730304 5704 md5 20e6658ce46975212ef4e878a8401558
+   leaves:     709 1 
+   Level Entries       Logical      Physical Length Flags
+    0/ 1   1/  4     0 -   339    13            340
+    0/ 1   2/  4   340 -   679  2129            340
+    0/ 1   3/  4   680 -  1359    22            680
+    0/ 1   4/  4  1360 -  1398    38             39
+fa size=16384000 (orig 16384000) md5=a045870e69aa6ff0c07247b237f035c4
+  [4096,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  [4100096,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  [8196096,+1048576) md5 cda0b4d8540af9e7f8f0041f154ecbb4
+  outside the written ranges: same as the Linux original
+fu size=16384000 (orig 16384000) md5=468c7a7fead0220acfad842d8395bb85
+  [4096,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  [4100096,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  [8196096,+1048576) md5 cda0b4d8540af9e7f8f0041f154ecbb4
+  outside the written ranges: same as the Linux original
+gh size=11137024 (orig 11137024) md5=58a02b41f328f061af6b5035588c8c09
+  [2789376,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  outside the written ranges: same as the Linux original
+gd size=11202560 (orig 11137024) md5=bbdcd13204244b34e066e6ceb2158920
+  [11137024,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  outside the written ranges: same as the Linux original
+gk size=11206656 (orig 11141120) md5=4d0b556a7cf4e3dbc357df056c401834
+  [11141120,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  outside the written ranges: same as the Linux original
+tf4 size=8388608 (orig 8388608) md5=410db1a69b27eae7d72f760309e40a8e
+  [1048576,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  outside the written ranges: same as the Linux original
+kd size=57801728 (orig 57801728) md5=1672d745f711a9e7e1902ff1c231666a
+  [20480000,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  outside the written ranges: same as the Linux original
+ku size=6142976 (orig 6142976) md5=96883201e28bdfd5543be94dd156535b
+  [2097152,+1048576) md5 cda0b4d8540af9e7f8f0041f154ecbb4
+  outside the written ranges: same as the Linux original
+cu size=11137024 (orig 11137024) md5=41dc8913c7287255021ce1556c396c23
+  [2789376,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  [4509696,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  outside the written ranges: same as the Linux original
+cw size=5730304 (orig 5730304) md5=f1b269e621cf7b01d4bf0491b3e7d6c5
+  [1396736,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  outside the written ranges: same as the Linux original
+ix size=41943040 (orig 41943040) md5=082d72a98aa179be403efe75b7fbd109
+  [32768,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  [20971520,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  outside the written ranges: same as the Linux original
+iy size=8454144 (orig 8388608) md5=0cc22d878547fc6d9af0fb99323960f6
+  [8388608,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  outside the written ranges: same as the Linux original
+fz size=5730304 (orig 5730304) md5=20e6658ce46975212ef4e878a8401558
+  [413696,+65536) md5 7058cb539754f33eb9dd9a96d6ac207e
+  [2052096,+8192) md5 028bf8455d7b0a8fb749325ee0bd37f9
+  [4919296,+8192) md5 5ef087474be6729811774670cd96ecfb
+  [5328896,+8192) md5 4408afe734d986692353d447cf47fa25
+  outside the written ranges: same as the Linux original
