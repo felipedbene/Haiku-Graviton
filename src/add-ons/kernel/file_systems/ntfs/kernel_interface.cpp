@@ -649,6 +649,13 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 	if (status != B_OK)
 		return status;
 
+	// chmod() leaves the type bits zero. Type bits that are set and differ
+	// from the node's ask to turn it into another kind of node, which no
+	// file system can do, so that is refused, before anything is changed.
+	if ((mask & B_STAT_MODE) != 0 && (stat->st_mode & S_IFMT) != 0
+		&& (stat->st_mode & S_IFMT) != (node->mode & S_IFMT))
+		return B_UNSUPPORTED;
+
 	ntfs_inode* ni = ntfs_inode_open(volume->ntfs, node->inode);
 	if (ni == NULL)
 		return B_IO_ERROR;
@@ -675,25 +682,16 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 		ntfs_inode_update_times(ni, (ntfs_time_update_flags)NTFS_UPDATE_MCTIME);
 	}
 
-	if ((mask & B_STAT_UID) != 0) {
-		// We don't support this (yet.)
-		if (node->uid != stat->st_uid)
-			return B_UNSUPPORTED;
-	}
-
-	if ((mask & B_STAT_GID) != 0) {
-		// We don't support this (yet.)
-		if (node->gid != stat->st_gid)
-			return B_UNSUPPORTED;
-	}
-
-	if ((mask & B_STAT_MODE) != 0) {
-		// We don't support this (yet.) Only the permission bits are compared:
-		// node->mode carries the file type, while chmod() passes just the bits
-		// it sets, so a chmod() to the current mode is a no-op that succeeds.
-		if ((node->mode & S_IUMSK) != (stat->st_mode & S_IUMSK))
-			return B_UNSUPPORTED;
-	}
+	// B_STAT_UID, B_STAT_GID and B_STAT_MODE are accepted and dropped. Without
+	// a user mapping (which this driver does not have) an owner, a group or
+	// permission bits cannot be stored: every node stays root's, files 0666
+	// and directories 0777. That is ntfs-3g's default, its "silent" option:
+	// chown() and chmod() report success and change nothing. Refusing them
+	// instead made every install -m, cp -p and tar xp fail on NTFS, as they
+	// set a mode on each file they create. Who may make the call is still
+	// decided by check_write_stat_permissions() above, so a caller that is
+	// not the owner gets B_NOT_ALLOWED, exactly as on a file system that
+	// stores modes.
 
 	if ((mask & B_STAT_CREATION_TIME) != 0)
 		ni->creation_time = timespec2ntfs(stat->st_crtim);
