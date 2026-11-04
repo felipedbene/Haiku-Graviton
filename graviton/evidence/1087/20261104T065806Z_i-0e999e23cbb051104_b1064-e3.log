@@ -1,0 +1,50 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b1064-e3
+# instance: i-0e999e23cbb051104   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm b1064: full1k, write 25 MiB (no ENOSPC), unmount
+# start: 20261104T065806Z   end: 20261104T065817Z   rc: 0
+# script sha256: bbda2a93d08599324e73319af65006fe21c78c21e1c05c985730c2a30ca9b5ea
+# ---- script ----
+# | # arm b1064 (PR #1081 tip, without #1080/#1079), isolation run 3 for the full1k corruption: on full1k (ext2, 1 KiB blocks) only,
+# | # write 25 MiB (no ENOSPC), sync, unmount, as a control for the rest: so Linux e2fsck shows whether the
+# | # failed write alone leaves the volume inconsistent.
+# | set -x
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/4 ] && [ ! -e $d/5 ] && DD=$d; done
+# | mkdir -p /efull1k && mount -t ext2 $DD/1 /efull1k || exit 1
+# | cd /efull1k
+# | dd if=/dev/urandom of=fill bs=65536 count=400 2>&1 | tail -2; echo "dd fill rc=$?"
+# | ls -ls fill; sync; cd /
+# | unmount /efull1k; echo "unmount rc=$?"
+# | grep -iE "ext2" /var/log/syslog | grep -v "disk system" | tail -20
+# ---- raw output ----
+cddf0caab37d389e7a3f8f6e0de0df2965a6693c3e7b8c461c71c4f6222a9e90  /boot/system/add-ons/kernel/file_systems/ext2
+400+0 records out
+26214400 bytes (26 MB, 25 MiB) copied, 4.03487 s, 6.5 MB/s
+dd fill rc=0
+25701 -rw-r--r-- 1 baron root 26214400 Nov  4 06:58 fill
+unmount rc=0
+KERN: module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ee10, "ext2"
++ sha256sum /boot/system/add-ons/kernel/file_systems/ext2
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/4 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/4 ']'
++ '[' '!' -e /dev/disk/nvme/1/5 ']'
++ DD=/dev/disk/nvme/1
++ mkdir -p /efull1k
++ mount -t ext2 /dev/disk/nvme/1/1 /efull1k
++ cd /efull1k
++ dd if=/dev/urandom of=fill bs=65536 count=400
++ tail -2
++ echo 'dd fill rc=0'
++ ls -ls fill
++ sync
++ cd /
++ unmount /efull1k
++ echo 'unmount rc=0'
++ grep -iE ext2 /var/log/syslog
++ grep -v 'disk system'
++ tail -20

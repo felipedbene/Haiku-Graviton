@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1087-e3-linux-check
+# instance: i-0fdd8b3004eb86c28   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck of arm c1087's full1k after a 25 MiB write
+# start: 20261104T071303Z   end: 20261104T071314Z   rc: 0
+# script sha256: eb53f4b6bf10428831b6d5f465c5b8fc05100683920f4871e13f5123d704b5d6
+# ---- script ----
+# | # Linux check of arm c1087's full1k after the 25 MiB write (volume vol-0c6867482cbb36ded): e2fsck -fn, and debugfs stat of fill.
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0c6867482cbb36ded '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "device $D"
+# | e2fsck -fn ${D}p2 2>&1 | cut -c1-300; echo "e2fsck rc=$?"
+# | debugfs -R "stat fill" ${D}p2 2>/dev/null | head -12
+# | debugfs -R "stat big" ${D}p2 2>/dev/null | head -6
+# | dumpe2fs ${D}p2 2>/dev/null | grep -E "^Group|block bitmap|Inode bitmap|free blocks" | head -24
+# ---- raw output ----
+device /dev/nvme10n1
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+full1k: 13/8192 files (7.7% non-contiguous), 29188/32768 blocks
+e2fsck rc=0
+Inode: 13   Type: regular    Mode:  0644   Flags: 0x0
+Generation: 0    Version: 0x00000000:00000000
+User:     0   Group:     0   Project:     0   Size: 26214400
+File ACL: 0
+Links: 1   Blockcount: 51402
+Fragment:  Address: 0    Number: 0    Size: 0
+ ctime: 0x00000000:00000000 -- Thu Jan  1 00:00:00 1970
+ atime: 0x6aeadab1:00000000 -- Wed Nov  4 07:11:45 2026
+ mtime: 0x6aeadab5:00000000 -- Wed Nov  4 07:11:49 2026
+crtime: 0x00000000:00000000 -- Thu Jan  1 00:00:00 1970
+Size of extra inode fields: 32
+BLOCKS:
+Group 0: (Blocks 1-8192)
+  Inode bitmap at 643 (+642)
+  208 free blocks, 2035 free inodes, 2 directories
+Group 1: (Blocks 8193-16384)
+  Inode bitmap at 8839 (+646)
+  32 free blocks, 2048 free inodes, 0 directories
+Group 2: (Blocks 16385-24576)
+  Inode bitmap at 16906 (+521)
+  32 free blocks, 2048 free inodes, 0 directories
+Group 3: (Blocks 24577-32767)
+  Inode bitmap at 25231 (+654)
+  3308 free blocks, 2048 free inodes, 0 directories

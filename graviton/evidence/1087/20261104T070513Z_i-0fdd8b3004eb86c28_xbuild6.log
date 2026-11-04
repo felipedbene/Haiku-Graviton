@@ -1,0 +1,63 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild6
+# instance: i-0fdd8b3004eb86c28   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ext2 c1079g (#1064 tip + #1080 + #1079 + #1087)
+# start: 20261104T070513Z   end: 20261104T070530Z   rc: 0
+# script sha256: 58ddcafaf43535f5ab24cc0ee3793ee075b6a3899898b184ddd1f7ab2d7ba212
+# ---- script ----
+# | # Build ext2 "c1079g" = the #1064 tip + #1080 + #1079 + #1087, to rerun #1079's ENOSPC test on
+# | # the 1 KiB-block volume without #1087's corruption in the way (patches from xbuild4/xbuild5).
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | git -C .. checkout -q -f 0da661af9b || exit 1
+# | for p in fix1080.patch fix1079.patch fix1087.patch; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || exit 1; done
+# | git -C .. diff --stat
+# | rm -rf $A/ext2
+# | jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 ext2 > $O/jam-c1079g.log 2>&1 || { tail -40 $O/jam-c1079g.log; exit 1; }
+# | cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.c1079g
+# | git -C .. checkout -q -f 0da661af9b
+# | cd $O; sha256sum fix1080.patch fix1079.patch fix1087.patch ext2.c1079g | tee SHA256SUMS6
+# | aws s3 cp --quiet ext2.c1079g s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/Q/out5/ext2.c1079g && echo uploaded
+# ---- raw output ----
+ .../kernel/file_systems/ext2/BlockAllocator.cpp    |   5 +-
+ .../kernel/file_systems/ext2/DataStream.cpp        |  52 ++++-
+ .../kernel/file_systems/ext2/ExtentStream.cpp      | 219 ++++++++++++---------
+ .../kernel/file_systems/ext2/ExtentStream.h        |   7 +
+ src/add-ons/kernel/file_systems/ext2/Inode.cpp     |  38 ++--
+ src/add-ons/kernel/file_systems/ext2/Volume.cpp    |  13 +-
+ src/add-ons/kernel/file_systems/ext2/Volume.h      |   2 +
+ src/add-ons/kernel/file_systems/ext2/ext2.h        |   9 +
+ 8 files changed, 231 insertions(+), 114 deletions(-)
+d98bce28c844f9a830b82f358a6843793fae628c23179c31c3e165890a0c021e  fix1080.patch
+3e5aefd8e1e7a19250bf9d2545ab7491abbe669bde175a6bcd093efcbb8d1365  fix1079.patch
+505b9c51810941936d74826b5e33e5deb1a4d54cc805e1cf82243c4308cec5b6  fix1087.patch
+435b07250a90c23c13f004db7001dc572e8f6adf22a9eb5b0e44eca81af01734  ext2.c1079g
+uploaded
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ git -C .. checkout -q -f 0da661af9b
++ for p in fix1080.patch fix1079.patch fix1087.patch
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ for p in fix1080.patch fix1079.patch fix1087.patch
++ git -C .. apply --check /opt/t/out/fix1079.patch
++ git -C .. apply /opt/t/out/fix1079.patch
++ for p in fix1080.patch fix1079.patch fix1087.patch
++ git -C .. apply --check /opt/t/out/fix1087.patch
++ git -C .. apply /opt/t/out/fix1087.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1079g
++ git -C .. checkout -q -f 0da661af9b
++ cd /opt/t/out
++ sha256sum fix1080.patch fix1079.patch fix1087.patch ext2.c1079g
++ tee SHA256SUMS6
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet ext2.c1079g s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/Q/out5/ext2.c1079g
++ echo uploaded
