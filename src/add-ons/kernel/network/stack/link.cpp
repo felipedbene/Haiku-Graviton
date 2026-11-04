@@ -73,8 +73,8 @@ private:
 
 private:
 			mutex				fMonitorLock;
-				// serializes starting and stopping a capture; never taken
-				// by the device's callbacks, and always before fLock
+				// serializes starting and stopping a capture, and binding;
+				// never taken by the device's callbacks, always before fLock
 			net_device_monitor	fMonitor;
 			net_device_interface* fMonitoredDevice;
 			net_device_interface* fBoundToDevice;
@@ -170,6 +170,11 @@ LinkProtocol::Bind(const sockaddr* address)
 	if (address == NULL || geteuid() != 0)
 		return B_NOT_ALLOWED;
 
+	// A stop may be unregistering a capture of this socket, holding the
+	// device list lock while it waits for the monitor lock, whose holder
+	// may be waiting for fLock; registering a handler below takes the device
+	// list lock, so do not hold fLock across it while a stop is in progress.
+	MutexLocker monitorLocker(fMonitorLock);
 	MutexLocker locker(fLock);
 
 	if (fMonitoredDevice != NULL)
