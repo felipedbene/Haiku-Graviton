@@ -1120,43 +1120,69 @@ VMSAv8TranslationMap::Query(addr_t va, phys_addr_t* pa, uint32* flags)
 	if (fPageTable == 0)
 		return B_OK;
 
-	ProcessRange(fPageTable, fInitialLevel, va, B_PAGE_SIZE, nullptr,
-		[=](uint64_t* ptePtr, uint64_t effectiveVa) {
-			uint64_t pte = atomic_get64((int64_t*)ptePtr);
+	// Walk by hand rather than with ProcessRange(), which only ever hands its
+	// callback level-3 entries: a page under a level-1/2 block descriptor would
+	// read as absent. The EFI loader maps the linear physical map with blocks,
+	// so get_memory_map_etc() on a vm_get_physical_page() address -- a disk
+	// driver's single-page I/O -- would panic on "unmapped memory".
+	uint64_t vaMask = (1UL << fVaBits) - 1;
+	int tableBits = fPageBits - 3;
+	uint64_t tableMask = (1UL << tableBits) - 1;
 
-			// ProcessRange() hands us every level-3 slot covered by the range,
-			// whether or not it holds a live mapping: a level-3 table exists as
-			// soon as any single page in its 2MB span is mapped, so slots for
-			// never-faulted pages are reached here holding an invalid entry.
-			// Such an entry carries neither a physical address nor attributes,
-			// so it must be reported as absent. Callers use PAGE_PRESENT to
-			// decide whether *pa is meaningful, and a zero *pa passed to
-			// vm_lookup_page() is fatal.
+	phys_addr_t ptPa = fPageTable;
+	uint64_t pte = 0;
+	uint64_t entryMask = pageMask;
+	for (int level = fInitialLevel; level <= 3; level++) {
+		int shift = tableBits * (3 - level) + fPageBits;
+		int index = ((va & vaMask) >> shift) & tableMask;
+		pte = atomic_get64((int64_t*)(TableFromPa(ptPa) + index));
+
+		// A level-3 table exists as soon as any single page in its 2MB span is
+		// mapped, so the slot of a never-faulted page holds an invalid entry.
+		// It carries neither a physical address nor attributes, so it must be
+		// reported as absent: callers use PAGE_PRESENT to decide whether *pa is
+		// meaningful, and a zero *pa passed to vm_lookup_page() is fatal.
+		if (level == 3) {
 			if ((pte & kPteValidMask) == 0)
-				return;
+				return B_OK;
+			break;
+		}
 
-			*pa = pte & kPteAddrMask;
-			*flags |= PAGE_PRESENT | B_KERNEL_READ_AREA;
-			if (is_pte_accessed(pte))
-				*flags |= PAGE_ACCESSED;
-			if (is_pte_dirty(pte))
-				*flags |= PAGE_MODIFIED;
+		uint64_t type = pte & kPteTypeMask;
+		if (type == kPteTypeL012Table) {
+			ptPa = pte & kPteAddrMask;
+			continue;
+		}
+		if (level == 0 || type != kPteTypeL12Block)
+			return B_OK;
 
-			if ((pte & kAttrPXN) == 0)
-				*flags |= B_KERNEL_EXECUTE_AREA;
+		entryMask = (1UL << shift) - 1;
+		break;
+	}
 
-			if ((pte & kAttrAPUserAccess) != 0) {
-				*flags |= B_READ_AREA;
-				if ((pte & kAttrUXN) == 0)
-					*flags |= B_EXECUTE_AREA;
-			}
+	// A block's attribute bits sit where a page's do; only the output address
+	// needs the offset of the page within the block added.
+	*pa = (pte & kPteAddrMask & ~entryMask) | (va & entryMask);
+	*flags |= PAGE_PRESENT | B_KERNEL_READ_AREA;
+	if (is_pte_accessed(pte))
+		*flags |= PAGE_ACCESSED;
+	if (is_pte_dirty(pte))
+		*flags |= PAGE_MODIFIED;
 
-			if ((pte & kAttrSWDBM) != 0) {
-				*flags |= B_KERNEL_WRITE_AREA;
-				if ((pte & kAttrAPUserAccess) != 0)
-					*flags |= B_WRITE_AREA;
-			}
-		});
+	if ((pte & kAttrPXN) == 0)
+		*flags |= B_KERNEL_EXECUTE_AREA;
+
+	if ((pte & kAttrAPUserAccess) != 0) {
+		*flags |= B_READ_AREA;
+		if ((pte & kAttrUXN) == 0)
+			*flags |= B_EXECUTE_AREA;
+	}
+
+	if ((pte & kAttrSWDBM) != 0) {
+		*flags |= B_KERNEL_WRITE_AREA;
+		if ((pte & kAttrAPUserAccess) != 0)
+			*flags |= B_WRITE_AREA;
+	}
 
 	return B_OK;
 }
