@@ -44,35 +44,49 @@ static const char* const kIDAttributeName = "id";
 #endif
 
 
+// ensure_directory_exists
+static status_t
+ensure_directory_exists(const char *path, const char *what)
+{
+	// Several build tools (e.g. the parallel "package extract" runs of a
+	// "jam -jN" build) may create the same directory concurrently. So rather
+	// than stat-then-mkdir, create first, and if that fails, accept whatever
+	// is there (maybe created by the winner of the race) as long as it is a
+	// directory.
+	if (mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO) == 0)
+		return B_OK;
+
+	status_t error = errno;
+	struct stat st;
+	if (lstat(path, &st) < 0)
+		return error;
+
+	if (!S_ISDIR(st.st_mode)) {
+		fprintf(stderr, "ensure_directory_exists(): %s \"%s\" exists, but is "
+			"no directory!\n", what, path);
+		return B_FILE_ERROR;
+	}
+
+	return B_OK;
+}
+
 // init_attribute_dir_base_dir
 static status_t
 init_attribute_dir_base_dir()
 {
 	static bool initialized = false;
-	static status_t initError;
 
 	if (initialized)
-		return initError;
+		return B_OK;
 
-	// stat the dir
-	struct stat st;
-	initError = B_OK;
-	if (lstat(sAttributeDirBasePath, &st) == 0) {
-		if (!S_ISDIR(st.st_mode)) {
-			// the attribute dir base dir is no directory
-			fprintf(stderr, "init_attribute_dir_base_dir(): The Attribute "
-				"directory base directory exists, but is no directory!\n");
-			initError = B_FILE_ERROR;
-		}
+	// Only cache success: a failure may be transient, and caching it would
+	// fail every later attribute operation of this process.
+	status_t error = ensure_directory_exists(sAttributeDirBasePath,
+		"Attribute directory base directory");
+	if (error == B_OK)
+		initialized = true;
 
-	} else {
-		// doesn't exist yet: create it
-		if (mkdir(sAttributeDirBasePath, S_IRWXU | S_IRWXG | S_IRWXO) < 0)
-			initError = errno;
-	}
-
-	initialized = true;
-	return initError;
+	return error;
 }
 
 // escape_attr_name
@@ -292,25 +306,8 @@ ensure_attribute_dir_exists(NodeRef ref, const char *path, int fd)
 	if (error != B_OK)
 		return error;
 
-	// stat the dir
-	struct stat st;
-	if (lstat(attrDirPath.c_str(), &st) == 0) {
-		if (!S_ISDIR(st.st_mode)) {
-			// the attribute dir is no directory
-			fprintf(stderr, "ensure_attribute_dir_exists(): Attribute "
-				"directory for node %lld exists, but is no directory!\n",
-				(long long)ref.node);
-			return B_FILE_ERROR;
-		}
-
-		return B_OK;
-	}
-
-	// doesn't exist yet: create it
-	if (mkdir(attrDirPath.c_str(), S_IRWXU | S_IRWXG | S_IRWXO) < 0)
-		return errno;
-
-	return B_OK;
+	return ensure_directory_exists(attrDirPath.c_str(),
+		"Attribute directory");
 }
 
 // open_attr_dir
@@ -339,10 +336,8 @@ get_attribute_path(NodeRef ref, const char *path, int fd,
 
 	// make sure the attribute dir for the node exits
 	status_t error = ensure_attribute_dir_exists(ref, path, fd);
-	if (error != B_OK) {
-		errno = error;
-		return -1;
-	}
+	if (error != B_OK)
+		return error;
 
 	// construct the attribute path
 	attrPath = get_attribute_dir_path(ref, path, fd) + '/';

@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+#
+# haiku-attr-dir-race-stress -- stress the host attribute emulation's creation of
+# its base directory (issue 992).
+#
+# Runs ON a Linux cross-build host, against a configured generated.* tree whose
+# host `package` tool has been built.
+#
+# What it guards. On a host without usable xattrs for BFS attributes (ext4 picks
+# HAIKU_HOST_USE_XATTR=0, HAIKU_HOST_USE_XATTR_REF=1), libroot_build stores every
+# node's attributes under HAIKU_BUILD_ATTRIBUTES_DIR (<generated>/attributes).
+# init_attribute_dir_base_dir() used to lstat() that directory and then mkdir() it,
+# and cached the result. When several host tools started together on a fresh tree
+# -- jam pass 0, `haiku-extract-build-features`, starts ~40 `package extract` runs
+# at -j64 -- every loser of the race got EEXIST from mkdir(), cached it, and failed
+# every attribute write of its run:
+#
+#   Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+#
+# ("-1" because get_attribute_path() also returned -1 instead of the error.)
+#
+# What it does. Each iteration removes <generated>/attributes, then starts
+# --parallel `package extract` runs of --hpkg at once, each into its own fresh
+# directory, and counts the runs that fail. The race is at process start, so the
+# number of concurrent first-writers is what matters, not the package size.
+# The tree's existing attributes directory is moved aside first and put back on
+# exit; nothing else may use the tree while this runs.
+#
+# Usage:
+#   haiku-attr-dir-race-stress --generated DIR --hpkg FILE
+#       [--lib-dir DIR] [--iterations N] [--parallel N] [--work DIR]
+#
+#   --work      a directory to create the scratch directory in (default /tmp)
+#   --lib-dir   a directory holding an alternative libroot_build.so, searched
+#               before <generated>/objects/linux/lib (for a before/after A/B of
+#               the same `package` binary)
+#   --iterations  default 100     --parallel  default 64
+#
+# Exit status: 0 if every extraction of every iteration succeeded, 1 if any
+# failed, 2 on a usage/setup error.
+
+set -u
+
+die() { echo "haiku-attr-dir-race-stress: $*" >&2; exit 2; }
+
+gen= hpkg= libDir= iterations=100 parallel=64 workParent=/tmp
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-h|--help) sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 0 ;;
+		-*) [ $# -ge 2 ] || die "$1 needs a value" ;;
+	esac
+	case "$1" in
+		--generated) gen=$2; shift 2 ;;
+		--hpkg) hpkg=$2; shift 2 ;;
+		--lib-dir) libDir=$2; shift 2 ;;
+		--iterations) iterations=$2; shift 2 ;;
+		--parallel) parallel=$2; shift 2 ;;
+		--work) workParent=$2; shift 2 ;;
+		*) die "unknown argument: $1" ;;
+	esac
+done
+
+[ -n "$gen" ] && [ -d "$gen" ] || die "--generated DIR is required"
+[ -n "$hpkg" ] && [ -f "$hpkg" ] || die "--hpkg FILE is required"
+case "$iterations$parallel" in
+	*[!0-9]*) die "--iterations and --parallel must be numbers" ;;
+esac
+gen=$(cd "$gen" && pwd)
+
+pkgTool=$(find "$gen/objects/linux" -path '*/release/tools/package/package' \
+	-type f 2>/dev/null | head -1)
+[ -x "$pkgTool" ] || die "no host 'package' tool under $gen/objects/linux"
+
+attrDir=$(sed -n 's/^HAIKU_BUILD_ATTRIBUTES_DIR[[:space:]]*?= "\(.*\)" ;$/\1/p' \
+	"$gen/build/BuildConfig")
+[ -n "$attrDir" ] || die "no HAIKU_BUILD_ATTRIBUTES_DIR in $gen/build/BuildConfig"
+grep -q "HAIKU_HOST_USE_XATTR[[:space:]]*?= \"1\"" "$gen/build/BuildConfig" \
+	&& die "this tree uses real xattrs (HAIKU_HOST_USE_XATTR=1); the emulation" \
+		"under test is not in use"
+
+ldPath="$gen/objects/linux/lib"
+if [ -n "$libDir" ]; then
+	[ -f "$libDir/libroot_build.so" ] || die "no libroot_build.so in $libDir"
+	ldPath="$libDir:$ldPath"
+fi
+lib=$(LD_LIBRARY_PATH="$ldPath" ldd "$pkgTool" \
+	| awk '/libroot_build/ && $3 ~ /^\// {print $3}')
+[ -n "$lib" ] || die "the package tool does not resolve libroot_build.so"
+grep -qaF "$attrDir" "$lib" \
+	|| die "$lib was not built for attributes dir $attrDir"
+
+work=$(mktemp -d "$workParent/attr-race-stress.XXXXXX") \
+	|| die "cannot create a scratch directory in $workParent"
+
+keep=
+restore() {
+	# Background jobs ignore SIGINT, so stop any extraction still running
+	# before touching the attributes dir it may be recreating.
+	local pids
+	pids=$(jobs -p)
+	[ -n "$pids" ] && kill $pids 2>/dev/null
+	wait
+	rm -rf "$attrDir"
+	if [ -n "$keep" ]; then
+		if [ -e "$attrDir" ]; then
+			echo "haiku-attr-dir-race-stress: $attrDir reappeared; the" \
+				"original is left at $keep" >&2
+		else
+			mv "$keep" "$attrDir"
+		fi
+	fi
+	rm -rf "$work"
+}
+trap restore EXIT
+trap 'exit 130' INT TERM
+
+if [ -e "$attrDir" ]; then
+	keep="$attrDir.stress-keep.$$"
+	mv "$attrDir" "$keep" || { keep=; die "cannot move $attrDir aside"; }
+fi
+
+echo "package tool: $pkgTool"
+echo "libroot_build: $lib ($(sha256sum "$lib" | cut -d' ' -f1))"
+echo "attributes dir: $attrDir"
+echo "hpkg: $hpkg"
+echo "iterations: $iterations  parallel: $parallel"
+
+failedIterations=0 failedRuns=0
+for i in $(seq 1 "$iterations"); do
+	rm -rf "$attrDir" "$work"/run
+	mkdir -p "$work/run"
+	for j in $(seq 1 "$parallel"); do
+		mkdir "$work/run/$j"
+	done
+	for j in $(seq 1 "$parallel"); do
+		(
+			LD_LIBRARY_PATH="$ldPath" "$pkgTool" extract -C "$work/run/$j" \
+				"$hpkg" > "$work/run/$j.log" 2>&1
+			echo $? > "$work/run/$j.rc"
+		) &
+	done
+	wait
+
+	failed=0
+	for j in $(seq 1 "$parallel"); do
+		[ "$(cat "$work/run/$j.rc")" = 0 ] || failed=$((failed + 1))
+	done
+	if [ "$failed" -gt 0 ]; then
+		failedIterations=$((failedIterations + 1))
+		failedRuns=$((failedRuns + failed))
+		echo "iteration $i: FAILED $failed/$parallel"
+		cat "$work"/run/*.log | grep -v '^$' | sort | uniq -c | sort -rn \
+			| head -3
+	fi
+done
+
+total=$((iterations * parallel))
+echo "RESULT: $failedIterations/$iterations iterations failed;" \
+	"$failedRuns/$total extractions failed"
+[ "$failedIterations" -eq 0 ]

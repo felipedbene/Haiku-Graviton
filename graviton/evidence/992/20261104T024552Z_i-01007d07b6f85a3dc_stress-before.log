@@ -1,0 +1,192 @@
+# evidence: issue 992 -- BEFORE: graviton/scripts/haiku-attr-dir-race-stress, trunk libroot_build.so, 100 iterations x 64 parallel extracts
+# instance: i-01007d07b6f85a3dc (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193), us-west-2, via SSM
+# driver: /opt/bf/drive.sh sha256 c765f8922489d56551a1ed7bd81b8c81aafe686e293b7cdbd437d4b071691603 (account id redacted), runphase.py sha256 024b17bb2dc68f72c2355fab100a6d8887e1703a166efea3f9b59a4681887d04
+# ---- raw output ----
+start stress before 100 64 20261104T024552Z
+package tool: /opt/src/haiku/generated.arm64/objects/linux/arm64/release/tools/package/package
+libroot_build: /opt/ab/before/libroot_build.so (4c17c0945bc421ba02833d8cc100dc19788d83d3fb6e583908593c288865120b)
+attributes dir: /opt/src/haiku/generated.arm64/attributes
+hpkg: /opt/src/haiku/generated.arm64/download/openssl3-3.5.9-3-arm64.hpkg
+iterations: 100  parallel: 64
+iteration 1: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 2: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 3: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 5: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 6: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 7: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 9: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 10: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 11: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 12: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 13: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 14: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 15: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 16: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 17: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 18: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 19: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 20: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 21: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 22: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 23: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 24: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 25: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 26: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 27: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 28: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 29: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 30: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 31: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 32: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 33: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 34: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 35: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 36: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 37: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 38: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 39: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 40: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 41: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 42: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 43: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 44: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 45: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 46: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 47: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 49: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 50: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 51: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 52: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 53: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 54: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 55: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 56: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 57: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 58: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 59: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 60: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 62: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 63: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 64: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 65: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 67: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 68: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 69: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 70: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 71: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 72: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 73: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 74: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 75: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 76: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 77: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 78: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 79: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 80: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 81: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 82: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 83: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 84: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 85: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 87: FAILED 2/64
+      2 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 88: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 91: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 92: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 93: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 94: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 95: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 96: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+iteration 98: FAILED 1/64
+      1 Error: Failed to create attribute "BEOS:TYPE" of file "bin": Unknown error -1
+RESULT: 89/100 iterations failed; 117/6400 extractions failed
+stress rc=1
+end stress 20261104T024910Z
+

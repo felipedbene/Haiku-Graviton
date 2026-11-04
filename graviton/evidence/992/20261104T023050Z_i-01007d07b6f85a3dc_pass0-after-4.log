@@ -1,0 +1,16 @@
+# evidence: issue 992 -- AFTER (fix 201a954e50): fresh-tree oven jam pass 0, try 4
+# instance: i-01007d07b6f85a3dc (Ubuntu 24.04 arm64, c7g.16xlarge, ami-0dcf79589cb11e193), us-west-2, via SSM
+# driver: /opt/bf/drive.sh sha256 c765f8922489d56551a1ed7bd81b8c81aafe686e293b7cdbd437d4b071691603 (account id redacted), runphase.py sha256 024b17bb2dc68f72c2355fab100a6d8887e1703a166efea3f9b59a4681887d04
+# ---- raw output ----
+start pass0 after-4 20261104T023050Z
+fresh tree: attributes=absent build_packages=absent
+4c375ef4cb graviton/scripts: add a stress test for the host attributes dir race (#992)
+jam pass 0 rc=0
+...updated 30 target(s)...
+ExtractHPKGArchive1 actions run: 29
+extracted build_packages dirs: 17
+ExtractHPKGArchive1 build_packages/icu74-74.1_bootstrap-1-arm64 
+ExtractHPKGArchive1 build_packages/ncurses6-6.6_bootstrap-1-arm64 
+...updated 30 target(s)...
+end pass0 20261104T023056Z
+
