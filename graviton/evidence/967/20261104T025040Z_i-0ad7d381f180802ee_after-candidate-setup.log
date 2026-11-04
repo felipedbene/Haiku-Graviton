@@ -1,0 +1,83 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-setup
+# instance: i-0ad7d381f180802ee   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: after arm (ami-04826c682d0d15870 = canonical + fat.fix970 + ntfs.fix967): checksums, toolchain, test images, repro build, diskimage register
+# start: 20261104T025040Z   end: 20261104T025108Z   rc: 0
+# script sha256: a5120fc4a089b1d007c13ac8caeaadbe2693ab6f7b0b44b3b9047708da028620
+# ---- script ----
+# | # Haiku arm setup for #970/#967: module checksums (kernel, libroot, fat, ntfs), toolchain,
+# | # the two test images (made by Ubuntu mkfs.vfat/mkntfs on the builder) and the repro sources,
+# | # all fetched from S3 and sha256 checked; compile; register the images with diskimage
+# | # (mounted from a LATER command: #1013 saw a register + mount in one SSM command fail).
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ntfs
+# | ls /boot/home/config/non-packaged/add-ons/kernel/file_systems /boot/system/non-packaged/add-ons/kernel/file_systems 2>&1
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -1
+# | command -v gcc wget || exit 1
+# | rm -rf /boot/home/t970 && mkdir -p /boot/home/t970 && cd /boot/home/t970
+# | wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/fat.img?<PRESIGNED>
+# | wget -q -O ntfs.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/ntfs.img?<PRESIGNED>
+# | wget -q -O chown970.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chown970.c?<PRESIGNED>
+# | wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chmod967.c?<PRESIGNED>
+# | wget -q -O atime933.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/atime933.c?<PRESIGNED>
+# | wget -q -O atime934.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/atime934.c?<PRESIGNED>
+# | printf '%s\n' '49e15b6938f7e81234dbd44880c2442a7a414dd9e49e0344e32e6c56f95b860d  fat.img' 'ce78656d585e8353e015928b4bca1c7d116a68e0d45e33793ae67cd086bf8e68  ntfs.img' '549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c' 'dd5c022510958e26d110582060ea7510baac5213c40291f3796b0046c5d921c2  atime934.c' '6fa74828a3dade1ecdd6f9827b8f774290cf9fdfcb08ed936822d2d6d1741c34  chmo
+# | for p in chown970 chmod967 atime933 atime934; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | diskimage register /boot/home/t970/fat.img
+# | diskimage register /boot/home/t970/ntfs.img
+# | diskimage list
+# | date
+# ---- raw output ----
+Haiku ip-10-128-7-124.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+33fe8b1faa2cdb5e9d611cc8d8d77e1030641eb95f71ab0f726d19c90392cdbc  /boot/system/add-ons/kernel/file_systems/fat
+08e826289e7fbab26e40ff50cf47e2667aa441da3e518da00272d5c57ff9be4c  /boot/system/add-ons/kernel/file_systems/ntfs
+ls: cannot access '/boot/home/config/non-packaged/add-ons/kernel/file_systems': No such file or directory
+ls: cannot access '/boot/system/non-packaged/add-ons/kernel/file_systems': No such file or directory
+[system] Done.
+/boot/system/bin/gcc
+/boot/system/bin/wget
+fat.img: OK
+ntfs.img: OK
+atime933.c: OK
+atime934.c: OK
+chmod967.c: OK
+chown970.c: OK
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
+Registered file as disk device "/dev/disk/virtual/files/4/raw" with ID 4.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t970/fat.img            /dev/disk/virtual/files/3/raw
+     4  /boot/home/t970/ntfs.img           /dev/disk/virtual/files/4/raw
+Wed Nov  4 02:51:05 GMT 2026
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ntfs
++ ls /boot/home/config/non-packaged/add-ons/kernel/file_systems /boot/system/non-packaged/add-ons/kernel/file_systems
++ tail -1
++ pkgman install -y gcc binutils haiku_devel wget
++ command -v gcc wget
++ rm -rf /boot/home/t970
++ mkdir -p /boot/home/t970
++ cd /boot/home/t970
++ wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/fat.img?<PRESIGNED>'
++ wget -q -O ntfs.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/ntfs.img?<PRESIGNED>'
++ wget -q -O chown970.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chown970.c?<PRESIGNED>'
++ wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chmod967.c?<PRESIGNED>'
++ wget -q -O atime933.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/atime933.c?<PRESIGNED>'
++ wget -q -O atime934.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/atime934.c?<PRESIGNED>'
++ printf '%s\n' '49e15b6938f7e81234dbd44880c2442a7a414dd9e49e0344e32e6c56f95b860d  fat.img' 'ce78656d585e8353e015928b4bca1c7d116a68e0d45e33793ae67cd086bf8e68  ntfs.img' '549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c' 'dd5c022510958e26d110582060ea7510baac5213c40291f3796b0046c5d921c2  atime934.c' '6fa74828a3dade1ecdd6f9827b8f774290cf9fdfcb08ed936822d2d6d1741c34  chmod967.c' '77433e41e55f7e30732277bfa0d9a645dc1e5abb62bb57b60fd4c73d58f4e92e  chown970.c'
++ sha256sum -c
++ for p in chown970 chmod967 atime933 atime934
++ gcc -O2 -Wall -o chown970 chown970.c
++ for p in chown970 chmod967 atime933 atime934
++ gcc -O2 -Wall -o chmod967 chmod967.c
++ for p in chown970 chmod967 atime933 atime934
++ gcc -O2 -Wall -o atime933 atime933.c
++ for p in chown970 chmod967 atime933 atime934
++ gcc -O2 -Wall -o atime934 atime934.c
++ diskimage register /boot/home/t970/fat.img
++ diskimage register /boot/home/t970/ntfs.img
++ diskimage list
++ date

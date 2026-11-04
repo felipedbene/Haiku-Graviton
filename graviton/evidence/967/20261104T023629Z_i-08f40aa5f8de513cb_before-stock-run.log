@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-stock-run
+# instance: i-08f40aa5f8de513cb   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm (stock canonical): chown970/atime934 on FAT, chmod967/atime933 on NTFS, coreutils, BFS controls
+# start: 20261104T023629Z   end: 20261104T025638Z   rc: 1
+# script sha256: e9ceb9148347bf4054b4c7f918112bc7142605dac8a8800287783c173593ca56
+# ---- script ----
+# | # #970/#967 run: mount the two registered images (FAT: /dev/disk/virtual/files/3/raw,
+# | # NTFS: .../4/raw), then chown970 + atime934 + coreutils on FAT, chmod967 + atime933 +
+# | # coreutils on NTFS, BFS controls, unmount.
+# | set -x
+# | cd /boot/home/t970
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ntfs
+# | listimage 1 | grep -E "file_systems/(fat|ntfs)"
+# | diskimage list
+# | mkdir -p /fat970 /ntfs967
+# | mount -t fat /dev/disk/virtual/files/3/raw /fat970; echo "mount fat rc=$?"
+# | mount -t ntfs /dev/disk/virtual/files/4/raw /ntfs967; echo "mount ntfs rc=$?"
+# | df | grep -E "fat970|ntfs967"
+# | date
+# | echo "=== FAT: chown970 ==="
+# | rm -rf /fat970/c970 /fat970/a934; mkdir /fat970/c970 /fat970/a934
+# | ./chown970 /fat970/c970; echo "chown970 fat rc=$?"
+# | echo "=== FAT: atime934 (regression) ==="
+# | ./atime934 /fat970/a934 | grep -E "^FAIL|chown|chmod|SUMMARY"; echo "atime934 fat rc=${PIPESTATUS[0]}"
+# | echo "=== FAT: coreutils ==="
+# | echo x > /fat970/demo; ls -ln /fat970/demo
+# | chown 1002 /fat970/demo; echo "root chown 1002 rc=$?"; stat -c 'uid=%u gid=%g mode=%a' /fat970/demo
+# | chgrp 1002 /fat970/demo; echo "root chgrp 1002 rc=$?"; stat -c 'uid=%u gid=%g mode=%a' /fat970/demo
+# | chown 0:0 /fat970/demo; echo "root chown 0:0 (current owner) rc=$?"
+# | echo y > src644; chmod 644 src644; cp -p src644 /fat970/cpp; echo "cp -p BFS->FAT rc=$?"; ls -ln /fat970/cpp
+# | echo "=== NTFS: chmod967 ==="
+# | rm -rf /ntfs967/m967 /ntfs967/a933; mkdir /ntfs967/m967 /ntfs967/a933
+# | ./chmod967 /ntfs967/m967; echo "chmod967 ntfs rc=$?"
+# | echo "=== NTFS: atime933 (regression) ==="
+# | ./atime933 /ntfs967/a933 | grep -E "^FAIL|chown|chmod|SUMMARY"; echo "atime933 ntfs rc=${PIPESTATUS[0]}"
+# | echo "=== NTFS: coreutils ==="
+# | echo x > /ntfs967/demo; ls -l /ntfs967/demo
+# | chmod 0666 /ntfs967/demo; echo "root chmod 0666 (same mode) rc=$?"
+# | chmod 0644 /ntfs967/demo; echo "root chmod 0644 (other mode) rc=$?"; ls -l /ntfs967/demo
+# | install -m 0666 src644 /ntfs967/inst; echo "install -m 0666 rc=$?"
+# | echo z > src666; chmod 666 src666; cp -p src666 /ntfs967/cpp; echo "cp -p (0666) BFS->NTFS rc=$?"
+# | mkdir -p tsrc && echo t > tsrc/f && chmod 666 tsrc/f && tar cf t.tar tsrc && (cd /ntfs967 && tar xpf /boot/home/t970/t.tar); echo "tar xpf (0666 file) onto NTFS rc=$?"
+# | echo "=== BFS controls ==="
+# | rm -rf bfs-c970 bfs-m967; mkdir bfs-c970 bfs-m967; chmod 755 bfs-c970; chmod 777 bfs-m967
+# | ./chown970 -o bfs-c970 | tail -1; echo "chown970 -o bfs rc=${PIPESTATUS[0]}"
+# | ./chmod967 bfs-m967 | tail -1; echo "chmod967 bfs rc=${PIPESTATUS[0]}"
+# | sync
+# | unmount /fat970; echo "unmount fat rc=$?"
+# | unmount /ntfs967; echo "unmount ntfs rc=$?"
+# ---- raw output ----

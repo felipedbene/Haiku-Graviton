@@ -1,0 +1,257 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-stock-run2
+# instance: i-07430391e1a6b5747   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm (stock canonical), second pass with the pipe-errno repros
+# start: 20261104T025238Z   end: 20261104T025250Z   rc: 0
+# script sha256: e72045f4286ca630c4a93bf02e85f3f577a6a63e4dc89cf481f5f87c25f4274d
+# ---- script ----
+# | # #970/#967 run, second pass: chown970/chmod967 now carry the child's errno through a pipe
+# | # (an exit status keeps 8 bits, and Haiku's errnos are large negative numbers, so the first
+# | # pass printed "errno15"/"errno14"). Fetch, check and rebuild them, then the same matrix:
+# | # FAT (/dev/disk/virtual/files/3/raw) chown970 + atime934 + coreutils; NTFS (.../4/raw)
+# | # chmod967 + atime933 + coreutils (+ strace of install -m); BFS controls. No unmount here.
+# | set -x
+# | cd /boot/home/t970
+# | wget -q -O chown970.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chown970.c?<PRESIGNED>
+# | wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chmod967.c?<PRESIGNED>
+# | printf '%s\n' 'd57b7bab21101b2aa016991254b508d7e80b2aa81cb1eea2de6629966a3ff6ca  chown970.c' 'e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c' | sha256sum -c || exit 1
+# | for p in chown970 chmod967; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ntfs
+# | listimage 1 | grep -E "file_systems/(fat|ntfs)"
+# | diskimage list
+# | df | grep -E "fat970|ntfs967"
+# | date
+# | echo "=== FAT: chown970 ==="
+# | rm -rf /fat970/c970 /fat970/a934; mkdir /fat970/c970 /fat970/a934
+# | ./chown970 /fat970/c970; echo "chown970 fat rc=$?"
+# | echo "=== FAT: atime934 (regression) ==="
+# | ./atime934 /fat970/a934 | grep -E "^FAIL|chown|chmod|SUMMARY"; echo "atime934 fat rc=${PIPESTATUS[0]}"
+# | echo "=== FAT: coreutils ==="
+# | echo x > /fat970/demo; ls -ln /fat970/demo
+# | chown 1002 /fat970/demo; echo "root chown 1002 rc=$?"; stat -c 'uid=%u gid=%g mode=%a' /fat970/demo
+# | chgrp 1002 /fat970/demo; echo "root chgrp 1002 rc=$?"; stat -c 'uid=%u gid=%g mode=%a' /fat970/demo
+# | chown 0:0 /fat970/demo; echo "root chown 0:0 (current owner) rc=$?"
+# | echo y > src644; chmod 644 src644; cp -p src644 /fat970/cpp; echo "cp -p BFS->FAT rc=$?"; ls -ln /fat970/cpp
+# | echo "=== NTFS: chmod967 ==="
+# | rm -rf /ntfs967/m967 /ntfs967/a933; mkdir /ntfs967/m967 /ntfs967/a933
+# | ./chmod967 /ntfs967/m967; echo "chmod967 ntfs rc=$?"
+# | echo "=== NTFS: atime933 (regression) ==="
+# | ./atime933 /ntfs967/a933 | grep -E "^FAIL|chown|chmod|SUMMARY"; echo "atime933 ntfs rc=${PIPESTATUS[0]}"
+# | echo "=== NTFS: coreutils ==="
+# | echo x > /ntfs967/demo; ls -l /ntfs967/demo
+# | chmod 0666 /ntfs967/demo; echo "root chmod 0666 (same mode) rc=$?"
+# | chmod 0644 /ntfs967/demo; echo "root chmod 0644 (other mode) rc=$?"; ls -l /ntfs967/demo
+# | install -m 0666 src644 /ntfs967/inst; echo "install -m 0666 rc=$?"
+# | echo z > src666; chmod 666 src666; cp -p src666 /ntfs967/cpp; echo "cp -p (0666) BFS->NTFS rc=$?"
+# | echo "=== BFS controls ==="
+# | rm -rf bfs-c970 bfs-m967; mkdir bfs-c970 bfs-m967; chmod 755 bfs-c970; chmod 777 bfs-m967
+# | ./chown970 -o bfs-c970 | tail -1; echo "chown970 -o bfs rc=${PIPESTATUS[0]}"
+# | ./chmod967 bfs-m967 | tail -1; echo "chmod967 bfs rc=${PIPESTATUS[0]}"
+# | sync
+# | echo "=== NTFS: why install -m 0666 fails (strace, chmod-family and open calls) ==="
+# | strace -o /tmp/inst.trace install -m 0666 src644 /ntfs967/inst2; echo "install rc=$?"
+# | grep -iE "chmod|chown|write_stat|open|unlink" /tmp/inst.trace | grep -v "/boot/system" | tail -20
+# ---- raw output ----
+chown970.c: OK
+chmod967.c: OK
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  /boot/system/add-ons/kernel/file_systems/fat
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  /boot/system/add-ons/kernel/file_systems/ntfs
+ 4053 0xffff0000dcb01000 0xffff0000dcb50000     0          0 /boot/system/add-ons/kernel/file_systems/ntfs
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t970/fat.img            /dev/disk/virtual/files/3/raw
+     4  /boot/home/t970/ntfs.img           /dev/disk/virtual/files/4/raw
+[1m/fat970           [0m
+[1m/ntfs967          [0m
+Wed Nov  4 02:52:41 GMT 2026
+=== FAT: chown970 ===
+== /fat970/c970 (stores no owner: another id must be refused with EPERM)
+PASS root    chown(cur,-1)        -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS root    chown(-1,cur)        -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS root    chown(cur,cur)       -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS root    chown(-1,-1)         -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    chown(1002,-1)       -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    chown(-1,1002)       -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    chown(1002,1002)     -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    chown(cur,1002)      -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    chown(1002,cur)      -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS root    lchown(cur,-1)       -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    lchown(1002,-1)      -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS root    fchown(cur,cur)      -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    fchown(1002,-1)      -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+FAIL root    fchown(-1,1002)      -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS root    dir chown(cur,cur)   -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793760760 atime 1793750400
+FAIL root    dir chown(1002,-1)   -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 512 mtime 1793760760 atime 1793750400
+FAIL root    dir chown(-1,1002)   -> ok      (expect EPERM) uid 0->0 gid 0->0(BAD) mode 0755 size 512 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(cur,-1)        -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(-1,cur)        -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(cur,cur)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(-1,-1)         -> ok      (expect ok   ) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(1002,-1)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(-1,1002)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(1002,1002)     -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(cur,1002)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 chown(1002,cur)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 lchown(cur,-1)       -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 lchown(1002,-1)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 fchown(cur,cur)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 fchown(1002,-1)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 fchown(-1,1002)      -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 1 mtime 1793760760 atime 1793750400
+PASS uid1002 dir chown(cur,cur)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793760760 atime 1793750400
+PASS uid1002 dir chown(1002,-1)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793760760 atime 1793750400
+PASS uid1002 dir chown(-1,1002)   -> EPERM   (expect EPERM) uid 0->0 gid 0->0 mode 0755 size 512 mtime 1793760760 atime 1793750400
+SUMMARY cases=34 failures=10
+chown970 fat rc=10
+=== FAT: atime934 (regression) ===
+PASS root      chmod(same mode)     -> ok      (expect ok    ) atime 999993600.000000000 mtime 999993600.000000000 ctime 999993600 size 1 mode 0755 uid 0
+PASS root      chmod(other mode)    -> ok      (expect ok    ) atime 999993600.000000000 mtime 999993600.000000000 ctime 999993600 size 1 mode 0555 uid 0
+FAIL root      chown(1002)          -> ok      (expect ok    ) atime 999993600.000000000 mtime 999993600.000000000 ctime 999993600 size 1 mode 0755 uid 0(BAD)
+PASS nonwriter chmod(same mode)     -> EPERM   (expect EPERM ) atime 999993600.000000000 mtime 999993600.000000000 ctime 999993600 size 1 mode 0755 uid 0
+PASS nonwriter chmod(other mode)    -> EPERM   (expect EPERM ) atime 999993600.000000000 mtime 999993600.000000000 ctime 999993600 size 1 mode 0755 uid 0
+PASS nonwriter chown(1002)          -> EPERM   (expect EPERM ) atime 999993600.000000000 mtime 999993600.000000000 ctime 999993600 size 1 mode 0755 uid 0
+SUMMARY cases=44 failures=1 errno-notes=6 refused-by-fs=0
+atime934 fat rc=1
+=== FAT: coreutils ===
+-rwxr-xr-x 1 0 0 2 Nov  4 02:52 /fat970/demo
+root chown 1002 rc=0
+uid=0 gid=0 mode=755
+root chgrp 1002 rc=0
+uid=0 gid=0 mode=755
+root chown 0:0 (current owner) rc=0
+cp -p BFS->FAT rc=0
+-rwxr-xr-x 1 0 0 2 Nov  4 02:52 /fat970/cpp
+=== NTFS: chmod967 ===
+== /ntfs967/m967
+FAIL root    chmod(same)          -> errno-2147459058 (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793760761
+PASS root    chmod(same|S_IFMT)   -> ok      (expect ok    ) mode 100666->100666 (asked 100666) size 1 mtime 1793760761
+FAIL root    fchmod(same)         -> errno-2147459058 (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793760761
+FAIL root    fchmodat(same)       -> errno-2147459058 (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793760761
+PASS root    chmod(other)         -> errno-2147459058 (expect ok/ref) mode 100666->100666 (asked 000664) size 1 mtime 1793760761  [refused: the file system cannot store it]
+PASS root    chmod(same|S_ISUID)  -> errno-2147459058 (expect ok/ref) mode 100666->100666 (asked 004666) size 1 mtime 1793760761  [refused: the file system cannot store it]
+FAIL root    dir chmod(same)      -> errno-2147459058 (expect ok    ) mode 040777->040777 (asked 000777) size 0 mtime 1793760761
+PASS root    dir chmod(other)     -> errno-2147459058 (expect ok/ref) mode 040777->040777 (asked 000775) size 0 mtime 1793760761  [refused: the file system cannot store it]
+PASS uid1002 chmod(same)          -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000666) size 1 mtime 1793760761
+PASS uid1002 chmod(same|S_IFMT)   -> EPERM   (expect EPERM ) mode 100666->100666 (asked 100666) size 1 mtime 1793760761
+PASS uid1002 fchmod(same)         -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000666) size 1 mtime 1793760761
+PASS uid1002 fchmodat(same)       -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000666) size 1 mtime 1793760761
+PASS uid1002 chmod(other)         -> EPERM   (expect EPERM ) mode 100666->100666 (asked 000664) size 1 mtime 1793760761
+PASS uid1002 chmod(same|S_ISUID)  -> EPERM   (expect EPERM ) mode 100666->100666 (asked 004666) size 1 mtime 1793760761
+PASS uid1002 dir chmod(same)      -> EPERM   (expect EPERM ) mode 040777->040777 (asked 000777) size 0 mtime 1793760761
+PASS uid1002 dir chmod(other)     -> EPERM   (expect EPERM ) mode 040777->040777 (asked 000775) size 0 mtime 1793760761
+SUMMARY cases=16 failures=4 refused-by-fs=3
+chmod967 ntfs rc=4
+=== NTFS: atime933 (regression) ===
+FAIL root      chmod(same mode)     -> Operation not supported (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793760761 size 1 mode 0666 uid 0
+PASS root      chmod(other mode)    -> Operation not supported (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793760761 size 1 mode 0666 uid 0  [unsupported by the file system]
+PASS root      chown(1002)          -> Operation not supported (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793760761 size 1 mode 0666 uid 0  [unsupported by the file system]
+PASS writer    chmod(same mode)     -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793760761 size 1 mode 0666 uid 0
+PASS writer    chmod(other mode)    -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793760761 size 1 mode 0666 uid 0
+PASS writer    chown(1002)          -> EPERM   (expect EPERM ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793760761 size 1 mode 0666 uid 0
+SUMMARY cases=44 failures=1 errno-notes=0 unsupported=2
+atime933 ntfs rc=1
+=== NTFS: coreutils ===
+-rw-rw-rw- 1 baron root 2 Nov  4 02:51 /ntfs967/demo
+root chmod 0666 (same mode) rc=1
+root chmod 0644 (other mode) rc=1
+-rw-rw-rw- 1 baron root 2 Nov  4 02:51 /ntfs967/demo
+install -m 0666 rc=1
+cp -p (0666) BFS->NTFS rc=0
+=== BFS controls ===
+SUMMARY cases=34 failures=0
+chown970 -o bfs rc=0
+SUMMARY cases=16 failures=0 refused-by-fs=0
+chmod967 bfs rc=0
+=== NTFS: why install -m 0666 fails (strace, chmod-family and open calls) ===
+install rc=0
+[   959] open(0xffffff9c, "src644", 0, 0x0) = 0x4 (3 us)
+[   959] open(0xffffff9c, "/ntfs967/inst2", O_WRONLY|O_EXCL|O_CREAT, 0x180) = 0x5 (50 us)
+[   959] open_attr_dir(0x4, (nil), false) = 0x6 (2 us)
+[   959] write_stat(0x5, (nil), false, {st_mode = 0x0|600}, 0x80, 0x1) = 0xffffffff8000600e Operation not supported (1 us)
++ cd /boot/home/t970
++ wget -q -O chown970.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chown970.c?<PRESIGNED>'
++ wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/src/chmod967.c?<PRESIGNED>'
++ printf '%s\n' 'd57b7bab21101b2aa016991254b508d7e80b2aa81cb1eea2de6629966a3ff6ca  chown970.c' 'e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c'
++ sha256sum -c
++ for p in chown970 chmod967
++ gcc -O2 -Wall -o chown970 chown970.c
++ for p in chown970 chmod967
++ gcc -O2 -Wall -o chmod967 chmod967.c
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ntfs
++ listimage 1
++ grep -E 'file_systems/(fat|ntfs)'
++ diskimage list
++ df
++ grep -E 'fat970|ntfs967'
++ date
++ echo '=== FAT: chown970 ==='
++ rm -rf /fat970/c970 /fat970/a934
++ mkdir /fat970/c970 /fat970/a934
++ ./chown970 /fat970/c970
++ echo 'chown970 fat rc=10'
++ echo '=== FAT: atime934 (regression) ==='
++ ./atime934 /fat970/a934
++ grep -E '^FAIL|chown|chmod|SUMMARY'
++ echo 'atime934 fat rc=1'
++ echo '=== FAT: coreutils ==='
++ echo x
++ ls -ln /fat970/demo
++ chown 1002 /fat970/demo
++ echo 'root chown 1002 rc=0'
++ stat -c 'uid=%u gid=%g mode=%a' /fat970/demo
++ chgrp 1002 /fat970/demo
++ echo 'root chgrp 1002 rc=0'
++ stat -c 'uid=%u gid=%g mode=%a' /fat970/demo
++ chown 0:0 /fat970/demo
++ echo 'root chown 0:0 (current owner) rc=0'
++ echo y
++ chmod 644 src644
++ cp -p src644 /fat970/cpp
++ echo 'cp -p BFS->FAT rc=0'
++ ls -ln /fat970/cpp
++ echo '=== NTFS: chmod967 ==='
++ rm -rf /ntfs967/m967 /ntfs967/a933
++ mkdir /ntfs967/m967 /ntfs967/a933
++ ./chmod967 /ntfs967/m967
++ echo 'chmod967 ntfs rc=4'
++ echo '=== NTFS: atime933 (regression) ==='
++ grep -E '^FAIL|chown|chmod|SUMMARY'
++ ./atime933 /ntfs967/a933
++ echo 'atime933 ntfs rc=1'
++ echo '=== NTFS: coreutils ==='
++ echo x
++ ls -l /ntfs967/demo
++ chmod 0666 /ntfs967/demo
+chmod: changing permissions of '/ntfs967/demo': Operation not supported
++ echo 'root chmod 0666 (same mode) rc=1'
++ chmod 0644 /ntfs967/demo
+chmod: changing permissions of '/ntfs967/demo': Operation not supported
++ echo 'root chmod 0644 (other mode) rc=1'
++ ls -l /ntfs967/demo
++ install -m 0666 src644 /ntfs967/inst
+install: setting permissions for '/ntfs967/inst': Operation not supported
++ echo 'install -m 0666 rc=1'
++ echo z
++ chmod 666 src666
++ cp -p src666 /ntfs967/cpp
++ echo 'cp -p (0666) BFS->NTFS rc=0'
++ echo '=== BFS controls ==='
++ rm -rf bfs-c970 bfs-m967
++ mkdir bfs-c970 bfs-m967
++ chmod 755 bfs-c970
++ chmod 777 bfs-m967
++ ./chown970 -o bfs-c970
++ tail -1
++ echo 'chown970 -o bfs rc=0'
++ ./chmod967 bfs-m967
++ tail -1
++ echo 'chmod967 bfs rc=0'
++ sync
++ echo '=== NTFS: why install -m 0666 fails (strace, chmod-family and open calls) ==='
++ strace -o /tmp/inst.trace install -m 0666 src644 /ntfs967/inst2
+install: setting permissions for '/ntfs967/inst2': Operation not supported
++ echo 'install rc=0'
++ grep -iE 'chmod|chown|write_stat|open|unlink' /tmp/inst.trace
++ grep -v /boot/system
++ tail -20
