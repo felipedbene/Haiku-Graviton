@@ -1,0 +1,180 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 -> elided
+# evidence: xbuild
+# instance: i-0d4a678c33760f14f   region: us-west-2   transport: EC2 user data (fetch-and-exec), logs via S3
+# what: cross-build <revisioned>kernel_arm64 at trunk a9954f424a and PR f91e9d9617 (Ubuntu 24.04 arm64 c7g.8xlarge, run from user data; output copied back from S3)
+# start: 20261104T033419Z (instance launch)   end: 20261104T033631Z (S3 upload)   rc: 0
+# script sha256: 2d684a17baf2732a0403daa7f3fb8fae544bf69a8674c8de90b17f860a84eb33
+# ---- script ----
+# | #!/bin/bash
+# | # bf-O: cross-build <revisioned>kernel_arm64 for trunk a9954f424a and PR #1040 f91e9d9617
+# | # (method of #1011/#1012 xsetup + xbuild: buildtools jam, oven cross-tools cache copied
+# | # read-only into bugfix/O/, configure --cross-tools-prefix, HAIKU_REVISION pinned to
+# | # canonical's hrev59996).
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root AWS_DEFAULT_REGION=us-west-2
+# | P=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo X)-us-west-2/bugfix/O
+# | O=/opt/t/out; mkdir -p $O
+# | {
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null); }
+# | P=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/O
+# | mkdir -p /opt/t && cd /opt/t && rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg fetch -q origin fix/1038-sigreturn-spsr
+# | git -C hg cat-file -t a9954f424a; git -C hg cat-file -t f91e9d9617
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet $P/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst && tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -2
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | nproc
+# | } > $O/xsetup.log 2>&1
+# | cd /opt/t/hg/generated
+# | R=objects/haiku/arm64/release/system
+# | kb() {	# kb <label> <sha>
+# | 	git -C .. checkout -q -f $2 && git -C .. log -1 --format="$1 %H %s"
+# | 	rm -rf $R/kernel
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 "<revisioned>kernel_arm64" > $O/jam-$1.log 2>&1; rc=$?
+# | 	echo "jam <revisioned>kernel_arm64 [$1] rc=$rc wall=$(( $(date +%s) - s ))s"
+# | 	[ $rc = 0 ] || { tail -40 $O/jam-$1.log; return 1; }
+# | 	echo "arch_thread warnings [$1]: $(grep -cE 'arch_thread\.cpp.*(warning|error)' $O/jam-$1.log)"
+# | 	cp $R/kernel/revisioned/kernel_arm64 $O/kernel_arm64.$1
+# | 	cp $R/kernel/kernel_arm64 $O/kernel_arm64.unrev.$1 2>/dev/null
+# | }
+# | {
+# | kb trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620 || exit 1
+# | kb pr f91e9d96178a29c052e043a97d0f027551250e3d || exit 1
+# | git -C .. diff --stat a9954f424a f91e9d9617
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | cd $O
+# | cmp -s kernel_arm64.trunk kernel_arm64.pr && { echo "PR kernel identical to trunk?"; exit 1; }
+# | for f in kernel_arm64.trunk kernel_arm64.pr; do ${X}objcopy -O binary --only-section=_haiku_revision $f /tmp/r.bin; echo "$f revision: $(tr -d '\0' < /tmp/r.bin)"; done
+# | echo "arch_restore_signal_frame size trunk/pr:"; ${X}nm -S kernel_arm64.trunk | grep arch_restore_signal_frame; ${X}nm -S kernel_arm64.pr | grep arch_restore_signal_frame
+# | sha256sum kernel_arm64.* | tee SHA256SUMS
+# | } > $O/xbuild.log 2>&1
+# | echo "xbuild rc=$?" >> $O/xbuild.log
+# | aws s3 cp --quiet --recursive $O/ $P/out/
+# | echo done > $O/DONE; aws s3 cp --quiet $O/DONE $P/out/DONE
+# ---- raw output ----
+=== xsetup.log
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo 'apt rc=0'
+apt rc=0
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
+++ aws sts get-caller-identity --query Account --output text
++ P=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/O
++ mkdir -p /opt/t
++ cd /opt/t
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg fetch -q origin fix/1038-sigreturn-spsr
++ git -C hg cat-file -t a9954f424a
+commit
++ git -C hg cat-file -t f91e9d9617
+commit
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ echo buildtools=d2e0a41eb
+buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
+/usr/local/bin/jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/O/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -2
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
+Configured successfully!
++ nproc
+32
+=== xbuild.log
++ kb trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620
++ git -C .. checkout -q -f a9954f424adad9f0a9ebbf64a4f8493add9bd620
++ git -C .. log -1 '--format=trunk %H %s'
+trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620 evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793763367
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ rc=0
+++ date +%s
++ echo 'jam <revisioned>kernel_arm64 [trunk] rc=0 wall=13s'
+jam <revisioned>kernel_arm64 [trunk] rc=0 wall=13s
++ '[' 0 = 0 ']'
+++ grep -cE 'arch_thread\.cpp.*(warning|error)' /opt/t/out/jam-trunk.log
++ echo 'arch_thread warnings [trunk]: 0'
+arch_thread warnings [trunk]: 0
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/t/out/kernel_arm64.unrev.trunk
++ kb pr f91e9d96178a29c052e043a97d0f027551250e3d
++ git -C .. checkout -q -f f91e9d96178a29c052e043a97d0f027551250e3d
++ git -C .. log -1 '--format=pr %H %s'
+pr f91e9d96178a29c052e043a97d0f027551250e3d arm64: validate the processor state sigreturn restores
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793763380
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
++ rc=0
+++ date +%s
++ echo 'jam <revisioned>kernel_arm64 [pr] rc=0 wall=9s'
+jam <revisioned>kernel_arm64 [pr] rc=0 wall=9s
++ '[' 0 = 0 ']'
+++ grep -cE 'arch_thread\.cpp.*(warning|error)' /opt/t/out/jam-pr.log
++ echo 'arch_thread warnings [pr]: 0'
+arch_thread warnings [pr]: 0
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.pr
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/t/out/kernel_arm64.unrev.pr
++ git -C .. diff --stat a9954f424a f91e9d9617
+ headers/private/kernel/arch/arm64/arm_registers.h |  2 ++
+ src/system/kernel/arch/arm64/arch_thread.cpp      | 42 +++++++++++++++++++++--
+ 2 files changed, 42 insertions(+), 2 deletions(-)
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ cd /opt/t/out
++ cmp -s kernel_arm64.trunk kernel_arm64.pr
++ for f in kernel_arm64.trunk kernel_arm64.pr
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision kernel_arm64.trunk /tmp/r.bin
+++ tr -d '\0'
++ echo 'kernel_arm64.trunk revision: hrev59996'
+kernel_arm64.trunk revision: hrev59996
++ for f in kernel_arm64.trunk kernel_arm64.pr
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objcopy -O binary --only-section=_haiku_revision kernel_arm64.pr /tmp/r.bin
+++ tr -d '\0'
++ echo 'kernel_arm64.pr revision: hrev59996'
+kernel_arm64.pr revision: hrev59996
++ echo 'arch_restore_signal_frame size trunk/pr:'
+arch_restore_signal_frame size trunk/pr:
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S kernel_arm64.trunk
++ grep arch_restore_signal_frame
+ffff0000001836a0 0000000000000110 T arch_restore_signal_frame
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S kernel_arm64.pr
++ grep arch_restore_signal_frame
+ffff00000018372c 00000000000001b0 T arch_restore_signal_frame
++ sha256sum kernel_arm64.pr kernel_arm64.trunk kernel_arm64.unrev.pr kernel_arm64.unrev.trunk
++ tee SHA256SUMS
+8d882e24d445b45331a47690c6342212f24f6a0a7bae9331b49d1dd2700af401  kernel_arm64.pr
+40f416eabf9480bb072ed54654fe41fb102161b2bba37d45dca4a046fbea1e6e  kernel_arm64.trunk
+d509ea8c219a3863bc50fa5a1b42d95ee78cf05936bee0f4f17b5f39ccd9414f  kernel_arm64.unrev.pr
+0cffbcb3003511e5fbe5d165348d176dc7e78552d80e13ea035df1162dd3d702  kernel_arm64.unrev.trunk
+xbuild rc=0
+=== SHA256SUMS
+8d882e24d445b45331a47690c6342212f24f6a0a7bae9331b49d1dd2700af401  kernel_arm64.pr
+40f416eabf9480bb072ed54654fe41fb102161b2bba37d45dca4a046fbea1e6e  kernel_arm64.trunk
+d509ea8c219a3863bc50fa5a1b42d95ee78cf05936bee0f4f17b5f39ccd9414f  kernel_arm64.unrev.pr
+0cffbcb3003511e5fbe5d165348d176dc7e78552d80e13ea035df1162dd3d702  kernel_arm64.unrev.trunk

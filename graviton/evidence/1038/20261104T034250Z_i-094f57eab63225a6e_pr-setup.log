@@ -1,0 +1,61 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 -> elided
+# evidence: pr-setup
+# instance: i-094f57eab63225a6e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm "pr" first boot: kernel sha256, toolchain + nodejs24 + python3.14; the first C revision failed to compile (<ucontext.h> is not a Haiku header, ucontext_t comes from <signal.h>) and was fixed before the runs below
+# start: 20261104T034250Z   end: 20261104T034309Z   rc: 1
+# script sha256: 08e49b153f472e6e673ce9d5c778c0eb5e1de315a27da6093a36f191b824727d
+# ---- script ----
+# | # bf-O #1040 A/B arm setup: kernel identity, toolchain + nodejs24 + python3, the C
+# | # regression test (inline), Node v24.21.0 source tree for its own signal tests.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
+# | ls /boot/system/packages | grep -E '^haiku-r1'
+# | pkgman install -y gcc binutils haiku_devel wget nodejs24 python3.14 2>&1 | tail -2
+# | command -v gcc wget node python3 || exit 1
+# | node --version; python3 --version
+# | rm -rf /boot/home/t1040 && mkdir -p /boot/home/t1040 && cd /boot/home/t1040
+# | echo '<base64 of sigregress1040.c, elided; first revision, identical to graviton/scripts/sigregress1040.c except that <ucontext.h> was included unconditionally>' | base64 -d > sigregress1040.c
+# | echo '9f13eb5a47b6b6a9bc6fd9ce930c9b22a47d99e4fea853589db1c37af24660a8  sigregress1040.c' | sha256sum -c || exit 1
+# | gcc -O2 -Wall -o sigregress1040 sigregress1040.c || exit 1
+# | wget -q https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz || exit 1
+# | echo '622424efb5dc0c26c93fbb619ff10737ee289c605b837c88778e186925d82777  node-v24.21.0.tar.gz' | sha256sum -c || exit 1
+# | tar -xzf node-v24.21.0.tar.gz --exclude='node-v24.21.0/deps/v8' --exclude='node-v24.21.0/deps/openssl' --exclude='node-v24.21.0/deps/icu-small' && ls node-v24.21.0 | head -30
+# ---- raw output ----
+Haiku ip-10-128-5-124.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 03:36:25 arm64 other Haiku
+8d882e24d445b45331a47690c6342212f24f6a0a7bae9331b49d1dd2700af401  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+haiku-r1~beta6_hrev59996-1-arm64.hpkg
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/gcc
+/boot/system/bin/wget
+/boot/system/bin/node
+/boot/system/bin/python3
+v24.22.2
+Python 3.14.7
+sigregress1040.c: OK
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so
++ ls /boot/system/packages
++ grep -E '^haiku-r1'
++ pkgman install -y gcc binutils haiku_devel wget nodejs24 python3.14
++ tail -2
++ command -v gcc wget node python3
++ node --version
++ python3 --version
++ rm -rf /boot/home/t1040
++ mkdir -p /boot/home/t1040
++ cd /boot/home/t1040
++ base64 -d
++ echo <base64 of sigregress1040.c, elided; first revision, identical to graviton/scripts/sigregress1040.c except that <ucontext.h> was included unconditionally>
++ echo '9f13eb5a47b6b6a9bc6fd9ce930c9b22a47d99e4fea853589db1c37af24660a8  sigregress1040.c'
++ sha256sum -c
++ gcc -O2 -Wall -o sigregress1040 sigregress1040.c
+sigregress1040.c:20:10: fatal error: ucontext.h: No such file or directory
+   20 | #include <ucontext.h>
+      |          ^~~~~~~~~~~~
+compilation terminated.
++ exit 1
+failed to run commands: exit status 1
+rc=1

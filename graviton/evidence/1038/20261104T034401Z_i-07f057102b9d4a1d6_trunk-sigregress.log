@@ -1,0 +1,106 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 -> elided
+# evidence: trunk-sigregress
+# instance: i-07f057102b9d4a1d6   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm "trunk": sigregress1040 x3 (the Node part of this script stopped on a missing tar; rerun below)
+# start: 20261104T034401Z   end: 20261104T034419Z   rc: 0 (C runs) / 1 (node part: tar missing)
+# script sha256: 25caa40d74601cf287c2e01428f2a00119984a85d75cd77aa262d45c930776a3
+# ---- script ----
+# | # bf-O #1040 A/B run: kernel identity, sigregress1040 x3, Node v24 signal tests
+# | # (Node's own runner, stdin a pipe per #870; same invocation as the #876 runs).
+# | set -u
+# | uname -a; sha256sum /boot/system/kernel_arm64
+# | cd /boot/home/t1040 || exit 1
+# | echo '<base64 of sigregress1040.c, elided; the file is graviton/scripts/sigregress1040.c>' | base64 -d > sigregress1040.c
+# | echo '808d5a828fd5147a6ac6fbbbdb1b97d0f7b003d9c2af174704a11557cbe7f325  sigregress1040.c' | sha256sum -c || exit 1
+# | gcc -O2 -Wall -o sigregress1040 sigregress1040.c || exit 1
+# | for n in 1 2 3; do echo "### sigregress1040 run $n"; timeout 300 ./sigregress1040; echo "rc=$?"; done
+# | if [ ! -d node-v24.22.2 ]; then
+# | 	wget -q https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz || exit 1
+# | 	echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz' | sha256sum -c || exit 1
+# | 	tar -xzf node-v24.22.2.tar.gz --exclude='node-v24.22.2/deps/v8' --exclude='node-v24.22.2/deps/openssl' --exclude='node-v24.22.2/deps/icu-small' || exit 1
+# | fi
+# | cd node-v24.22.2 || exit 1
+# | echo "node $(node --version)"
+# | T=$(cd test && ls -d parallel/test-signal-*.js parallel/test-process-kill-*.js parallel/test-child-process-kill*.js parallel/test-process-*signal*.js parallel/test-child-process-*signal*.js sequential/test-*signal*.js abort/test-signal-handler.js 2>/dev/null | sed 's/\.js$//' | sort -u | tr '\n' ' ')
+# | echo "tests: $T"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap $T > /boot/home/t1040/tap-node.txt 2>&1
+# | rc=$?
+# | f=/boot/home/t1040/tap-node.txt
+# | echo "##### node signal tests: test.py rc=$rc wall=$(( $(date +%s) - s ))s plan $(grep -am1 '^1\.\.' $f) pass=$(grep -ac '^ok ' $f) fail=$(grep -ac '^not ok ' $f)"
+# | grep -aE "^(ok|not ok) " $f | sed -E 's/^(not ok|ok) [0-9]+ /\1 /' | sort -k2 | uniq
+# | echo "--- failure detail (first 40 lines each)"
+# | awk '/^not ok /{p=1; print; next} /^(ok|not ok) /{p=0} p' $f | head -120
+# | echo "--- kernel log: sigreturn refusals (expected none)"
+# | grep -a "arch_restore_signal_frame" /var/log/syslog | tail -5; echo "refusals: $(grep -ac arch_restore_signal_frame /var/log/syslog)"
+# ---- raw output ----
+Haiku ip-10-128-6-174.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 03:36:16 arm64 other Haiku
+40f416eabf9480bb072ed54654fe41fb102161b2bba37d45dca4a046fbea1e6e  /boot/system/kernel_arm64
+sigregress1040.c: OK
+### sigregress1040 run 1
+PASS sigaction-plain-raise        raise=0 sig=18 count=1
+PASS sigaction-plain-kill         kill=0 count=2
+PASS sigaction-siginfo-kill       signo=19 code=0 pid=464(self 464) uc=1
+PASS siginfo-ucontext-spsr-el0t   spsr=0x60000000
+PASS sigaction-siginfo-sigqueue   sigqueue=0 signo=19 code=1 value=0x1040
+PASS sa_restart-read-restarted    read=1 errno=0 alarms=1 elapsed=0.60s
+PASS no-sa_restart-read-eintr     read=-1 errno=-2147483638 alarms=1 elapsed=0.20s
+PASS sigaltstack-handler          sigaltstack=0 count=1000 on-alt-stack=1 SS_ONSTACK=1
+PASS sigaltstack-left-after-return ss_flags=0
+PASS nested-unblocked             maxdepth=2 order=1,2,3
+PASS nested-masked-deferred       maxdepth=1 order=1,3,2
+PASS pingpong-threads-10k         pings=10000 pongs=10000 0.21s (20.9 us/round trip)
+PASS raise-10k                    count=10000 0.01s
+PASS ucontext-x19-async-edit      x19=0x123456789abcdef loop-left=0x1ffadf543 hits=1 spsr=0x20000000
+PASS ucontext-x19-sync-edit       hits=1 x19=0xfedcba987654321
+PASS ucontext-nzcv-edit           spsr-in-handler=0x60000000 nzcv-after=0xf0000000
+PASS fp-int-state-under-signals   signals=154 result identical
+PASS sigsegv-null-siglongjmp-x100 hits=100 si_addr=(nil) si_code=30 segv-blocked-after=0
+RESULT pass=18 fail=0
+rc=0
+### sigregress1040 run 2
+PASS sigaction-plain-raise        raise=0 sig=18 count=1
+PASS sigaction-plain-kill         kill=0 count=2
+PASS sigaction-siginfo-kill       signo=19 code=0 pid=472(self 472) uc=1
+PASS siginfo-ucontext-spsr-el0t   spsr=0x60000000
+PASS sigaction-siginfo-sigqueue   sigqueue=0 signo=19 code=1 value=0x1040
+PASS sa_restart-read-restarted    read=1 errno=0 alarms=1 elapsed=0.60s
+PASS no-sa_restart-read-eintr     read=-1 errno=-2147483638 alarms=1 elapsed=0.20s
+PASS sigaltstack-handler          sigaltstack=0 count=1000 on-alt-stack=1 SS_ONSTACK=1
+PASS sigaltstack-left-after-return ss_flags=0
+PASS nested-unblocked             maxdepth=2 order=1,2,3
+PASS nested-masked-deferred       maxdepth=1 order=1,3,2
+PASS pingpong-threads-10k         pings=10000 pongs=10000 0.21s (21.4 us/round trip)
+PASS raise-10k                    count=10000 0.01s
+PASS ucontext-x19-async-edit      x19=0x123456789abcdef loop-left=0x1ff614c77 hits=1 spsr=0x60000000
+PASS ucontext-x19-sync-edit       hits=1 x19=0xfedcba987654321
+PASS ucontext-nzcv-edit           spsr-in-handler=0x60000000 nzcv-after=0xf0000000
+PASS fp-int-state-under-signals   signals=155 result identical
+PASS sigsegv-null-siglongjmp-x100 hits=100 si_addr=(nil) si_code=30 segv-blocked-after=0
+RESULT pass=18 fail=0
+rc=0
+### sigregress1040 run 3
+PASS sigaction-plain-raise        raise=0 sig=18 count=1
+PASS sigaction-plain-kill         kill=0 count=2
+PASS sigaction-siginfo-kill       signo=19 code=0 pid=479(self 479) uc=1
+PASS siginfo-ucontext-spsr-el0t   spsr=0x60000000
+PASS sigaction-siginfo-sigqueue   sigqueue=0 signo=19 code=1 value=0x1040
+PASS sa_restart-read-restarted    read=1 errno=0 alarms=1 elapsed=0.60s
+PASS no-sa_restart-read-eintr     read=-1 errno=-2147483638 alarms=1 elapsed=0.20s
+PASS sigaltstack-handler          sigaltstack=0 count=1000 on-alt-stack=1 SS_ONSTACK=1
+PASS sigaltstack-left-after-return ss_flags=0
+PASS nested-unblocked             maxdepth=2 order=1,2,3
+PASS nested-masked-deferred       maxdepth=1 order=1,3,2
+PASS pingpong-threads-10k         pings=10000 pongs=10000 0.21s (20.8 us/round trip)
+PASS raise-10k                    count=10000 0.01s
+PASS ucontext-x19-async-edit      x19=0x123456789abcdef loop-left=0x1ff141600 hits=1 spsr=0x20000000
+PASS ucontext-x19-sync-edit       hits=1 x19=0xfedcba987654321
+PASS ucontext-nzcv-edit           spsr-in-handler=0x60000000 nzcv-after=0xf0000000
+PASS fp-int-state-under-signals   signals=155 result identical
+PASS sigsegv-null-siglongjmp-x100 hits=100 si_addr=(nil) si_code=30 segv-blocked-after=0
+RESULT pass=18 fail=0
+rc=0
+node-v24.22.2.tar.gz: OK
+/tmp/run-96796-2e9c93.sh: line 13: tar: command not found
+failed to run commands: exit status 1
+rc=1
