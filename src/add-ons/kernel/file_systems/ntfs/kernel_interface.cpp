@@ -762,14 +762,17 @@ fs_create(fs_volume* _volume, fs_vnode* _directory, const char* name,
 		return B_UNSUPPORTED;
 #endif
 
-	status = fs_generic_create(_volume, directory, name, S_IFREG | (mode & 07777), _vnodeID);
-	if (status != B_OK)
-		return status;
-
+	// Allocated before the file is created: once fs_generic_create() has
+	// published the vnode, the reference belongs to the VFS only if we
+	// succeed, so nothing may fail after it.
 	file_cookie* cookie = new file_cookie;
 	if (cookie == NULL)
 		return B_NO_MEMORY;
 	ObjectDeleter<file_cookie> cookieDeleter(cookie);
+
+	status = fs_generic_create(_volume, directory, name, S_IFREG | (mode & 07777), _vnodeID);
+	if (status != B_OK)
+		return status;
 
 	cookie->open_mode = openMode;
 
@@ -1101,6 +1104,11 @@ fs_create_dir(fs_volume* _volume, fs_vnode* _directory, const char* name, int mo
 	if (status != B_OK)
 		return status;
 
+	// fs_generic_create() published the new vnode, which leaves us a
+	// reference. Unlike create(), create_dir() hands no vnode back to the
+	// VFS, so the reference is ours to drop; otherwise the node stays
+	// referenced and the volume can never be unmounted.
+	put_vnode(_volume, inode);
 	return B_OK;
 }
 
