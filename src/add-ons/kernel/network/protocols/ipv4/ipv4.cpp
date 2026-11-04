@@ -2102,13 +2102,18 @@ ipv4_error_reply(net_protocol* protocol, net_buffer* cause, net_error error,
 
 ssize_t
 ipv4_process_ancillary_data_no_container(net_protocol* protocol,
-	net_buffer* buffer, void* msgControl, size_t msgControlLen)
+	net_buffer* buffer, void* msgControl, size_t msgControlLen,
+	int* _messageFlags)
 {
 	ssize_t bytesWritten = 0;
 
 	if ((((ipv4_protocol*)protocol)->flags & IP_FLAG_RECEIVE_DEST_ADDR) != 0) {
-		if (msgControlLen < CMSG_SPACE(sizeof(struct in_addr)))
-			return B_NO_MEMORY;
+		if (msgControlLen < CMSG_SPACE(sizeof(struct in_addr))) {
+			// The datagram is still returned, without the control message
+			// (POSIX, as on Linux and the BSDs).
+			*_messageFlags |= MSG_CTRUNC;
+			return bytesWritten;
+		}
 
 		cmsghdr* messageHeader = (cmsghdr*)msgControl;
 		messageHeader->cmsg_len = CMSG_LEN(sizeof(struct in_addr));
