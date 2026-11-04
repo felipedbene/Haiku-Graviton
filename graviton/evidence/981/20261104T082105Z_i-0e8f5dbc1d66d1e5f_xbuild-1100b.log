@@ -1,0 +1,64 @@
+# evidence: xbuild-1100b
+# instance: i-0e8f5dbc1d66d1e5f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T082105Z   end: 20261104T082128Z   rc: 0
+# script sha256: e382ad13ab2a5a320765b73fb0e4af3f25ead5396ef48fde3ea84c6a49731bd1
+# ---- script ----
+# | # Network modules for the #1100 review rework: #1021 alone (the base it now
+# | # depends on), #1100 as first pushed (on trunk), and #1100 reworked on #1021.
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S/1100
+# | cd /opt/wS/hg/generated || exit 1
+# | git -C .. fetch -q --depth 80 origin fix/959-udp-msg-ctrunc fix/981-udp-send-pktinfo || exit 2
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	echo "== $label: $(git -C .. rev-parse --short HEAD) $(git -C .. log -1 --format=%s)"
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/S/patch/$patch /opt/wS/$patch || return 1
+# | 		sha256sum /opt/wS/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wS/$patch || { echo "apply failed"; return 1; }
+# | 		git -C .. diff --stat -- src headers
+# | 	fi
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label rc=$rc failed=$(grep -cE '\.\.\.failed' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error' jam-$label.log | head -30; }
+# | 	echo "--- warnings in the changed files"
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/(ipv4/ipv4|udp/udp)\.cpp:|stack/(routes|datalink|net_socket)\.cpp:' | sort -u | head
+# | 	mkdir -p /opt/wS/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/wS/out/$label/$t && sha256sum /opt/wS/out/$label/$t | sed "s|/opt/wS/out/||"
+# | 		aws s3 cp --quiet /opt/wS/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | git -C .. fetch -q --depth 80 origin fix/959-udp-msg-ctrunc:refs/remotes/origin/fix/959-udp-msg-ctrunc fix/981-udp-send-pktinfo:refs/remotes/origin/fix/981-udp-send-pktinfo
+# | build new1100 origin/fix/959-udp-msg-ctrunc 1100-r2.patch stack ipv4 ipv6 udp
+# ---- raw output ----
+== new1100: 2234f92a evidence: recvmsg MSG_CTRUNC A/B on Graviton for #959
+a9010bf69ec166ecccacf1760af2505c45ec47249f92c6c3f3581d8ffcfee55c  /opt/wS/1100-r2.patch
+ headers/posix/netinet/in.h                         |  12 +
+ headers/private/net/net_datalink.h                 |   3 +
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp |  53 ++++
+ src/add-ons/kernel/network/protocols/udp/udp.cpp   | 268 ++++++++++++++++++++-
+ src/add-ons/kernel/network/stack/datalink.cpp      |   4 +-
+ src/add-ons/kernel/network/stack/net_socket.cpp    |   4 +
+ src/add-ons/kernel/network/stack/routes.cpp        |  51 +++-
+ src/add-ons/kernel/network/stack/routes.h          |   2 +
+ 8 files changed, 393 insertions(+), 4 deletions(-)
+JAM new1100 rc=0 failed=0
+--- warnings in the changed files
+6154343e2794071d5bc7cab18ac5212145c62b9557e39f3c97240eed3f33d28a  new1100/stack
+f1bb4eba61d60b437a6fb85e999854d0099be1b586d81ef9929b983ce3f5e64c  new1100/ipv4
+001505a31a6c74881f3f8fdeaea17afed691c624074b411ff47538241225ac3f  new1100/ipv6
+bbff0672fc9d14de9e1549d04487e8c741063d6b09e252bd604bd37c11f98939  new1100/udp

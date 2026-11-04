@@ -1,0 +1,13 @@
+# evidence: repeat-new1100
+# instance: i-0ba0abc2533d21812   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T084257Z   end: 20261104T084314Z   rc: 0
+# script sha256: 0ec05b981c24d146404ba7d0908b6f1cb60e85a7c2b8235e12f3c7fe28bfc06c
+# ---- script ----
+# | # Stability on the reworked #1100 arm: pktinfo981 x20, test_bio_dgram x5.
+# | cd /boot/home/wS || exit 1
+# | IP=$(ifconfig /dev/net/ena/0 | grep "inet addr:" | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | f=0; for i in $(seq 1 20); do ./pktinfo981.f4 -l $IP > /tmp/p.txt 2>&1 || { f=$((f+1)); grep FAIL /tmp/p.txt | head -3; }; done; echo "pktinfo981: $f of 20 runs failed"
+# | cd ossl-new; f=0; for i in 1 2 3 4 5; do make test TESTS=test_bio_dgram > /tmp/o.txt 2>&1; grep -q "Result: PASS" /tmp/o.txt || f=$((f+1)); done; echo "test_bio_dgram: $f of 5 runs failed"
+# ---- raw output ----
+pktinfo981: 0 of 20 runs failed
+test_bio_dgram: 0 of 5 runs failed

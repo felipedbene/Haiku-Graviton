@@ -1,0 +1,40 @@
+# evidence: peer-old1100
+# instance: i-0e8f5dbc1d66d1e5f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T083636Z   end: 20261104T083827Z   rc: 0
+# script sha256: b308cb46dd60ab1e5f9354da1a89ab0625092347dd4cee852fc96d0a5a5ed6e7
+# ---- script ----
+# | # ENA peer for issue 1099: tcpdump on UDP 9981 and TCP 9982, a TCP listener on
+# | # 9982, for ~100 s while the DeBeOS instance runs its rows.
+# | cd /opt/wS/t 2>/dev/null || { mkdir -p /opt/wS/t && cd /opt/wS/t; }
+# | IF=$(ip route show default | awk '{print $5}')
+# | ip -4 -o addr show dev $IF | awk '{print "peer", $2, $4}'
+# | T=/tmp/td.$$.txt
+# | tcpdump -n -l -i $IF 'udp port 9981 or tcp port 9982' > $T 2>$T.err < /dev/null &
+# | TD=$!
+# | timeout 100 python3 -c '
+# | import socket
+# | s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+# | s.bind(("0.0.0.0", 9982)); s.listen(8)
+# | while True:
+# |     c, a = s.accept(); print("tcp accept from", a, flush=True); c.close()
+# | ' > /tmp/acc.txt 2>&1 &
+# | sleep 100
+# | kill -INT $TD; sleep 1
+# | echo "--- tcpdump, by source"
+# | awk '{print $3}' $T | sed 's/\.[0-9]*$//' | sort | uniq -c
+# | echo "--- tcpdump"; head -60 $T; tail -2 $T.err
+# | echo "--- tcp listener"; cat /tmp/acc.txt
+# ---- raw output ----
+peer ens5 10.128.7.125/22
+--- tcpdump, by source
+      1 
+      4 10.128.7.252
+--- tcpdump
+08:36:54.604325 IP 10.128.7.252.53330 > 10.128.7.125.9981: UDP, length 17
+08:36:55.702884 IP 10.128.7.252.53331 > 10.128.7.125.9981: UDP, length 28
+08:37:00.113779 IP 10.128.7.252.53339 > 10.128.7.125.9981: UDP, length 23
+08:37:05.624027 IP 10.128.7.252.53344 > 10.128.7.125.9981: UDP, length 17
+
+4 packets received by filter
+0 packets dropped by kernel
+--- tcp listener
