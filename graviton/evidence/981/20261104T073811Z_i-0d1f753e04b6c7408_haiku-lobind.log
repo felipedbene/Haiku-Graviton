@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: haiku-lobind
+# instance: i-0d1f753e04b6c7408   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T073811Z   end: 20261104T073827Z   rc: 0
+# script sha256: b6f03cf6243018e0d7963d993438f1f3d4c3b17e40c94240c4fc418a37c6ea9f
+# ---- script ----
+# | # Incidental to issue 981: a socket bound to 127.0.0.1 sendto()s an off-host
+# | # peer. Linux refuses (EINVAL); does DeBeOS put the datagram on the ENA? The
+# | # ENA transmit counter and the peer's tcpdump answer that.
+# | cd /boot/home/wS || exit 1
+# | curl -sSf -o lobind.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/lobind.c?<PRESIGNED>' && gcc -o lobind lobind.c -lnetwork || exit 2
+# | sha256sum lobind.c
+# | ifconfig /dev/net/ena/0 | grep Transmit
+# | sleep 3
+# | for i in 1 2 3 4 5; do ./lobind 10.128.6.237; done
+# | sleep 1
+# | ifconfig /dev/net/ena/0 | grep Transmit
+# ---- raw output ----
+e9cfa75091029f69af47de00501a51635328a25facd534bd90f945da793bc1d4  lobind.c
+	Transmit: 1566 packets, 0 errors, 376130 bytes, 0 mcasts, 0 dropped
+bind(127.0.0.1)=0 sendto(10.128.6.237)=6 
+bind(127.0.0.1)=0 sendto(10.128.6.237)=6 
+bind(127.0.0.1)=0 sendto(10.128.6.237)=6 
+bind(127.0.0.1)=0 sendto(10.128.6.237)=6 
+bind(127.0.0.1)=0 sendto(10.128.6.237)=6 
+	Transmit: 1571 packets, 0 errors, 376370 bytes, 0 mcasts, 0 dropped

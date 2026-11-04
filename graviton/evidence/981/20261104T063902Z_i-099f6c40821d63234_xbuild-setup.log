@@ -1,0 +1,42 @@
+# evidence: xbuild-setup
+# instance: i-099f6c40821d63234   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T063902Z   end: 20261104T064036Z   rc: 0
+# script sha256: c70b32bbcee619873bcd9ca8583d888e2855f1fab230fa14dfbadab93804b7a6
+# ---- script ----
+# | # Cross-build host setup for issue 981 (method of #959's xbuild-setup), plus
+# | # tcpdump for the ENA peer rows and the Linux reference toolchain.
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq
+# | apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file tcpdump perl > /tmp/apt.log 2>&1
+# | echo "apt rc=$?"
+# | if ! command -v aws; then
+# | 	curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
+# | 	(cd /tmp && unzip -q a.zip && ./aws/install > /dev/null)
+# | fi
+# | uname -a
+# | mkdir -p /opt/wS && cd /opt/wS
+# | rm -rf hg buildtools
+# | git clone -q --depth 80 --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg || exit 3
+# | git -C hg log -1 --format='trunk %H %s'
+# | git clone -q --depth 1 https://github.com/felipedbene/buildtools.git buildtools || exit 3
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /dev/null 2>&1 && ./jam0 install > /dev/null 2>&1)
+# | command -v jam || exit 4
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 5
+# | tar --zstd -xf /tmp/ct.tar.zst -C .
+# | ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix /opt/wS/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32 2>&1 | tail -1
+# | echo SETUP-DONE
+# ---- raw output ----
+apt rc=0
+Linux ip-10-128-6-237 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620 evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+SETUP-DONE

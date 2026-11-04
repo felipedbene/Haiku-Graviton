@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-f981v6b
+# instance: i-075e47253d46be762   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T072822Z   end: 20261104T072833Z   rc: 0
+# script sha256: 0986f447c1d19946a94fcabac502aa9d87a0d9a1e6a90fc4916adca42074aa62
+# ---- script ----
+# | # Restage the 981 candidate (981-v6.patch, built in xbuild-modules6) as
+# | # non-packaged overrides: stack and ipv4 are unchanged from v5, udp is new.
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | mkdir -p $D/protocols /boot/home/wS/mod && cd /boot/home/wS/mod
+# | echo "--- overrides before"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | curl -sSf -o stack.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/mod/f981/stack?<PRESIGNED>' || exit 4
+# | echo '67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  stack.mod' | sha256sum -c || exit 5
+# | cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | curl -sSf -o ipv4.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/mod/f981/ipv4?<PRESIGNED>' || exit 4
+# | echo 'eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  ipv4.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | curl -sSf -o udp.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/mod/f981/udp?<PRESIGNED>' || exit 4
+# | echo '8c703d2546da52584f69f32fc407219af34b67513134192cb0bf38990bdde3ec  udp.mod' | sha256sum -c || exit 5
+# | cp udp.mod $D/protocols/udp.new && mv $D/protocols/udp.new $D/protocols/udp
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+--- overrides before
+eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7d54599d45935e30a54baa781800edd7764b24cd44af0515f342317bb72b00ed  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+stack.mod: OK
+ipv4.mod: OK
+udp.mod: OK
+--- overrides after
+eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+8c703d2546da52584f69f32fc407219af34b67513134192cb0bf38990bdde3ec  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+STAGE-DONE

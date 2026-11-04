@@ -1,0 +1,52 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: haiku-prep2
+# instance: i-075e47253d46be762   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T065758Z   end: 20261104T065808Z   rc: 0
+# script sha256: 5b1b92cdbff145a52f73b83b9cdb02fc89d0d0ea9dd0f74fbaa8036ab225a362
+# ---- script ----
+# | # Test binaries for both arms of issue 981, built once on the before arm (so
+# | # the imaged after arm runs the same files): pktinfo981 and dgram981 against
+# | # the stock headers and against this change's netinet/in.h, udp947 and tcp900
+# | # against the stock headers (they are the regression checks).
+# | W=/boot/home/wS
+# | cd $W || exit 1
+# | fetch() { curl -sSf -o "$1" "$2" || { echo "fetch $1 failed"; exit 4; }; }
+# | fetch pktinfo981.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/pktinfo981.c?<PRESIGNED>'
+# | fetch udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/udp947.c?<PRESIGNED>'
+# | fetch tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/tcp900.c?<PRESIGNED>'
+# | sha256sum pktinfo981.c udp947.c tcp900.c inc/netinet/in.h
+# | gcc -Wall -o pktinfo981.stock pktinfo981.c -lnetwork && gcc -Wall -I$W/inc -o pktinfo981.new pktinfo981.c -lnetwork || exit 5
+# | gcc -O2 -o udp947 udp947.c -lnetwork && gcc -O2 -o tcp900 tcp900.c -lnetwork || exit 5
+# | sha256sum pktinfo981.stock pktinfo981.new dgram981.stock dgram981.new udp947 tcp900
+# | ifconfig
+# | sync
+# | echo PREP-DONE
+# ---- raw output ----
+a83582054c4a62c8d65662ee006af6950394b28ee8d1b304ffe40fa3c8d5df5f  pktinfo981.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+e083612709da1a46d4a5136ce27514aa2e3c18602c3997c594279707a1e2f6a8  inc/netinet/in.h
+5a1e9f720a7420c6a68bcd742d0d1f39feeb9d2a8f8f44fd4ca774869e9015a5  pktinfo981.stock
+10859c0b6c33152c2450be20fbc5e0b42581f6c30347e56f66cbff6b55c0a4b0  pktinfo981.new
+f86bf9e7c91055a28ecb0a23c708d4b94c2f2850ba5620a2dc03ec58b7d5b95d  dgram981.stock
+c8b094b82b5b03a2113d93ee5c033ac144358c238be9309b02d6e05e2493e796  dgram981.new
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+loop	Hardware type: Local Loopback, Address: none
+	inet addr: 127.0.0.1, Mask: 255.0.0.0
+	inet6 addr: ::1, Prefix Length: 128
+	MTU: 65536, Metric: 0, up loopback link
+	Receive: 0 packets, 0 errors, 0 bytes, 0 mcasts, 0 dropped
+	Transmit: 25704 packets, 0 errors, 814280538 bytes, 0 mcasts, 0 dropped
+	Collisions: 0
+
+/dev/net/ena/0
+	Hardware type: Ethernet, Address: 06:ff:da:d0:0b:05
+	Media type: Auto-select
+	inet addr: 10.128.4.36, Bcast: 10.128.7.255, Mask: 255.255.252.0
+	MTU: 9001, Metric: 0, up broadcast link auto-configured
+	Receive: 182305 packets, 0 errors, 267425336 bytes, 0 mcasts, 0 dropped
+	Transmit: 115303 packets, 0 errors, 9108763 bytes, 0 mcasts, 0 dropped
+	Collisions: 0
+
+PREP-DONE

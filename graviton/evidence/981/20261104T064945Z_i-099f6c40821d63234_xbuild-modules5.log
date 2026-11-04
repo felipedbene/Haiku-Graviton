@@ -1,0 +1,56 @@
+# evidence: xbuild-modules5
+# instance: i-099f6c40821d63234   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T064945Z   end: 20261104T065008Z   rc: 0
+# script sha256: cb24e55ccd7e725c94a2c6b8499d3078fac52eb820f1781ea550331dc9e5a9e2
+# ---- script ----
+# | # Build trunk's and the 981 candidate's network modules (method of #959).
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S
+# | cd /opt/wS/hg/generated || exit 1
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | build() {
+# | 	local label=$1 patch=$2; shift 2
+# | 	git -C .. checkout -q -f --detach origin/graviton || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/wS/$patch || return 1
+# | 		sha256sum /opt/wS/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wS/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	echo "--- warnings in the changed files"
+# | 	grep -A3 'warning:' jam-$label.log | grep -E 'protocols/(ipv4/ipv4|udp/udp)\.cpp|stack/net_socket\.cpp' | sort -u | head -20
+# | 	mkdir -p /opt/wS/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/wS/out/$label/$t && sha256sum /opt/wS/out/$label/$t | sed "s|/opt/wS/out/||"
+# | 		aws s3 cp --quiet /opt/wS/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | # trunk built in the previous run
+# | build f981 981-v5.patch stack ipv4 udp
+# ---- raw output ----
+2876906914fda5b351d751129c478eff50f3b56b4104a22233857ae4e43a1319  /opt/wS/981-v5.patch
+ headers/posix/netinet/in.h                         |  12 ++
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp |  51 +++++
+ src/add-ons/kernel/network/protocols/udp/udp.cpp   | 230 ++++++++++++++++++++-
+ src/add-ons/kernel/network/stack/net_socket.cpp    |   4 +
+ 4 files changed, 295 insertions(+), 2 deletions(-)
+JAM f981 head=a9954f42 patch=981-v5.patch rc=0 wall=8s failed=0 warnings=100
+--- warnings in the changed files
+67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  f981/stack
+eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  f981/ipv4
+7d54599d45935e30a54baa781800edd7764b24cd44af0515f342317bb72b00ed  f981/udp

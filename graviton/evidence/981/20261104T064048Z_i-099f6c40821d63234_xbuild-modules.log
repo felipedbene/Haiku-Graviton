@@ -1,0 +1,95 @@
+# evidence: xbuild-modules
+# instance: i-099f6c40821d63234   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T064048Z   end: 20261104T064130Z   rc: 1
+# script sha256: 710b2a0db6759354165f639819ada0dabfd8107343b3abd56be52edf47a0418a
+# ---- script ----
+# | # Build trunk's and the 981 candidate's network modules (method of #959).
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S
+# | cd /opt/wS/hg/generated || exit 1
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | build() {
+# | 	local label=$1 patch=$2; shift 2
+# | 	git -C .. checkout -q -f --detach origin/graviton || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/wS/$patch || return 1
+# | 		sha256sum /opt/wS/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wS/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	echo "--- warnings in the changed files"
+# | 	grep -A3 'warning:' jam-$label.log | grep -E 'protocols/(ipv4/ipv4|udp/udp)\.cpp|stack/net_socket\.cpp' | sort -u | head -20
+# | 	mkdir -p /opt/wS/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/wS/out/$label/$t && sha256sum /opt/wS/out/$label/$t | sed "s|/opt/wS/out/||"
+# | 		aws s3 cp --quiet /opt/wS/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build trunk none stack ipv4 udp
+# | build f981 981-v1.patch stack ipv4 udp
+# ---- raw output ----
+JAM trunk head=a9954f42 patch=none rc=0 wall=15s failed=0 warnings=120
+--- warnings in the changed files
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  trunk/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  trunk/ipv4
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  trunk/udp
+17eeb92caff1a22971312496c9db4e74fa4de771edc35c8f9f50e2039c4e6f7b  /opt/wS/981-v1.patch
+ headers/posix/netinet/in.h                         |  12 ++
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp |  51 +++++
+ src/add-ons/kernel/network/protocols/udp/udp.cpp   | 215 ++++++++++++++++++++-
+ src/add-ons/kernel/network/stack/net_socket.cpp    |   4 +
+ 4 files changed, 280 insertions(+), 2 deletions(-)
+JAM f981 head=a9954f42 patch=981-v1.patch rc=1 wall=7s failed=2 warnings=100
+collect2: error: ld returned 1 exit status
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/network/stack/stack 
+...updated 22 target(s)...
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/ipv4.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/ipv4_address.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/multicast.o 
+Link objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/ipv4 
+SetType1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/ipv4 
+MimeSet1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/ipv4 
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/ipv4 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4/ipv4 
+...updated 5 target(s)...
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp.o 
+Link objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp 
+/opt/wS/hg/generated/cross-tools-arm64/aarch64-unknown-haiku/bin/ld: objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp.o: in function `UdpEndpoint::_SourceFromControlData(net_buffer*, net_domain*, unsigned int*) [clone .localalias]':
+udp.cpp:(.text+0x2ef0): undefined reference to `in6addr_any'
+/opt/wS/hg/generated/cross-tools-arm64/aarch64-unknown-haiku/bin/ld: udp.cpp:(.text+0x2ef4): undefined reference to `in6addr_any'
+collect2: error: ld returned 1 exit status
+
+LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/wS/hg/generated/objects/linux/lib" ../build/scripts/rm_attrs objects/linux/arm64/release/tools/rm_attrs -f "objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp"
+/opt/wS/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -Xlinker --no-undefined -shared -nostdlib -Xlinker --no-undefined -Xlinker -soname="udp" -z max-page-size=0x1000 -o "objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp"  "/opt/wS/hg/generated/cross-tools-arm64/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/crtbeginS.o" "objects/haiku/arm64/release/system/glue/haiku_version_glue.o" "objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp.o" \
+"objects/haiku/arm64/release/system/kernel/kernel.so"  "build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a" "/opt/wS/hg/generated/cross-tools-arm64/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/crtendS.o" \
+
+
+...failed Link objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp ...
+
+BUILD FAILURE:
+...failed updating 1 target(s)...
+...updated 2 target(s)...
+--- warnings in the changed files
+67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  f981/stack
+eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  f981/ipv4
+cp: cannot stat 'objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp': No such file or directory
+
+aws: [ERROR]: The user-provided path /opt/wS/out/f981/udp does not exist.
+failed to run commands: exit status 1

@@ -1,0 +1,15 @@
+# evidence: haiku-repeat-after-v6
+# instance: i-0d1f753e04b6c7408   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T073325Z   end: 20261104T073348Z   rc: 0
+# script sha256: 11a8d592b8accdcc7f614d35123035adbfd03f3d89ee17193504478e2c46707e
+# ---- script ----
+# | # Stability on the after arm: pktinfo981.new x50, dgram981.new x50, and
+# | # openssl's test_bio_dgram (new headers) x10.
+# | cd /boot/home/wS || exit 1
+# | f=0; for i in $(seq 1 50); do ./pktinfo981.new -l $(ifconfig | grep "inet addr:" | grep -v 127.0.0.1 | head -1 | sed 's/.*inet addr: *\([0-9.]*\).*/\1/') > /tmp/p.txt 2>&1 || { f=$((f+1)); grep FAIL /tmp/p.txt | head -3; }; done; echo "pktinfo981.new: $f of 50 runs failed"
+# | f=0; for i in $(seq 1 50); do ./dgram981.new > /tmp/d.txt 2>&1 || { f=$((f+1)); grep FAIL /tmp/d.txt | head -3; }; done; echo "dgram981.new: $f of 50 runs failed"
+# | cd ossl-new; f=0; for i in $(seq 1 10); do make test TESTS=test_bio_dgram > /tmp/o.txt 2>&1; grep -q "Result: PASS" /tmp/o.txt || { f=$((f+1)); grep -E "not ok|ERROR" /tmp/o.txt | head -5; }; done; echo "test_bio_dgram (new headers): $f of 10 runs failed"
+# ---- raw output ----
+pktinfo981.new: 0 of 50 runs failed
+dgram981.new: 0 of 50 runs failed
+test_bio_dgram (new headers): 0 of 10 runs failed

@@ -1,0 +1,408 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: haiku-setup2
+# instance: i-075e47253d46be762   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T064641Z   end: 20261104T064653Z   rc: 7
+# script sha256: c0e7ed23e9fe2d4201c0fd7845d65707c664e3ed894e6445be6a545c0a7a1a9f
+# ---- script ----
+# | # Before arm for issue 981 (canonical, unmodified network stack): toolchain, the
+# | # repros against the stock headers and against this change's netinet/in.h (an
+# | # include overlay, so only the header differs), and openssl 3.5.9 + the
+# | # in-tree openssl3-3.5.9.patchset built both ways. The builds stay on disk, so
+# | # the after arm (this disk, imaged) runs the very same binaries.
+# | W=/boot/home/wS
+# | mkdir -p $W/inc/netinet && cd $W
+# | uname -a
+# | pkgman install -y gcc binutils haiku_devel make perl curl tar patch 2>&1 | tail -1
+# | fetch() { curl -sSf -o "$1" "$2" || { echo "fetch $1 failed"; exit 4; }; }
+# | fetch inc/netinet/in.h 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/in.h?<PRESIGNED>'
+# | fetch pktinfo981.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/pktinfo981.c?<PRESIGNED>'
+# | fetch dgram981.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/dgram981.c?<PRESIGNED>'
+# | fetch openssl3-3.5.9.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/openssl3-3.5.9.patchset?<PRESIGNED>'
+# | sha256sum inc/netinet/in.h pktinfo981.c dgram981.c openssl3-3.5.9.patchset /boot/system/develop/headers/posix/netinet/in.h
+# | gcc -Wall -o pktinfo981.stock pktinfo981.c -lnetwork && gcc -Wall -I$W/inc -o pktinfo981.new pktinfo981.c -lnetwork || exit 5
+# | gcc -o dgram981.stock dgram981.c -lnetwork && gcc -I$W/inc -o dgram981.new dgram981.c -lnetwork || exit 5
+# | sha256sum pktinfo981.* dgram981.*
+# | curl -sSfL -o openssl-3.5.9.tar.gz https://www.openssl.org/source/openssl-3.5.9.tar.gz || curl -sSfL -o openssl-3.5.9.tar.gz https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz || exit 6
+# | echo "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a  openssl-3.5.9.tar.gz" | sha256sum -c || exit 6
+# | for v in stock new; do
+# | 	rm -rf ossl-$v && mkdir ossl-$v && tar -xzf openssl-3.5.9.tar.gz -C ossl-$v --strip-components=1
+# | 	(cd ossl-$v && patch -p1 -s < ../openssl3-3.5.9.patchset) || { echo "patch $v failed"; exit 7; }
+# | 	inc=""; [ $v = new ] && inc="-I$W/inc"
+# | 	s=$(date +%s)
+# | 	(cd ossl-$v && ./Configure haiku-aarch64 shared -g $inc > ../configure-$v.log 2>&1 && make -j8 > ../make-$v.log 2>&1)
+# | 	echo "openssl $v build rc=$? wall=$(( $(date +%s) - s ))s"
+# | 	tail -3 make-$v.log
+# | 	grep -c "IP_PKTINFO\|in_pktinfo" ossl-$v/crypto/bio/bss_dgram.c
+# | 	sha256sum ossl-$v/test/bio_dgram_test ossl-$v/libcrypto.so.3 2>/dev/null
+# | done
+# | sync
+# | echo SETUP-DONE
+# ---- raw output ----
+Haiku ip-10-128-4-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+[system] Done.
+e083612709da1a46d4a5136ce27514aa2e3c18602c3997c594279707a1e2f6a8  inc/netinet/in.h
+c5babed5e0a0110a5c692f0b25bb2a58fb06f7f260dc72b4d1cb98614b3ef0ec  pktinfo981.c
+7e14477dde30bfdc962f35895c641e6bd1892d2999419b30e60e599ee75637b3  dgram981.c
+cbd056d16991ad97b8069786219171884eba506db652b4599340d86d37b13717  openssl3-3.5.9.patchset
+19be7395e6ba3d041de5386e7f7a0d4f72415e6db0d09ba9f5ec70f71f207d47  /boot/system/develop/headers/posix/netinet/in.h
+c5babed5e0a0110a5c692f0b25bb2a58fb06f7f260dc72b4d1cb98614b3ef0ec  pktinfo981.c
+76729a94bfaacd1e4ce71e4195f1d2059c486528878d101473b8246f3ca215c3  pktinfo981.new
+7358a2716d6378c8894828de7d33be5ee34847f633193d0c2e620fe26269b464  pktinfo981.stock
+7e14477dde30bfdc962f35895c641e6bd1892d2999419b30e60e599ee75637b3  dgram981.c
+c8b094b82b5b03a2113d93ee5c033ac144358c238be9309b02d6e05e2493e796  dgram981.new
+f86bf9e7c91055a28ecb0a23c708d4b94c2f2850ba5620a2dc03ec58b7d5b95d  dgram981.stock
+openssl-3.5.9.tar.gz: OK
+The text leading up to this was:
+--------------------------
+|From a76096e2a88e271b88d522e62ce3278a9ec9ff59 Mon Sep 17 00:00:00 2001
+|From: Augustin Cavalier <waddlesplash@gmail.com>
+|Date: Sat, 14 Mar 2020 19:20:45 -0400
+|Subject: Small changes for Haiku.
+|
+|
+|diff --git a/include/internal/common.h b/include/internal/common.h
+|index 5de7279..f5febc3 100644
+|--- a/include/internal/common.h
+|+++ b/include/internal/common.h
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From 23ba144476dda889059ce294fa829016ec639f10 Mon Sep 17 00:00:00 2001
+|From: Adrien Destugues <pulkomandy@pulkomandy.tk>
+|Date: Wed, 18 Nov 2020 18:29:38 +0100
+|Subject: Use find_directory to locate user certificates
+|
+|We want this directory (where the user can easily add their own
+|certificates) to be non-packaged and under user control. The system
+|certificates are centralized in the CARootCertificates.pem file.
+|
+|This was previously done in BSecureSocket (overriding OpenSSL defaults),
+|now it is valid also for apps using OpenSSL directly.
+|
+|diff --git a/crypto/x509/x509_def.c b/crypto/x509/x509_def.c
+|index 5a6ecaf..39220df 100644
+|--- a/crypto/x509/x509_def.c
+|+++ b/crypto/x509/x509_def.c
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+2 out of 2 hunks ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From b5d8af0d82e3b423a800811f859bab84ae370a41 Mon Sep 17 00:00:00 2001
+|From: David Karoly <david.karoly@outlook.com>
+|Date: Wed, 13 Dec 2023 14:54:54 +0100
+|Subject: Haiku: skip test case test_print_error_format
+|
+|
+|diff --git a/test/errtest.c b/test/errtest.c
+|index 323184d..8f19709 100644
+|--- a/test/errtest.c
+|+++ b/test/errtest.c
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+2 out of 2 hunks ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From f5496d814e82d3b0a591a3d2dcce4a183a9d22dc Mon Sep 17 00:00:00 2001
+|From: David Karoly <david.karoly@outlook.com>
+|Date: Wed, 13 Dec 2023 14:59:20 +0100
+|Subject: Haiku: don't use IPV6_V6ONLY
+|
+|
+|diff --git a/crypto/bio/bio_sock2.c b/crypto/bio/bio_sock2.c
+|index a9face3..136f43d 100644
+|--- a/crypto/bio/bio_sock2.c
+|+++ b/crypto/bio/bio_sock2.c
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From 9e73dcdb29a28d3acda705098a9dcbcd8cf98f8e Mon Sep 17 00:00:00 2001
+|From: David Karoly <david.karoly@outlook.com>
+|Date: Wed, 13 Dec 2023 17:49:28 +0100
+|Subject: Haiku: listening sockets shall default to IPv4
+|
+|
+|diff --git a/crypto/bio/bss_acpt.c b/crypto/bio/bss_acpt.c
+|index 14bc36d..04bc647 100644
+|--- a/crypto/bio/bss_acpt.c
+|+++ b/crypto/bio/bss_acpt.c
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From 4cdd3d1c2a3557ffe4412ae8d7dd60f6211c1024 Mon Sep 17 00:00:00 2001
+|From: Jerome Duval <jerome.duval@gmail.com>
+|Date: Tue, 4 Jun 2024 21:35:22 +0200
+|Subject: Haiku: inherit unix, add symbol versioning
+|
+|
+|diff --git a/Configurations/50-haiku.conf b/Configurations/50-haiku.conf
+|index 4580e71..c8c2805 100644
+|--- a/Configurations/50-haiku.conf
+|+++ b/Configurations/50-haiku.conf
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/Configurations/shared-info.pl b/Configurations/shared-info.pl
+|index caf6f90..96953f9 100644
+|--- a/Configurations/shared-info.pl
+|+++ b/Configurations/shared-info.pl
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/util/mkdef.pl b/util/mkdef.pl
+|index 309f908..14e5854 100755
+|--- a/util/mkdef.pl
+|+++ b/util/mkdef.pl
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/util/shlib_wrap.sh.in b/util/shlib_wrap.sh.in
+|index 675d99a..5d9b667 100755
+|--- a/util/shlib_wrap.sh.in
+|+++ b/util/shlib_wrap.sh.in
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From b5ed25fc49ea4bbe4b5b53326ddd6ea6594bcb45 Mon Sep 17 00:00:00 2001
+|From: Sebastian Andrzej Siewior <sebastian@breakpoint.cc>
+|Date: Wed, 8 Jun 2022 20:45:32 +0200
+|Subject: Remove the provider section.
+|
+|The provider section breaks libssl1.1 users. Remove it for now.
+|
+|Link: https://bugs.debian.org/1011051
+|Signed-off-by: Sebastian Andrzej Siewior <sebastian@breakpoint.cc>
+|
+|diff --git a/apps/openssl.cnf b/apps/openssl.cnf
+|index abace0e..c1a142f 100644
+|--- a/apps/openssl.cnf
+|+++ b/apps/openssl.cnf
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+2 out of 2 hunks ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From 66eee3898bf62567d2277ce97d6d1c8ad18022a7 Mon Sep 17 00:00:00 2001
+|From: =?UTF-8?q?J=C3=A9r=C3=B4me=20Duval?= <jerome.duval@gmail.com>
+|Date: Sun, 16 Mar 2025 19:50:17 +0100
+|Subject: gnu-shared: remove Bsymbolic like Debian
+|
+|
+|diff --git a/Configurations/shared-info.pl b/Configurations/shared-info.pl
+|index 96953f9..b4437c2 100644
+|--- a/Configurations/shared-info.pl
+|+++ b/Configurations/shared-info.pl
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|
+|From db0093aa0631f39c2bce8de4b475ae59537caa22 Mon Sep 17 00:00:00 2001
+|From: Jerome Duval <jerome.duval@gmail.com>
+|Date: Wed, 9 Apr 2025 20:00:11 +0200
+|Subject: fix gcc2 build
+|
+|
+|diff --git a/crypto/hashtable/hashtable.c b/crypto/hashtable/hashtable.c
+|index 11f144f..3fdcea5 100644
+|--- a/crypto/hashtable/hashtable.c
+|+++ b/crypto/hashtable/hashtable.c
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/include/internal/common.h b/include/internal/common.h
+|index f5febc3..a1f9953 100644
+|--- a/include/internal/common.h
+|+++ b/include/internal/common.h
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/test/cmp_vfy_test.c b/test/cmp_vfy_test.c
+|index 2705b57..364ec1c 100644
+|--- a/test/cmp_vfy_test.c
+|+++ b/test/cmp_vfy_test.c
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|From 1475ecb7ad37eb77d219a2a720292db43748d150 Mon Sep 17 00:00:00 2001
+|From: Felipe De Bene <benfelip@amazon.com>
+|Date: Fri, 17 Oct 2026 12:30:00 +0000
+|Subject: Haiku: keep the sign of a negative errno in ERR_GET_REASON
+|
+|Haiku's errno values are negative by default: EAGAIN is B_WOULD_BLOCK,
+|INT_MIN + 11, i.e. 0x8000000b. err_set_error() stores a system error as
+|ERR_SYSTEM_FLAG | reason and ERR_SYSTEM_FLAG is 0x80000000, so for a Haiku
+|errno the flag bit and the errno's own sign bit are the same bit and the
+|stored word is the errno unchanged -- nothing is lost on the way in.
+|
+|ERR_GET_REASON() then returns errcode & ERR_SYSTEM_MASK, and ERR_SYSTEM_MASK
+|is INT_MAX, which strips exactly that bit. EAGAIN comes back as 11, so every
+|caller that compares the result against an errno fails to match:
+|BIO_err_is_non_fatal() classes a would-block as fatal, which makes the QUIC
+|stack tear down a connection on the first empty non-blocking recvmmsg, and
+|ossl_err_string_int() prints "No Error (11)" for it.
+|
+|So recover the sign rather than discarding it. Under B_USE_POSITIVE_POSIX_ERRORS
+|the errno values are negated and therefore positive, the flag bit is genuinely
+|just a flag, and upstream's masking is already correct -- hence the guard.
+|
+|0x80000000 is deliberately read as an errno and not as "reason 0". The two are
+|the same stored word and cannot be told apart, but only one of them is real: it
+|is ENOMEM (B_NO_MEMORY, which headers/os/support/Errors.h singles out as the
+|code that "can't be negated"), whereas a system error raised with errno 0 says
+|nothing anyone can act on. Reading it as 0 would turn an out-of-memory into
+|"No Error", which is the failure class this patch exists to stop.
+|
+|crypto/err/err.c needs no matching change: its only ERR_GET_REASON consumer for
+|a system error passes the value to openssl_strerror_r(int, char *, size_t),
+|which truncates it back to the correct 32 bits.
+|
+|--- a/include/openssl/err.h.in
+|+++ b/include/openssl/err.h.in
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|-- 
+|2.54.0
+|
+|From 6b1d0c1f7a2e4f9c8d3b5a6e7f8091a2b3c4d5e6 Mon Sep 17 00:00:00 2001
+|From: Felipe De Bene <benfelip@amazon.com>
+|Date: Mon, 2 Nov 2026 15:20:00 +0000
+|Subject: Haiku: add the haiku-aarch64 target
+|
+|There was no arm64 entry, so ./config on arm64 Haiku (uname -m "arm64")
+|matched the '.*-.*-haiku' catch-all and configured haiku-x86: 32-bit
+|bignum limbs (BN_LLONG, "bn(64,32)") on a 64-bit CPU, and, with the
+|recipe's no-asm, none of the ARMv8 AES, PMULL, SHA or bignum assembly.
+|
+|haiku-aarch64 takes linux-aarch64's asm_arch and linux64 perlasm flavour
+|(plain GNU-as ELF) on haiku-common. bn_ops is SIXTY_FOUR_BIT_LONG alone,
+|as for haiku-x86_64: linux-aarch64's RC4_CHAR would also change the
+|public RC4_KEY layout, and buys nothing here.
+|
+|armcap.c detects the crypto extensions with getauxval() where the
+|platform has one. DeBeOS's libroot answers AT_HWCAP/AT_HWCAP2 in the
+|Linux bit layout from the ID registers EL0 cannot read. It leaves
+|HWCAP_CPUID and HWCAP_SVE clear, so OpenSSL neither executes an EL0 MRS
+|of MIDR_EL1 nor turns on SVE paths the kernel has not advertised. The
+|include is unconditional on Haiku: the SIGILL-probe fallback would
+|probe SVE successfully and enable it.
+|
+|os-dep/haiku.h, which haiku-common force-includes into every compile,
+|is skipped under __ASSEMBLER__. The aarch64 perlasm output is .S, run
+|through the preprocessor, and the C declarations from <sys/select.h>
+|were assembler errors (x86_64's perlasm emits plain .s, so it never
+|hit this).
+|---
+|diff --git a/Configurations/50-haiku.conf b/Configurations/50-haiku.conf
+|--- a/Configurations/50-haiku.conf
+|+++ b/Configurations/50-haiku.conf
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/util/perl/OpenSSL/config.pm b/util/perl/OpenSSL/config.pm
+|--- a/util/perl/OpenSSL/config.pm
+|+++ b/util/perl/OpenSSL/config.pm
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/crypto/armcap.c b/crypto/armcap.c
+|--- a/crypto/armcap.c
+|+++ b/crypto/armcap.c
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+The text leading up to this was:
+--------------------------
+|diff --git a/os-dep/haiku.h b/os-dep/haiku.h
+|--- a/os-dep/haiku.h
+|+++ b/os-dep/haiku.h
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+1 out of 1 hunk ignored
+patch stock failed
+tar (child): gzip: Cannot exec: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+failed to run commands: exit status 7

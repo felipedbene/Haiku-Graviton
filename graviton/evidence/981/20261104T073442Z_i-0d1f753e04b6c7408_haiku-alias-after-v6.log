@@ -1,0 +1,46 @@
+# evidence: haiku-alias-after-v6
+# instance: i-0d1f753e04b6c7408   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T073442Z   end: 20261104T073507Z   rc: 0
+# script sha256: d9db2c01ce85b07f32c7f0b945d6142a241f67afcb94176da2b9afe141e0f8bb
+# ---- script ----
+# | # ENA wire test for issue 981: give /dev/net/ena/0 a second address (the ENI's
+# | # secondary private IP 10.128.13.123, assigned through EC2), then send to the Linux peer
+# | # from it through IP_PKTINFO and IPV6_PKTINFO-mapped, and with a plain
+# | # sendto(). The peer's tcpdump shows which source each one carried.
+# | cd /boot/home/wS || exit 1
+# | cat > addaddr.cpp <<'X'
+# | #include <NetworkAddress.h>
+# | #include <NetworkInterface.h>
+# | #include <stdio.h>
+# | #include <string.h>
+# | int main(int argc, char** argv) {
+# | 	BNetworkInterface interface(argv[1]);
+# | 	BNetworkInterfaceAddress address;
+# | 	address.SetAddress(BNetworkAddress(AF_INET, argv[2]));
+# | 	address.SetMask(BNetworkAddress(AF_INET, argv[3]));
+# | 	status_t status = interface.AddAddress(address);
+# | 	printf("AddAddress(%s %s/%s) = %s\n", argv[1], argv[2], argv[3], strerror(status));
+# | 	return status == B_OK ? 0 : 1;
+# | }
+# | X
+# | g++ -o addaddr addaddr.cpp -lbnetapi -lnetwork || exit 2
+# | ./addaddr /dev/net/ena/0 10.128.13.123 255.255.252.0 || exit 3
+# | ifconfig /dev/net/ena/0 | grep "inet addr"
+# | sleep 8
+# | P=10.128.6.237
+# | ./pktinfo981.new send $P 9981 -
+# | ./pktinfo981.new send $P 9981 10.128.13.123
+# | ./pktinfo981.new send $P 9981 10.128.13.123 /dev/net/ena/0
+# | ./pktinfo981.new send ::ffff:$P 9981 ::ffff:10.128.13.123
+# | ./pktinfo981.new send $P 9981 -
+# | echo ALIAS-DONE
+# ---- raw output ----
+AddAddress(/dev/net/ena/0 10.128.13.123/255.255.252.0) = No error
+	inet addr: 10.128.14.102, Bcast: 10.128.15.255, Mask: 255.255.252.0
+	inet addr: 10.128.13.123, Bcast: --, Mask: 255.255.252.0
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+send 10.128.13.123 -> 10.128.6.237.9981 ifindex=0: sendmsg=29 0
+send 10.128.13.123 -> 10.128.6.237.9981 ifindex=2: sendmsg=29 0
+send ::ffff:10.128.13.123 -> ::ffff:10.128.6.237.9981 ifindex=0: sendmsg=36 0
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+ALIAS-DONE

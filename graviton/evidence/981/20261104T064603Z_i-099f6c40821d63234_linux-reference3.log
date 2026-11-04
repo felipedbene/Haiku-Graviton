@@ -1,0 +1,48 @@
+# evidence: linux-reference3
+# instance: i-099f6c40821d63234   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T064603Z   end: 20261104T064614Z   rc: 0
+# script sha256: e8ec50e78351e3b0d7f2d1ea9cc5f2e4f046b2955e0366090ac494257efc8d93
+# ---- script ----
+# | # Linux reference: pktinfo981 (loopback matrix, with this host's ENA address as
+# | # a second local source) on Ubuntu 24.04 / Linux 7.0, c7g.8xlarge.
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | B=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S
+# | mkdir -p /opt/wS/t && cd /opt/wS/t
+# | aws s3 cp --quiet $B/src/pktinfo981.c . && sha256sum pktinfo981.c
+# | cc -Wall -o pktinfo981 pktinfo981.c && uname -r
+# | IP=$(ip -4 -o addr show dev $(ip route show default | awk '{print $5}') | awk '{print $4}' | cut -d/ -f1)
+# | LL=$(ip -6 -o addr show scope link | grep -v " lo " | awk '{print $4}' | cut -d/ -f1 | head -1)
+# | echo "ena ipv4=$IP ipv6 link-local=$LL"
+# | ./pktinfo981 -l $IP
+# | echo "rc=$?"
+# ---- raw output ----
+c5babed5e0a0110a5c692f0b25bb2a58fb06f7f260dc72b4d1cb98614b3ef0ec  pktinfo981.c
+7.0.0-1014-aws
+ena ipv4=10.128.6.237 ipv6 link-local=fe80::4ff:d5ff:fe15:bc59
+ipv4 IP_PKTINFO src=127.0.0.1                        PASS  sendmsg=10 recv=10 from 127.0.0.1.48654 (want 127.0.0.1)
+ipv4 IP_PKTINFO src=127.0.0.2 (bind() takes it)      PASS  sendmsg=10 recv=10 from 127.0.0.2.48654 (want 127.0.0.2)
+ipv4 IP_PKTINFO src=192.0.2.1 (foreign)              PASS  sendmsg=-1 ENETUNREACH (want ENETUNREACH)
+ipv4 IP_PKTINFO src=255.255.255.255 (broadcast)      PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv4 IP_PKTINFO src=224.0.0.1 (multicast)            PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv4 IP_PKTINFO src=0.0.0.0 ifindex=lo               PASS  sendmsg=10 recv=10 from 127.0.0.1.48654 (want 127.0.0.1)
+ipv4 IP_PKTINFO src=127.0.0.1 ifindex=lo             PASS  sendmsg=10 recv=10 from 127.0.0.1.48654 (want 127.0.0.1)
+ipv4 IP_PKTINFO ifindex=9999 (none)                  PASS  sendmsg=-1 ENODEV (want ENODEV)
+ipv4 IP_PKTINFO short cmsg_len                       PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv4 IP_SENDSRCADDR src=127.0.0.1 (BSD)              SKIP  option not defined by the headers
+ipv4 IP_SENDSRCADDR src=192.0.2.1 (BSD)              SKIP  option not defined by the headers
+ipv4 IP_TTL cmsg (info only)                         INFO  sendmsg=10 recv=10 from 127.0.0.1.48654 (want 127.0.0.1)
+ipv4 IP_PKTINFO src=10.128.6.237 to loopback         PASS  sendmsg=10 recv=10 from 10.128.6.237.48654 (want 10.128.6.237)
+ipv4 IP_PKTINFO on a connected socket                PASS  sendmsg=10 recv=10 from 10.128.6.237.39755
+ipv4 IP_PKTINFO setsockopt/getsockopt                PASS  setsockopt=0 getsockopt=1
+ipv4 recv IP_PKTINFO cmsg                            PASS  recv=10 [IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1] (want [IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1])
+ipv6 IPV6_PKTINFO src=::1                            PASS  sendmsg=10 recv=10 from ::1.56562 (want ::1)
+ipv6 IPV6_PKTINFO src=2001:db8::1 (foreign)          PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv6 IPV6_PKTINFO src=ff02::1 (multicast)            PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv6 IPV6_PKTINFO src=:: ifindex=lo                  PASS  sendmsg=10 recv=10 from ::1.56562 (want ::1)
+ipv6 IPV6_PKTINFO src=::1 ifindex=lo                 PASS  sendmsg=10 recv=10 from ::1.56562 (want ::1)
+ipv6 IPV6_PKTINFO ifindex=9999 (none)                PASS  sendmsg=-1 ENODEV (want ENODEV)
+ipv6 IPV6_PKTINFO mapped src to mapped dst           PASS  sendmsg=10 recv=10 from 127.0.0.1.56562 (want 127.0.0.1)
+ipv6 IPV6_PKTINFO src=::1 to mapped dst              PASS  sendmsg=-1 EINVAL (want EINVAL)
+PASS: 0 of 21 row(s) failed
+rc=0

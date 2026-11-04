@@ -1,0 +1,253 @@
+# evidence: haiku-before2
+# instance: i-075e47253d46be762   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T065817Z   end: 20261104T065828Z   rc: 0
+# script sha256: 699537bc74232927c9b2d84de50fe75263064da5a8a29916fb85af6f1f1b7c4c
+# ---- script ----
+# | # One arm of issue 981: which network modules are loaded, then pktinfo981 and
+# | # dgram981 (stock and new headers), openssl's test_bio_dgram (openssl built
+# | # against the stock and the new headers), and the regressions udp947 (full and
+# | # -t), tcp900 and plain sendto().
+# | W=/boot/home/wS
+# | cd $W || exit 1
+# | uname -a
+# | echo "--- network modules loaded (image paths)"
+# | listimage 1 | grep -E "network/(stack|protocols/(ipv4|ipv6|udp|tcp))" | awk '{print $NF}' | sort -u
+# | echo "--- packaged and override module sha256"
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/protocols/ipv4 /boot/system/add-ons/kernel/network/protocols/udp
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | sha256sum pktinfo981.stock pktinfo981.new dgram981.stock dgram981.new udp947 tcp900 ossl-stock/test/bio_dgram_test ossl-new/test/bio_dgram_test
+# | IP=$(ifconfig | grep "inet addr:" | grep -v "127.0.0.1" | head -1 | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | LL=$(ifconfig | grep "inet6 addr: fe80" | grep -v "fe80::1," | head -1 | sed 's/.*inet6 addr: *\([0-9a-f:]*\).*/\1/')
+# | echo "ena ipv4=$IP ipv6 link-local=${LL:-none}"
+# | L6=""; [ -n "$LL" ] && L6="-L $LL"
+# | for v in stock new; do
+# | 	echo "=== pktinfo981.$v"
+# | 	./pktinfo981.$v -l $IP $L6; echo "pktinfo981.$v rc=$?"
+# | done
+# | for v in stock new; do
+# | 	echo "=== dgram981.$v"
+# | 	./dgram981.$v; echo "dgram981.$v rc=$?"
+# | done
+# | for v in stock new; do
+# | 	echo "=== openssl ($v headers) test_bio_dgram"
+# | 	(cd ossl-$v && make test TESTS=test_bio_dgram V=1 2>&1) | grep -E "Testing with|ok [0-9]|ERROR|:error:|Result|PASS|FAIL" | grep -v "^make"
+# | done
+# | echo "=== udp947"; ./udp947; echo "udp947 rc=$?"
+# | echo "=== udp947 -t"; ./udp947 -t; echo "udp947 -t rc=$?"
+# | echo "=== tcp900"; ./tcp900 2>&1 | tail -40; echo "tcp900 rc=$?"
+# | echo RUN-DONE
+# ---- raw output ----
+Haiku ip-10-128-4-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- network modules loaded (image paths)
+/boot/system/add-ons/kernel/network/protocols/ipv4
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/stack
+--- packaged and override module sha256
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/system/add-ons/kernel/network/protocols/ipv4
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/system/add-ons/kernel/network/protocols/udp
+eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+7d54599d45935e30a54baa781800edd7764b24cd44af0515f342317bb72b00ed  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+5a1e9f720a7420c6a68bcd742d0d1f39feeb9d2a8f8f44fd4ca774869e9015a5  pktinfo981.stock
+10859c0b6c33152c2450be20fbc5e0b42581f6c30347e56f66cbff6b55c0a4b0  pktinfo981.new
+f86bf9e7c91055a28ecb0a23c708d4b94c2f2850ba5620a2dc03ec58b7d5b95d  dgram981.stock
+c8b094b82b5b03a2113d93ee5c033ac144358c238be9309b02d6e05e2493e796  dgram981.new
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+013761d9f93d63380c13225c5ee4599ba6c9e716d414616ea4f1f585d2b0d29d  ossl-stock/test/bio_dgram_test
+bf7ca3c484311031294010ba13b9644e6962a20a66ada5e9a7f7fa65fd2497b1  ossl-new/test/bio_dgram_test
+ena ipv4=10.128.4.36 ipv6 link-local=none
+=== pktinfo981.stock
+ipv4 IP_PKTINFO src=127.0.0.1                        SKIP  option not defined by the headers
+ipv4 IP_PKTINFO src=127.0.0.2 (bind() refuses it)    SKIP  option not defined by the headers
+ipv4 IP_PKTINFO src=192.0.2.1 (foreign)              SKIP  option not defined by the headers
+ipv4 IP_PKTINFO src=255.255.255.255 (broadcast)      SKIP  option not defined by the headers
+ipv4 IP_PKTINFO src=224.0.0.1 (multicast)            SKIP  option not defined by the headers
+ipv4 IP_PKTINFO src=0.0.0.0 ifindex=lo               SKIP  option not defined by the headers
+ipv4 IP_PKTINFO src=127.0.0.1 ifindex=lo             SKIP  option not defined by the headers
+ipv4 IP_PKTINFO ifindex=9999 (none)                  SKIP  option not defined by the headers
+ipv4 IP_PKTINFO short cmsg_len                       SKIP  option not defined by the headers
+ipv4 IP_SENDSRCADDR src=127.0.0.1 (BSD)              SKIP  option not defined by the headers
+ipv4 IP_SENDSRCADDR src=192.0.2.1 (BSD)              SKIP  option not defined by the headers
+ipv4 IP_TTL cmsg (info only)                         INFO  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_PKTINFO src=10.128.4.36 to loopback          SKIP  option not defined by the headers
+ipv4 IP_PKTINFO on a connected socket                FAIL  sendmsg=-2 recv=-1 from -
+ipv4 IP_PKTINFO setsockopt/getsockopt                FAIL  IP_PKTINFO not defined by the headers
+ipv6 IPV6_PKTINFO src=::1                            FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO src=2001:db8::1 (foreign)          FAIL  sendmsg=-1 EOPNOTSUPP (want EADDRNOTAVAIL)
+ipv6 IPV6_PKTINFO src=ff02::1 (multicast)            FAIL  sendmsg=-1 EOPNOTSUPP (want EINVAL)
+ipv6 IPV6_PKTINFO src=:: ifindex=lo                  FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO src=::1 ifindex=lo                 FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO ifindex=9999 (none)                FAIL  sendmsg=-1 EOPNOTSUPP (want ENODEV)
+ipv6 IPV6_PKTINFO mapped src to mapped dst           FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO src=::1 to mapped dst              FAIL  sendmsg=-1 EOPNOTSUPP (want EINVAL)
+FAIL: 10 of 10 row(s) failed
+pktinfo981.stock rc=1
+=== pktinfo981.new
+ipv4 IP_PKTINFO src=127.0.0.1                        FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_PKTINFO src=127.0.0.2 (bind() refuses it)    FAIL  sendmsg=-1 EOPNOTSUPP (want EADDRNOTAVAIL)
+ipv4 IP_PKTINFO src=192.0.2.1 (foreign)              FAIL  sendmsg=-1 EOPNOTSUPP (want EADDRNOTAVAIL)
+ipv4 IP_PKTINFO src=255.255.255.255 (broadcast)      FAIL  sendmsg=-1 EOPNOTSUPP (want EINVAL)
+ipv4 IP_PKTINFO src=224.0.0.1 (multicast)            FAIL  sendmsg=-1 EOPNOTSUPP (want EINVAL)
+ipv4 IP_PKTINFO src=0.0.0.0 ifindex=lo               FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_PKTINFO src=127.0.0.1 ifindex=lo             FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_PKTINFO ifindex=9999 (none)                  FAIL  sendmsg=-1 EOPNOTSUPP (want ENODEV)
+ipv4 IP_PKTINFO short cmsg_len                       FAIL  sendmsg=-1 EOPNOTSUPP (want EINVAL)
+ipv4 IP_SENDSRCADDR src=127.0.0.1 (BSD)              FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_SENDSRCADDR src=192.0.2.1 (BSD)              FAIL  sendmsg=-1 EOPNOTSUPP (want EADDRNOTAVAIL)
+ipv4 IP_TTL cmsg (info only)                         INFO  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_PKTINFO src=10.128.4.36 to loopback          FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_PKTINFO on a connected socket                FAIL  sendmsg=-1 recv=-1 from -
+ipv4 IP_PKTINFO setsockopt/getsockopt                FAIL  setsockopt=-1 getsockopt=0
+ipv4 recv IP_PKTINFO cmsg                            FAIL  recv=10  (want [IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1])
+ipv4 recv IP_RECVDSTADDR + IP_PKTINFO cmsgs          FAIL  recv=10 [cmsg 0/7] (want [cmsg 0/7][IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1])
+ipv6 IPV6_PKTINFO src=::1                            FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO src=2001:db8::1 (foreign)          FAIL  sendmsg=-1 EOPNOTSUPP (want EADDRNOTAVAIL)
+ipv6 IPV6_PKTINFO src=ff02::1 (multicast)            FAIL  sendmsg=-1 EOPNOTSUPP (want EINVAL)
+ipv6 IPV6_PKTINFO src=:: ifindex=lo                  FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO src=::1 ifindex=lo                 FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO ifindex=9999 (none)                FAIL  sendmsg=-1 EOPNOTSUPP (want ENODEV)
+ipv6 IPV6_PKTINFO mapped src to mapped dst           FAIL  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv6 IPV6_PKTINFO src=::1 to mapped dst              FAIL  sendmsg=-1 EOPNOTSUPP (want EINVAL)
+FAIL: 24 of 24 row(s) failed
+pktinfo981.new rc=1
+=== dgram981.stock
+ipv4 enable receive option                   PASS  IP_RECVDSTADDR=0
+ipv4 recv: destination address cmsg          PASS  recvmsg=4 controllen=24 flags=0x0 [IP_RECVDSTADDR 0/7 127.0.0.1]
+ipv4 send: source address cmsg               FAIL  neither IP_PKTINFO nor IP_SENDSRCADDR is defined
+ipv6 enable receive option                   PASS  IPV6_RECVPKTINFO=0
+ipv6 recv: destination address cmsg          PASS  recvmsg=4 controllen=40 flags=0x0 [IPV6_PKTINFO 41/31 ::1]
+ipv6 send: source address cmsg               FAIL  sendmsg(IPV6_PKTINFO)=-1 Operation not supported
+FAIL: 2 failure(s)
+dgram981.stock rc=1
+=== dgram981.new
+ipv4 enable receive option                   FAIL  IP_PKTINFO=-1 (Protocol option not available)
+ipv4 recv: destination address cmsg          FAIL  recvmsg=4 controllen=0 flags=0x0
+ipv4 send: source address cmsg               FAIL  sendmsg(IP_PKTINFO)=-1 Operation not supported
+ipv6 enable receive option                   PASS  IPV6_RECVPKTINFO=0
+ipv6 recv: destination address cmsg          PASS  recvmsg=4 controllen=40 flags=0x0 [IPV6_PKTINFO 41/31 ::1]
+ipv6 send: source address cmsg               FAIL  sendmsg(IPV6_PKTINFO)=-1 Operation not supported
+FAIL: 4 failure(s)
+dgram981.new rc=1
+=== openssl (stock headers) test_bio_dgram
+Result: NOTESTS
+        # # Testing with AF_INET, local=0
+        ok 1 - iteration 1
+        # # Testing with AF_INET6, local=0
+        ok 2 - iteration 2
+        # # Testing with AF_INET, local=1
+        # ERROR: (bool) 'do_sendmmsg(b1, tx_msg, 2, 0, &num_processed) == true' failed @ test/bio_dgram_test.c:277
+        # E830B145C3000000:error:80007030:system library:dgram_sendmmsg:Destination address required:crypto/bio/bss_dgram.c:1453:
+        # E830B145C3000000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1439:
+        # E830B145C3000000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1445:
+        not ok 3 - iteration 3
+        # # Testing with AF_INET6, local=1
+        # ERROR: (bool) 'do_sendmmsg(b1, tx_msg, 2, 0, &num_processed) == true' failed @ test/bio_dgram_test.c:277
+        # E830B145C3000000:error:80007030:system library:dgram_sendmmsg:Destination address required:crypto/bio/bss_dgram.c:1453:
+        # E830B145C3000000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1439:
+        # E830B145C3000000:error:8000702B:system library:dgram_sendmmsg:Operation not supported:crypto/bio/bss_dgram.c:1453:
+        not ok 4 - iteration 4
+    not ok 1 - test_bio_dgram
+        ok 5 - iteration 1
+        ok 6 - iteration 2
+        ok 7 - iteration 3
+    ok 2 - test_bio_dgram_pair
+not ok 1 - running bio_dgram_test
+Result: FAIL
+=== openssl (new headers) test_bio_dgram
+Result: NOTESTS
+        # # Testing with AF_INET, local=0
+        ok 1 - iteration 1
+        # # Testing with AF_INET6, local=0
+        ok 2 - iteration 2
+        # # Testing with AF_INET, local=1
+        # ERROR: (int) 'BIO_dgram_set_local_addr_enable(b1, 1) == 1' failed @ test/bio_dgram_test.c:268
+        # E8905E5B28020000:error:80007030:system library:dgram_sendmmsg:Destination address required:crypto/bio/bss_dgram.c:1453:
+        # E8905E5B28020000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1439:
+        not ok 3 - iteration 3
+        # # Testing with AF_INET6, local=1
+        # ERROR: (bool) 'do_sendmmsg(b1, tx_msg, 2, 0, &num_processed) == true' failed @ test/bio_dgram_test.c:277
+        # E8905E5B28020000:error:80007030:system library:dgram_sendmmsg:Destination address required:crypto/bio/bss_dgram.c:1453:
+        # E8905E5B28020000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1439:
+        # E8905E5B28020000:error:8000702B:system library:dgram_sendmmsg:Operation not supported:crypto/bio/bss_dgram.c:1453:
+        not ok 4 - iteration 4
+    not ok 1 - test_bio_dgram
+        ok 5 - iteration 1
+        ok 6 - iteration 2
+        ok 7 - iteration 3
+    ok 2 - test_bio_dgram_pair
+not ok 1 - running bio_dgram_test
+Result: FAIL
+=== udp947
+ipv4 none                                                  PASS  controllen=0 flags=0x0
+ipv4 IP_RECVDSTADDR                                        PASS  controllen=24 flags=0x0 [IP_RECVDSTADDR 127.0.0.1]
+ipv4 IP_RECVDSTADDR set+cleared                            PASS  controllen=0 flags=0x0
+ipv4 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+ipv6 none                                                  PASS  controllen=0 flags=0x0
+ipv6 IPV6_RECVPKTINFO                                      PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVPKTINFO set+cleared                          PASS  controllen=0 flags=0x0
+ipv6 both set+cleared                                      PASS  controllen=0 flags=0x0
+ipv6 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+v4-to-dual none                                            PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO                                PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVPKTINFO set+cleared                    PASS  controllen=0 flags=0x0
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 14 passed, 4 failed
+udp947 rc=4
+=== udp947 -t
+ipv4 IP_RECVDSTADDR, 4-byte control buffer                 FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+ipv6 IPV6_RECVPKTINFO, 4-byte control buffer               FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+udp947 -t: 0 passed, 3 failed
+udp947 -t rc=3
+=== tcp900
+tcp ::1               s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 314.1 MiB/s, eof
+tcp ::1               c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 294.8 MiB/s, eof
+tcp ::1               s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.004s, 273.3 MiB/s, eof
+tcp ::1               c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 314.5 MiB/s, eof
+tcp ::1               s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.200s, 320.7 MiB/s, eof
+tcp ::1               c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.199s, 321.7 MiB/s, eof
+tcp ::1               s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 391.2 MiB/s, eof
+tcp ::1               c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 391.2 MiB/s, eof
+tcp ::ffff:127.0.0.1  TCP_MAXSEG 65495
+tcp ::ffff:127.0.0.1  s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 307.6 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 312.2 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 315.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 26.4 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 27.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 320.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 320.5 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 314.3 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 316.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.200s, 319.4 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.200s, 319.3 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.3 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.7 MiB/s, eof
+tcp 127.0.0.1         TCP_MAXSEG 65495
+tcp 127.0.0.1         s2c    65482 in   65482 writes       PASS  delivered 65482/65482 in 0.000s, 307.6 MiB/s, eof
+tcp 127.0.0.1         s2c    65483 in   65483 writes       PASS  delivered 65483/65483 in 0.000s, 318.6 MiB/s, eof
+tcp 127.0.0.1         s2c    65495 in   65495 writes       PASS  delivered 65495/65495 in 0.000s, 315.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 25.7 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 26.4 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 307.9 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 320.5 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 316.6 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 315.0 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.7 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.201s, 318.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.5 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.164s, 390.4 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, delivered 65488
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 2.2s, 0 FAIL
+tcp900 rc=0
+RUN-DONE

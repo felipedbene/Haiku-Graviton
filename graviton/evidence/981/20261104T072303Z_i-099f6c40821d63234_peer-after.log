@@ -1,0 +1,41 @@
+# evidence: peer-after
+# instance: i-099f6c40821d63234   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T072303Z   end: 20261104T072350Z   rc: 0
+# script sha256: f8414e1fe19b0cbe71106de71535937688d1ad1657c068e0ddd4381de86e4e01
+# ---- script ----
+# | # ENA peer for issue 981: tcpdump and a receiver on UDP 9981 for ~40 s, while
+# | # the Haiku instance sends to it (see the matching haiku-ena log). The
+# | # tcpdump AppArmor profile was unloaded first (aa.sh): it refuses every signal.
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | B=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S
+# | T=/tmp/td.$$.txt
+# | cd /opt/wS/t && aws s3 cp --quiet $B/src/pktinfo981.c . && sha256sum pktinfo981.c && cc -Wall -o pktinfo981 pktinfo981.c || exit 3
+# | IF=$(ip route show default | awk '{print $5}')
+# | ip -4 -o addr show dev $IF | awk '{print "peer", $2, $4}'
+# | tcpdump -n -l -i $IF 'udp port 9981' > $T 2>$T.err < /dev/null &
+# | TD=$!
+# | sleep 1
+# | timeout 40 ./pktinfo981 recv 9981 20 < /dev/null > /tmp/rv.txt 2>&1
+# | kill -INT $TD; sleep 1
+# | echo "--- tcpdump"; cat $T; tail -2 $T.err
+# | echo "--- receiver"; cat /tmp/rv.txt
+# ---- raw output ----
+a83582054c4a62c8d65662ee006af6950394b28ee8d1b304ffe40fa3c8d5df5f  pktinfo981.c
+peer ens5 10.128.6.237/22
+--- tcpdump
+07:23:27.154489 IP 10.128.10.194.59547 > 10.128.6.237.9981: UDP, length 17
+07:23:27.156464 IP 10.128.10.194.59548 > 10.128.6.237.9981: UDP, length 29
+07:23:27.159804 IP 10.128.10.194.59549 > 10.128.6.237.9981: UDP, length 23
+07:23:27.163038 IP 10.128.10.194.59550 > 10.128.6.237.9981: UDP, length 29
+07:23:27.176492 IP 10.128.10.194.59554 > 10.128.6.237.9981: UDP, length 17
+
+5 packets received by filter
+0 packets dropped by kernel
+--- receiver
+recv from ::ffff:10.128.10.194.59547: "pktinfo981 from -"
+recv from ::ffff:10.128.10.194.59548: "pktinfo981 from 10.128.10.194"
+recv from ::ffff:10.128.10.194.59549: "pktinfo981 from 0.0.0.0"
+recv from ::ffff:10.128.10.194.59550: "pktinfo981 from 10.128.10.194"
+recv from ::ffff:10.128.10.194.59554: "pktinfo981 from -"
+recv: Resource temporarily unavailable
