@@ -1,0 +1,240 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-031477615f842b77f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build trunk fat/ntfs at 79292bc67f (hrev59996), the two fix modules and the fat/ntfs side builds
+# start: 20261104T023144Z   end: 20261104T023242Z   rc: 0
+# script sha256: a281d78be03f074bfd63c447eb2d82781aad0aeaf4ac6ddaa727187aaeeae869
+# ---- script ----
+# | # Build at canonical's source commit 79292bc67f (fat and ntfs sources are identical to trunk
+# | # a9954f424a), revision pinned to canonical's hrev59996:
+# | #  trunk:   fat, ntfs (to show the build reproduces canonical's packaged modules)
+# | #  fix970:  trunk + fix970.patch -> fat, plus <build>fat_shell and the USER objects of
+# | #           userlandfs fat (method of #934's xbuild3)
+# | #  fix967:  trunk + fix967.patch -> ntfs, plus the USER kernel_interface object of userlandfs ntfs
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUTS=s3://haiku-graviton-$ACCT-us-west-2/bugfix/E/out
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | GF='<src!tests!add-ons!kernel!file_systems!userlandfs!fat>'
+# | GN='<src!tests!add-ons!kernel!file_systems!userlandfs!ntfs>'
+# | git -C .. checkout -q -f 79292bc67f && git -C .. log -1 --format='base %H %s' || exit 1
+# | git -C .. diff --quiet 79292bc67f origin/graviton -- src/add-ons/kernel/file_systems/fat src/add-ons/kernel/file_systems/ntfs && echo "fat+ntfs sources identical at 79292bc67f and origin/graviton $(git -C .. rev-parse --short origin/graviton)"
+# | rm -rf $A/fat $A/ntfs
+# | s=$(date +%s)
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV fat ntfs > $O/jam-trunk.log 2>&1 || { tail -40 $O/jam-trunk.log; exit 1; }
+# | echo "JAM trunk ok wall=$(( $(date +%s) - s ))s"
+# | cp $A/fat/fat $O/fat.trunk && cp $A/ntfs/ntfs $O/ntfs.trunk || exit 1
+# | fixbuild() {	# fixbuild <label> <patch> <module>
+# | 	git -C .. checkout -q -f 79292bc67f
+# | 	git -C .. apply --check $O/$2 && git -C .. apply $O/$2 || return 1
+# | 	git -C .. diff --stat
+# | 	rm -rf $A/$3
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV $3 > $O/jam-$1.log 2>&1 || { tail -40 $O/jam-$1.log; return 1; }
+# | 	echo "JAM $3 $1 ok"
+# | 	grep -E "warning:|error:" $O/jam-$1.log | grep -E "$3/"
+# | 	cp $A/$3/$3 $O/$3.$1 || return 1
+# | }
+# | fixbuild fix970 fix970.patch fat || exit 1
+# | jam -q -j$(nproc) "${GF}kernel_interface.o" "${GF}support.o" > $O/jam-ufat.log 2>&1; echo "JAM USER fat objects fix970 rc=$?"
+# | grep -E "error|warning:.*(support|kernel_interface)" $O/jam-ufat.log | head -5
+# | jam -q -j$(nproc) "<build>fat_shell" > $O/jam-fatshell.log 2>&1; echo "JAM <build>fat_shell fix970 rc=$?"
+# | grep -E "error|warning:.*fat/(support|kernel_interface)" $O/jam-fatshell.log | head -5
+# | fixbuild fix967 fix967.patch ntfs || exit 1
+# | jam -q -j$(nproc) "${GN}kernel_interface.o" > $O/jam-untfs.log 2>&1; echo "JAM USER ntfs kernel_interface.o fix967 rc=$?"
+# | grep -E "error|warning:.*kernel_interface" $O/jam-untfs.log | head -5
+# | git -C .. checkout -q -f 79292bc67f
+# | # rebuild trunk from a clean module tree: the build reproduces bit for bit
+# | rm -rf $A/fat $A/ntfs
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV fat ntfs > $O/jam-trunk2.log 2>&1 || exit 1
+# | cmp $A/fat/fat $O/fat.trunk && echo "fat trunk rebuild identical"
+# | cmp $A/ntfs/ntfs $O/ntfs.trunk && echo "ntfs trunk rebuild identical"
+# | cmp -s $O/fat.trunk $O/fat.fix970 && { echo "fat fix identical to trunk?"; exit 1; }
+# | cmp -s $O/ntfs.trunk $O/ntfs.fix967 && { echo "ntfs fix identical to trunk?"; exit 1; }
+# | cd $O
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | echo "fat dosfs_wstat size (trunk / fix970):"; ${X}nm -S -C fat.trunk | grep -w dosfs_wstat; ${X}nm -S -C fat.fix970 | grep -w dosfs_wstat
+# | echo "ntfs fs_write_stat size (trunk / fix967):"; ${X}nm -S -C ntfs.trunk | grep -w fs_write_stat; ${X}nm -S -C ntfs.fix967 | grep -w fs_write_stat
+# | sha256sum fat.* ntfs.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'fat.*' --include 'ntfs.*' --include SHA256SUMS . $OUTS/ && echo uploaded
+# ---- raw output ----
+base 79292bc67f1988be857bb3c52c13d5f2a1cf19a4 evidence: the amazon_ssm_agent 3.3.3270.0-4 rebuild for #894 (#1010)
+fat+ntfs sources identical at 79292bc67f and origin/graviton a9954f424a
+JAM trunk ok wall=13s
+ .../kernel/file_systems/fat/kernel_interface.cpp    | 21 +++++++++------------
+ 1 file changed, 9 insertions(+), 12 deletions(-)
+JAM fat fix970 ok
+JAM USER fat objects fix970 rc=0
+JAM <build>fat_shell fix970 rc=0
+ src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+JAM ntfs fix967 ok
+../src/add-ons/kernel/file_systems/ntfs/utils/sd.c:124:27: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/sd.c:158:27: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/sd.c:220:27: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/sd.c:241:27: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/sd.c:344:27: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/sd.c:365:27: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:80:32: warning: unused variable 'fusecontext' [-Wunused-variable]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:282:66: warning: taking address of packed member of 'union <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:454:36: warning: taking address of packed member of 'union <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/collate.c:230:36: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/collate.c:232:36: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/utils.c:579:47: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/utils.c:667:47: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/utils.c:668:42: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:619:27: warning: unused variable 'of' [-Wunused-variable]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:824:45: warning: 'struct fuse_entry_param' declared inside parameter list will not be visible outside of this definition or declaration
+../src/add-ons/kernel/file_systems/ntfs/libntfs/index.c:277:37: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1053:43: warning: format '%llu' expects argument of type 'long long unsigned int', but argument 3 has type 'u64' {aka 'long unsigned int'} [-Wformat=]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1078:41: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/reparse.c:185:61: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/reparse.c:187:38: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:1155:23: warning: integer overflow in expression '-2147483648' of type 'int' results in '-2147483648' [-Woverflow]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/dir.c:334:44: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1194:43: warning: format '%llu' expects argument of type 'long long unsigned int', but argument 3 has type 'u64' {aka 'long unsigned int'} [-Wformat=]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1227:33: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1235:41: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/dir.c:455:44: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/unistr.c:432:37: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1250:33: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:1346:23: warning: integer overflow in expression '-2147483648' of type 'int' results in '-2147483648' [-Woverflow]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1380:41: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/security.c:404:9: warning: converting a packed 'SECURITY_DESCRIPTOR_RELATIVE' pointer (alignment 1) to a 'le32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/inode.c:544:69: warning: format '%llu' expects argument of type 'long long unsigned int', but argument 2 has type 'u64' {aka 'long unsigned int'} [-Wformat=]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:1533:23: warning: integer overflow in expression '-2147483648' of type 'int' results in '-2147483648' [-Woverflow]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/security.c:705:48: warning: converting a packed 'INDEX_ENTRY' pointer (alignment 1) to a 'struct SII' pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/security.c:729:56: warning: converting a packed 'INDEX_ENTRY' pointer (alignment 1) to a 'struct SII' pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/dir.c:1001:49: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/security.c:884:48: warning: converting a packed 'INDEX_ENTRY' pointer (alignment 1) to a 'struct SDH' pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:1721:24: warning: integer overflow in expression '-2147483648' of type 'int' results in '-2147483648' [-Woverflow]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:1763:17: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/inode.c:1272:61: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2146:24: warning: integer overflow in expression '-2147483648' of type 'int' results in '-2147483648' [-Woverflow]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/dir.c:1993:44: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2421:23: warning: integer overflow in expression '-2147483648' of type 'int' results in '-2147483648' [-Woverflow]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2452:71: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2453:65: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2476:71: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2477:65: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2776:54: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2777:70: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2806:54: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2807:70: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:2897:17: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/ea.c:280:43: warning: array subscript 255 is outside the bounds of an interior zero-length array 'const u8[0]' {aka 'const unsigned char[]'} [-Wzero-length-bounds]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:3012:17: warning: taking address of packed member of 'struct <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1011:36: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1013:59: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/security.c:1141:13: warning: 'staticgroupmember' defined but not used [-Wunused-function]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/reparse.c:165:52: warning: array subscript 254 is outside the bounds of an interior zero-length array 'ntfschar[0]' {aka 'short unsigned int[]'} [-Wzero-length-bounds]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/reparse.c:167:52: warning: array subscript 254 is outside the bounds of an interior zero-length array 'ntfschar[0]' {aka 'short unsigned int[]'} [-Wzero-length-bounds]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:4877:23: warning: assignment discards 'const' qualifier from pointer target type [-Wdiscarded-qualifiers]
+../src/add-ons/kernel/file_systems/ntfs/utils/mkntfs.c:4878:20: warning: assignment discards 'const' qualifier from pointer target type [-Wdiscarded-qualifiers]
+../src/add-ons/kernel/file_systems/ntfs/libntfs/ea.c:459:41: warning: array subscript 256 is outside the bounds of an interior zero-length array 'const u8[0]' {aka 'const unsigned char[]'} [-Wzero-length-bounds]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1129:17: warning: 'ino' may be used uninitialized [-Wmaybe-uninitialized]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1128:12: warning: 'close_state' may be used uninitialized [-Wmaybe-uninitialized]
+JAM USER ntfs kernel_interface.o fix967 rc=1
+fat trunk rebuild identical
+ntfs trunk rebuild identical
+fat dosfs_wstat size (trunk / fix970):
+0000000000013020 00000000000003c0 t dosfs_wstat(fs_volume*, fs_vnode*, stat const*, unsigned int)
+0000000000013020 00000000000003ec t dosfs_wstat(fs_volume*, fs_vnode*, stat const*, unsigned int)
+ntfs fs_write_stat size (trunk / fix967):
+0000000000004f00 000000000000037c t fs_write_stat(fs_volume*, fs_vnode*, stat const*, unsigned int)
+0000000000004f00 0000000000000380 t fs_write_stat(fs_volume*, fs_vnode*, stat const*, unsigned int)
+33fe8b1faa2cdb5e9d611cc8d8d77e1030641eb95f71ab0f726d19c90392cdbc  fat.fix970
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  fat.trunk
+08e826289e7fbab26e40ff50cf47e2667aa441da3e518da00272d5c57ff9be4c  ntfs.fix967
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  ntfs.trunk
+uploaded
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUTS=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/out
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ GF='<src!tests!add-ons!kernel!file_systems!userlandfs!fat>'
++ GN='<src!tests!add-ons!kernel!file_systems!userlandfs!ntfs>'
++ git -C .. checkout -q -f 79292bc67f
++ git -C .. log -1 '--format=base %H %s'
++ git -C .. diff --quiet 79292bc67f origin/graviton -- src/add-ons/kernel/file_systems/fat src/add-ons/kernel/file_systems/ntfs
+++ git -C .. rev-parse --short origin/graviton
++ echo 'fat+ntfs sources identical at 79292bc67f and origin/graviton a9954f424a'
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ date +%s
++ s=1793759508
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 fat ntfs
+++ date +%s
++ echo 'JAM trunk ok wall=13s'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat /opt/t/out/fat.trunk
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.trunk
++ fixbuild fix970 fix970.patch fat
++ git -C .. checkout -q -f 79292bc67f
++ git -C .. apply --check /opt/t/out/fix970.patch
++ git -C .. apply /opt/t/out/fix970.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 fat
++ echo 'JAM fat fix970 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-fix970.log
++ grep -E fat/
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat /opt/t/out/fat.fix970
+++ nproc
++ jam -q -j64 '<src!tests!add-ons!kernel!file_systems!userlandfs!fat>kernel_interface.o' '<src!tests!add-ons!kernel!file_systems!userlandfs!fat>support.o'
++ echo 'JAM USER fat objects fix970 rc=0'
++ grep -E 'error|warning:.*(support|kernel_interface)' /opt/t/out/jam-ufat.log
++ head -5
+++ nproc
++ jam -q -j64 '<build>fat_shell'
++ echo 'JAM <build>fat_shell fix970 rc=0'
++ grep -E 'error|warning:.*fat/(support|kernel_interface)' /opt/t/out/jam-fatshell.log
++ head -5
++ fixbuild fix967 fix967.patch ntfs
++ git -C .. checkout -q -f 79292bc67f
++ git -C .. apply --check /opt/t/out/fix967.patch
++ git -C .. apply /opt/t/out/fix967.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 ntfs
++ echo 'JAM ntfs fix967 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-fix967.log
++ grep -E ntfs/
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.fix967
+++ nproc
++ jam -q -j64 '<src!tests!add-ons!kernel!file_systems!userlandfs!ntfs>kernel_interface.o'
++ echo 'JAM USER ntfs kernel_interface.o fix967 rc=1'
++ grep -E 'error|warning:.*kernel_interface' /opt/t/out/jam-untfs.log
++ head -5
++ git -C .. checkout -q -f 79292bc67f
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 fat ntfs
++ cmp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat /opt/t/out/fat.trunk
++ echo 'fat trunk rebuild identical'
++ cmp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.trunk
++ echo 'ntfs trunk rebuild identical'
++ cmp -s /opt/t/out/fat.trunk /opt/t/out/fat.fix970
++ cmp -s /opt/t/out/ntfs.trunk /opt/t/out/ntfs.fix967
++ cd /opt/t/out
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ echo 'fat dosfs_wstat size (trunk / fix970):'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C fat.trunk
++ grep -w dosfs_wstat
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C fat.fix970
++ grep -w dosfs_wstat
++ echo 'ntfs fs_write_stat size (trunk / fix967):'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C ntfs.trunk
++ grep -w fs_write_stat
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -S -C ntfs.fix967
++ grep -w fs_write_stat
++ sha256sum fat.fix970 fat.trunk ntfs.fix967 ntfs.trunk
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive --exclude '*' --include 'fat.*' --include 'ntfs.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/out/
++ echo uploaded

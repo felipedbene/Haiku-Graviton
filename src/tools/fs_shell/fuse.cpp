@@ -281,11 +281,21 @@ static int
 fuse_chown(const char* path, uid_t uid, gid_t gid)
 {
 	PRINTD("##chown\n");
+	// libfuse passes -1 for the id that is not to be changed, as chown(2)
+	// does; only ask the file system for the ids actually given
 	fssh_struct_stat st;
-	st.fssh_st_uid = uid;
-	st.fssh_st_gid = gid;
-	return _ERR(_kern_write_stat(-1, path, false, &st, sizeof(st),
-			FSSH_B_STAT_UID|FSSH_B_STAT_GID));
+	int mask = 0;
+	if (uid != (uid_t)-1) {
+		st.fssh_st_uid = uid;
+		mask |= FSSH_B_STAT_UID;
+	}
+	if (gid != (gid_t)-1) {
+		st.fssh_st_gid = gid;
+		mask |= FSSH_B_STAT_GID;
+	}
+	if (mask == 0)
+		return 0;
+	return _ERR(_kern_write_stat(-1, path, false, &st, sizeof(st), mask));
 }
 
 

@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fatmin-unmount
+# instance: i-08b934b45b9da84db   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: minimal FAT unmount repro: unmount
+# start: 20261104T030028Z   end: 20261104T030235Z   rc: 1
+# script sha256: badaf05ef0e100cdf6ad8ac63778051fa17a27fbca66a01ac9729f03ec5ac5ea
+# ---- script ----
+# | # Minimal FAT unmount repro, step 3: unmount. If this never returns, the console has the KDL.
+# | set -x
+# | unmount /f; echo "unmount rc=$?"
+# ---- raw output ----
