@@ -1,0 +1,63 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference-fix2
+# instance: i-0a996cb927484deed   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux reference: linksend1037 (committed source) over AF_PACKET SOCK_RAW to the Haiku fix2 arm 10.128.5.2
+# start: 20261104T035945Z   end: 20261104T035957Z   rc: 1
+# script sha256: c6cd81fb933852146609e1c1fba9f710e7bb3d944d324402a317534c648c802d
+# ---- script ----
+# | cd /opt/j && curl -sSf -o linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>' && gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c 2>&1; echo "compile rc=$?"
+# | # Linux reference: the same frames through AF_PACKET SOCK_RAW, to the Haiku fix arm (10.128.5.2)
+# | cd /opt/j; uname -r; sha256sum linksend1037.c linksend1037
+# | pkill -x tcpdump; rm -f ref.pcap
+# | timeout 60 tcpdump -i ens5 -nn -e -U -w ref.pcap 'arp or (icmp and host 10.128.5.2) or udp port 9 or ether proto 0x88b5 or ip6' > ref.err 2>&1 &
+# | sleep 2
+# | ./linksend1037 ens5 10.128.5.2 2000; echo "linksend1037 exit=$?"
+# | sleep 1; pkill -INT -x tcpdump; sleep 1
+# | echo "--- tcpdump on the Linux side, ARP frames"
+# | tcpdump -nn -e -r ref.pcap arp 2>/dev/null | head -6
+# | echo "--- as root in a user namespace-free non-root: AF_PACKET needs CAP_NET_RAW"
+# | setpriv --reuid=65534 --regid=65534 --clear-groups ./linksend1037 ens5 10.128.5.2 1 2>&1 | head -3
+# ---- raw output ----
+compile rc=0
+7.0.0-1014-aws
+0e6ab75343297ed29c5efb87ebc0e52cb9cf4f3723611395ec5e7c6263b94355  linksend1037.c
+9c2ed5162b0007c0f32b1379358f4271c57fc775a1321ed70d717403cc573ee5  linksend1037
+packet-bind            PASS  AF_PACKET SOCK_RAW bind(ifindex 2) = 0 (ok)
+interface ens5 mac 06:ff:cc:fd:bb:01 ip 10.128.7.84 peer 10.128.5.2
+arp-request-tx         PASS  ARP who-has peer: send = 60 (ok), seen leaving = 1, source 06:ff:cc:fd:bb:01
+arp-reply-rx           PASS  send = 60 (ok), reply from peer: 06:ff:f8:34:63:19
+icmp-echo-tx           PASS  ICMP echo to peer: send = 67 (ok), seen leaving = 1, source 06:ff:cc:fd:bb:01
+icmp-echo-reply-rx     PASS  send = 67 (ok), echo reply = 1
+udp-tx                 PASS  UDP to peer:9 marker J1037-LINKSEND-UDP: send = 60 (ok), seen leaving = 1, source 06:ff:cc:fd:bb:01
+ipv6-tx                PASS  ICMPv6 echo to ff02::1: send = 83 (ok), seen leaving = 1, source 06:ff:cc:fd:bb:01
+x88b5-tx               PASS  ethertype 0x88b5 broadcast: send = 60 (ok), seen leaving = 1, source 06:ff:cc:fd:bb:01
+burst                  PASS  2000/2000 ARP, 2000/2000 ICMP sent in 0.016s
+after-burst-echo       PASS  echo reply = 1
+RESULT failures=0
+linksend1037 exit=0
+--- tcpdump on the Linux side, ARP frames
+03:59:51.142309 06:ff:cc:fd:bb:01 > ff:ff:ff:ff:ff:ff, ethertype ARP (0x0806), length 60: Request who-has 10.128.5.2 tell 10.128.7.84, length 46
+03:59:51.142344 06:ff:cc:fd:bb:01 > ff:ff:ff:ff:ff:ff, ethertype ARP (0x0806), length 60: Request who-has 10.128.5.2 tell 10.128.7.84, length 46
+03:59:51.142381 06:ff:f8:34:63:19 > 06:ff:cc:fd:bb:01, ethertype ARP (0x0806), length 42: Reply 10.128.5.2 is-at 06:ff:f8:34:63:19, length 28
+03:59:51.142381 06:ff:f8:34:63:19 > 06:ff:cc:fd:bb:01, ethertype ARP (0x0806), length 42: Reply 10.128.5.2 is-at 06:ff:f8:34:63:19, length 28
+03:59:51.144529 06:ff:cc:fd:bb:01 > ff:ff:ff:ff:ff:ff, ethertype ARP (0x0806), length 60: Request who-has 10.128.5.2 tell 10.128.7.84, length 46
+03:59:51.144540 06:ff:cc:fd:bb:01 > ff:ff:ff:ff:ff:ff, ethertype ARP (0x0806), length 60: Request who-has 10.128.5.2 tell 10.128.7.84, length 46
+--- as root in a user namespace-free non-root: AF_PACKET needs CAP_NET_RAW
+packet-bind            FAIL  AF_PACKET SOCK_RAW bind(ifindex 2) = -1 (Bad file descriptor)
+RESULT failures=2 (open failed)
+pkill: killing pid 2650 failed: Permission denied
+pkill: killing pid 2731 failed: Permission denied
+pkill: killing pid 2800 failed: Permission denied
+pkill: killing pid 2874 failed: Permission denied
+pkill: killing pid 2916 failed: Permission denied
+pkill: killing pid 2962 failed: Permission denied
+pkill: killing pid 3030 failed: Permission denied
+pkill: killing pid 2650 failed: Permission denied
+pkill: killing pid 2731 failed: Permission denied
+pkill: killing pid 2800 failed: Permission denied
+pkill: killing pid 2874 failed: Permission denied
+pkill: killing pid 2916 failed: Permission denied
+pkill: killing pid 2962 failed: Permission denied
+pkill: killing pid 3030 failed: Permission denied
+pkill: killing pid 3108 failed: Permission denied
+failed to run commands: exit status 1

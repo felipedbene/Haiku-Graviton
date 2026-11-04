@@ -1,0 +1,13 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-peer-rebuild
+# instance: i-0a996cb927484deed   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux peer: rebuild linksend1037 from the final source
+# start: 20261104T034231Z   end: 20261104T034242Z   rc: 0
+# script sha256: 0b3e099f4fde1df99ba99d722f10adab5875ccc6a8e0655a7cee670e0c604285
+# ---- script ----
+# | cd /opt/j && curl -sSf -o linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>' && gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c 2>&1; echo "compile rc=$?"
+# | sha256sum linksend1037.c linksend1037
+# ---- raw output ----
+compile rc=0
+289d4240094827b275c2b53a2f25c2b90d6b7e4896594f742f382766d92790ad  linksend1037.c
+25828413af7d2e6fa77719b9a1b5cbc67c3ceb837cba121f9f935177fd06aa32  linksend1037

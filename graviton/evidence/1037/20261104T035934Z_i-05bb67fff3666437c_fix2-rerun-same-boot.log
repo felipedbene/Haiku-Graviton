@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fix2-rerun-same-boot
+# instance: i-05bb67fff3666437c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: fix2 arm: linksend1037 again on the same boot
+# start: 20261104T035934Z   end: 20261104T035945Z   rc: 0
+# script sha256: 041b8b0b9b06cc0c1d0a4173093c94372df34a702c509f8f9c2736aa4c1a058e
+# ---- script ----
+# | # Same boot, second run: a process that exited must not have left a frame type claimed.
+# | cd /boot/home/j && ./linksend1037 /dev/net/ena/0 10.128.7.84 2000; echo "linksend1037 exit=$?"
+# ---- raw output ----
+send-only-bind         PASS  bind(sdl_type 0, own MAC) = 0 (ok)
+interface /dev/net/ena/0 mac 06:ff:f8:34:63:19 ip 10.128.5.2 peer 10.128.7.84
+arp-request-tx         PASS  ARP who-has peer: send = 60 (ok), seen leaving = 1, source 06:ff:f8:34:63:19
+arp-reply-rx           PASS  send = 60 (ok), reply from peer: 06:ff:cc:fd:bb:01
+icmp-echo-tx           PASS  ICMP echo to peer: send = 67 (ok), seen leaving = 1, source 06:ff:f8:34:63:19
+icmp-echo-reply-rx     PASS  send = 67 (ok), echo reply = 1
+udp-tx                 PASS  UDP to peer:9 marker J1037-LINKSEND-UDP: send = 60 (ok), seen leaving = 1, source 06:ff:f8:34:63:19
+ipv6-tx                PASS  ICMPv6 echo to ff02::1: send = 83 (ok), seen leaving = 1, source 06:ff:f8:34:63:19
+x88b5-tx               PASS  ethertype 0x88b5 broadcast: send = 60 (ok), seen leaving = 1, source 06:ff:f8:34:63:19
+typed-bind-0806        PASS  bind(IFT_ETHER, 0x0806) = -1 (General system error); expected refused
+typed-bind-0806-x1000  PASS  1000/1000 refused
+typed-bind-88b5        PASS  bind = 0, sendto = 60 (ok)
+typed-bind-88b5-x1000  PASS  1000/1000 bound
+bound-capture-close    PASS  bind = 0, SIOCSPACKETCAP = 0, close, bind again = 0 (ok)
+bind-by-name+mac       PASS  bind(nlen 14 + MAC) = 0 (ok), sendto = 60 (ok), seen leaving = 1, source 06:ff:f8:34:63:19
+bad-dst-no-type        PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-no-addr        PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-long-name      PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-family         PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-short          PASS  sendto = -1 (Invalid Argument); expected refused
+nonroot-bind           PASS  uid 1000: bind = -1 (Operation not allowed)
+nonroot-send           PASS  uid 1000: sendto unbound = -1 (Operation not allowed)
+burst                  PASS  2000/2000 ARP, 2000/2000 ICMP sent in 0.086s
+after-burst-echo       PASS  echo reply = 1
+RESULT failures=0
+linksend1037 exit=0

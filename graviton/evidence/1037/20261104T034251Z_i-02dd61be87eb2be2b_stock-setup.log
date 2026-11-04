@@ -1,0 +1,41 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-setup
+# instance: i-02dd61be87eb2be2b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock canonical Haiku: build linksend1037 and linksend1019 natively, module hashes
+# start: 20261104T034251Z   end: 20261104T034303Z   rc: 2
+# script sha256: 590e38fd1d7bec2c1cbebbd852368be7bdce99f93ad804e01625c58c085bd086
+# ---- script ----
+# | mkdir -p /boot/home/j && cd /boot/home/j
+# | pkgman install -y wget 2>&1 | tail -1
+# | wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>' || exit 7
+# | wget -q -O linksend1019.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1019.c?<PRESIGNED>' || exit 7
+# | gcc -O2 -Wall -Wextra -o linksend1037 linksend1037.c -lnetwork 2>&1; echo "compile linksend1037 rc=$?"
+# | gcc -O2 -o linksend1019 linksend1019.c -lnetwork 2>&1; echo "compile linksend1019 rc=$?"
+# | sha256sum linksend1037.c linksend1037 linksend1019.c linksend1019
+# | uname -a; id; ifconfig /dev/net/ena/0 | head -8
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+# | ls /boot/home/config/non-packaged/add-ons/kernel/network 2>&1
+# ---- raw output ----
+[system] Done.
+/tmp/run-95584-02f2c3.sh: line 5: gcc: command not found
+compile linksend1037 rc=127
+/tmp/run-95584-02f2c3.sh: line 6: gcc: command not found
+compile linksend1019 rc=127
+289d4240094827b275c2b53a2f25c2b90d6b7e4896594f742f382766d92790ad  linksend1037.c
+de0a3a0aa7b863261ceb0d7a3942d3f5ca85a4e322f6750d9f51dc417348ab14  linksend1019.c
+Haiku ip-10-128-4-59.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+uid=0(baron) gid=0(root) groups=0(root)
+/dev/net/ena/0
+	Hardware type: Ethernet, Address: 06:ff:c5:2c:87:8f
+	Media type: Auto-select
+	inet addr: 10.128.4.59, Bcast: 10.128.7.255, Mask: 255.255.252.0
+	MTU: 9001, Metric: 0, up broadcast link auto-configured
+	Receive: 3211 packets, 0 errors, 3121107 bytes, 0 mcasts, 0 dropped
+	Transmit: 2623 packets, 0 errors, 402760 bytes, 0 mcasts, 0 dropped
+	Collisions: 0
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  /boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+ls: cannot access '/boot/home/config/non-packaged/add-ons/kernel/network': No such file or directory
+sha256sum: linksend1037: No such file or directory
+sha256sum: linksend1019: No such file or directory
+failed to run commands: exit status 2

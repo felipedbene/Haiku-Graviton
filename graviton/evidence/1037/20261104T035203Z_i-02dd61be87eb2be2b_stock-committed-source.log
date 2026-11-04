@@ -1,0 +1,39 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-committed-source
+# instance: i-02dd61be87eb2be2b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock arm: linksend1037 built from the committed source
+# start: 20261104T035203Z   end: 20261104T035215Z   rc: 0
+# script sha256: 391ef6b18685085b6dcd6f26d0b6b2604857da778194374dca07c1c13213cb3f
+# ---- script ----
+# | # linksend1037 from the committed source (only the Linux backend changed since the full run)
+# | cd /boot/home/j && wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>' || exit 7
+# | gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c -lnetwork 2>&1; echo "compile rc=$?"
+# | sha256sum linksend1037.c linksend1037
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f 2>/dev/null | xargs -r sha256sum
+# | ./linksend1037 /dev/net/ena/0 10.128.7.84 2000; echo "linksend1037 exit=$?"
+# ---- raw output ----
+compile rc=0
+6f9fe23e8cfb0706f88de745e423f1ae61cec8364e169d7d2e31638378abf9ee  linksend1037.c
+3f09e1e5d771e47890a2a8ef59f1a24d7948f1eb723ffe1949a43086e9e45a84  linksend1037
+send-only-bind         PASS  bind(sdl_type 0, own MAC) = 0 (ok)
+interface /dev/net/ena/0 mac 06:ff:c5:2c:87:8f ip 10.128.4.59 peer 10.128.7.84
+arp-request-tx         FAIL  ARP who-has peer: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+arp-reply-rx           FAIL  send = -1 (General system error), reply from peer: none
+icmp/udp               FAIL  skipped: no peer MAC
+ipv6-tx                FAIL  ICMPv6 echo to ff02::1: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+x88b5-tx               FAIL  ethertype 0x88b5 broadcast: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+typed-bind-0806        PASS  bind(IFT_ETHER, 0x0806) = -1 (General system error); expected refused
+typed-bind-0806-x1000  PASS  1000/1000 refused
+typed-bind-88b5        FAIL  bind = -1, sendto = -1 (General system error)
+typed-bind-88b5-x1000  FAIL  0/1000 bound
+bound-capture-close    FAIL  bind = -1, SIOCSPACKETCAP = 0, close, bind again = -1 (General system error)
+bind-by-name+mac       FAIL  bind(nlen 14 + MAC) = 0 (ok), sendto = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+bad-dst-no-type        PASS  sendto = -1 (General system error); expected refused
+bad-dst-no-addr        PASS  sendto = -1 (General system error); expected refused
+bad-dst-long-name      PASS  sendto = -1 (General system error); expected refused
+bad-dst-family         PASS  sendto = -1 (Invalid Argument); expected refused
+nonroot-bind           PASS  uid 1000: bind = -1 (Operation not allowed)
+nonroot-send           PASS  uid 1000: sendto unbound = -1 (Operation not allowed)
+burst                  FAIL  0/2000 ARP, 0/0 ICMP sent in 0.003s
+RESULT failures=10
+linksend1037 exit=10

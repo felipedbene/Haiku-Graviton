@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fix2-peer-tcpdump-start
+# instance: i-0a996cb927484deed   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux peer: start tcpdump for the fix2 arm run
+# start: 20261104T035849Z   end: 20261104T035903Z   rc: 0
+# script sha256: faeedcee5be2d9f341f5db8e64d582654c928aded082abf52e451836d7a6f768
+# ---- script ----
+# | cd /opt/j; pkill tcpdump; rm -f cap.pcap
+# | nohup timeout 600 tcpdump -i ens5 -nn -e -U -w cap.pcap 'not tcp port 443 and not tcp port 22 and (arp or icmp or udp port 9 or ether proto 0x88b5 or ip6)' > tcpdump.err 2>&1 &
+# | sleep 2; cat tcpdump.err; echo started
+# ---- raw output ----
+started
+pkill: killing pid 2650 failed: Permission denied
+pkill: killing pid 2731 failed: Permission denied
+pkill: killing pid 2800 failed: Permission denied
+pkill: killing pid 2874 failed: Permission denied
+pkill: killing pid 2916 failed: Permission denied
+pkill: killing pid 2962 failed: Permission denied

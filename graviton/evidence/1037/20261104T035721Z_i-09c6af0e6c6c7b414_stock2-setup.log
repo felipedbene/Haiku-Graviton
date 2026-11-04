@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock2-setup
+# instance: i-09c6af0e6c6c7b414   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: fresh stock canonical box: gcc + the repros from the committed sources
+# start: 20261104T035721Z   end: 20261104T035738Z   rc: 0
+# script sha256: f36033931815842c9c1bbce436efc432969ef16390c8c2d1510df10b0539ac28
+# ---- script ----
+# | # Fresh stock canonical box: gcc and the repros, built natively from the committed sources.
+# | set -e
+# | pkgman install -y wget gcc binutils haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/j && cd /boot/home/j
+# | wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>'; wget -q -O linksend1019.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1019.c?<PRESIGNED>'; wget -q -O tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/tcp900.c?<PRESIGNED>'; wget -q -O udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/udp947.c?<PRESIGNED>'
+# | gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c -lnetwork
+# | gcc -O2 -o linksend1019 linksend1019.c -lnetwork
+# | gcc -O2 -Wall -o tcp900 tcp900.c -lnetwork
+# | gcc -O2 -Wall -Wextra -o udp947 udp947.c -lnetwork
+# | sha256sum linksend1037.c linksend1037 linksend1019 tcp900 udp947
+# ---- raw output ----
+[system] Done.
+0e6ab75343297ed29c5efb87ebc0e52cb9cf4f3723611395ec5e7c6263b94355  linksend1037.c
+bc3f110b09d9687f90e19aab2bdc16fba79df1fc42d0d2814f73de0fcb6f9a80  linksend1037
+9a28a177e3e50e099a9fa9abf755b6bb6f5f7a0645a4eede45b03004780ccb9d  linksend1019
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947

@@ -1,0 +1,123 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-final-run
+# instance: i-02dd61be87eb2be2b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock arm: linksend1019, linksend1037 against the Linux peer, regressions
+# start: 20261104T034857Z   end: 20261104T034914Z   rc: 0
+# script sha256: f075155856496c7e14c069e3f9c9d2bd92451cb513c62f56d640b199ca9e909c
+# ---- script ----
+# | # Issue 1037 run on one arm. Peer: Linux 10.128.7.84 (tcpdump running there).
+# | cd /boot/home/j
+# | echo "--- modules in use (non-packaged overrides, if any, win over the packaged ones)"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f 2>/dev/null | xargs -r sha256sum
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+# | sha256sum linksend1037 linksend1019
+# | uname -a
+# | echo "--- linksend1019 (the issue's original probe)"
+# | ./linksend1019 /dev/net/ena/0
+# | echo "--- linksend1037"
+# | ./linksend1037 /dev/net/ena/0 10.128.7.84 2000; echo "linksend1037 exit=$?"
+# | echo "--- regression: the stack's own ARP + IPv4 to the peer, after flushing the ARP entry"
+# | arp -d 10.128.7.84 2>&1; ping -c 5 10.128.7.84 2>&1 | tail -3; arp -a 2>&1 | grep 10.128.7.84
+# | echo "--- regression: IPv4 TCP over ENA (HTTPS download, checksummed)"
+# | s=$(date +%s); wget -q -O stack.dl 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/mod/fix/stack?<PRESIGNED>' && echo "download ok $(( $(date +%s) - s ))s"; echo "57fcecbcd50b381940524dcc7a2e19c86b11828b73e84170178fc313c4e2a1ca  stack.dl" | sha256sum -c
+# | echo "--- regression: IPv6 link-local to the peer over ENA"
+# | ping6 -c 3 fe80::4ff:ccff:fefd:bb01%/dev/net/ena/0 2>&1 | tail -3
+# | echo "--- regression: tcp900 and udp947"
+# | [ -x tcp900 ] || { wget -q -O tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/tcp900.c?<PRESIGNED>' && gcc -O2 -Wall -o tcp900 tcp900.c -lnetwork; }
+# | [ -x udp947 ] || { wget -q -O udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/udp947.c?<PRESIGNED>' && gcc -O2 -Wall -Wextra -o udp947 udp947.c -lnetwork; }
+# | sha256sum tcp900.c tcp900 udp947.c udp947
+# | ./tcp900 $(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\),.*/\1/p') > tcp900.out 2>&1; echo "tcp900 exit=$?"; grep -cE "PASS|ok" tcp900.out; grep -E "FAIL" tcp900.out | head; tail -3 tcp900.out
+# | ./udp947 > udp947.out 2>&1; echo "udp947 exit=$?"; tail -3 udp947.out
+# | ./udp947 -t > udp947t.out 2>&1; echo "udp947 -t exit=$?"; tail -2 udp947t.out
+# | echo "--- interface counters"
+# | ifconfig /dev/net/ena/0 | grep -E "Receive|Transmit"
+# | echo "--- syslog tail (network)"
+# | tail -n 400 /var/log/syslog | grep -iE "ena|net|link|KDL|panic" | tail -15
+# | exit 0
+# ---- raw output ----
+--- modules in use (non-packaged overrides, if any, win over the packaged ones)
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  /boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+3f09e1e5d771e47890a2a8ef59f1a24d7948f1eb723ffe1949a43086e9e45a84  linksend1037
+9a28a177e3e50e099a9fa9abf755b6bb6f5f7a0645a4eede45b03004780ccb9d  linksend1019
+Haiku ip-10-128-4-59.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- linksend1019 (the issue's original probe)
+SIOCGIFADDR(AF_LINK) /dev/net/ena/0: family 4 type 6 alen 6 index 2 mac 06:ff:c5:2c:87:8f
+ethertype 0x88b5: bind=-1 (General system error)
+ethertype 0x88b5: sendto=-1 (Invalid Argument)
+ethertype 0x0806: bind=-1 (General system error)
+ethertype 0x0806: sendto=-1 (Invalid Argument)
+ethertype 0x0800: bind=-1 (General system error)
+ethertype 0x0800: sendto=-1 (Invalid Argument)
+ethertype 0x0000: bind=0 (ok)
+ethertype 0x0000: sendto=-1 (General system error)
+--- linksend1037
+send-only-bind         PASS  bind(sdl_type 0, own MAC) = 0 (ok)
+interface /dev/net/ena/0 mac 06:ff:c5:2c:87:8f ip 10.128.4.59 peer 10.128.7.84
+arp-request-tx         FAIL  ARP who-has peer: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+arp-reply-rx           FAIL  send = -1 (General system error), reply from peer: none
+icmp/udp               FAIL  skipped: no peer MAC
+ipv6-tx                FAIL  ICMPv6 echo to ff02::1: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+x88b5-tx               FAIL  ethertype 0x88b5 broadcast: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+typed-bind-0806        PASS  bind(IFT_ETHER, 0x0806) = -1 (General system error); expected refused
+typed-bind-0806-x1000  PASS  1000/1000 refused
+typed-bind-88b5        FAIL  bind = -1, sendto = -1 (General system error)
+typed-bind-88b5-x1000  FAIL  0/1000 bound
+bound-capture-close    FAIL  bind = -1, SIOCSPACKETCAP = 0, close, bind again = -1 (General system error)
+bind-by-name+mac       FAIL  bind(nlen 14 + MAC) = 0 (ok), sendto = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+bad-dst-no-type        PASS  sendto = -1 (General system error); expected refused
+bad-dst-no-addr        PASS  sendto = -1 (General system error); expected refused
+bad-dst-long-name      PASS  sendto = -1 (General system error); expected refused
+bad-dst-family         PASS  sendto = -1 (Invalid Argument); expected refused
+nonroot-bind           PASS  uid 1000: bind = -1 (Operation not allowed)
+nonroot-send           PASS  uid 1000: sendto unbound = -1 (Operation not allowed)
+burst                  FAIL  0/2000 ARP, 0/0 ICMP sent in 0.003s
+RESULT failures=10
+linksend1037 exit=10
+--- regression: the stack's own ARP + IPv4 to the peer, after flushing the ARP entry
+--- 10.128.7.84 ping statistics ---
+5 packets transmitted, 5 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 0.204/0.240/0.349/0.055 ms
+    10.128.7.84  06:ff:cc:fd:bb:01  valid
+--- regression: IPv4 TCP over ENA (HTTPS download, checksummed)
+download ok 0s
+stack.dl: OK
+--- regression: IPv6 link-local to the peer over ENA
+/tmp/run-2624-fea6be.sh: line 17: ping6: command not found
+--- regression: tcp900 and udp947
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+b7e1c986347d09bec2992193a84cbb0ec9dcc5e4c0026b2affb6cdec9779b124  tcp900
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+57b5a55e0127113b0a41fa80b3c96af326af16f5beda132fbbe6b26d80a9095a  udp947
+tcp900 exit=0
+52
+total 3.0s, 0 FAIL
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, delivered 65488
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 3.0s, 0 FAIL
+udp947 exit=4
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 14 passed, 4 failed
+udp947 -t exit=3
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         FAIL  recvmsg=-1 Out of memory data="" controllen=4 flags=0x0; next recv=3 "2nd"
+udp947 -t: 0 passed, 3 failed
+--- interface counters
+	Receive: 58450 packets, 0 errors, 83407902 bytes, 0 mcasts, 0 dropped
+	Transmit: 135476 packets, 0 errors, 550120460 bytes, 0 mcasts, 0 dropped
+--- syslog tail (network)
+KERN: package_daemon: [6158233:    65] KERN: ena: set device MTU 9001 after queue creation (matching what we report to the stack): ok
+KERN: ena: watchdog running: 6000 ms keep-alive timeout, 1000 ms cadence
+KERN: package_daemon: [6160614:    65] KERN: ena: attached [build Nov  4 2026 00:11:44]; interrupts so far: 13 management, 0 io
+KERN: /dev/net/ena/0: transmit checksum offload 0x1
+KERN: package_daemon: [6163743:    65] DAEMON 'DHCP': /dev/net/ena/0: Send DHCP_DISCOVER to 255.255.255.255:67
+KERN: register_domain(4, link)
+KERN: ena: first io interrupt delivered
+DAEMON 'DHCP': /dev/net/ena/0: Received DHCP_OFFER from 10.128.4.1
+DAEMON 'DHCP':   subnet: 255.255.252.0
+DAEMON 'DHCP': /dev/net/ena/0: Send DHCP_REQUEST for 10.128.4.59 to 255.255.255.255:67
+DAEMON 'DHCP': /dev/net/ena/0: Received DHCP_ACK from 10.128.4.1
+DAEMON 'DHCP':   subnet: 255.255.252.0
+KERN: package_daemon: [6165971:    65] DAEMON 'DHCP': /dev/net/ena/0: DHCP status = No error
+KERN: ena: rx offload observed after 1000 frames: l4_csum_checked 731, l4_csum_err 0, l3_proto==ipv4 986, l3_csum_err 0 (rx_supported 0x7, rx_enabled 0x0)
+KERN: ena: rx offload observed after 50000 frames: l4_csum_checked 49515, l4_csum_err 0, l3_proto==ipv4 49980, l3_csum_err 0 (rx_supported 0x7, rx_enabled 0x0)

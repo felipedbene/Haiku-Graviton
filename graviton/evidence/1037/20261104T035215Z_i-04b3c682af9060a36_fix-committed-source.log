@@ -1,0 +1,44 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fix-committed-source
+# instance: i-04b3c682af9060a36   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: fix arm: linksend1037 built from the committed source
+# start: 20261104T035215Z   end: 20261104T035226Z   rc: 0
+# script sha256: 391ef6b18685085b6dcd6f26d0b6b2604857da778194374dca07c1c13213cb3f
+# ---- script ----
+# | # linksend1037 from the committed source (only the Linux backend changed since the full run)
+# | cd /boot/home/j && wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>' || exit 7
+# | gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c -lnetwork 2>&1; echo "compile rc=$?"
+# | sha256sum linksend1037.c linksend1037
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f 2>/dev/null | xargs -r sha256sum
+# | ./linksend1037 /dev/net/ena/0 10.128.7.84 2000; echo "linksend1037 exit=$?"
+# ---- raw output ----
+compile rc=0
+6f9fe23e8cfb0706f88de745e423f1ae61cec8364e169d7d2e31638378abf9ee  linksend1037.c
+3f09e1e5d771e47890a2a8ef59f1a24d7948f1eb723ffe1949a43086e9e45a84  linksend1037
+92c06419a19e7bef74b6fe269cb02277115fe30e957ae830705d9af3b4d1140a  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+57fcecbcd50b381940524dcc7a2e19c86b11828b73e84170178fc313c4e2a1ca  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+send-only-bind         PASS  bind(sdl_type 0, own MAC) = 0 (ok)
+interface /dev/net/ena/0 mac 06:ff:c8:c3:85:15 ip 10.128.5.222 peer 10.128.7.84
+arp-request-tx         PASS  ARP who-has peer: send = 60 (ok), seen leaving = 1, source 06:ff:c8:c3:85:15
+arp-reply-rx           PASS  send = 60 (ok), reply from peer: 06:ff:cc:fd:bb:01
+icmp-echo-tx           PASS  ICMP echo to peer: send = 67 (ok), seen leaving = 1, source 06:ff:c8:c3:85:15
+icmp-echo-reply-rx     PASS  send = 67 (ok), echo reply = 1
+udp-tx                 PASS  UDP to peer:9 marker J1037-LINKSEND-UDP: send = 60 (ok), seen leaving = 1, source 06:ff:c8:c3:85:15
+ipv6-tx                PASS  ICMPv6 echo to ff02::1: send = 83 (ok), seen leaving = 1, source 06:ff:c8:c3:85:15
+x88b5-tx               PASS  ethertype 0x88b5 broadcast: send = 60 (ok), seen leaving = 1, source 06:ff:c8:c3:85:15
+typed-bind-0806        PASS  bind(IFT_ETHER, 0x0806) = -1 (General system error); expected refused
+typed-bind-0806-x1000  PASS  1000/1000 refused
+typed-bind-88b5        PASS  bind = 0, sendto = 60 (ok)
+typed-bind-88b5-x1000  PASS  1000/1000 bound
+bound-capture-close    PASS  bind = 0, SIOCSPACKETCAP = 0, close, bind again = 0 (ok)
+bind-by-name+mac       PASS  bind(nlen 14 + MAC) = 0 (ok), sendto = 60 (ok), seen leaving = 1, source 06:ff:c8:c3:85:15
+bad-dst-no-type        PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-no-addr        PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-long-name      PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-family         PASS  sendto = -1 (Invalid Argument); expected refused
+nonroot-bind           PASS  uid 1000: bind = -1 (Operation not allowed)
+nonroot-send           PASS  uid 1000: sendto unbound = -1 (Operation not allowed)
+burst                  PASS  2000/2000 ARP, 2000/2000 ICMP sent in 0.085s
+after-burst-echo       PASS  echo reply = 1
+RESULT failures=0
+linksend1037 exit=0

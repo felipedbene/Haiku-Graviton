@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-fix
+# instance: i-0804fae60c02a3c9e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stage the fix arm: fix stack + ethernet_frame as non-packaged overrides on canonical; gcc and the repros
+# start: 20261104T034517Z   end: 20261104T034534Z   rc: 0
+# script sha256: 2b269501fe19af1c41a649114f328aea58342a8f797814a280222984acc78605
+# ---- script ----
+# | # Stage the fix arm (method of #947): canonical + the fix's stack and ethernet_frame as
+# | # non-packaged overrides, which the next boot loads instead of the packaged ones. A fresh
+# | # launch of an image of this box is the fix arm. Also gcc + the repros, built natively.
+# | set -e
+# | pkgman install -y wget gcc binutils haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/j && cd /boot/home/j
+# | wget -q -O linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1037.c?<PRESIGNED>'
+# | wget -q -O linksend1019.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/linksend1019.c?<PRESIGNED>'
+# | gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c -lnetwork
+# | gcc -O2 -o linksend1019 linksend1019.c -lnetwork
+# | sha256sum linksend1037.c linksend1037 linksend1019.c linksend1019
+# | wget -q -O stack.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/mod/fix/stack?<PRESIGNED>'
+# | wget -q -O ethernet_frame.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/mod/fix/ethernet_frame?<PRESIGNED>'
+# | cat > sums <<'SUMS'
+# | 57fcecbcd50b381940524dcc7a2e19c86b11828b73e84170178fc313c4e2a1ca  stack.mod
+# | 92c06419a19e7bef74b6fe269cb02277115fe30e957ae830705d9af3b4d1140a  ethernet_frame.mod
+# | SUMS
+# | sha256sum -c sums
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | mkdir -p $D/datalink_protocols
+# | cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | cp ethernet_frame.mod $D/datalink_protocols/ethernet_frame.new && mv $D/datalink_protocols/ethernet_frame.new $D/datalink_protocols/ethernet_frame
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+# | sync; sync
+# | echo STAGE-DONE
+# ---- raw output ----
+[system] Done.
+22a830b19f55e9aaecd4fa8e397a3fe0c1a6b3e1967cc064896e2e2538aa44ce  linksend1037.c
+bd74fd4812cc14a981e733d1ab6f5a68b24f5fd6be37a8181d71f53c904848c7  linksend1037
+de0a3a0aa7b863261ceb0d7a3942d3f5ca85a4e322f6750d9f51dc417348ab14  linksend1019.c
+9a28a177e3e50e099a9fa9abf755b6bb6f5f7a0645a4eede45b03004780ccb9d  linksend1019
+stack.mod: OK
+ethernet_frame.mod: OK
+92c06419a19e7bef74b6fe269cb02277115fe30e957ae830705d9af3b4d1140a  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+57fcecbcd50b381940524dcc7a2e19c86b11828b73e84170178fc313c4e2a1ca  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  /boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+STAGE-DONE

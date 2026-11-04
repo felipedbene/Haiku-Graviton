@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock2-rerun-same-boot
+# instance: i-09c6af0e6c6c7b414   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: stock2 arm: linksend1037 again on the same boot
+# start: 20261104T035838Z   end: 20261104T035849Z   rc: 0
+# script sha256: 041b8b0b9b06cc0c1d0a4173093c94372df34a702c509f8f9c2736aa4c1a058e
+# ---- script ----
+# | # Same boot, second run: a process that exited must not have left a frame type claimed.
+# | cd /boot/home/j && ./linksend1037 /dev/net/ena/0 10.128.7.84 2000; echo "linksend1037 exit=$?"
+# ---- raw output ----
+send-only-bind         PASS  bind(sdl_type 0, own MAC) = 0 (ok)
+interface /dev/net/ena/0 mac 06:ff:c3:72:9b:bd ip 10.128.6.71 peer 10.128.7.84
+arp-request-tx         FAIL  ARP who-has peer: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+arp-reply-rx           FAIL  send = -1 (General system error), reply from peer: none
+icmp/udp               FAIL  skipped: no peer MAC
+ipv6-tx                FAIL  ICMPv6 echo to ff02::1: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+x88b5-tx               FAIL  ethertype 0x88b5 broadcast: send = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+typed-bind-0806        PASS  bind(IFT_ETHER, 0x0806) = -1 (General system error); expected refused
+typed-bind-0806-x1000  PASS  1000/1000 refused
+typed-bind-88b5        FAIL  bind = -1, sendto = -1 (General system error)
+typed-bind-88b5-x1000  FAIL  0/1000 bound
+bound-capture-close    FAIL  bind = -1, SIOCSPACKETCAP = 0, close, bind again = -1 (General system error)
+bind-by-name+mac       FAIL  bind(nlen 14 + MAC) = 0 (ok), sendto = -1 (General system error), seen leaving = 0, source 00:00:00:00:00:00
+bad-dst-no-type        PASS  sendto = -1 (General system error); expected refused
+bad-dst-no-addr        PASS  sendto = -1 (General system error); expected refused
+bad-dst-long-name      PASS  sendto = -1 (General system error); expected refused
+bad-dst-family         PASS  sendto = -1 (Invalid Argument); expected refused
+bad-dst-short          PASS  sendto = -1 (General system error); expected refused
+nonroot-bind           PASS  uid 1000: bind = -1 (Operation not allowed)
+nonroot-send           PASS  uid 1000: sendto unbound = -1 (Operation not allowed)
+burst                  FAIL  0/2000 ARP, 0/0 ICMP sent in 0.003s
+RESULT failures=10
+linksend1037 exit=10

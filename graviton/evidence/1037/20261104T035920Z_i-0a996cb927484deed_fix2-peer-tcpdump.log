@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fix2-peer-tcpdump
+# instance: i-0a996cb927484deed   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux peer: what tcpdump saw during the fix2 arm run
+# start: 20261104T035920Z   end: 20261104T035933Z   rc: 0
+# script sha256: 8db20cf464bbf18d264f75f0c43f15d12c9555251cb95bc9c0bfbcbb9aa08495
+# ---- script ----
+# | cd /opt/j; sleep 2; pkill -INT tcpdump; sleep 2; cat tcpdump.err
+# | echo "--- frames from/for the Haiku box by kind"
+# | tcpdump -nn -e -r cap.pcap 2>/dev/null | awk '{print}' > cap.txt
+# | echo "total $(wc -l < cap.txt)"
+# | echo "arp: $(grep -c 'ARP' cap.txt)  icmp echo request: $(grep -c 'ICMP echo request' cap.txt)  icmp echo reply: $(grep -c 'ICMP echo reply' cap.txt)  udp :9: $(grep -cE '\.9: UDP' cap.txt)  ipv6: $(grep -c 'IPv6' cap.txt)  0x88b5: $(grep -ci '0x88b5' cap.txt)"
+# | echo "--- first frames of each kind"
+# | grep -m3 'ARP' cap.txt; grep -m2 'ICMP echo request' cap.txt; grep -m2 'ICMP echo reply' cap.txt; grep -m2 -E '\.9: UDP' cap.txt; grep -m2 'IPv6' cap.txt
+# | echo "--- UDP marker payload as captured"
+# | tcpdump -nn -X -r cap.pcap 'udp port 9' 2>/dev/null | head -8
+# | echo "--- ICMP marker payload as captured (first request)"
+# | tcpdump -nn -X -c 1 -r cap.pcap 'icmp[icmptype] = icmp-echo' 2>/dev/null | head -8
+# ---- raw output ----
+--- frames from/for the Haiku box by kind
+total 4022
+arp: 4  icmp echo request: 2008  icmp echo reply: 2008  udp :9: 1  ipv6: 0  0x88b5: 0
+--- first frames of each kind
+03:59:06.804474 06:ff:cc:fd:bb:01 > ff:ff:ff:ff:ff:ff, ethertype ARP (0x0806), length 42: Request who-has 10.128.5.2 tell 10.128.7.84, length 28
+03:59:06.804510 06:ff:f8:34:63:19 > 06:ff:cc:fd:bb:01, ethertype ARP (0x0806), length 42: Reply 10.128.5.2 is-at 06:ff:f8:34:63:19, length 28
+03:59:15.302184 06:ff:d9:42:07:7f > ff:ff:ff:ff:ff:ff, ethertype ARP (0x0806), length 42: Request who-has 10.128.7.84 tell 10.128.4.1, length 28
+03:59:06.804436 06:ff:f8:34:63:19 > 06:ff:cc:fd:bb:01, ethertype IPv4 (0x0800), length 67: 10.128.5.2 > 10.128.7.84: ICMP echo request, id 4427, seq 1, length 33
+03:59:06.804489 06:ff:f8:34:63:19 > 06:ff:cc:fd:bb:01, ethertype IPv4 (0x0800), length 67: 10.128.5.2 > 10.128.7.84: ICMP echo request, id 4427, seq 2, length 33
+03:59:06.804528 06:ff:cc:fd:bb:01 > 06:ff:f8:34:63:19, ethertype IPv4 (0x0800), length 67: 10.128.7.84 > 10.128.5.2: ICMP echo reply, id 4427, seq 1, length 33
+03:59:06.804533 06:ff:cc:fd:bb:01 > 06:ff:f8:34:63:19, ethertype IPv4 (0x0800), length 67: 10.128.7.84 > 10.128.5.2: ICMP echo reply, id 4427, seq 2, length 33
+03:59:06.805360 06:ff:f8:34:63:19 > 06:ff:cc:fd:bb:01, ethertype IPv4 (0x0800), length 60: 10.128.5.2.4151 > 10.128.7.84.9: UDP, length 18
+--- UDP marker payload as captured
+03:59:06.805360 IP 10.128.5.2.4151 > 10.128.7.84.9: UDP, length 18
+	0x0000:  4500 002e 1037 4000 4011 0933 0a80 0502  E....7@.@..3....
+	0x0010:  0a80 0754 1037 0009 001a 0000 4a31 3033  ...T.7......J103
+	0x0020:  372d 4c49 4e4b 5345 4e44 2d55 4450       7-LINKSEND-UDP
+--- ICMP marker payload as captured (first request)
+03:59:06.804436 IP 10.128.5.2 > 10.128.7.84: ICMP echo request, id 4427, seq 1, length 33
+	0x0000:  4500 0035 0001 4000 4001 1972 0a80 0502  E..5..@.@..r....
+	0x0010:  0a80 0754 0800 a6df 114b 0001 4a31 3033  ...T.....K..J103
+	0x0020:  372d 4c49 4e4b 5345 4e44 2d49 434d 502d  7-LINKSEND-ICMP-
+	0x0030:  3030 3030 31                             00001
+pkill: killing pid 2650 failed: Permission denied
+pkill: killing pid 2731 failed: Permission denied
+pkill: killing pid 2800 failed: Permission denied
+pkill: killing pid 2874 failed: Permission denied
+pkill: killing pid 2916 failed: Permission denied
+pkill: killing pid 2962 failed: Permission denied
+pkill: killing pid 3030 failed: Permission denied
