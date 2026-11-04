@@ -10,6 +10,7 @@
 #include <fs_cache.h>
 #include <lock.h>
 #include <string.h>
+#include <sys/uio.h>
 
 #include "ext2.h"
 #include "Volume.h"
@@ -91,6 +92,8 @@ public:
 			status_t	WriteAt(Transaction& transaction, off_t pos,
 							const uint8* buffer, size_t* length);
 			status_t	FillGapWithZeros(off_t start, off_t end);
+			status_t	ZeroUninitialized(off_t pos, size_t length,
+							const iovec* vecs, size_t count);
 
 			status_t	Resize(Transaction& transaction, off_t size);
 

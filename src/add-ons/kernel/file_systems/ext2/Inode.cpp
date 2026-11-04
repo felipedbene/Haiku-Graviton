@@ -300,6 +300,24 @@ Inode::WriteAt(Transaction& transaction, off_t pos, const uint8* buffer,
 		}
 	}
 
+	if ((Flags() & EXT2_INODE_EXTENTS) != 0) {
+		// Preallocated extents read as zeros (see ZeroUninitialized()), so
+		// data written into one would not read back: turn the ones this
+		// write (or the gap it fills) lands in into written extents first.
+		off_t start = oldSize < pos ? oldSize : pos;
+		bool changed;
+		ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
+		status_t status = stream.MarkWritten(transaction, start, end - start,
+			changed);
+		if (status == B_OK && changed)
+			status = WriteBack(transaction);
+		if (status != B_OK) {
+			*_length = 0;
+			WriteLockInTransaction(transaction);
+			return status;
+		}
+	}
+
 	writeLocker.Unlock();
 
 	if (oldSize < pos)
@@ -320,6 +338,18 @@ Inode::WriteAt(Transaction& transaction, off_t pos, const uint8* buffer,
 	TRACE("Inode::WriteAt(): Done\n");
 
 	return status;
+}
+
+
+status_t
+Inode::ZeroUninitialized(off_t pos, size_t length, const iovec* vecs,
+	size_t count)
+{
+	if ((Flags() & EXT2_INODE_EXTENTS) == 0)
+		return B_OK;
+
+	ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
+	return stream.ZeroUninitialized(pos, length, vecs, count);
 }
 
 
