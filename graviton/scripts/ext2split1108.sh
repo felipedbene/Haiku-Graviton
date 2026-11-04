@@ -26,6 +26,11 @@
 #  p3 c4k  4 KiB blocks, metadata_csum:
 #     cu   1360 unwritten extents at even blocks: depth 1, root and leaves full
 #     cw   700 written extents at even blocks: depth 1, 2 full leaves
+#  p4 e4k  ext2, 4 KiB blocks, indirect-mapped (regression: the goal change reaches DataStream):
+#     ix   truncate -s 40M, 4 KiB at 0 and at 39 MiB (holes with missing indirect blocks)
+#     iy   8 MiB of data, for an append
+#  p5 fx   ext4, 4 KiB blocks, 48 MiB (regression: ENOSPC):
+#     fz   700 written extents at even blocks; Haiku fills the volume, then writes into fz's holes
 #
 # Haiku steps (each one mounts, writes, syncs and unmounts):
 #   fa / fu: 8 KiB at block 1 (first leaf), 8 KiB at block 1001 (third leaf), 1 MiB at block 2001
@@ -34,6 +39,8 @@
 #   tf4: 64 KiB at 1 MiB (between the root's extents)
 #   kd: 8 KiB at 1 KiB-block 20000;  ku: 1 MiB at 2 MiB
 #   cu: 64 KiB at block 681, 8 KiB at block 1101;  cw: 64 KiB at block 341
+#   ix: 64 KiB at 32 KiB and at 20 MiB (indirect holes); iy: append 64 KiB
+#   nospc: fill fx, write into fz's holes (ENOSPC expected), remove the filler
 #   rd: read every test file back (md5)
 # The chunks are random, made on Haiku; their md5s are in the Haiku log, to compare with the md5
 # of each written range that "check" prints.
@@ -47,11 +54,13 @@ seed() {
 	D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) \
 		'$9 == v { print $11 }' | sed 's|.*/||')
 	D=/dev/$D; echo "seed device $D"; lsblk $D || exit 1
-	sgdisk -Z $D > /dev/null; sgdisk -n1:0:+900M -n2:0:+500M -n3:0:+400M $D || exit 1
+	sgdisk -Z $D > /dev/null
+	sgdisk -n1:0:+700M -n2:0:+500M -n3:0:+400M -n4:0:+200M -n5:0:+48M $D || exit 1
 	partprobe $D; sleep 2; P=${D}p
 	X="-O ^has_journal,^orphan_file,^metadata_csum"
 	mkfs.ext4 -q -F $X -L x4k ${P}1 && mkfs.ext4 -q -F -b 1024 $X -L x1k ${P}2 \
-		&& mkfs.ext4 -q -F -O ^has_journal,^orphan_file,metadata_csum -L c4k ${P}3 || exit 1
+		&& mkfs.ext4 -q -F -O ^has_journal,^orphan_file,metadata_csum -L c4k ${P}3 \
+		&& mkfs.ext2 -q -F -b 4096 -L e4k ${P}4 && mkfs.ext4 -q -F $X -L fx ${P}5 || exit 1
 	cat > /opt/mk.py <<'PY'
 import os, sys
 # mk.py <path> <written|unwritten> <count> <first block> <step> <block size> [size in blocks]
@@ -88,19 +97,28 @@ PY
 		python3 /opt/mk.py m/cu unwritten 1360 0 2 4096
 		python3 /opt/mk.py m/cw written 700 0 2 4096
 		sync; chmod 666 m/*); umount m
+	mount ${P}4 m && (chmod 777 m
+		truncate -s 40M m/ix
+		dd if=/dev/urandom of=m/ix bs=4096 count=1 conv=notrunc status=none
+		dd if=/dev/urandom of=m/ix bs=4096 count=1 seek=9984 conv=notrunc status=none
+		head -c 8M /dev/urandom > m/iy
+		sync; chmod 666 m/*); umount m
+	mount ${P}5 m && (chmod 777 m
+		python3 /opt/mk.py m/fz written 700 0 2 4096
+		sync; chmod 666 m/*); umount m
 	set +x
 	shapes $P
-	for n in 1 2 3; do e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck p$n rc=$?"; tail -1 /tmp/f.out; done
+	for n in 1 2 3 4 5; do e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck p$n rc=$?"; tail -1 /tmp/f.out; done
 	# the Linux-made files, to check the contents against afterwards
 	rm -rf /opt/seed/orig; mkdir -p /opt/seed/orig
-	for n in 1 2 3; do mount -o ro ${P}$n m && cp --sparse=always m/[a-z]* /opt/seed/orig/; umount m; done
+	for n in 1 2 3 4 5; do mount -o ro ${P}$n m && cp --sparse=always m/[a-z]* /opt/seed/orig/; umount m; done
 	ls -ls /opt/seed/orig; sync
 }
 
 shapes() {
 	# every file's size, md5, and its index nodes (debugfs ex -n: level/depth, entries/max)
 	P=$1
-	for n in 1 2 3; do
+	for n in 1 2 3 4 5; do
 		mount -o ro ${P}$n /opt/seed/m || continue
 		for f in $(ls /opt/seed/m | grep -v lost); do
 			echo "== p$n $f $(stat -c '%s %b' /opt/seed/m/$f) md5 $(md5sum < /opt/seed/m/$f | cut -d' ' -f1)"
@@ -115,7 +133,7 @@ check() {
 	D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) \
 		'$9 == v { print $11 }' | sed 's|.*/||')
 	P=/dev/${D}p; echo "volume /dev/$D"
-	for n in 1 2 3; do
+	for n in 1 2 3 4 5; do
 		echo "== p$n"; e2fsck -fn ${P}$n > /tmp/fsck.out 2>&1; r=$?
 		grep -v "^Pass\|^e2fsck 1" /tmp/fsck.out | cut -c1-200 | head -20; echo "e2fsck p$n rc=$r"
 	done
@@ -152,21 +170,27 @@ PY
 		gh "$((B * 681)):8192" gd "11137024:65536" gk "11141120:65536" tf4 "1048576:65536"
 	chk 2 kd "$((1024 * 20000)):8192" ku "2097152:1048576"
 	chk 3 cu "$((B * 681)):65536 $((B * 1101)):8192" cw "$((B * 341)):65536"
+	chk 4 ix "32768:65536 20971520:65536" iy "8388608:65536"
+	chk 5 fz "$((B * 101)):65536 $((B * 501)):8192 $((B * 1201)):8192 $((B * 1301)):8192"
 }
 
 step() {
 	lockbefore=$(grep -c "failed to lock memory" /var/log/syslog)
+	SEEKS="1201 1301"
+	case $1 in
+	nospc2) SEEKS="101 501"; set -- nospc ;;
+	esac
 	case $1 in
 	fa|fu)
 		mount -t ext2 $DD/0 /hx4k || exit 1
-		dd if=/boot/home/c8k of=/hx4k/$1 bs=4096 seek=1 conv=notrunc 2>&1 | tail -1; echo "$1 write1 rc=$?"
-		dd if=/boot/home/c8k of=/hx4k/$1 bs=4096 seek=1001 conv=notrunc 2>&1 | tail -1; echo "$1 write2 rc=$?"
-		dd if=/boot/home/c1m of=/hx4k/$1 bs=4096 seek=2001 conv=notrunc 2>&1 | tail -1; echo "$1 write3 rc=$?"
+		dd if=/boot/home/c8k of=/hx4k/$1 bs=4096 seek=1 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "$1 write1 rc=$r"
+		dd if=/boot/home/c8k of=/hx4k/$1 bs=4096 seek=1001 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "$1 write2 rc=$r"
+		dd if=/boot/home/c1m of=/hx4k/$1 bs=4096 seek=2001 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "$1 write3 rc=$r"
 		ls -ls /hx4k/$1; sync; unmount /hx4k; echo "unmount rc=$?"
 		;;
 	gh)
 		mount -t ext2 $DD/0 /hx4k || exit 1
-		dd if=/boot/home/c8k of=/hx4k/gh bs=4096 seek=681 conv=notrunc 2>&1 | tail -1; echo "gh write rc=$?"
+		dd if=/boot/home/c8k of=/hx4k/gh bs=4096 seek=681 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "gh write rc=$r"
 		ls -ls /hx4k/gh; sync; unmount /hx4k; echo "unmount rc=$?"
 		;;
 	gd|gk)
@@ -176,29 +200,51 @@ step() {
 		;;
 	tf4)
 		mount -t ext2 $DD/0 /hx4k || exit 1
-		dd if=/boot/home/c64k of=/hx4k/tf4 bs=65536 seek=16 conv=notrunc 2>&1 | tail -1; echo "tf4 write rc=$?"
+		dd if=/boot/home/c64k of=/hx4k/tf4 bs=65536 seek=16 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "tf4 write rc=$r"
 		ls -ls /hx4k/tf4; sync; unmount /hx4k; echo "unmount rc=$?"
 		;;
 	kd)
 		mount -t ext2 $DD/1 /hx1k || exit 1
-		dd if=/boot/home/c8k of=/hx1k/kd bs=1024 seek=20000 conv=notrunc 2>&1 | tail -1; echo "kd write rc=$?"
+		dd if=/boot/home/c8k of=/hx1k/kd bs=1024 seek=20000 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "kd write rc=$r"
 		ls -ls /hx1k/kd; sync; unmount /hx1k; echo "unmount rc=$?"
 		;;
 	ku)
 		mount -t ext2 $DD/1 /hx1k || exit 1
-		dd if=/boot/home/c1m of=/hx1k/ku bs=1048576 seek=2 conv=notrunc 2>&1 | tail -1; echo "ku write rc=$?"
+		dd if=/boot/home/c1m of=/hx1k/ku bs=1048576 seek=2 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "ku write rc=$r"
 		ls -ls /hx1k/ku; sync; unmount /hx1k; echo "unmount rc=$?"
 		;;
 	cu)
 		mount -t ext2 $DD/2 /hc4k || exit 1
-		dd if=/boot/home/c64k of=/hc4k/cu bs=4096 seek=681 conv=notrunc 2>&1 | tail -1; echo "cu write1 rc=$?"
-		dd if=/boot/home/c8k of=/hc4k/cu bs=4096 seek=1101 conv=notrunc 2>&1 | tail -1; echo "cu write2 rc=$?"
+		dd if=/boot/home/c64k of=/hc4k/cu bs=4096 seek=681 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "cu write1 rc=$r"
+		dd if=/boot/home/c8k of=/hc4k/cu bs=4096 seek=1101 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "cu write2 rc=$r"
 		ls -ls /hc4k/cu; sync; unmount /hc4k; echo "unmount rc=$?"
 		;;
 	cw)
 		mount -t ext2 $DD/2 /hc4k || exit 1
-		dd if=/boot/home/c64k of=/hc4k/cw bs=4096 seek=341 conv=notrunc 2>&1 | tail -1; echo "cw write rc=$?"
+		dd if=/boot/home/c64k of=/hc4k/cw bs=4096 seek=341 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "cw write rc=$r"
 		ls -ls /hc4k/cw; sync; unmount /hc4k; echo "unmount rc=$?"
+		;;
+	ix)
+		mount -t ext2 $DD/3 /he4k || exit 1
+		dd if=/boot/home/c64k of=/he4k/ix bs=4096 seek=8 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "ix write1 rc=$r"
+		dd if=/boot/home/c64k of=/he4k/ix bs=65536 seek=320 conv=notrunc 2>&1 | tail -1; r=${PIPESTATUS[0]}; echo "ix write2 rc=$r"
+		cat /boot/home/c64k >> /he4k/iy; echo "iy append rc=$?"
+		ls -ls /he4k; sync; unmount /he4k; echo "unmount rc=$?"
+		;;
+	nospc)
+		# fill fx (1 MiB, then 4 KiB writes, until ENOSPC), then write into holes of fz (in a
+		# full leaf): each write must fail cleanly (no KDL) and the volume stay consistent; then
+		# remove the filler. Holes at blocks 1201 and 1301 (blocks 101 and 501 on a rerun: "nospc2").
+		mount -t ext2 $DD/4 /hfx || exit 1
+		dd if=/dev/zero of=/hfx/big bs=1048576 2>&1 | tail -1; echo "fill rc=${PIPESTATUS[0]}"
+		dd if=/dev/zero of=/hfx/big2 bs=4096 2>&1 | tail -1; echo "fill2 rc=${PIPESTATUS[0]}"
+		ls -ls /hfx; df /hfx | tail -3; sync
+		for b in $SEEKS; do
+			dd if=/boot/home/c8k of=/hfx/fz bs=4096 seek=$b conv=notrunc 2>&1 | tail -1
+			echo "fz write at block $b (ENOSPC expected) rc=${PIPESTATUS[0]}"
+		done
+		sync; rm -f /hfx/big /hfx/big2; echo "rm rc=$?"; sync
+		echo "fz md5 $(md5sum < /hfx/fz)"; unmount /hfx; echo "unmount rc=$?"
 		;;
 	rd)
 		mount -t ext2 $DD/0 /hx4k || exit 1
@@ -210,6 +256,9 @@ step() {
 		mount -t ext2 $DD/2 /hc4k || exit 1
 		for f in cu cw; do echo "$f md5 $(md5sum < /hc4k/$f)"; done
 		unmount /hc4k
+		mount -t ext2 $DD/3 /he4k || exit 1
+		for f in ix iy; do echo "$f md5 $(md5sum < /he4k/$f)"; done
+		unmount /he4k
 		;;
 	esac
 	echo "lock-memory failures during step $1 (#1069): $(( $(grep -c 'failed to lock memory' /var/log/syslog) - lockbefore ))"
@@ -220,14 +269,14 @@ haiku() {
 	sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
 	BOOT=$(df /boot | awk '/Device:/ { print $2 }')
 	DD=""
-	for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/2 ] && DD=$d; done
+	for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/4 ] && DD=$d; done
 	[ -n "$DD" ] || { echo "no data disk"; exit 1; }
-	mkdir -p /hx4k /hx1k /hc4k
+	mkdir -p /hx4k /hx1k /hc4k /he4k /hfx
 	[ -f /boot/home/c1m ] || { dd if=/dev/urandom of=/boot/home/c1m bs=65536 count=16
 		dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1
 		dd if=/dev/urandom of=/boot/home/c8k bs=8192 count=1; } 2>/dev/null
 	for c in c1m c64k c8k; do echo "$c md5 $(md5sum < /boot/home/$c)"; done
-	for s in ${@:-fa fu gh gd gk tf4 kd ku cu cw rd}; do echo "=== step $s"; step $s; done
+	for s in ${@:-fa fu gh gd gk tf4 kd ku cu cw ix nospc rd}; do echo "=== step $s"; step $s; done
 	echo "=== KDL/panic lines in syslog: $(grep -ciE 'kernel debugger|panic' /var/log/syslog)"
 	grep "ext2" /var/log/syslog | tail -20
 }
