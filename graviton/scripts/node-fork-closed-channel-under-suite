@@ -1,0 +1,23 @@
+#!/bin/sh
+# node-fork-closed-channel-under-suite -- issue 978 under the load it was first seen in:
+# the full parallel suite at -j 16, with the probe (at /tmp) run 16-way in rounds for the
+# whole suite. NODE= selects the binary (default /boot/system/bin/node); expects a 24.x
+# source tree at /boot/home/node-src/node-v24.22.2.
+set -u
+export PATH=/boot/home/config/non-packaged/bin:$PATH
+cd /boot/home/node-src/node-v24.22.2 || exit 1
+uname -a; ls /packages | grep -E "^(nodejs24|libuv|nghttp2|haiku-)"
+NODE=${NODE:-/boot/system/bin/node}; echo "node: $NODE $($NODE --version)"; sha256sum /tmp/node-fork-closed-channel-probe.js
+rm -f /tmp/suite978.done; tot=0; hung=0; other=0; r=0; mkdir -p /tmp/q978; rm -f /tmp/q978/*.rc
+( : | python3 tools/test.py --shell=$NODE -j 16 -p tap parallel > /tmp/suite978.tap 2>&1; echo done > /tmp/suite978.done ) &
+while [ ! -f /tmp/suite978.done ]; do r=$((r+1)); j=0
+  while [ $j -lt 16 ]; do j=$((j+1)); ( : | timeout 90 $NODE /tmp/node-fork-closed-channel-probe.js 30000 > /tmp/q978/$j.out 2>&1; echo $? > /tmp/q978/$j.rc.t; mv /tmp/q978/$j.rc.t /tmp/q978/$j.rc ) & done
+  j=0; while [ $j -lt 16 ]; do j=$((j+1)); while [ ! -f /tmp/q978/$j.rc ]; do sleep 1; done; done
+  j=0; while [ $j -lt 16 ]; do j=$((j+1)); tot=$((tot+1)); rc=$(cat /tmp/q978/$j.rc); rm -f /tmp/q978/$j.rc
+    case $rc in 0) ;; 3) hung=$((hung+1)); [ $hung -le 4 ] && cat /tmp/q978/$j.out ;; *) other=$((other+1)); [ $other -le 3 ] && tail -12 /tmp/q978/$j.out ;; esac; done
+done
+echo "RESULT probe alongside the suite: rounds=$r runs=$tot hung=$hung other_fail=$other"
+echo "RESULT suite: ok=$(grep -c '^ok ' /tmp/suite978.tap) notok=$(grep -c '^not ok ' /tmp/suite978.tap) timeout=$(grep -c '^    timeout$' /tmp/suite978.tap)"
+grep -E "^(not )?ok .*fork-closed-channel" /tmp/suite978.tap
+grep '^not ok' /tmp/suite978.tap
+echo M978S_DONE
