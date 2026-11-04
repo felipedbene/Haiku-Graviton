@@ -51,6 +51,15 @@ private:
 						ext2_extent_stream*& stream, fsblock_t& leafBlock,
 						int32& index, fileblock_t& next);
 	status_t		_ZeroBlocks(fsblock_t start, uint32 count);
+	status_t		_AllocateTreeBlock(Transaction& transaction,
+						fsblock_t goal, fsblock_t& block);
+	status_t		_GrowDepth(Transaction& transaction);
+	status_t		_SplitNode(Transaction& transaction,
+						fsblock_t parentBlock, int32 parentIndex,
+						fsblock_t childBlock, int32 insertAt);
+	status_t		_MakeRoom(Transaction& transaction, fileblock_t first,
+						off_t& added);
+	uint16			_MaxBlockEntries() const;
 	status_t		_LowerKeys(Transaction& transaction, fileblock_t first);
 	status_t		_FillHoles(Transaction& transaction, fileblock_t first,
 						fileblock_t end, off_t& added, bool& zeroed);

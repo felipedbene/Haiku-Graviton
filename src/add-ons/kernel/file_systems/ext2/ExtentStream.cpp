@@ -306,36 +306,13 @@ ExtentStream::_Enlarge(Transaction& transaction, off_t targetBlocks,
 			if (level < 0 && fStream->extent_header.NumEntries()
 					>= fStream->extent_header.MaxEntries()) {
 				TRACE("Enlarge() add a level, increment root depth\n");
-				fsblock_t newBlock = fStream->extent_index[0].PhysicalBlock();
-				uint32 _allocated;
-				status_t status = fVolume->AllocateBlocks(transaction, 1, 1,
-					blockGroup, newBlock, _allocated);
+				cached.Unset();
+				status_t status = _GrowDepth(transaction);
 				if (status != B_OK) {
-					ERROR("Enlarge() AllocateBlocks() failed()\n");
+					ERROR("Enlarge(): growing the tree failed\n");
 					return status;
 				}
-				ASSERT(_CheckBlock(fStream, newBlock) == B_OK);
-				TRACE("Enlarge() move root to block %" B_PRIu64 "\n",
-					newBlock);
 				numBlocks++;
-				stream = (ext2_extent_stream *)cached.SetToWritable(
-					transaction, newBlock);
-				if (stream == NULL)
-					return B_IO_ERROR;
-				ASSERT(fStream->extent_header.IsValid());
-				memcpy(stream, fStream, sizeof(ext2_extent_stream));
-				fStream->extent_header.SetDepth(stream->extent_header.Depth()
-					+ 1);
-				TRACE("Enlarge() new root depth %d\n",
-					fStream->extent_header.Depth());
-				fStream->extent_header.SetNumEntries(1);
-				fStream->extent_index[0].SetLogicalBlock(0);
-				fStream->extent_index[0].SetPhysicalBlock(newBlock);
-				stream->extent_header.SetMaxEntries((fVolume->BlockSize()
-					- sizeof(ext2_extent_header)) / sizeof(ext2_extent_index));
-				fInode->SetExtentChecksum(stream);
-				ASSERT(stream->extent_header.IsValid());
-
 				ASSERT(Check());
 				continue;
 			}
@@ -817,14 +794,6 @@ ExtentStream::_FillHoles(Transaction& transaction, fileblock_t first,
 			blockGroup, start, allocated);
 		if (status != B_OK)
 			return status;
-		// The blocks may hold anything; a partial write of an uncached page
-		// reads them back first. Zero them before they are mapped.
-		status = _ZeroBlocks(start, allocated);
-		if (status != B_OK) {
-			fVolume->FreeBlocks(transaction, start, allocated);
-			return status;
-		}
-		zeroed = true;
 
 		bool merge = false;
 		if (i > 0) {
@@ -837,44 +806,25 @@ ExtentStream::_FillHoles(Transaction& transaction, fileblock_t first,
 		}
 
 		if (!merge && count >= stream->extent_header.MaxEntries()) {
+			// The leaf has no room for a new extent: split it (and what is
+			// full above it), then look the hole up again, as it may now
+			// belong to the new leaf.
 			fVolume->FreeBlocks(transaction, start, allocated);
-			if (stream != fStream || stream->extent_header.Depth() != 0) {
-				// Making room in a full leaf below the root would need a
-				// split; fail the write rather than lose its data.
-				ERROR("FillHoles(): leaf full, can't fill the hole at %"
-					B_PRIu64 "\n", first);
-				return B_UNSUPPORTED;
-			}
-			// the root in the inode is full: move it to a leaf block
-			fsblock_t newBlock = fStream->extent_entries[0].PhysicalBlock();
-			uint32 firstLogical = fStream->extent_entries[0].LogicalBlock();
-			blockGroup = (newBlock - fFirstBlock) / fVolume->BlocksPerGroup();
-			if (blockGroup >= fVolume->NumGroups())
-				blockGroup = 0;
-			status = fVolume->AllocateBlocks(transaction, 1, 1, blockGroup,
-				newBlock, allocated);
+			cached.Unset();
+			status = _MakeRoom(transaction, first, added);
 			if (status != B_OK)
 				return status;
-			ext2_extent_stream* leaf = (ext2_extent_stream*)
-				cached.SetToWritable(transaction, newBlock, true);
-			if (leaf == NULL) {
-				fVolume->FreeBlocks(transaction, newBlock, 1);
-				return B_IO_ERROR;
-			}
-			memcpy(leaf, fStream, sizeof(ext2_extent_stream));
-			leaf->extent_header.SetMaxEntries((fVolume->BlockSize()
-				- sizeof(ext2_extent_header)) / sizeof(ext2_extent_entry));
-			fInode->SetExtentChecksum(leaf);
-			fStream->extent_header.SetDepth(1);
-			fStream->extent_header.SetNumEntries(1);
-			// an index key is the first logical block of its child, as
-			// Linux checks
-			memset(&fStream->extent_index[0], 0, sizeof(ext2_extent_index));
-			fStream->extent_index[0].SetLogicalBlock(firstLogical);
-			fStream->extent_index[0].SetPhysicalBlock(newBlock);
-			added++;
 			continue;
 		}
+
+		// The blocks may hold anything; a partial write of an uncached page
+		// reads them back first. Zero them before they are mapped.
+		status = _ZeroBlocks(start, allocated);
+		if (status != B_OK) {
+			fVolume->FreeBlocks(transaction, start, allocated);
+			return status;
+		}
+		zeroed = true;
 
 		if (leafBlock != 0) {
 			stream = (ext2_extent_stream*)cached.SetToWritable(transaction,
@@ -911,6 +861,237 @@ ExtentStream::_FillHoles(Transaction& transaction, fileblock_t first,
 	}
 
 	return B_OK;
+}
+
+
+status_t
+ExtentStream::_AllocateTreeBlock(Transaction& transaction, fsblock_t goal,
+	fsblock_t& block)
+{
+	uint32 blockGroup = goal < fFirstBlock
+		? 0 : (goal - fFirstBlock) / fVolume->BlocksPerGroup();
+	if (blockGroup >= fVolume->NumGroups())
+		blockGroup = 0;
+	block = goal;
+	uint32 allocated;
+	return fVolume->AllocateBlocks(transaction, 1, 1, blockGroup, block,
+		allocated);
+}
+
+
+status_t
+ExtentStream::_GrowDepth(Transaction& transaction)
+{
+	// As ext4_ext_grow_indepth(): the root in the inode moves, as it is, to
+	// a new block, and becomes an index with that block as its only child.
+	// The block has room for many more entries than the inode.
+	uint16 depth = fStream->extent_header.Depth();
+	if (depth >= kMaxTreeDepth)
+		return B_FILE_TOO_LARGE;
+
+	// near what the root points to
+	fsblock_t goal = 0;
+	if (fStream->extent_header.NumEntries() > 0) {
+		goal = depth > 0 ? fStream->extent_index[0].PhysicalBlock()
+			: fStream->extent_entries[0].PhysicalBlock();
+	}
+	fsblock_t newBlock;
+	status_t status = _AllocateTreeBlock(transaction, goal, newBlock);
+	if (status != B_OK)
+		return status;
+	CachedBlock cached(fVolume);
+	ext2_extent_stream* node = (ext2_extent_stream*)cached.SetToWritable(
+		transaction, newBlock, true);
+	if (node == NULL) {
+		fVolume->FreeBlocks(transaction, newBlock, 1);
+		return B_IO_ERROR;
+	}
+	memcpy(node, fStream, sizeof(ext2_extent_stream));
+	node->extent_header.SetMaxEntries(_MaxBlockEntries());
+	fInode->SetExtentChecksum(node);
+
+	// an index key is the first logical block of its child, as e2fsck
+	// checks; entries and indexes keep it at the same place
+	uint32 key = fStream->extent_header.NumEntries() > 0
+		? fStream->extent_entries[0].LogicalBlock() : 0;
+	fStream->extent_header.SetDepth(depth + 1);
+	fStream->extent_header.SetNumEntries(1);
+	memset(&fStream->extent_index[0], 0, sizeof(fStream->extent_index));
+	fStream->extent_index[0].SetLogicalBlock(key);
+	fStream->extent_index[0].SetPhysicalBlock(newBlock);
+	fInode->SetExtentChecksum(fStream);
+	return B_OK;
+}
+
+
+status_t
+ExtentStream::_SplitNode(Transaction& transaction, fsblock_t parentBlock,
+	int32 parentIndex, fsblock_t childBlock, int32 insertAt)
+{
+	// As ext4_ext_split(), one level at a time: the upper part of the full
+	// child moves to a new block, which gets an index entry right after the
+	// child's in the parent. The parent must have room.
+	CachedBlock parentCached(fVolume);
+	ext2_extent_stream* parent = fStream;
+	if (parentBlock != 0) {
+		parent = (ext2_extent_stream*)parentCached.SetToWritable(transaction,
+			parentBlock);
+		if (parent == NULL)
+			return B_IO_ERROR;
+	}
+	CachedBlock childCached(fVolume);
+	ext2_extent_stream* child = (ext2_extent_stream*)
+		childCached.SetToWritable(transaction, childBlock);
+	if (child == NULL)
+		return B_IO_ERROR;
+
+	int32 parentCount = parent->extent_header.NumEntries();
+	int32 count = child->extent_header.NumEntries();
+	if (parentCount >= parent->extent_header.MaxEntries()
+		|| parentIndex >= parentCount || count < 2) {
+		return B_BAD_DATA;
+	}
+
+	// Where the entry that needs the room goes decides the split. Appending
+	// (Linux's files fill their leaves that way) moves only the last entry,
+	// so that the old node stays all but full; ext4 moves nothing then, but
+	// a node can't be left empty here. Anywhere else, half moves, so that
+	// both halves have room for what comes next.
+	int32 split;
+	if (insertAt >= count)
+		split = count - 1;
+	else if (insertAt <= 0)
+		split = 1;
+	else
+		split = count / 2;
+
+	fsblock_t newBlock;
+	status_t status = _AllocateTreeBlock(transaction, childBlock, newBlock);
+	if (status != B_OK)
+		return status;
+	CachedBlock newCached(fVolume);
+	ext2_extent_stream* node = (ext2_extent_stream*)newCached.SetToWritable(
+		transaction, newBlock, true);
+	if (node == NULL) {
+		fVolume->FreeBlocks(transaction, newBlock, 1);
+		return B_IO_ERROR;
+	}
+
+	// extent entries and index entries have the same size, and both start
+	// with their first logical block
+	int32 moved = count - split;
+	node->extent_header.magic = EXT2_EXTENT_MAGIC;
+	node->extent_header.SetNumEntries(moved);
+	node->extent_header.SetMaxEntries(_MaxBlockEntries());
+	node->extent_header.SetDepth(child->extent_header.Depth());
+	node->extent_header.SetGeneration(0);
+	memcpy(&node->extent_entries[0], &child->extent_entries[split],
+		moved * sizeof(ext2_extent_entry));
+	fInode->SetExtentChecksum(node);
+
+	memset(&child->extent_entries[split], 0,
+		moved * sizeof(ext2_extent_entry));
+	child->extent_header.SetNumEntries(split);
+	fInode->SetExtentChecksum(child);
+
+	memmove(&parent->extent_index[parentIndex + 2],
+		&parent->extent_index[parentIndex + 1],
+		(parentCount - parentIndex - 1) * sizeof(ext2_extent_index));
+	ext2_extent_index& index = parent->extent_index[parentIndex + 1];
+	memset(&index, 0, sizeof(ext2_extent_index));
+	index.SetLogicalBlock(node->extent_entries[0].LogicalBlock());
+	index.SetPhysicalBlock(newBlock);
+	parent->extent_header.SetNumEntries(parentCount + 1);
+	fInode->SetExtentChecksum(parent);
+	return B_OK;
+}
+
+
+status_t
+ExtentStream::_MakeRoom(Transaction& transaction, fileblock_t first,
+	off_t& added)
+{
+	// Makes room for one more extent in the leaf _LookUp() finds for
+	// "first", as ext4_ext_create_new_leaf() does: the topmost full node on
+	// the path whose parent has room is split, or the tree grows by a level
+	// if even the root is full, until the leaf has room. Each step leaves a
+	// valid tree, so running out of space on the way loses nothing; the
+	// blocks the tree got so far are in "added" (for i_blocks).
+	for (;;) {
+		uint16 depth = fStream->extent_header.Depth();
+		if (depth > kMaxTreeDepth)
+			return B_BAD_DATA;
+
+		fsblock_t blocks[kMaxTreeDepth + 1];
+			// of the node at each level; the root in the inode has none
+		int32 positions[kMaxTreeDepth + 1];
+			// the entry taken in each index node, where the extent goes in
+			// the leaf
+		bool full[kMaxTreeDepth + 1];
+
+		CachedBlock cached(fVolume);
+		ext2_extent_stream* stream = fStream;
+		blocks[0] = 0;
+		for (uint16 level = 0;; level++) {
+			int32 count = stream->extent_header.NumEntries();
+			full[level] = count >= stream->extent_header.MaxEntries();
+			if (level == depth) {
+				int32 i = 0;
+				while (i < count && stream->extent_entries[i].LogicalBlock()
+						+ stream->extent_entries[i].Length() <= first) {
+					i++;
+				}
+				positions[level] = i;
+				break;
+			}
+			if (count == 0)
+				return B_BAD_DATA;
+			int32 i = 0;
+			while (i + 1 < count
+				&& stream->extent_index[i + 1].LogicalBlock() <= first) {
+				i++;
+			}
+			positions[level] = i;
+			blocks[level + 1] = stream->extent_index[i].PhysicalBlock();
+			stream = (ext2_extent_stream*)cached.SetTo(blocks[level + 1]);
+			if (stream == NULL)
+				return B_IO_ERROR;
+			if (!stream->extent_header.IsValid()
+				|| stream->extent_header.Depth() != depth - level - 1
+				|| !fInode->VerifyExtentChecksum(stream)) {
+				return B_BAD_DATA;
+			}
+		}
+		cached.Unset();
+
+		if (!full[depth])
+			return B_OK;
+
+		int32 level = depth;
+		while (level > 0 && full[level - 1])
+			level--;
+
+		status_t status;
+		if (level == 0)
+			status = _GrowDepth(transaction);
+		else {
+			status = _SplitNode(transaction, blocks[level - 1],
+				positions[level - 1], blocks[level],
+				level == depth ? positions[level] : positions[level] + 1);
+		}
+		if (status != B_OK)
+			return status;
+		added++;
+	}
+}
+
+
+uint16
+ExtentStream::_MaxBlockEntries() const
+{
+	// what an extent tree block holds, entries or indexes (12 bytes each)
+	return (fVolume->BlockSize() - sizeof(ext2_extent_header))
+		/ sizeof(ext2_extent_entry);
 }
 
 
