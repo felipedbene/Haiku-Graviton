@@ -230,6 +230,12 @@ extern void __arch_init_system_time(void);
 // arch_commpage.cpp and libroot's getauxval().
 extern void arm64_get_hwcap(uint64* hwcap, uint64* hwcap2);
 
+// Value an EL0 MRS of the ID register (op0, op1, CRn, CRm, op2) reads under
+// the HWCAP_CPUID emulation, or false if the register is outside the emulated
+// space (the caller then raises SIGILL, as for any other trapped MRS).
+extern bool arm64_emulate_id_register(uint32 op0, uint32 op1, uint32 crn,
+	uint32 crm, uint32 op2, uint64* _value);
+
 // Effective SVE vector length in bytes, or 0 when SVE is disabled/absent. Set
 // once per CPU by arch_sve_init_percpu(); read by the EL0 exception FP save/
 // restore path (arch_asm.S) and by arch_restore_signal_frame(). Hidden

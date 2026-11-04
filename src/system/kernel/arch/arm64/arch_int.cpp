@@ -286,6 +286,31 @@ private:
 };
 
 
+/*!	Emulates an EL0 MRS of an ID register (the HWCAP_CPUID ABI, see
+	arm64_emulate_id_register()) and steps past it. Returns false, leaving
+	the frame untouched, for any register outside the emulated space.
+*/
+static bool
+emulate_user_mrs(iframe* frame, uint32 op0, uint32 op1, uint32 crn,
+	uint32 crm, uint32 op2, uint32 rt)
+{
+	uint64 value;
+	if (!arm64_emulate_id_register(op0, op1, crn, crm, op2, &value))
+		return false;
+
+	// The iframe keeps x29 and x30 apart from x0-x28; Rt 31 is XZR.
+	if (rt < 29)
+		frame->x[rt] = value;
+	else if (rt == 29)
+		frame->fp = value;
+	else if (rt == 30)
+		frame->lr = value;
+
+	frame->elr += 4;
+	return true;
+}
+
+
 extern "C" void
 do_sync_handler(iframe * frame)
 {
@@ -310,11 +335,45 @@ do_sync_handler(iframe * frame)
 	bool isExec = false;
 	switch (ESR_ELx_EXCEPTION(frame->esr)) {
 		case EXCP_MSR:
+		{
+			// With FEAT_IDST (Armv8.4 on, so Graviton3) an EL0 read of an ID
+			// register is reported here, its operands decoded in the ISS.
+			const uint64 esr = frame->esr;
+			if (isUser && (esr & 1) != 0
+				&& emulate_user_mrs(frame, (esr >> 20) & 0x3, (esr >> 14) & 0x7,
+					(esr >> 10) & 0xf, (esr >> 1) & 0xf, (esr >> 17) & 0x7,
+					(esr >> 5) & 0x1f)) {
+				return;
+			}
+
 			// An MSR/MRS naming a system register EL0 may not reach. Reported
 			// apart from a plain undefined instruction because the encoding is
 			// a valid one that the very same code executes fine at EL1.
 			signalCode = ILL_PRVREG;
 			break;
+		}
+
+		case EXCP_UNKNOWN:
+		{
+			// Without FEAT_IDST (Graviton2's Neoverse N1) the same read is
+			// just an undefined instruction, so the MRS has to be recognised
+			// from the instruction word, as Linux does. Interrupts go on first
+			// so that fetching it may page it back in.
+			if (!isUser)
+				break;
+
+			enable_interrupts();
+			uint32 insn;
+			if (IS_USER_ADDRESS(frame->elr)
+				&& user_memcpy(&insn, (void*)frame->elr, sizeof(insn)) == B_OK
+				&& (insn & 0xfff00000) == 0xd5300000
+				&& emulate_user_mrs(frame, 2 | ((insn >> 19) & 0x1),
+					(insn >> 16) & 0x7, (insn >> 12) & 0xf, (insn >> 8) & 0xf,
+					(insn >> 5) & 0x7, insn & 0x1f)) {
+				return;
+			}
+			break;
+		}
 
 		case EXCP_PC_ALIGN:
 			exceptionType = B_ALIGNMENT_EXCEPTION;
