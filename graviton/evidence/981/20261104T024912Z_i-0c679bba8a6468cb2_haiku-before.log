@@ -1,0 +1,44 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f, hrev59996), openssl 3.5.9 + openssl3-3.5.9.patchset, ./Configure haiku-aarch64 enable-zlib enable-zstd shared -g
+# issue 981 evidence: dgram981 repro + test_bio_dgram, 2026-11-04T02:49:14Z
+Haiku ip-10-128-9-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+ipv4 enable receive option                   PASS  IP_RECVDSTADDR=0
+ipv4 recv: destination address cmsg          PASS  recvmsg=4 controllen=24 flags=0x0 [IP_RECVDSTADDR 0/7 127.0.0.1]
+ipv4 send: source address cmsg               FAIL  neither IP_PKTINFO nor IP_SENDSRCADDR is defined
+ipv6 enable receive option                   PASS  IPV6_RECVPKTINFO=0
+ipv6 recv: destination address cmsg          PASS  recvmsg=4 controllen=40 flags=0x0 [IPV6_PKTINFO 41/31 ::1]
+ipv6 send: source address cmsg               FAIL  sendmsg(IPV6_PKTINFO)=-1 Operation not supported
+FAIL: 2 failure(s)
+dgram981 rc=1
+    # Subtest: test_bio_dgram
+    1..4
+    # INFO:  @ test/bio_dgram_test.c:120
+    # # Testing with AF_INET, local=0
+    # 
+    ok 1 - iteration 1
+    # INFO:  @ test/bio_dgram_test.c:126
+    # # Testing with AF_INET6, local=0
+    # 
+    ok 2 - iteration 2
+    # INFO:  @ test/bio_dgram_test.c:120
+    # # Testing with AF_INET, local=1
+    # 
+    # ERROR: (bool) 'do_sendmmsg(b1, tx_msg, 2, 0, &num_processed) == true' failed @ test/bio_dgram_test.c:277
+    # false
+    # E830445BE9000000:error:80007030:system library:dgram_sendmmsg:Destination address required:crypto/bio/bss_dgram.c:1453:
+    # E830445BE9000000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1439:
+    # E830445BE9000000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1445:
+    # OPENSSL_TEST_RAND_SEED=1793760554
+    not ok 3 - iteration 3
+    # INFO:  @ test/bio_dgram_test.c:126
+    # # Testing with AF_INET6, local=1
+    # 
+    # ERROR: (bool) 'do_sendmmsg(b1, tx_msg, 2, 0, &num_processed) == true' failed @ test/bio_dgram_test.c:277
+    # false
+    # E830445BE9000000:error:80007030:system library:dgram_sendmmsg:Destination address required:crypto/bio/bss_dgram.c:1453:
+    # E830445BE9000000:error:1000006F:BIO routines:dgram_sendmmsg:local address not available:crypto/bio/bss_dgram.c:1439:
+    # E830445BE9000000:error:8000702B:system library:dgram_sendmmsg:Operation not supported:crypto/bio/bss_dgram.c:1453:
+    # OPENSSL_TEST_RAND_SEED=1793760554
+    not ok 4 - iteration 4
+# OPENSSL_TEST_RAND_SEED=1793760554
+not ok 1 - test_bio_dgram
+bio_dgram_test rc=1
