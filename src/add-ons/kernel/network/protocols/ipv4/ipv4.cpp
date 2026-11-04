@@ -1595,6 +1595,15 @@ ipv4_send_routed_data(net_protocol* _protocol, struct net_route* route,
 	if (destination.sin_addr.s_addr == INADDR_ANY)
 		return EDESTADDRREQ;
 
+	// A loopback source must not leave the host (RFC 1122, 3.2.1.3): it only
+	// goes out through the loopback, or to an address of this host. Linux
+	// refuses the rest with EINVAL, too. Left alone, a socket bound to
+	// 127.0.0.1 put such datagrams on the wire.
+	if (ntohl(source.sin_addr.s_addr) >> 24 == IN_LOOPBACKNET
+		&& (interface->device->flags & IFF_LOOPBACK) == 0
+		&& (route->flags & RTF_LOCAL) == 0)
+		return B_BAD_VALUE;
+
 	if ((interface->device->flags & IFF_BROADCAST) != 0
 		&& (destination.sin_addr.s_addr == INADDR_BROADCAST
 			|| (broadcastAddress != NULL && destination.sin_addr.s_addr

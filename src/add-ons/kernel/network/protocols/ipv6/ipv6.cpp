@@ -1404,6 +1404,13 @@ ipv6_send_routed_data(net_protocol* _protocol, struct net_route* route,
 	if (IN6_IS_ADDR_UNSPECIFIED(&destination.sin6_addr))
 		return EDESTADDRREQ;
 
+	// ::1 must not leave the host (RFC 4291, 2.5.3): only the loopback, or an
+	// address of this host, takes it; EINVAL otherwise, as ipv4 answers.
+	if (IN6_IS_ADDR_LOOPBACK(&source.sin6_addr)
+		&& (interface->device->flags & IFF_LOOPBACK) == 0
+		&& (route->flags & RTF_LOCAL) == 0)
+		return B_BAD_VALUE;
+
 	if (IN6_IS_ADDR_MULTICAST(&destination.sin6_addr))
 		buffer->msg_flags |= MSG_MCAST;
 
