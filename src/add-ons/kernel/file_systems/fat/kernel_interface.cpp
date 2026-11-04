@@ -849,7 +849,11 @@ dosfs_release_vnode(fs_volume* volume, fs_vnode* vnode, bool reenter)
 	}
 
 	if (bsdNode->v_type == VREG) {
-		status = file_cache_sync(bsdNode->v_cache);
+		// No file_cache_sync() here: free_vnode() flushed the cache through our fsync hook
+		// right before calling us, and the node's reference count is already negative now.
+		// Pages still modified at this point are ones whose write-back failed; writing them
+		// again would acquire_vnode() a node that can no longer be referenced, and the I/O
+		// could finish after the node is freed below.
 		file_cache_delete(bsdNode->v_cache);
 		file_map_delete(bsdNode->v_file_map);
 	} else {
