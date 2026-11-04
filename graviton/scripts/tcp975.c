@@ -34,6 +34,27 @@
  *   zerodead  (issue 1044) the peer stops reading, and once the window is
  *             closed it is black-holed: a peer gone while its window is
  *             closed. Time how long the blocked send() takes to fail.
+ *   shutfin   (issue 1044 review; give the peer's data port + 3, whose
+ *             receive buffer is fixed) measure what the peer takes before its
+ *             window closes, then on a second connection send a little less
+ *             than that and shutdown(SHUT_WR): everything sent is
+ *             acknowledged, the window is closed, and only a FIN is owed.
+ *             Black-hole the peer and time a blocked recv().
+ *   longreopen (review) a 200 s closed window, so the probes back off to a
+ *             minute, then the window reopens and the transfer finishes;
+ *             then 150 s idle. The peer's capture shows whether anything is
+ *             sent into the idle connection.
+ *   submss    (review) the window is closed, the peer silenced, and after
+ *             70 s of backed-off probes a forged ACK opens the window by
+ *             less than a segment. The capture shows how long until data
+ *             goes into it.
+ *   dupack3, winupd3 (issue 1074) data in flight to a black-holed peer, then
+ *             three forged ACKs of SND.UNA: unchanged (duplicates) or each
+ *             with a new window (window updates). The capture shows whether
+ *             they make the client send.
+ *   stale     (issue 1075) an idle connection gets a forged old ACK (1000
+ *             bytes below SND.UNA) advertising a zero window. Time how long
+ *             1 KiB sends take to arrive before and after it.
  *
  * Every wait is bounded (cap, default 1200 s): a stack that never gives up is
  * reported as "no error after N s" instead of hanging the run.
@@ -464,13 +485,246 @@ mode_zerodead(int s, int c)
 	}
 }
 
+static long
+peer_value(int c, const char* what, int port)
+{
+	char command[64], reply[128];
+	snprintf(command, sizeof(command), "%s %d", what, port);
+	control(c, command, reply, sizeof(reply));
+	return atol(reply + 3);
+}
+
+/* Sends without blocking for `seconds`, so the peer's closed window and our
+   send buffer both fill up. Returns what send() took. */
+static long
+fill(int s, double seconds)
+{
+	static char buffer[65536];
+	long taken = 0;
+	struct pollfd p = { s, POLLOUT, 0 };
+	double start = now();
+	while (now() - start < seconds) {
+		if (poll(&p, 1, 500) == 1 && (p.revents & POLLOUT) != 0) {
+			ssize_t n = send(s, buffer, sizeof(buffer), MSG_DONTWAIT);
+			if (n > 0)
+				taken += n;
+		}
+	}
+	return taken;
+}
+
+static int
+mode_shutfin(int s, int c)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	/* This connection only measures how much the peer's fixed receive
+	   buffer takes before its window closes. */
+	snprintf(command, sizeof(command), "STOPREAD %d 100000", port);
+	control(c, command, reply, sizeof(reply));
+	fill(s, 5);
+	long capacity = peer_value(c, "INQ", port);
+	close(s);
+
+	/* A second one sends a little less than that, then exactly the window
+	   the peer still offers (it never takes back what it has offered), so
+	   the window is closed with everything sent acknowledged, and only the
+	   FIN is owed. */
+	s = connect_to(sDataPort);
+	port = local_port(s);
+	printf("  capacity %ld; second connection from port %d\n", capacity, port);
+	snprintf(command, sizeof(command), "STOPREAD %d 100000", port);
+	control(c, command, reply, sizeof(reply));
+	long amount = capacity - 16384;
+	for (int round = 0; round < 6 && amount > 0; round++) {
+		long before = peer_value(c, "INQ", port);
+		int error = send_all(s, amount);
+		if (error != 0) {
+			printf("RESULT %s FAIL send: %s\n", sMode, strerror(error));
+			return 1;
+		}
+		for (int i = 0; i < 100
+				&& peer_value(c, "INQ", port) < before + amount; i++)
+			usleep(100000);
+		/* Let the peer's ACK of it reach its tracker first. */
+		usleep(500000);
+		amount = peer_value(c, "RCVWND", port);
+		printf("  the peer holds %ld, still offers %ld\n",
+			peer_value(c, "INQ", port), amount);
+	}
+	sleep(2);
+	/* A Linux 7.0 peer takes a bare FIN even into a zero window, so make it
+	   refuse this one, as a stack without that exception would. It still
+	   answers the window probes, with its window closed. */
+	snprintf(command, sizeof(command), "DROPFIN %d", port);
+	control(c, command, reply, sizeof(reply));
+	shutdown(s, SHUT_WR);
+	sleep(5);
+	printf("FIN-OWED-CHECK now\n");
+	fflush(stdout);
+	sleep(20);
+	snprintf(command, sizeof(command), "DROP %d", port);
+	control(c, command, reply, sizeof(reply));
+	double start = now();
+	arm_cap(sCap);
+	char buffer[16];
+	ssize_t n = recv(s, buffer, sizeof(buffer), 0);
+	if (n == 0) {
+		printf("RESULT %s FAIL recv() returned EOF after %.1f s\n", sMode,
+			now() - start);
+		return 1;
+	}
+	return report_error(start, n < 0 ? errno : EIO, "recv() after SHUT_WR");
+}
+
+static int
+mode_longreopen(int s, int c)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	snprintf(command, sizeof(command), "STOPREAD %d 200", port);
+	control(c, command, reply, sizeof(reply));
+	double start = now();
+	arm_cap(sCap);
+	int error = send_all(s, 64 << 20);
+	alarm(0);
+	if (error != 0) {
+		printf("RESULT %s FAIL send(): %s\n", sMode, strerror(error));
+		return 1;
+	}
+	while (peer_count(c, port) < (64 << 20))
+		usleep(100000);
+	time_t t = time(NULL);
+	char stamp[32];
+	strftime(stamp, sizeof(stamp), "%H:%M:%S", gmtime(&t));
+	printf("IDLE-FROM %s (64 MiB delivered %.1f s in)\n", stamp,
+		now() - start);
+	fflush(stdout);
+	sleep(150);
+	t = time(NULL);
+	strftime(stamp, sizeof(stamp), "%H:%M:%S", gmtime(&t));
+	printf("IDLE-TO %s\n", stamp);
+	printf("RESULT %s DONE see the capture for segments sent while idle\n",
+		sMode);
+	return 0;
+}
+
+static int
+mode_submss(int s, int c)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	snprintf(command, sizeof(command), "STOPREAD %d 100000", port);
+	control(c, command, reply, sizeof(reply));
+	fill(s, 10);
+	snprintf(command, sizeof(command), "MUTE %d", port);
+	control(c, command, reply, sizeof(reply));
+	sleep(70);
+	snprintf(command, sizeof(command), "INJECT %d submss", port);
+	control(c, command, reply, sizeof(reply));
+	printf("  inject: %s\n", reply);
+	time_t t = time(NULL);
+	char stamp[32];
+	strftime(stamp, sizeof(stamp), "%H:%M:%S", gmtime(&t));
+	printf("INJECTED %s\n", stamp);
+	fflush(stdout);
+	sleep(90);
+	snprintf(command, sizeof(command), "UNMUTE %d", port);
+	control(c, command, reply, sizeof(reply));
+	printf("RESULT %s DONE see the capture for the first data after the "
+		"injection\n", sMode);
+	return 0;
+}
+
+static int
+mode_dupwin(int s, int c, const char* kind)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	static char buffer[1 << 20];
+	/* One byte and its ACK, so the peer has sent a pure ACK of SND.UNA for
+	   the forgeries to copy, and the connection is still in slow start: the
+	   congestion window, not the peer's, limits what is in flight, and what
+	   is left unsent is there for limited transmit if an ACK counts as a
+	   duplicate (run this at a 1500-byte MTU, so the peer's window is many
+	   segments wide). */
+	send(s, buffer, 1, 0);
+	while (peer_count(c, port) < 1)
+		usleep(2000);
+	usleep(100000);
+	snprintf(command, sizeof(command), "DROP %d", port);
+	control(c, command, reply, sizeof(reply));
+	ssize_t queued = send(s, buffer, sizeof(buffer), MSG_DONTWAIT);
+	snprintf(command, sizeof(command), "INJECT %d %s", port, kind);
+	control(c, command, reply, sizeof(reply));
+	time_t t = time(NULL);
+	char stamp[32];
+	strftime(stamp, sizeof(stamp), "%H:%M:%S", gmtime(&t));
+	printf("INJECTED %s after %zd bytes queued: %s\n", stamp, queued, reply);
+	fflush(stdout);
+	sleep(2);
+	printf("RESULT %s DONE see the capture for segments after the "
+		"injection\n", sMode);
+	return 0;
+}
+
+static double
+delivery(int s, int c, int port)
+{
+	static char buffer[1024];
+	long before = peer_count(c, port);
+	double start = now();
+	send(s, buffer, sizeof(buffer), 0);
+	while (peer_count(c, port) < before + (long)sizeof(buffer)) {
+		if (now() - start > 30)
+			return -1;
+		usleep(2000);
+	}
+	return now() - start;
+}
+
+static int
+mode_stale(int s, int c)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	double worst = 0;
+	for (int i = 0; i < 5; i++) {
+		double d = delivery(s, c, port);
+		printf("  before: 1 KiB arrived in %.3f s\n", d);
+		if (d > worst)
+			worst = d;
+		usleep(200000);
+	}
+	snprintf(command, sizeof(command), "INJECT %d stalezero", port);
+	control(c, command, reply, sizeof(reply));
+	printf("  inject: %s\n", reply);
+	usleep(50000);
+	double after = 0;
+	for (int i = 0; i < 3; i++) {
+		double d = delivery(s, c, port);
+		printf("  after: 1 KiB arrived in %.3f s\n", d < 0 ? 30.0 : d);
+		if (d < 0 || d > after)
+			after = d < 0 ? 30 : d;
+	}
+	if (after < 0.25) {
+		printf("RESULT %s PASS the old zero-window ACK was ignored: worst "
+			"delivery %.3f s after it (%.3f s before)\n", sMode, after, worst);
+		return 0;
+	}
+	printf("RESULT %s FAIL the old zero-window ACK closed the window: worst "
+		"delivery %.3f s after it (%.3f s before)\n", sMode, after, worst);
+	return 1;
+}
+
 int
 main(int argc, char** argv)
 {
 	if (argc < 5) {
 		fprintf(stderr, "usage: %s <peer-ip> <data-port> <control-port> "
-			"<write|read|poll|close|recover|zerowin|reopen|zerodead> "
-			"[cap-seconds]\n", argv[0]);
+			"<write|read|poll|close|recover|zerowin|reopen|zerodead|shutfin|"
+			"longreopen|submss|dupack3|winupd3|stale> [cap-seconds]\n",
+			argv[0]);
 		return 100;
 	}
 	sPeer = argv[1];
@@ -501,6 +755,18 @@ main(int argc, char** argv)
 		return mode_reopen(s, c);
 	if (strcmp(sMode, "zerodead") == 0)
 		return mode_zerodead(s, c);
+	if (strcmp(sMode, "shutfin") == 0)
+		return mode_shutfin(s, c);
+	if (strcmp(sMode, "longreopen") == 0)
+		return mode_longreopen(s, c);
+	if (strcmp(sMode, "submss") == 0)
+		return mode_submss(s, c);
+	if (strcmp(sMode, "dupack3") == 0)
+		return mode_dupwin(s, c, "dup3");
+	if (strcmp(sMode, "winupd3") == 0)
+		return mode_dupwin(s, c, "win3");
+	if (strcmp(sMode, "stale") == 0)
+		return mode_stale(s, c);
 	fprintf(stderr, "unknown mode %s\n", sMode);
 	return 100;
 }
