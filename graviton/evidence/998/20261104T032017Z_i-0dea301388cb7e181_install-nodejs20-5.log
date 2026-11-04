@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: install-nodejs20-5
+# instance: i-0dea301388cb7e181   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T032017Z   end: 20261104T032022Z   rc: 0
+# script sha256: 337f016b29c10e48f97d5951159a25339bf4a99bd9b850e2bde830729a0b25d0
+# ---- script ----
+# | # issue 998: install the rev-5 hpkg from a local file; pkgman must pull icu75 from the repo
+# | cd /boot/home/hpkg998 && sha256sum nodejs20-20.15.1-5-arm64.hpkg
+# | yes '' 2>/dev/null | head -60 | pkgman install /boot/home/hpkg998/nodejs20-20.15.1-5-arm64.hpkg 2>&1 | LC_ALL=C tr -cd '\11\12\15\40-\176' | grep -E "install package|upgrade package|Done|problem" 
+# | ls /packages | grep -E "^(nodejs20|icu)"
+# ---- raw output ----
+0a7d15fd6a52b320cb77130e6d56a8f039bdccca7d46255aab5acb8a446c6296  nodejs20-20.15.1-5-arm64.hpkg
+    install package icu75-75.1-2 from repository DeBeOS
+    upgrade package nodejs20-20.15.1-4 to 20.15.1-5 from local file
+[system] Done.
+icu74-74.1_bootstrap-1
+icu75-75.1-2
+icu78-78.3-1
+nodejs20-20.15.1-5

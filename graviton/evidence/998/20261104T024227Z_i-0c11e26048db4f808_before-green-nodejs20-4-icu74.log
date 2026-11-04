@@ -1,0 +1,86 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-green-nodejs20-4-icu74
+# instance: i-0c11e26048db4f808   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T024227Z   end: 20261104T024231Z   rc: 0
+# script sha256: bb418f1250c9c017876b6a527a459ee2c93e0f70ac08a6e96a8df0f2943557f8
+# ---- script ----
+# | # issue 998 root cause, on a canonical-image box with green packages
+# | echo "== image"; uname -a; ls /packages | grep -E "^(icu|nodejs)"
+# | echo "== the baked ICU data directory vs where icu74 is mounted"
+# | for l in /boot/system/lib/libicuuc.so.74.1 /boot/system/lib/libicuuc.so.75.1; do echo "$l:"; grep -ao "/packages/icu7[0-9][^ ]*/\.self/data/icu/7[0-9]\.1" $l | sort -u; done
+# | ls -d /packages/icu74*/.self/data/icu/74.1 /packages/icu74_bootstrap-74.1-1 2>&1
+# | ls -la /boot/system/data/icu/74.1/icudt74l.dat /boot/system/data/icu/75.1/icudt75l.dat
+# | echo "== libicudata sizes (stub + .dat archive for 74/75, data in the library for 78)"
+# | ls -laL /boot/system/lib/libicudata.so.74 /boot/system/lib/libicudata.so.75 /boot/system/lib/libicudata.so.78
+# | echo "== icu-data-probe (graviton/scripts/icu-data-probe.c)"
+# | cd /tmp; for v in 74 75 78; do echo "-- icu$v"; ./icuprobe$v; echo "rc=$?"; done
+# | echo "-- icu74, ICU_DATA=/boot/system/data/icu/74.1"; ICU_DATA=/boot/system/data/icu/74.1 ./icuprobe74; echo "rc=$?"
+# | echo "== green nodejs20 (before)"; package list -i /boot/system/packages/nodejs20-20.15.1-4-arm64.hpkg | grep -E "version:|libicu"
+# | sha256sum /boot/system/packages/nodejs20-20.15.1-4-arm64.hpkg
+# | node20 -p 'process.versions.node + " icu " + process.versions.icu'
+# | node20 -e 'console.log(new Intl.DateTimeFormat("en-US").format(new Date(0)), "|", "ß".localeCompare("ss","de"), "|", new Intl.NumberFormat("de-DE").format(1234.5))' 2>&1 | grep -v "^$"; echo "rc=$?"
+# | echo "-- same binary, ICU_DATA=/boot/system/data/icu/74.1"
+# | ICU_DATA=/boot/system/data/icu/74.1 node20 -e 'console.log(new Intl.DateTimeFormat("en-US").format(new Date(0)), "|", "ß".localeCompare("ss","de"), "|", new Intl.NumberFormat("de-DE").format(1234.5))'; echo "rc=$?"
+# ---- raw output ----
+== image
+Haiku ip-10-128-4-94.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 arm64 Haiku
+icu66-66.1-3
+icu74-74.1_bootstrap-1
+icu75-75.1-2
+icu75_devel-75.1-2
+icu78-78.3-1
+nodejs20-20.15.1-4
+== the baked ICU data directory vs where icu74 is mounted
+/boot/system/lib/libicuuc.so.74.1:
+/packages/icu74_bootstrap-74.1-1/.self/data/icu/74.1
+/boot/system/lib/libicuuc.so.75.1:
+/packages/icu75-75.1-2/.self/data/icu/75.1
+ls: cannot access '/packages/icu74_bootstrap-74.1-1': No such file or directory
+/packages/icu74-74.1_bootstrap-1/.self/data/icu/74.1
+-r-xr-xr-x 1 baron root 30783664 Apr 21  2026 /boot/system/data/icu/74.1/icudt74l.dat
+-r-xr-xr-x 1 baron root 30729184 Sep  1 22:29 /boot/system/data/icu/75.1/icudt75l.dat
+== libicudata sizes (stub + .dat archive for 74/75, data in the library for 78)
+-r-xr-xr-x 1 baron root   135192 Apr 21  2026 /boot/system/lib/libicudata.so.74
+-r-xr-xr-x 1 baron root   135216 Sep  1 22:29 /boot/system/lib/libicudata.so.75
+-r-xr-xr-x 1 baron root 33242312 Oct  5 17:10 /boot/system/lib/libicudata.so.78
+== icu-data-probe (graviton/scripts/icu-data-probe.c)
+-- icu74
+data dir: /packages/icu74_bootstrap-74.1-1/.self/data/icu/74.1
+ures_open(de):   U_MISSING_RESOURCE_ERROR
+ucol_open(de):   U_FILE_ACCESS_ERROR
+udatpg_open(en_US): U_MISSING_RESOURCE_ERROR
+rc=1
+-- icu75
+data dir: /packages/icu75-75.1-2/.self/data/icu/75.1
+ures_open(de):   U_ZERO_ERROR
+ucol_open(de):   U_USING_DEFAULT_WARNING
+udatpg_open(en_US): U_USING_DEFAULT_WARNING
+rc=0
+-- icu78
+data dir: 
+ures_open(de):   U_ZERO_ERROR
+ucol_open(de):   U_USING_DEFAULT_WARNING
+udatpg_open(en_US): U_USING_DEFAULT_WARNING
+rc=0
+-- icu74, ICU_DATA=/boot/system/data/icu/74.1
+data dir: /boot/system/data/icu/74.1
+ures_open(de):   U_ZERO_ERROR
+ucol_open(de):   U_USING_DEFAULT_WARNING
+udatpg_open(en_US): U_USING_DEFAULT_WARNING
+rc=0
+== green nodejs20 (before)
+	version: 20.15.1-4
+	requires: lib:libicudata>=74.1
+	requires: lib:libicui18n>=74.1
+	requires: lib:libicuuc>=74.1
+3ec629e2d63224686cb186e3210e8e05bde55455933ab303b51ac981bdbb4a7c  /boot/system/packages/nodejs20-20.15.1-4-arm64.hpkg
+20.15.1 icu 74.1
+<--- Last few GCs --->
+<--- JS stacktrace --->
+FATAL ERROR: DateTimePatternGeneratorCache::CreateGenerator Allocation failed - process out of memory
+----- Native stack trace -----
+Abort
+rc=0
+-- same binary, ICU_DATA=/boot/system/data/icu/74.1
+1/1/1970 | 1 | 1.234,5
+rc=0

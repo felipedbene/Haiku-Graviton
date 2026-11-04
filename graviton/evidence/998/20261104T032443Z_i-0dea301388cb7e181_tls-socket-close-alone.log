@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: tls-socket-close-alone
+# instance: i-0dea301388cb7e181   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T032443Z   end: 20261104T032448Z   rc: 0
+# script sha256: eaa94c0ce3583cb993e2c73cf4398820e3090bedaa8a76cf830d1f77501de7d2
+# ---- script ----
+# | # the one test failing after but not before: run it alone with rev 5
+# | ls /packages | grep -E "^nodejs20"
+# | cd /boot/home/node20-src/node-v20.15.1 || exit 1
+# | ok=0; i=0; while [ $i -lt 10 ]; do i=$((i+1)); : | timeout 120 /boot/system/bin/node20 test/parallel/test-tls-socket-close.js > /tmp/t.txt 2>&1 && ok=$((ok+1)); done
+# | echo "RESULT test-tls-socket-close alone: $ok/10"; [ $ok -lt 10 ] && tail -12 /tmp/t.txt
+# | grep -A12 "^not ok .*test-tls-socket-close" /tmp/p20.tap | head -16
+# ---- raw output ----
+nodejs20-20.15.1-5
+RESULT test-tls-socket-close alone: 10/10
+not ok 2945 parallel/test-tls-socket-close
+  ---
+  duration_ms: 326.77800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:408
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert(serverTlsSocket)

@@ -1,0 +1,118 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: ab-before-nodejs20-4
+# instance: i-0dea301388cb7e181   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T031146Z   end: 20261104T031521Z   rc: 0
+# script sha256: 7ad1161fd4b74d2f81ca278219666a9e2b8c27ef3b9a3d9760a56d0b26253f69
+# ---- script ----
+# | # issue 998 A/B: nodejs20 on a fresh canonical box -- Intl smoke, npm start-up, and the suites
+# | set -u; L=before
+# | export PATH=/boot/home/config/non-packaged/bin:$PATH
+# | ls /packages | grep -E "^(nodejs20|icu)"
+# | N=/boot/system/bin/node20; $N -p 'process.versions.node + " icu " + process.versions.icu + " unicode " + process.versions.unicode'
+# | for js in 'new Intl.DateTimeFormat("en-US").format(new Date(0))' '"ß".localeCompare("ss","de")' 'new Intl.NumberFormat("de-DE").format(1234.5)' 'new Date(0).toLocaleString("ja-JP",{timeZone:"UTC"})' 'new Intl.DisplayNames(["fr"],{type:"region"}).of("DE")' '[...new Intl.Segmenter("en",{granularity:"word"}).segment("hello world")].length' 'Intl.supportedValuesOf("timeZone").length'; do
+# |   printf '%-90s -> ' "$js"; $N -p "$js" 2>&1 | grep -v '^$' | tail -1; done
+# | cd /boot/home/node20-src/node-v20.15.1 || exit 1
+# | echo "== npm start-up (the tree's own deps/npm, as make test-only uses it)"; $N deps/npm/bin/npm-cli.js --version 2>&1 | tail -2
+# | echo "== intl/icu subset"
+# | : | python3 tools/test.py --shell=$N -j 16 -p tap 'parallel/test-intl*' 'parallel/test-icu*' 'parallel/test-*locale*' > /tmp/i20.tap 2>&1
+# | echo "RESULT intl subset: ok=$(grep -c '^ok ' /tmp/i20.tap) (skip=$(grep -c '^ok .*# skip' /tmp/i20.tap)) notok=$(grep -c '^not ok ' /tmp/i20.tap)"; grep '^not ok' /tmp/i20.tap
+# | echo "== full parallel suite -j 16"
+# | : | python3 tools/test.py --shell=$N -j 16 -p tap parallel > /tmp/p20.tap 2>&1
+# | echo "RESULT parallel: ok=$(grep -c '^ok ' /tmp/p20.tap) (skip=$(grep -c '^ok .*# skip' /tmp/p20.tap)) notok=$(grep -c '^not ok ' /tmp/p20.tap) timeout=$(grep -c '^    timeout$' /tmp/p20.tap)"
+# | grep '^not ok' /tmp/p20.tap | sed 's/^not ok [0-9]* //' | sort > /tmp/p20-notok-$L.txt; wc -l < /tmp/p20-notok-$L.txt
+# | cat /tmp/p20-notok-$L.txt
+# ---- raw output ----
+icu74-74.1_bootstrap-1
+icu78-78.3-1
+nodejs20-20.15.1-4
+20.15.1 icu 74.1 unicode 15.1
+new Intl.DateTimeFormat("en-US").format(new Date(0))                                       -> Abort
+"ß".localeCompare("ss","de")                                                              -> Node.js v20.15.1
+new Intl.NumberFormat("de-DE").format(1234.5)                                              -> Node.js v20.15.1
+new Date(0).toLocaleString("ja-JP",{timeZone:"UTC"})                                       -> Abort
+new Intl.DisplayNames(["fr"],{type:"region"}).of("DE")                                     -> DE
+[...new Intl.Segmenter("en",{granularity:"word"}).segment("hello world")].length           -> Intl.supportedValuesOf("timeZone").length                                                  -> Node.js v20.15.1
+== npm start-up (the tree's own deps/npm, as make test-only uses it)
+10.7.0
+== intl/icu subset
+RESULT intl subset: ok=7 (skip=2) notok=2
+not ok 6 parallel/test-icu-punycode
+not ok 9 parallel/test-intl
+== full parallel suite -j 16
+RESULT parallel: ok=3368 (skip=112) notok=75 timeout=0
+75
+parallel/test-child-process-default-options
+parallel/test-child-process-env
+parallel/test-child-process-exec-env
+parallel/test-cli-node-print-help
+parallel/test-cluster-concurrent-disconnect
+parallel/test-crypto-authenticated
+parallel/test-crypto-dh
+parallel/test-crypto-hash
+parallel/test-crypto-oneshot-hash
+parallel/test-datetime-change-notify
+parallel/test-debugger-profile
+parallel/test-debugger-profile-command
+parallel/test-dns
+parallel/test-dotenv-node-options
+parallel/test-error-format-list
+parallel/test-fs-link
+parallel/test-fs-open-no-close
+parallel/test-fs-promises
+parallel/test-fs-stat-date
+parallel/test-fs-stream-construct-compat-error-write
+parallel/test-fs-write-sigxfsz
+parallel/test-http-writable-true-after-close
+parallel/test-http2-https-fallback
+parallel/test-http2-server-unknown-protocol
+parallel/test-https-client-checkServerIdentity
+parallel/test-https-strict
+parallel/test-https-unix-socket-self-signed
+parallel/test-icu-punycode
+parallel/test-inspector-has-idle
+parallel/test-inspector-promises
+parallel/test-inspector-stop-profile-after-done
+parallel/test-intl
+parallel/test-node-output-errors
+parallel/test-node-output-v8-warning
+parallel/test-npm-install
+parallel/test-os
+parallel/test-permission-fs-symlink-target-write
+parallel/test-process-dlopen-error-message-crash
+parallel/test-process-env-tz
+parallel/test-process-euid-egid
+parallel/test-process-external-stdio-close
+parallel/test-process-external-stdio-close-spawn
+parallel/test-repl-underscore
+parallel/test-runner-coverage
+parallel/test-runner-output
+parallel/test-setproctitle
+parallel/test-snapshot-basic
+parallel/test-snapshot-gzip
+parallel/test-snapshot-warning
+parallel/test-stdout-close-catch
+parallel/test-tls-alert-handling
+parallel/test-tls-alpn-server-client
+parallel/test-tls-cert-regression
+parallel/test-tls-client-auth
+parallel/test-tls-client-getephemeralkeyinfo
+parallel/test-tls-client-mindhsize
+parallel/test-tls-client-renegotiation-13
+parallel/test-tls-client-verify
+parallel/test-tls-dhe
+parallel/test-tls-empty-sni-context
+parallel/test-tls-enable-trace
+parallel/test-tls-enable-trace-cli
+parallel/test-tls-getcipher
+parallel/test-tls-multi-key
+parallel/test-tls-multiple-cas-as-string
+parallel/test-tls-peer-certificate-encoding
+parallel/test-tls-psk-circuit
+parallel/test-tls-server-verify
+parallel/test-tls-set-ciphers
+parallel/test-tls-sni-option
+parallel/test-tls-sni-server-client
+parallel/test-trace-events-fs-async
+parallel/test-trace-events-fs-sync
+parallel/test-url-parse-invalid-input
+parallel/test-util-inspect

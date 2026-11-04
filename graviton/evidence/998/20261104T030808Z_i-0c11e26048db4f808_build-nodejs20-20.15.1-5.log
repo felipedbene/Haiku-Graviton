@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: build-nodejs20-20.15.1-5
+# instance: i-0c11e26048db4f808   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T030808Z   end: 20261104T030811Z   rc: 0
+# script sha256: 4716522a92b1a7b2d942212af36e45af197d17a40efb54cf50b5bc19c98e078d
+# ---- script ----
+# | cd /boot/home/haikuports/packages || exit 1
+# | sha256sum nodejs20-20.15.1-5-arm64.hpkg nodejs20_devel-20.15.1-5-arm64.hpkg
+# | package list -i nodejs20-20.15.1-5-arm64.hpkg | grep -E "version|requires|provides"
+# | grep -E "BUILD_OK|attempt" /boot/home/nb-driver-998.log
+# | grep -m3 -E "icu-i18n|--with-intl|icu_ver|system-icu" /boot/home/nb-nodejs20-20.15.1.log
+# | grep -n "REVISION=\|libicu" /boot/home/haikuports/net-libs/nodejs/nodejs20-20.15.1.recipe
+# | sha256sum /boot/home/haikuports/net-libs/nodejs/nodejs20-20.15.1.recipe /boot/home/haikuports/net-libs/nodejs/patches/nodejs-20.15.1.patchset
+# ---- raw output ----
+0a7d15fd6a52b320cb77130e6d56a8f039bdccca7d46255aab5acb8a446c6296  nodejs20-20.15.1-5-arm64.hpkg
+2848a26877cecf4d4fae1a417b6a7836831cb153d8bd6987243d8adc28123f98  nodejs20_devel-20.15.1-5-arm64.hpkg
+	version: 20.15.1-5
+	provides: nodejs20 = 20.15.1
+	provides: cmd:corepack = 20.15.1 (compatible >= 20)
+	provides: cmd:node20 = 20.15.1 (compatible >= 20)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libbrotlidec>=1.2.1
+	requires: lib:libbrotlienc>=1.2.1
+	requires: lib:libcares>=2.19.7
+	requires: lib:libcrypto>=3
+	requires: lib:libexecinfo>=1.1
+	requires: lib:libicudata>=75.1
+	requires: lib:libicui18n>=75.1
+	requires: lib:libicuuc>=75.1
+	requires: lib:libnghttp2>=14.28.2
+	requires: lib:libssl>=3
+	requires: lib:libuv>=1.0.0
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32
+nodejs20-20.15.1: attempt 1 installing: devel:libnghttp2 
+nodejs20-20.15.1: attempt 2 installing: devel:libssl >= 3 
+nodejs20-20.15.1: attempt 3 installing: devel:libuv 
+nodejs20-20.15.1: attempt 4 installing: devel:libz 
+nodejs20-20.15.1: BUILD_OK (attempt 5)
+23:# package has its data (icudt74l.dat), but libicuuc bakes the data directory under the
+29:REVISION="5"
+55:	lib:libicudata$secondaryArchSuffix
+56:	lib:libicui18n$secondaryArchSuffix
+57:	lib:libicuuc$secondaryArchSuffix
+77:	devel:libicudata$secondaryArchSuffix == 75.1
+78:	devel:libicui18n$secondaryArchSuffix == 75.1
+79:	devel:libicuuc$secondaryArchSuffix == 75.1
+424c1c4917c1f57085b766c0ff57ee7d7820bc03ae475a36d88ceb593493d3ad  /boot/home/haikuports/net-libs/nodejs/nodejs20-20.15.1.recipe
+43be94a09e02325373faeb0b90ff760111560b0cda7c412b7457449eac55e3a0  /boot/home/haikuports/net-libs/nodejs/patches/nodejs-20.15.1.patchset
