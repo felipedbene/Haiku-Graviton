@@ -25,7 +25,8 @@ struct lowntfs_context {
 };
 
 int* ntfs_haiku_get_close_state(struct lowntfs_context *ctx, u64 ino);
-void ntfs_haiku_put_close_state(struct lowntfs_context *ctx, u64 ino, u64 ghost);
+void ntfs_haiku_put_close_state(struct lowntfs_context *ctx, u64 parent,
+	const char* name, u64 ino, u64 ghost);
 
 enum {
 	CLOSE_GHOST = 1,

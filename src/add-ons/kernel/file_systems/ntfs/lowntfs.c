@@ -1066,7 +1066,6 @@ ntfs_fuse_rm(struct lowntfs_context *ctx, ino_t parent, const char *name,
 				}
 				ni = (ntfs_inode*)NULL;
 			}
-			*close_state |= CLOSE_GHOST;
 			u64 ghost = ++ctx->latest_ghost;
 
 			sprintf(ghostname,ghostformat,ghost);
@@ -1099,8 +1098,11 @@ ntfs_fuse_rm(struct lowntfs_context *ctx, ino_t parent, const char *name,
 				goto out;
 
 #ifdef __HAIKU__
+			// Only now that the ghost exists: set earlier, a failure above
+			// left the node marked as ghosted with no ghost to remove.
+			*close_state |= CLOSE_GHOST;
 			// We have to do this before the parent directory is reopened.
-			ntfs_haiku_put_close_state(ctx, ino, ghost);
+			ntfs_haiku_put_close_state(ctx, parent, name, ino, ghost);
 			close_state = NULL;
 #endif
 
@@ -1145,7 +1147,7 @@ exit:
 out :
 #ifdef __HAIKU__
 	if (close_state)
-		ntfs_haiku_put_close_state(ctx, ino, -1);
+		ntfs_haiku_put_close_state(ctx, parent, name, ino, (u64)-1);
 #endif
 	free(uname);
 	return res;

@@ -439,18 +439,29 @@ ntfs_haiku_get_close_state(struct lowntfs_context *ctx, u64 ino)
 }
 
 
+/*!	\a ghost is the number of the ghost name ntfs_fuse_rm() has just linked
+	the node under in \a parent, in place of \a name; (u64)-1 if it made
+	none, which leaves an earlier ghost of the node alone.
+*/
 void
-ntfs_haiku_put_close_state(struct lowntfs_context *ctx, u64 ino, u64 ghost)
+ntfs_haiku_put_close_state(struct lowntfs_context *ctx, u64 parent,
+	const char* name, u64 ino, u64 ghost)
 {
 	vnode* node = (vnode*)ctx->current_close_state_vnode;
 	if (node == NULL)
 		return;
 
-	node->lowntfs_ghost = ghost;
-	if ((node->lowntfs_close_state & CLOSE_GHOST) != 0) {
+	if (ghost != (u64)-1 && (node->lowntfs_close_state & CLOSE_GHOST) != 0) {
+		node->lowntfs_ghost = ghost;
+		// The ghost lives where the name was unlinked, and fs_remove_vnode()
+		// removes it from node->parent_inode (upstream records of->parent
+		// here). The node's own parent can be another directory, for a file
+		// with several names, or unknown (-1) for a vnode get_vnode() loaded
+		// rather than a lookup; the ghost then stayed behind for good.
+		node->parent_inode = parent;
 		fs_volume* _volume = (fs_volume*)ctx->haiku_fs_volume;
-		entry_cache_remove(_volume->id, node->parent_inode, node->name);
-		notify_entry_removed(_volume->id, node->parent_inode, node->name, node->inode);
+		entry_cache_remove(_volume->id, parent, name);
+		notify_entry_removed(_volume->id, parent, name, node->inode);
 		remove_vnode(_volume, node->inode);
 	}
 
