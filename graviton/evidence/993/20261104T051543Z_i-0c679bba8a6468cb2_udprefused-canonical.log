@@ -1,0 +1,11 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f)
+# issue 993: udprefused993, 2026-11-04T05:15:45Z
+Haiku ip-10-128-9-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 arm64 Haiku
+udp 127.0.0.1:<unused> recv        PASS  0.000s  recv=-1 Connection refused
+udp 127.0.0.1:<unused> poll        PASS  0.000s  poll=1 revents=0x5 SO_ERROR=Connection refused
+udp ::1:<unused> recv              FAIL  3.000s  recv=-1 Operation timed out
+udp ::1:<unused> poll              FAIL  3.000s  poll=0 revents=0x0 SO_ERROR=0
+udp 0.0.0.0:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+udp [::]:53 recv (resolver default) FAIL  3.000s  recv=-1 Operation timed out
+FAIL: 3/6 refused
+rc=1

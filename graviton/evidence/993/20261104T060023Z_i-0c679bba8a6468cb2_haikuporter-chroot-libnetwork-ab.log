@@ -1,0 +1,447 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f)
+# haikuporter -y -j32 --test openssl3; TEST() replaced by the libnetwork A/B: arm stock = the image's /boot/system/lib/libnetwork.so; arm c993 = this branch's libnetwork.so (cross-built from origin/graviton a9954f424a + the getaddrinfo.c change) via LIBRARY_PATH. base (origin/graviton a9954f424a unpatched) is byte-identical to the image's library (sha256 below).
+== issue 993 chroot A/B (stock libnetwork vs c993 via LIBRARY_PATH), Wed Nov  4 05:56:25 GMT 2026
+ls: cannot access '/boot/system/settings/network': No such file or directory
+105696f0f3da7e866b737daaedf20467dd1b6b8350958c4febbdb25ea6b7c5d4  /boot/system/lib/libnetwork.so
+105696f0f3da7e866b737daaedf20467dd1b6b8350958c4febbdb25ea6b7c5d4  /sources/lnb/base/libnetwork.so
+6afab702728367a4d1f7846d76109167da7ad32a5b5a8882dbb79cefed0a1e57  /sources/lnb/c993/libnetwork.so
+== arm stock
+  getaddrinfo(::1      , 0            ) PASS  0.000s  ok: inet6
+  getaddrinfo(::1      , AI_ADDRCONFIG) FAIL  28.001s  No address associated with hostname
+  getaddrinfo(127.0.0.1, 0            ) PASS  0.000s  ok: inet
+  getaddrinfo(127.0.0.1, AI_ADDRCONFIG) PASS  0.000s  ok: inet
+  FAIL: 3/4
+  mock server port=52731 loaded: /boot/system/lib/libnetwork.so
+  one CMP exchange (IR) over [::1]: rc=0 elapsed=28.322s, DNS queries sent by the client: 8
+== arm c993
+  getaddrinfo(::1      , 0            ) PASS  0.000s  ok: inet6
+  getaddrinfo(::1      , AI_ADDRCONFIG) PASS  0.000s  ok: inet6
+  getaddrinfo(127.0.0.1, 0            ) PASS  0.000s  ok: inet
+  getaddrinfo(127.0.0.1, AI_ADDRCONFIG) PASS  0.000s  ok: inet
+  PASS: 4/4
+  mock server port=52775 loaded: /sources/lnb/c993/libnetwork.so
+  one CMP exchange (IR) over [::1]: rc=0 elapsed=0.298s, DNS queries sent by the client: 0
+== arm c993: make VFP=1 test TESTS="test_cmp_http test_ocsp_cert_chain"
+"make" depend && "make" _tests
+make[1]: Entering directory '/sources/openssl-3.5.9'
+make[1]: Leaving directory '/sources/openssl-3.5.9'
+make[1]: Entering directory '/sources/openssl-3.5.9'
+"make" run_tests
+make[2]: Entering directory '/sources/openssl-3.5.9'
+( SRCTOP=. \
+  BLDTOP=. \
+  PERL="perl" \
+  FIPSKEY="f4556650ac31d35461610bac4ed81b1a181b2d8a43ea2854cbae22ca74560813" \
+  EXE_EXT= \
+  perl ./test/run_tests.pl test_cmp_http test_ocsp_cert_chain )
+00-prep_fipsmodule_cnf.t .. skipped: FIPS module config file only supported in a fips build
+Files=1, Tests=0,  0 wallclock secs ( 0.01 usr  0.00 sys +  0.18 cusr  0.03 csys =  0.23 CPU)
+Result: NOTESTS
+
+    ok 1 - default config
+    ok 2 - wrong server
+    ok 3 - wrong server port
+    ok 4 - server default port
+    ok 5 - server port out of range
+    ok 6 - server port negative
+    ok 7 - server missing argument
+    ok 8 - server with default port
+    ok 9 - server port bad syntax: leading garbage
+    ok 10 - server port bad syntax: trailing garbage
+    ok 11 - server with wrong port
+    ok 12 - proxy port bad syntax: leading garbage
+    ok 13 - proxy port out of range
+    ok 14 - proxy default port
+    ok 15 - proxy missing argument
+    ok 16 - tls_used
+    ok 17 - path explicit
+    ok 18 - path overrides -server path
+    ok 19 - path default -server path
+    ok 20 - path missing argument
+    ok 21 - path wrong
+    ok 22 - path with additional '/'s fine according to RFC 3986
+    ok 23 - path mixed case
+    ok 24 - path upper case
+    ok 25 - msg_timeout missing argument
+    ok 26 - msg_timeout negative
+    ok 27 - msg_timeout 5
+    ok 28 - msg_timeout 0
+    ok 29 - total_timeout missing argument
+    ok 30 - total_timeout negative
+    ok 31 - total_timeout 10
+    ok 32 - total_timeout 0
+    ok 33 - keep_alive missing argument
+    ok 34 - keep_alive negative
+    ok 35 - keep_alive 0
+    ok 36 - keep_alive 1
+    ok 37 - keep_alive 2
+    ok 38 - keep_alive too large
+    ok 39 - keep_alive extremely large
+ok 1 - CMP app CLI Mock connection
+    ok 1 - default test
+    ok 2 - recipient missing arg
+    ok 3 - unknown attribute in recipient name
+    ok 4 - wrong syntax in recipient name: trailing double '/' after value
+    ok 5 - wrong syntax in recipient name: missing '='
+    ok 6 - wrong syntax in recipient name: C too long
+    ok 7 - config default with expected sender
+    ok 8 - expected sender missing arg
+    ok 9 - wrong expected sender
+    ok 10 - unknown attribute in expected sender
+    ok 11 - extra attribute in expected sender
+    ok 12 - double attribute in expected sender
+    ok 13 - missing attribute in expected sender
+    ok 14 - bad syntax in expected sender name: leading double '/'
+    ok 15 - bad syntax in expected sender name: trailing double '/'
+    ok 16 - bad syntax in expected sender name: missing '='
+    ok 17 - expected sender empty attributes
+    ok 18 - explicit srvcert
+    ok 19 - reuse last srvcert
+    ok 20 - reuse last extracerts
+    ok 21 - output no srvcert empty extracerts
+    ok 22 - cannot reuse last srvcert
+    ok 23 - cannot reuse last extracerts
+    ok 24 - srvcert missing arg
+    ok 25 - wrong srvcert and -trusted ignored
+    ok 26 - srvcert is empty file
+    ok 27 - srvcert random content
+    ok 28 - no -trusted but srvcert
+    ok 29 - no -trusted and no -srvcert
+    ok 30 - trusted missing arg
+    ok 31 - wrong trusted cert
+    ok 32 - trusted empty file
+    ok 33 - trusted random file
+    ok 34 - trusted file does not exist
+    ok 35 - untrusted missing arg
+    ok 36 - untrusted not matching cert
+    ok 37 - untrusted empty file
+    ok 38 - untrusted random file
+    ok 39 - untrusted file does not exist
+    ok 40 - ignore key usage
+    ok 41 - ignorekeyusage with parameter
+    ok 42 - no unprotected errors - no errors
+    ok 43 - unprotected_errors with parameter
+    ok 44 - extracertsout
+    ok 45 - extracertsout no parameter
+    ok 46 - extracertsout multiple arguments
+ok 2 - CMP app CLI Mock verification
+    ok 1 - valid secret - wrong cert/key ignored
+    ok 2 - secret missing arg
+    ok 3 - wrong secret without ref
+    ok 4 - wrong secret - correct cert
+    ok 5 - ref missing arg
+    ok 6 - empty ref but correct cert
+    ok 7 - wrong ref but correct cert
+    ok 8 - valid cert and key and keypass
+    ok 9 - cert missing arg
+    ok 10 - key missing arg
+    ok 11 - keypass missing arg
+    ok 12 - keypass empty string
+    ok 13 - keypass no prefix
+    ok 14 - keypass prefix wrong
+    ok 15 - wrong keypass
+    ok 16 - no cert
+    ok 17 - no key
+    ok 18 - no keypass
+    ok 19 - wrong cert
+    ok 20 - cert file does not exist
+    ok 21 - cert file random content
+    ok 22 - empty cert file
+    ok 23 - key file random content
+    ok 24 - random keypass file
+    ok 25 - correct extraCerts
+    ok 26 - extracerts big file
+    ok 27 - extracerts missing arg
+    ok 28 - extracerts empty file
+    ok 29 - extracerts random content
+    ok 30 - extracerts file does not exist
+    ok 31 - default sha256
+    ok 32 - digest sha256
+    ok 33 - digest sha512
+    ok 34 - digest missing arg
+    ok 35 - digest non-existing
+    ok 36 - digest obsolete
+    ok 37 - multiple digests
+    ok 38 - unprotected request
+ok 3 - CMP app CLI Mock credentials
+    ok 1 - minimum options
+    ok 2 - no cmd
+    ok 3 - cmd missing arg
+    ok 4 - cmd undefined
+    ok 5 - cmd incomplete
+    ok 6 - no cacertsout
+    ok 7 - cacertsout given
+    ok 8 - use cacerts
+    ok 9 - cacertsout missing arg
+    ok 10 - --- get certificate for revocation ----
+    ok 11 - revreason unspecified
+    ok 12 - --- get certificate for revocation ----
+    ok 13 - revreason keyCompromise
+    ok 14 - --- get certificate for revocation ----
+    ok 15 - revreason CACompromise
+    ok 16 - --- get certificate for revocation ----
+    ok 17 - revreason affiliationChanged
+    ok 18 - --- get certificate for revocation ----
+    ok 19 - revreason superseded
+    ok 20 - --- get certificate for revocation ----
+    ok 21 - revreason cessationOfOperation
+    ok 22 - --- get certificate for revocation ----
+    ok 23 - revreason certificateHold
+    ok 24 - revreason removeFromCRL
+    ok 25 - revreason 7 (invalid)
+    ok 26 - --- get certificate for revocation ----
+    ok 27 - revreason priviligeWithdrawn
+    ok 28 - --- get certificate for revocation ----
+    ok 29 - revreason AACompromise
+    ok 30 - --- get certificate for revocation ----
+    ok 31 - --- use csr for revocation ----
+    ok 32 - --- get certificate for revocation ----
+    ok 33 - without oldcert
+    ok 34 - oldcert file nonexistent
+    ok 35 - empty oldcert file
+    ok 36 - oldcert and key do not match
+    ok 37 - revreason 11 (invalid)
+    ok 38 - revreason string
+    ok 39 - revreason out of integer range
+    ok 40 - use csr for revocation
+    ok 41 - --- get certificate for revocation ----
+    ok 42 - use issuer and serial for revocation
+    ok 43 - --- get certificate for revocation ----
+    ok 44 - use issuer but no serial for revocation
+    ok 45 - use serial but no issuer for revocation
+    ok 46 - wrong issuer for revocation
+    ok 47 - bad issuer DN for revocation
+    ok 48 - wrong serial for revocation
+    ok 49 - bad serial for revocation
+    ok 50 - rr without oldcert/csr/issuer/serial
+    ok 51 - rr with oldcert file nonexistent
+    ok 52 - rr with empty oldcert file
+    ok 53 - rr where oldcert and key do not match
+    ok 54 - ir + infotype
+    ok 55 - genm without -infotype
+    ok 56 - genm with missing infotype value
+    ok 57 - genm with invalid infotype value
+    ok 58 - genm with infotype signKeyPairTypes
+    ok 59 - genm caCerts
+    ok 60 - genm caCerts missing cacertsout option
+    ok 61 - genm caCerts missing cacertsout arg
+    ok 62 - genm caCerts extra cacertsout arg
+    ok 63 - genm rootCaCert with oldwithold
+    ok 64 - genm rootCaCert without oldwithold
+    ok 65 - genm rootCaCert oldwithold missing arg
+    ok 66 - genm rootCaCert oldwithold empty file
+    ok 67 - genm rootCaCert oldwithold random file
+    ok 68 - genm rootCaCert oldwithold nonexistent
+    ok 69 - genm rootCaCert oldwithold different
+    ok 70 - genm rootCaCert missing newwithnew
+    ok 71 - genm rootCaCert newwithnew missing arg
+    ok 72 - genm rootCaCert with oldwithnew
+    ok 73 - genm rootCaCert oldwithnew missing arg
+    ok 74 - genm rootCaCert newwithnew oldwithnew newwithold
+    ok 75 - genm rootCaCert newwithold missig arg
+    ok 76 - genm rootCaCert newwithnew newwithold
+    ok 77 - genm crlStatusList with crlcert
+    ok 78 - genm crlStatusList with old crl
+    ok 79 - genm crlStatusList with crlcert and old crl
+    ok 80 - genm crlStatusList with latest crl
+    ok 81 - genm crlStatusList with -oldcrl referring to nonexisting file due to empty CRL response message in previous test case
+    ok 82 - genm crlStatusList with -crlcert nonexistent
+    ok 83 - genm crlStatusList with wrong issuer
+    ok 84 - genm crlStatusList missing -crlcert & -oldcrl
+    ok 85 - genm crlStatusList with wrong cert and correct crl
+    ok 86 - genm certReqTemplate
+    ok 87 - genm certReqTemplate missing template option
+    ok 88 - genm certReqTemplate without optional keyspec option
+    ok 89 - genm certReqTemplate missing template arg
+    ok 90 - genm certReqTemplate template extra arg
+    ok 91 - genm certReqTemplate template arg non-ex dir
+    ok 92 - genm certReqTemplate keyspec arg non-ex dir
+    ok 93 - profile
+    ok 94 - profile wrong value
+    ok 95 - profile missing argument
+    ok 96 - profile extra argument
+    ok 97 - geninfo int
+    ok 98 - geninfo str
+    ok 99 - geninfo empty str
+    ok 100 - geninfo str and int
+    ok 101 - geninfo missing argument
+    ok 102 - geninfo bad OID num: leading '.'
+    ok 103 - geninfo invalid OID number string
+    ok 104 - geninfo unknown OID number string
+    ok 105 - geninfo bad OID name: trailing '_'
+    ok 106 - geninfo bad syntax: missing ':int'
+    ok 107 - geninfo bad type tag
+    ok 108 - geninfo bad syntax: missing ':'
+    ok 109 - geninfo bad int syntax: double ':'
+    ok 110 - geninfo bad int syntax: extra char
+    ok 111 - reqout ir+certConf rspout ip+pkiConf
+    ok 112 - reqout cr rspout cp
+    ok 113 - reqin old tid
+    ok 114 - reqin new tid
+    ok 115 - reqin wrong req
+    ok 116 - rspin
+    ok 117 - rspin too few files - server must reject
+    ok 118 - rspin too few files - no server
+    ok 119 - reqout_only ir with -port
+    ok 120 - reqout_only ir - no server
+    ok 121 - reqout_only non-existing directory and file
+    ok 122 - reqin ir - no newkey
+    ok 123 - reqin ir and rspout - using no newkey and -popo 0 as workaround
+    ok 124 - reqin ip and rspin  - using no newkey and -popo 0 as workaround
+    ok 125 - reqout_only ir - no server with -popo -1 (same as -centralkeygen)
+    ok 126 - reqin ir and rspout - using no newkey and -popo -1 (same as -centralkeygen)
+    ok 127 - reqin ip and rspin  - using no newkey and -popo -1 (same as -centralkeygen)
+    ok 128 - central key generation
+    ok 129 - central key generation missing newkeyout
+    ok 130 - using popo 1 with -centralkeygen
+    ok 131 - using popo -1 redundantly with -centralkeygen
+    ok 132 - using popo -1 alternatively to -centralkeygen
+    ok 133 - using centrally generated key (and cert) with existing chain
+    ok 134 - using centrally generated key (and cert) without giving chain (requires sender cert caching)
+    ok 135 - using centrally generated key with wrong password
+    ok 136 - using popo -1 (instead of -centralkeygen) without -newkeyout
+ok 4 - CMP app CLI Mock commands
+    ok 1 - newkey
+    ok 2 - use chainout
+    ok 3 - missing chain
+    ok 4 - newkey missing arg
+    ok 5 - newkey is non-existing directory and file
+    ok 6 - newkey too many parameters
+    ok 7 - newkey is an RSA key
+    ok 8 - newkeypass
+    ok 9 - read newkeypass from file
+    ok 10 - newkeypass no prefix
+    ok 11 - no newkeypass
+    ok 12 - missing newkeypass parameter
+    ok 13 - colon missing and no passwd
+    ok 14 - newkeypass double colon
+    ok 15 - newkeypass double passwd
+    ok 16 - newkeypass wrongfile
+    ok 17 - wrong password for encrypted pem
+    ok 18 - newkeypass ignored
+    ok 19 - newkeypass invalid
+    ok 20 - subject argument missing
+    ok 21 - issuer
+    ok 22 - issuer missing arg
+    ok 23 - days 1
+    ok 24 - days 0
+    ok 25 - days 365*100 beyond 2038
+    ok 26 - days missing arg
+    ok 27 - days negative
+    ok 28 - days no not integer
+    ok 29 - days out of range
+    ok 30 - reqexts
+    ok 31 - reqexts missing arg
+    ok 32 - reqexts non-exisitng section
+    ok 33 - reqexts malformed section
+    ok 34 - reqexts and sans
+    ok 35 - sans 1 dns
+    ok 36 - sans 1 dns critical
+    ok 37 - sans critical
+    ok 38 - sans 2 dns
+    ok 39 - sans 1 dns 1 ip
+    ok 40 - sans 2 ip
+    ok 41 - sans 1 uri
+    ok 42 - san_nodefault
+    ok 43 - san default via oldcert
+    ok 44 - popo SIGNATURE
+    ok 45 - popo RAVERIFIED
+    ok 46 - popo missing arg
+    ok 47 - popo too large
+    ok 48 - popo too small
+    ok 49 - popo NONE
+    ok 50 - popo KEYENC not supported
+    ok 51 - implicit_confirm
+    ok 52 - implicit_confirm with parameter
+    ok 53 - disable_confirm
+    ok 54 - disable_confirm with parameter
+    ok 55 - use certout (and chainout)
+    ok 56 - certout and chainout sent to same file
+    ok 57 - use certout and chainout from same file
+    ok 58 - no certout
+    ok 59 - certout missing arg
+    ok 60 - certout is non-existing directory and file
+    ok 61 - certout too many parameters
+    ok 62 - no out_trusted
+    ok 63 - out_trusted bigcert
+    ok 64 - out_trusted missing arg
+    ok 65 - out_trusted is non-existing file
+    ok 66 - out_trusted too many parameters
+    ok 67 - out_trusted empty certificate file
+    ok 68 - out_trusted accept issuing ca cert even with CRL check enabled by default
+    ok 69 - out_trusted expired issuing ca cert
+    ok 70 - out_trusted expired root ca cert
+    ok 71 - out_trusted wrong ca
+    ok 72 - out_trusted random input
+    ok 73 - oldcert ignored
+    ok 74 - oldcert missing arg
+    ok 75 - oldcert non existing file
+    ok 76 - oldcert empty file
+    ok 77 - oldcert random contents
+    ok 78 - pkcs10 converted to ir with privkey
+    ok 79 - pkcs10 converted to ir with pubkey with popo SIGNATURE
+    ok 80 - pkcs10 converted to ir with pubkey with popo RAVERIFIED
+    ok 81 - pkcs10 converted to ir without -newkey
+    ok 82 - p10cr csr present
+    ok 83 - p10cr csr missing
+    ok 84 - p10cr csr missing arg
+    ok 85 - p10cr csr non-existing file
+    ok 86 - p10cr csr empty file
+    ok 87 - ir + ignored revocation
+    ok 88 - ir + invalid revreason
+    ok 89 - ir + revreason not an integer
+    ok 90 - cr
+    ok 91 - kur explicit options
+    ok 92 - kur minimal options
+    ok 93 - kur newkey value missing
+    ok 94 - kur newkey is non-existing directory and file
+    ok 95 - kur newkey parameter count no match
+    ok 96 - kur newkey missing argument
+    ok 97 - kur oldcert not existing
+    ok 98 - kur wrong oldcert
+    ok 99 - kur empty oldcert file
+    ok 100 - kur without cert and oldcert
+    ok 101 - kur certout overwriting oldcert
+ok 5 - CMP app CLI Mock enrollment
+ok 6 - Mock server has terminated80-test_cmp_http.t ......... ok
+
+ok 1 - ocsp server port check
+ok 2 - s_server port check
+s_server ready, listening on port 56127
+not ok 3 - check s_server sent ocsp response
+# ------------------------------------------------------------------------------
+#   Failed test 'check s_server sent ocsp response'
+#   at test/recipes/82-test_ocsp_cert_chain.t line 138.
+# Looks like you failed 1 test of 3.82-test_ocsp_cert_chain.t .. 
+Dubious, test returned 1 (wstat 256, 0x100)
+Failed 1/3 subtests 
+
+Test Summary Report
+-------------------
+82-test_ocsp_cert_chain.t (Wstat: 256 (exited 1) Tests: 3 Failed: 1)
+  Failed test:  3
+  Non-zero exit status: 1
+Files=2, Tests=9, 110 wallclock secs ( 0.15 usr  0.02 sys + 17.89 cusr  7.91 csys = 25.97 CPU)
+Result: FAIL
+make[2]: *** [Makefile:4018: run_tests] Error 1
+make[2]: Leaving directory '/sources/openssl-3.5.9'
+make[1]: *** [Makefile:4015: _tests] Error 2
+make[1]: Leaving directory '/sources/openssl-3.5.9'
+make: *** [Makefile:4013: tests] Error 2
+== arm c993: tests rc=2 wall=112s
+waiting for build package openssl3-3.5.9-3 to be deactivated
+waiting for build package openssl3_debuginfo-3.5.9-3 to be deactivated
+waiting for build package openssl3_devel-3.5.9-3 to be deactivated
+waiting for build package openssl3_man-3.5.9-3 to be deactivated
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/dev-libs/openssl/work-3.5.9 intact for inspection
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+dev-libs::openssl3-3.5.9
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+TESTING dev-libs::openssl3-3.5.9
+----------------------------------------------------------------------
+haikuporter exit 0 wall=199s

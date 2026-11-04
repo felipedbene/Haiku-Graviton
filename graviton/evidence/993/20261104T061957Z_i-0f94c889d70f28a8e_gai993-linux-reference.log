@@ -1,0 +1,15 @@
+# instance i-0f94c889d70f28a8e c7g.8xlarge, Ubuntu 24.04 ami-0dcf79589cb11e193
+Linux ip-10-128-9-243 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+getaddrinfo(::1      , 0            ) PASS  0.000s  ok: inet6
+getaddrinfo(::1      , AI_ADDRCONFIG) PASS  0.000s  ok: inet6
+getaddrinfo(127.0.0.1, 0            ) PASS  0.000s  ok: inet
+getaddrinfo(127.0.0.1, AI_ADDRCONFIG) PASS  0.000s  ok: inet
+PASS: 4/4
+rc=0
+== netns: lo + an IPv4-only interface, the Haiku instance shape
+getaddrinfo(::1      , 0            ) PASS  0.000s  ok: inet6
+getaddrinfo(::1      , AI_ADDRCONFIG) PASS  0.000s  Address family for hostname not supported
+getaddrinfo(127.0.0.1, 0            ) PASS  0.000s  ok: inet
+getaddrinfo(127.0.0.1, AI_ADDRCONFIG) PASS  0.000s  ok: inet
+PASS: 4/4
+rc=0

@@ -1,0 +1,27 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f); host (no chroot), libnetwork arms via LIBRARY_PATH
+# issue 993 host A/B: libnetwork via LIBRARY_PATH, 2026-11-04T06:19:59Z
+Haiku ip-10-128-9-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 arm64 Haiku
+105696f0f3da7e866b737daaedf20467dd1b6b8350958c4febbdb25ea6b7c5d4  /boot/system/lib/libnetwork.so
+105696f0f3da7e866b737daaedf20467dd1b6b8350958c4febbdb25ea6b7c5d4  /boot/home/lnb/base/libnetwork.so
+6afab702728367a4d1f7846d76109167da7ad32a5b5a8882dbb79cefed0a1e57  /boot/home/lnb/c993/libnetwork.so
+== arm stock (LIBRARY_PATH=<unset>)
+  loaded: /boot/system/lib/libnetwork.so
+  getaddrinfo(::1      , 0            ) PASS  0.000s  ok: inet6
+  getaddrinfo(::1      , AI_ADDRCONFIG) FAIL  0.004s  No address associated with hostname
+  getaddrinfo(127.0.0.1, 0            ) PASS  0.000s  ok: inet
+  getaddrinfo(127.0.0.1, AI_ADDRCONFIG) PASS  0.000s  ok: inet
+  FAIL: 3/4
+== arm base (LIBRARY_PATH=/boot/home/lnb/base)
+  loaded: /boot/home/lnb/base/libnetwork.so
+  getaddrinfo(::1      , 0            ) PASS  0.000s  ok: inet6
+  getaddrinfo(::1      , AI_ADDRCONFIG) FAIL  0.002s  No address associated with hostname
+  getaddrinfo(127.0.0.1, 0            ) PASS  0.000s  ok: inet
+  getaddrinfo(127.0.0.1, AI_ADDRCONFIG) PASS  0.000s  ok: inet
+  FAIL: 3/4
+== arm c993 (LIBRARY_PATH=/boot/home/lnb/c993)
+  loaded: /boot/home/lnb/c993/libnetwork.so
+  getaddrinfo(::1      , 0            ) PASS  0.000s  ok: inet6
+  getaddrinfo(::1      , AI_ADDRCONFIG) PASS  0.000s  ok: inet6
+  getaddrinfo(127.0.0.1, 0            ) PASS  0.000s  ok: inet
+  getaddrinfo(127.0.0.1, AI_ADDRCONFIG) PASS  0.000s  ok: inet
+  PASS: 4/4

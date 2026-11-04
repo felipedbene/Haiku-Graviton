@@ -1,0 +1,25 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f)
+# haikuporter -y -j32 --test openssl3 with TEST() = LIBRARY_PATH=/sources/lnb/c993:... make VFP=1 test (the full suite, in haikuporter's chroot, with this branch's libnetwork)
+== issue 993: full suite in the chroot with c993 libnetwork, Wed Nov  4 06:00:50 GMT 2026
+105696f0f3da7e866b737daaedf20467dd1b6b8350958c4febbdb25ea6b7c5d4  /boot/system/lib/libnetwork.so
+6afab702728367a4d1f7846d76109167da7ad32a5b5a8882dbb79cefed0a1e57  /sources/lnb/c993/libnetwork.so
+6afab702728367a4d1f7846d76109167da7ad32a5b5a8882dbb79cefed0a1e57  /boot/home/lnb/c993/libnetwork.so
+ok 1 - CMP app CLI Mock connection
+ok 2 - CMP app CLI Mock verification
+ok 3 - CMP app CLI Mock credentials
+ok 4 - CMP app CLI Mock commands
+ok 5 - CMP app CLI Mock enrollment
+Test Summary Report
+-------------------
+02-test_errstr.t                      (Wstat: 256 (exited 1) Tests: 94 Failed: 1)
+  Failed test:  7
+  Non-zero exit status: 1
+04-test_bio_dgram.t                   (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+  Failed test:  1
+  Non-zero exit status: 1
+82-test_ocsp_cert_chain.t             (Wstat: 256 (exited 1) Tests: 3 Failed: 1)
+  Failed test:  3
+  Non-zero exit status: 1
+Files=347, Tests=4475, 1015 wallclock secs ( 4.58 usr  1.45 sys + 501.66 cusr 412.80 csys = 920.49 CPU)
+Result: FAIL
+== full suite rc=2 wall=1017s

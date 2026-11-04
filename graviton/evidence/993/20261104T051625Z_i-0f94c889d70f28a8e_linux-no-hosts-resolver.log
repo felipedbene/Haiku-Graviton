@@ -1,0 +1,12 @@
+# instance i-0f94c889d70f28a8e c7g.8xlarge, Ubuntu 24.04 ami-0dcf79589cb11e193
+# Linux analogue of haikuporter's chroot: empty hosts and resolv.conf in a private mount namespace, 2026-11-04T05:16:29Z
+Linux ip-10-128-9-243 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+== host as configured
+  getaddrinfo(localhost): err=[] n=1 0.000s
+  getnameinfo(::1): err=[] host=ip6-localhost 0.000s
+== arm none: empty hosts, empty resolv.conf
+  getaddrinfo(localhost): err=[Temporary failure in name resolution] n=0 0.000s
+  getnameinfo(::1): err=[Temporary failure in name resolution] host= 0.000s
+== arm resolv-v6: nameserver ::1
+  getaddrinfo(localhost): err=[Temporary failure in name resolution] n=0 0.000s
+  getnameinfo(::1): err=[Temporary failure in name resolution] host= 0.000s

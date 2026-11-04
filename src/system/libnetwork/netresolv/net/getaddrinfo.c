@@ -578,8 +578,16 @@ getaddrinfo(const char *hostname, const char *servname,
 	for (ex = explore; ex->e_af >= 0; ex++) {
 		*pai = ai0;
 
-		/* ADDRCONFIG check */
-		if ((((uint64_t)1 << ex->e_af) & mask) == 0)
+		/*
+		 * ADDRCONFIG check, for a NULL hostname only. A numeric hostname
+		 * is an address, not a name, and must never fall through to the
+		 * DNS lookup below: skipping it here for an unconfigured family
+		 * sent "::1" to the name servers on any host without a
+		 * non-loopback IPv6 address, which is every IPv4-only instance.
+		 * As on FreeBSD, AI_ADDRCONFIG does not filter a numeric hostname.
+		 */
+		if (hostname == NULL
+			&& (((uint64_t)1 << ex->e_af) & mask) == 0)
 			continue;
 
 		/* PF_UNSPEC entries are prepared for DNS queries only */

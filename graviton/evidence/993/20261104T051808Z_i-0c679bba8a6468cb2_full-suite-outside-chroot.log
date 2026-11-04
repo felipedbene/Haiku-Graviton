@@ -1,0 +1,24 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f)
+# full openssl 3.5.9 suite run directly on the host (no chroot): cd /boot/home/o/openssl-3.5.9 && perl -e '$SIG{HUP}="DEFAULT"; exec @ARGV' make VFP=1 test
+start: Wed Nov  4 02:56:23 GMT 2026
+rc=2
+Wed Nov  4 03:12:03 GMT 2026
+    ok 11 - msg_timeout 5
+    ok 15 - total_timeout 10
+ok 1 - CMP app CLI Mock connection
+ok 2 - CMP app CLI Mock verification
+ok 3 - CMP app CLI Mock credentials
+ok 4 - CMP app CLI Mock commands
+ok 5 - CMP app CLI Mock enrollment
+80-test_cmp_http.t ...................... ok
+82-test_ocsp_cert_chain.t ............... ok
+Test Summary Report
+-------------------
+02-test_errstr.t                      (Wstat: 256 (exited 1) Tests: 94 Failed: 1)
+  Failed test:  86
+  Non-zero exit status: 1
+04-test_bio_dgram.t                   (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+  Failed test:  1
+  Non-zero exit status: 1
+Files=347, Tests=4475, 939 wallclock secs ( 4.61 usr  1.21 sys + 503.88 cusr 385.52 csys = 895.22 CPU)
+Result: FAIL

@@ -1,0 +1,60 @@
+# getaddrinfo regression rows, base (= image) vs c993 libnetwork via LIBRARY_PATH, 2026-11-04T06:03:02Z
+Haiku ip-10-128-9-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 arm64 Haiku
+== base
+::1 unspec 0                                 6:::1 
+::1 unspec ADDRCONFIG                        error: No address associated with hostname
+::1 inet6 ADDRCONFIG                         error: Non-recoverable failure in name resolution
+::1 inet ADDRCONFIG                          error: No address associated with hostname
+127.0.0.1 unspec ADDRCONFIG                  4:127.0.0.1 
+127.0.0.1 inet6 ADDRCONFIG|V4MAPPED          error: Non-recoverable failure in name resolution
+10.0.0.1 NUMERICHOST|ADDRCONFIG              4:10.0.0.1 
+fe80::1%loop ADDRCONFIG                      error: No address associated with hostname
+localhost unspec 0                           4:127.0.0.1 6:::1 
+localhost unspec ADDRCONFIG                  4:127.0.0.1 
+amazon.com ADDRCONFIG                        4:98.87.170.71 4:98.82.161.185 4:98.87.170.74 
+amazon.com 0                                 4:98.87.170.74 4:98.82.161.185 4:98.87.170.71 
+no-such-host.invalid ADDRCONFIG              error: No address associated with hostname
+NULL PASSIVE|ADDRCONFIG                      4:0.0.0.0 
+NULL PASSIVE                                 6::: 4:0.0.0.0 
+NULL ADDRCONFIG (loopback)                   4:127.0.0.1 
+bad literal NUMERICHOST                      error: hostname or servname not provided or not known
+== c993
+::1 unspec 0                                 6:::1 
+::1 unspec ADDRCONFIG                        6:::1 
+::1 inet6 ADDRCONFIG                         6:::1 
+::1 inet ADDRCONFIG                          error: No address associated with hostname
+127.0.0.1 unspec ADDRCONFIG                  4:127.0.0.1 
+127.0.0.1 inet6 ADDRCONFIG|V4MAPPED          6:::ffff:127.0.0.1 
+10.0.0.1 NUMERICHOST|ADDRCONFIG              4:10.0.0.1 
+fe80::1%loop ADDRCONFIG                      6:fe80::1 
+localhost unspec 0                           4:127.0.0.1 6:::1 
+localhost unspec ADDRCONFIG                  4:127.0.0.1 
+amazon.com ADDRCONFIG                        4:98.87.170.71 4:98.87.170.74 4:98.82.161.185 
+amazon.com 0                                 4:98.82.161.185 4:98.87.170.71 4:98.87.170.74 
+no-such-host.invalid ADDRCONFIG              error: No address associated with hostname
+NULL PASSIVE|ADDRCONFIG                      4:0.0.0.0 
+NULL PASSIVE                                 6::: 4:0.0.0.0 
+NULL ADDRCONFIG (loopback)                   4:127.0.0.1 
+bad literal NUMERICHOST                      error: hostname or servname not provided or not known
+== diff base c993
+2,3c2,3
+< ::1 unspec ADDRCONFIG                        error: No address associated with hostname
+< ::1 inet6 ADDRCONFIG                         error: Non-recoverable failure in name resolution
+---
+> ::1 unspec ADDRCONFIG                        6:::1 
+> ::1 inet6 ADDRCONFIG                         6:::1 
+6c6
+< 127.0.0.1 inet6 ADDRCONFIG|V4MAPPED          error: Non-recoverable failure in name resolution
+---
+> 127.0.0.1 inet6 ADDRCONFIG|V4MAPPED          6:::ffff:127.0.0.1 
+8c8
+< fe80::1%loop ADDRCONFIG                      error: No address associated with hostname
+---
+> fe80::1%loop ADDRCONFIG                      6:fe80::1 
+11,12c11,12
+< amazon.com ADDRCONFIG                        4:98.87.170.71 4:98.82.161.185 4:98.87.170.74 
+< amazon.com 0                                 4:98.87.170.74 4:98.82.161.185 4:98.87.170.71 
+---
+> amazon.com ADDRCONFIG                        4:98.87.170.71 4:98.87.170.74 4:98.82.161.185 
+> amazon.com 0                                 4:98.82.161.185 4:98.87.170.71 4:98.87.170.74 
+failed to run commands: exit status 1

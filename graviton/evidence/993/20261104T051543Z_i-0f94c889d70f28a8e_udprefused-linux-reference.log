@@ -1,0 +1,11 @@
+# instance i-0f94c889d70f28a8e c7g.8xlarge, Ubuntu 24.04 ami-0dcf79589cb11e193
+# issue 993: udprefused993, 2026-11-04T05:16:03Z
+Linux ip-10-128-9-243 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+udp 127.0.0.1:<unused> recv        PASS  0.000s  recv=-1 Connection refused
+udp 127.0.0.1:<unused> poll        PASS  0.000s  poll=1 revents=0x8 SO_ERROR=Connection refused
+udp ::1:<unused> recv              PASS  0.000s  recv=-1 Connection refused
+udp ::1:<unused> poll              PASS  0.000s  poll=1 revents=0x8 SO_ERROR=Connection refused
+udp 0.0.0.0:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+udp [::]:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+PASS: 6/6 refused
+rc=0
