@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-kernel-cmp
+# instance: i-08d7a8a5e483ffab4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: the trunk kernel rebuild differs only in the embedded build date/time
+# start: 20261104T024830Z   end: 20261104T024841Z   rc: 0
+# script sha256: e5726d131b233b57afc188ca17381ba5db13f7b623d0b803c0ecf359ac53b610
+# ---- script ----
+# | cd /opt/t/hg/generated
+# | K=objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64
+# | echo "differing bytes trunk vs trunk rebuild: $(cmp -l $K /opt/t/out/kernel_arm64.trunk | wc -l)"
+# | cmp -l $K /opt/t/out/kernel_arm64.trunk | head -12
+# | strings -a /opt/t/out/kernel_arm64.trunk | grep -E "^[A-Z][a-z]{2} [ 0-9]{2} 20[0-9]{2}$|^[0-9]{2}:[0-9]{2}:[0-9]{2}$" | head
+# | strings -a $K | grep -E "^[A-Z][a-z]{2} [ 0-9]{2} 20[0-9]{2}$|^[0-9]{2}:[0-9]{2}:[0-9]{2}$" | head
+# ---- raw output ----
+differing bytes trunk vs trunk rebuild: 6
+1749033  65  64
+1749035  64  65
+1749036  61  67
+1754741  65  64
+1754743  64  65
+1754744  61  67
+02:44:57
+Nov  4 2026
+02:45:41
+Nov  4 2026

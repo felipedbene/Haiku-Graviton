@@ -1,0 +1,184 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: arm-c979-c7g
+# instance: i-0f271ff0de6474d4e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c979 on c7g.4xlarge (AMI ami-0ebd0dcb006f9fbd4): idreg979, rng980, elfmachine1000, openssl3 3.5.9-3 speed -evp aes-256-gcm x3
+# start: 20261104T025548Z   end: 20261104T025714Z   rc: 0
+# script sha256: 77d3d8b968907f64661a83c460e60db6790d118723d70b8b2629fa4757231370
+# ---- script ----
+# | # One DeBeOS arm: toolchain, the three repros, openssl identity + speed (3 runs), loader messages.
+# | # ARM label is in the first line of output.
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -1
+# | command -v gcc wget > /dev/null || exit 1
+# | uname -a
+# | sha256sum /boot/system/packages/haiku-r1*.hpkg
+# | mkdir -p /boot/home/bfA && cd /boot/home/bfA && rm -rf e && mkdir e
+# | wget -q -O idreg979.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/idreg979.c?<PRESIGNED>"
+# | wget -q -O rng980.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/rng980.c?<PRESIGNED>"
+# | wget -q -O elfmachine1000.c "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/elfmachine1000.c?<PRESIGNED>"
+# | wget -q -O hello.x86_64 "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/A/in/hello.x86_64?<PRESIGNED>"
+# | cat > sums <<'SUMS'
+# | 56aa0e300b20aaffb8e7915e41b589693772779b299577d39b6a9878a959e8a1  elfmachine1000.c
+# | ef776604ea0bea63a69d070c16873f17b3c01726e5aa8e9d7753319fc9dd07c1  idreg979.c
+# | 093b798d35e31db587044f9ba598a55cc5a0059e6c629c4b25839126f746fc9a  rng980.c
+# | a3942dd5247b08fdcebf23664b5a45a1dfc68697b98adb0c27cada6875463276  hello.x86_64
+# | SUMS
+# | sha256sum -c sums || exit 1
+# | chmod +x hello.x86_64
+# | for p in idreg979 rng980 elfmachine1000; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | echo '=== idreg979'; ./idreg979; echo "rc=$?"
+# | echo '=== idreg979 -f'; ./idreg979 -f 2>&1 | head -12; echo "rc=$?"
+# | echo '=== rng980'; ./rng980; echo "rc=$?"
+# | echo '=== elfmachine1000'
+# | SL=$(wc -l < /var/log/syslog)
+# | cd e && ../elfmachine1000 /boot/system/bin/true /boot/system/lib/libbsd.so ../hello.x86_64; echo "rc=$?"; cd ..
+# | echo '=== the x86_64 binary from a shell (bash):'; ./hello.x86_64; echo "rc=$?"
+# | echo '=== syslog lines written during elfmachine1000 (runtime_loader/elf):'
+# | tail -n +$((SL + 1)) /var/log/syslog | grep -E "runtime_loader|elf:" | sed 's/^.*KERN: //' | sort | uniq -c | head -40
+# | O=$(command -v openssl); echo "openssl: $O"; $O version; $O info -cpusettings
+# | for i in 1 2 3; do echo "--- run $i"; $O speed -evp aes-256-gcm 2>&1 | tail -2; done
+# | echo "--- forced OPENSSL_armcap=0x1e7d (#979's Linux mask test)"; OPENSSL_armcap=0x1e7d $O speed -evp aes-256-gcm 2>&1 | tail -1
+# ---- raw output ----
+[system] Done.
+Haiku ip-10-128-7-33.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 02:45:09 arm64 other Haiku
+c7a0d06d47e7f64059ea36bfec2bdfde4a7bac06109d6e6f1ff62f9399b35fbb  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+elfmachine1000.c: OK
+idreg979.c: OK
+rng980.c: OK
+hello.x86_64: OK
+=== idreg979
+AT_HWCAP  0x000000000cbffffb
+AT_HWCAP2 0x0000000000006001
+HWCAP_CPUID set
+reg MIDR_EL1           0x00000000411fd401
+reg S3_0_C0_C0_1       signal 4
+reg S3_0_C0_C0_2       signal 4
+reg S3_0_C0_C0_3       signal 4
+reg S3_0_C0_C0_4       signal 4
+reg MPIDR_EL1          0x0000000080000000
+reg REVIDR_EL1         000000000000000000
+reg S3_0_C0_C0_7       signal 4
+reg ID_PFR0_EL1        signal 4
+reg S3_0_C0_C1_1       signal 4
+reg S3_0_C0_C1_2       signal 4
+reg S3_0_C0_C1_3       signal 4
+reg S3_0_C0_C1_4       signal 4
+reg S3_0_C0_C1_5       signal 4
+reg S3_0_C0_C1_6       signal 4
+reg S3_0_C0_C1_7       signal 4
+reg ID_ISAR0_EL1       000000000000000000
+reg S3_0_C0_C2_1       000000000000000000
+reg S3_0_C0_C2_2       000000000000000000
+reg S3_0_C0_C2_3       000000000000000000
+reg S3_0_C0_C2_4       000000000000000000
+reg S3_0_C0_C2_5       000000000000000000
+reg S3_0_C0_C2_6       000000000000000000
+reg S3_0_C0_C2_7       000000000000000000
+reg MVFR0_EL1          000000000000000000
+reg S3_0_C0_C3_1       000000000000000000
+reg S3_0_C0_C3_2       000000000000000000
+reg S3_0_C0_C3_3       000000000000000000
+reg S3_0_C0_C3_4       000000000000000000
+reg S3_0_C0_C3_5       000000000000000000
+reg S3_0_C0_C3_6       000000000000000000
+reg S3_0_C0_C3_7       000000000000000000
+reg ID_AA64PFR0_EL1    0x0000000000110011
+reg ID_AA64PFR1_EL1    000000000000000000
+reg ID_AA64PFR2_EL1    000000000000000000
+reg S3_0_C0_C4_3       000000000000000000
+reg ID_AA64ZFR0_EL1    000000000000000000
+reg ID_AA64SMFR0_EL1   000000000000000000
+reg S3_0_C0_C4_6       000000000000000000
+reg ID_AA64FPFR0_EL1   000000000000000000
+reg ID_AA64DFR0_EL1    0x0000000000000006
+reg ID_AA64DFR1_EL1    000000000000000000
+reg S3_0_C0_C5_2       000000000000000000
+reg S3_0_C0_C5_3       000000000000000000
+reg ID_AA64AFR0_EL1    000000000000000000
+reg ID_AA64AFR1_EL1    000000000000000000
+reg S3_0_C0_C5_6       000000000000000000
+reg S3_0_C0_C5_7       000000000000000000
+reg ID_AA64ISAR0_EL1   0x1011111110212120
+reg ID_AA64ISAR1_EL1   0x0010100000211002
+reg ID_AA64ISAR2_EL1   000000000000000000
+reg ID_AA64ISAR3_EL1   000000000000000000
+reg S3_0_C0_C6_4       000000000000000000
+reg S3_0_C0_C6_5       000000000000000000
+reg S3_0_C0_C6_6       000000000000000000
+reg S3_0_C0_C6_7       000000000000000000
+reg ID_AA64MMFR0_EL1   0x00000111ff000000
+reg ID_AA64MMFR1_EL1   000000000000000000
+reg ID_AA64MMFR2_EL1   000000000000000000
+reg ID_AA64MMFR3_EL1   000000000000000000
+reg ID_AA64MMFR4_EL1   000000000000000000
+reg S3_0_C0_C7_5       000000000000000000
+reg S3_0_C0_C7_6       000000000000000000
+reg S3_0_C0_C7_7       000000000000000000
+MRS into x29 reads MIDR_EL1                                ok
+MRS into x30 reads MIDR_EL1                                ok
+MRS into xzr is skipped, x19/x20/x28 untouched             ok
+ID_PFR0_EL1 (CRm 1, not emulated) raises SIGILL            ok
+SCTLR_EL1 (not an ID register) raises SIGILL               ok
+MIDR_EL1 stable over 100000 reads                          ok
+failures: 0
+rc=0
+=== idreg979 -f
+AT_HWCAP  0x000000000cbffffb
+AT_HWCAP2 0x0000000000006001
+HWCAP_CPUID set
+reg MIDR_EL1           0x00000000411fd401
+reg S3_0_C0_C0_1       signal 4
+reg S3_0_C0_C0_2       signal 4
+reg S3_0_C0_C0_3       signal 4
+reg S3_0_C0_C0_4       signal 4
+reg MPIDR_EL1          0x0000000080000000
+reg REVIDR_EL1         000000000000000000
+reg S3_0_C0_C0_7       signal 4
+reg ID_PFR0_EL1        signal 4
+rc=0
+=== rng980
+AT_HWCAP  0x000000000cbffffb
+AT_HWCAP2 0x0000000000006001
+HWCAP2_RNG clear
+RNDR   executes: 10000/10000 reads succeeded, 0 repeated
+RNDRRS executes: 10000/10000 reads succeeded, 0 repeated
+HWCAP2_RNG agrees with whether RNDR executes               FAIL
+RNDR: most reads succeed, no value repeats                 ok
+RNDRRS: most reads succeed, no value repeats               ok
+failures: 1
+rc=1
+=== elfmachine1000
+execve ./exe.native                          ran, exit 0                              ok
+dlopen ./lib.native.so                       loaded                                   ok
+execve ./exe.x86_64                          ran, exit 0                              FAIL
+    dlerror: loaded
+dlopen ./lib.x86_64.so                       refused                                  FAIL
+execve ./exe.i386                            ran, exit 0                              FAIL
+    dlerror: loaded
+dlopen ./lib.i386.so                         refused                                  FAIL
+execve ./exe.em7777                          ran, exit 0                              FAIL
+    dlerror: loaded
+dlopen ./lib.em7777.so                       refused                                  FAIL
+execve ./exe.bigendian                       ran, exit 0                              FAIL
+    dlerror: loaded
+dlopen ./lib.bigendian.so                    refused                                  FAIL
+execve ../hello.x86_64                       ran, killed by signal 4                  FAIL
+failures: 9
+rc=1
+=== the x86_64 binary from a shell (bash):
+rc=132
+=== syslog lines written during elfmachine1000 (runtime_loader/elf):
+openssl: /boot/system/bin/openssl
+OpenSSL 3.5.9 29 Sep 2026 (Library: OpenSSL 3.5.9 29 Sep 2026)
+OPENSSL_armcap=0x11efd
+--- run 1
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      69548.91k   258355.68k   800512.04k  2075224.31k  4711326.01k  5123164.07k
+--- run 2
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      69559.00k   257925.62k   797488.28k  2074780.97k  4710371.71k  5121816.04k
+--- run 3
+type             16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+AES-256-GCM      70012.76k   259013.88k   800845.91k  2075354.54k  4714440.98k  5124928.17k
+--- forced OPENSSL_armcap=0x1e7d (#979's Linux mask test)
+AES-256-GCM      69323.69k   256768.20k   837104.33k  2075364.54k  4713974.27k  5123621.86k
+/tmp/run-36775-0c4fe1.sh: line 27:   439 Illegal instruction        ./hello.x86_64
