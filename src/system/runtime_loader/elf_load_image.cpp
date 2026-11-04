@@ -417,6 +417,70 @@ parse_dynamic_segment(image_t* image)
 }
 
 
+#ifndef ELF_MACHINE
+#	error ELF_MACHINE is not defined for this architecture (elf_private.h)
+#endif
+
+
+static const char*
+elf_machine_name(uint16 machine)
+{
+	switch (machine) {
+		case EM_386:
+		case EM_486:
+			return "x86";
+		case EM_68K:
+			return "m68k";
+		case EM_MIPS:
+			return "mips";
+		case EM_PPC:
+			return "ppc";
+		case EM_ARM:
+			return "arm";
+		case EM_SPARCV9:
+			return "sparc64";
+		case EM_X86_64:
+			return "x86_64";
+		case EM_AARCH64:
+			return "arm64";
+		case EM_RISCV:
+			return "riscv";
+		default:
+			return "an unknown machine";
+	}
+}
+
+
+/*!	Explains, for an ELF image parse_elf_header() refused, why it cannot run
+	here when the reason is that it was built for another machine or byte
+	order. Returns false for any other kind of bad header, which the caller
+	reports generically. e_machine sits at the same offset in both ELF
+	classes, so this also names the machine of a 32-bit image on a 64-bit
+	system and vice versa.
+*/
+static bool
+report_foreign_elf_image(const char* path, const elf_ehdr& eheader)
+{
+	if (memcmp(eheader.e_ident, ELFMAG, 4) != 0)
+		return false;
+
+	if (!eheader.IsHostEndian()) {
+		FATAL("%s: ELF image has the wrong byte order (EI_DATA %u) for this "
+			"system\n", path, eheader.e_ident[EI_DATA]);
+		return true;
+	}
+
+	if (!ELF_MACHINE_IS_NATIVE(eheader.e_machine)) {
+		FATAL("%s: ELF image is for %s (e_machine %u), but this system is "
+			"%s\n", path, elf_machine_name(eheader.e_machine),
+			eheader.e_machine, elf_machine_name(ELF_MACHINE));
+		return true;
+	}
+
+	return false;
+}
+
+
 // #pragma mark -
 
 
@@ -428,6 +492,13 @@ parse_elf_header(elf_ehdr* eheader, int32* _pheaderSize,
 		return B_NOT_AN_EXECUTABLE;
 
 	if (eheader->e_ident[4] != ELF_CLASS)
+		return B_NOT_AN_EXECUTABLE;
+
+	// An image for another machine or byte order has to be refused here,
+	// before anything in it is interpreted: its program headers and dynamic
+	// section would otherwise be parsed as if native, and fail much later
+	// with an error that never mentions the architecture.
+	if (!eheader->IsHostEndian() || !ELF_MACHINE_IS_NATIVE(eheader->e_machine))
 		return B_NOT_AN_EXECUTABLE;
 
 	if (eheader->e_phoff == 0)
@@ -458,6 +529,10 @@ parse_elf32_header(Elf32_Ehdr* eheader, int32* _pheaderSize,
 	if (eheader->e_ident[4] != ELFCLASS32)
 		return B_NOT_AN_EXECUTABLE;
 
+	if (!eheader->IsHostEndian()
+		|| (eheader->e_machine != EM_386 && eheader->e_machine != EM_486))
+		return B_NOT_AN_EXECUTABLE;
+
 	if (eheader->e_phoff == 0)
 		return B_NOT_AN_EXECUTABLE;
 
@@ -481,6 +556,9 @@ parse_elf64_header(Elf64_Ehdr* eheader, int32* _pheaderSize,
 		return B_NOT_AN_EXECUTABLE;
 
 	if (eheader->e_ident[4] != ELFCLASS64)
+		return B_NOT_AN_EXECUTABLE;
+
+	if (!eheader->IsHostEndian() || eheader->e_machine != EM_X86_64)
 		return B_NOT_AN_EXECUTABLE;
 
 	if (eheader->e_phoff == 0)
@@ -584,7 +662,8 @@ load_image(char const* name, image_type type, const char* rpath, const char* run
 
 	status = parse_elf_header(&eheader, &pheaderSize, &sheaderSize);
 	if (status < B_OK) {
-		FATAL("%s: Incorrect ELF header\n", path);
+		if (!report_foreign_elf_image(path, eheader))
+			FATAL("%s: Incorrect ELF header\n", path);
 		goto err1;
 	}
 
