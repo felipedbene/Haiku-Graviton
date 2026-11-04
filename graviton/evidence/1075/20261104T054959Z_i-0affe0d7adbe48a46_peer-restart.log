@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: peer-restart
+# instance: i-0affe0d7adbe48a46   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T054959Z   end: 20261104T055017Z   rc: 0
+# script sha256: 5ca91b461304dfe96ba5492cd1b8c3fd69f6aa8bf126ca36c367d7d5feccaf55
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | cd /opt/t975
+# | aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/rv/src/tcp975-peer.py tcp975-peer.py
+# | sha256sum tcp975-peer.py
+# | pkill -TERM -f 'tcp975-peer.py 9751'; sleep 2
+# | echo "DROP rules left: $(iptables -S | grep -c DROP)"
+# | nohup python3 -I /opt/t975/tcp975-peer.py 9751 9752 > /opt/t975/peer2.log 2>&1 &
+# | sleep 3; ss -ltnp | grep -E '975[124]'
+# ---- raw output ----
+f3a29dfa4652a54e5696d02d1dcb4ea6d5afd2c3d1ed010d9a89bc2ddeb0184d  tcp975-peer.py
+DROP rules left: 0
+LISTEN 0      64           0.0.0.0:9751      0.0.0.0:*    users:(("python3",pid=9501,fd=3))        
+LISTEN 0      64           0.0.0.0:9752      0.0.0.0:*    users:(("python3",pid=9501,fd=7))        
+LISTEN 0      64           0.0.0.0:9754      0.0.0.0:*    users:(("python3",pid=9501,fd=5))        
