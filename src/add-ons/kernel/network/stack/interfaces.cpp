@@ -1487,11 +1487,18 @@ get_interface_for_device(net_domain* domain, uint32 index)
 /*!	Returns a reference to an Interface that matches the given \a linkAddress.
 	The link address is checked against its hardware address, or its interface
 	name, or finally the interface index.
+	If \a _status is given, it is set to why no interface is returned:
+	\c B_BAD_VALUE when none matches, or the error that prevented using the
+	one that does in \a domain.
 */
 Interface*
-get_interface_for_link(net_domain* domain, const sockaddr* _linkAddress)
+get_interface_for_link(net_domain* domain, const sockaddr* _linkAddress,
+	status_t* _status)
 {
 	sockaddr_dl& linkAddress = *(sockaddr_dl*)_linkAddress;
+	status_t dummy;
+	status_t& status = _status != NULL ? *_status : dummy;
+	status = B_BAD_VALUE;
 
 	RecursiveLocker locker(sLock);
 
@@ -1519,7 +1526,8 @@ get_interface_for_link(net_domain* domain, const sockaddr* _linkAddress)
 			BReference<Interface> interfaceRef(interface);
 			locker.Unlock();
 
-			if (interface->CreateDomainDatalinkIfNeeded(domain) != B_OK)
+			status = interface->CreateDomainDatalinkIfNeeded(domain);
+			if (status != B_OK)
 				return NULL;
 
 			return interfaceRef.Detach();

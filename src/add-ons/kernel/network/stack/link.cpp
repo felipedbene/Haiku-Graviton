@@ -151,9 +151,11 @@ LinkProtocol::Bind(const sockaddr* address)
 	if (fMonitoredDevice != NULL)
 		return B_BUSY;
 
-	Interface* interface = get_interface_for_link(sDomain, address);
+	status_t lookupStatus;
+	Interface* interface = get_interface_for_link(sDomain, address,
+		&lookupStatus);
 	if (interface == NULL)
-		return B_BAD_VALUE;
+		return lookupStatus;
 
 	net_device_interface* boundTo
 		= acquire_device_interface(interface->DeviceInterface());

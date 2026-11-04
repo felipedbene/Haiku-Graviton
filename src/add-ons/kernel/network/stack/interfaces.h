@@ -195,7 +195,8 @@ status_t update_interface_address(InterfaceAddress* interfaceAddress,
 Interface* get_interface(net_domain* domain, uint32 index);
 Interface* get_interface(net_domain* domain, const char* name);
 Interface* get_interface_for_device(net_domain* domain, uint32 index);
-Interface* get_interface_for_link(net_domain* domain, const sockaddr* address);
+Interface* get_interface_for_link(net_domain* domain, const sockaddr* address,
+	status_t* _status = NULL);
 InterfaceAddress* get_interface_address(const struct sockaddr* address);
 InterfaceAddress* get_interface_address_for_destination(net_domain* domain,
 	const sockaddr* destination);
