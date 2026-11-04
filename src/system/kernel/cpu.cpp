@@ -191,9 +191,15 @@ cpu_get_active_time(int32 cpu)
 		activeTime = cpu_active_time_state_value(state);
 	}
 
-	// Counter reads on two CPUs are not ordered against the word, so a
-	// projection can still overshoot by a fraction of a microsecond. Keep
-	// what callers see monotonic regardless.
+	// A projection can still overshoot the value the writer goes on to store:
+	// the writer reads system_time() and then stores the word, and a reader
+	// that sees the old word with a clock read taken inside that window counts
+	// the window as busy. The window is normally well under a microsecond, but
+	// it has no bound if the hypervisor deschedules the writer's vCPU between
+	// the two (steal time). The error does not accumulate, since every store
+	// is computed from the writer's own clock, and the high-water mark below
+	// only holds the value still until the CPU's next busy run catches up.
+	// It keeps what callers see monotonic regardless.
 	int64* reported = &sReportedActiveTime[cpu];
 	int64 previous = atomic_get64(reported);
 	while (activeTime > previous) {

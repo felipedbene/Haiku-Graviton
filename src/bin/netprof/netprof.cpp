@@ -9,13 +9,16 @@
 	from cpu_info::active_time. That total is the number worth optimising but it
 	says nothing about where the time goes. This tool partitions it.
 
-	The partition is exact rather than statistical, and that is the point of
-	using thread times instead of a sampling profiler. CPUEntry::TrackActivity()
-	(scheduler_cpu.cpp) derives active_time by *adding up* the kernel_time and
-	user_time deltas of every non-idle thread as it leaves the CPU, so the sum of
-	the per-thread deltas below is the same quantity nettput divides by the byte
-	count -- not an estimate of it. Any residual is therefore meaningful and is
-	reported rather than hidden: see the reconciliation at the end of the output.
+	The partition comes from thread times rather than a sampling profiler, so
+	it is a measurement, not an estimate. It is not the same quantity as
+	active_time, though. CPUEntry::TrackActivity() (scheduler_cpu.cpp) keeps
+	active_time as wall time the CPU spends outside its idle thread, while the
+	per-thread kernel_time and user_time deltas below cover only the time each
+	thread is charged for. The two agree up to the reschedule path itself,
+	which runs between one thread's time being stopped and the next one's being
+	started and is charged to no thread but still counts as active. So the
+	residual reported at the end of the output is normally small and positive,
+	and anything larger is meaningful and is reported rather than hidden.
 
 	Interrupt handler time is *not* broken out, because the kernel charges it to
 	whichever thread happened to be running (interrupts.cpp only accumulates it
@@ -23,15 +26,16 @@
 	whose interrupts are woken by its own network threads this mostly lands on
 	the right thread anyway, but time spent in an interrupt that arrives while a
 	CPU is idle is charged to the idle thread and so escapes active_time
-	entirely. That shows up here as a negative residual.
+	entirely. That shows up here as a negative residual, offset by the positive
+	reschedule-path residual above.
 
 	Idle threads are deliberately left out of the partition and reported apart
 	from it. Their kernel_time advances for the whole time they are on the CPU,
 	so each one accrues an entire wall-clock window and would swamp the table --
-	and TrackActivity() excludes them from active_time for exactly the same
-	reason, so including them here would break the reconciliation the tool
-	exists to perform. They are still worth printing: idle time is the headroom
-	left, which is the other half of any statement about cost.
+	and active_time is by definition the time spent outside them, so including
+	them here would break the reconciliation the tool exists to perform. They
+	are still worth printing: idle time is the headroom left, which is the other
+	half of any statement about cost.
 */
 
 #include <errno.h>
@@ -172,7 +176,9 @@ print_usage(const char* name)
 		"Usage: %s [-n <count>] [-b <bytes>] <seconds>\n"
 		"Partitions the CPU time spent during a window across every thread on\n"
 		"the system, and reconciles the partition against the per-CPU\n"
-		"active_time that nettput measures.\n"
+		"active_time that nettput measures (wall time outside the idle\n"
+		"threads; the residual includes reschedule time no thread is\n"
+		"charged for).\n"
 		"\n"
 		"  -n <count>   Show the <count> busiest threads. Default %d; 0 shows\n"
 		"               every thread that used any CPU at all.\n"
@@ -279,8 +285,9 @@ main(int argc, char** argv)
 			= find_thread(&sBefore, after->thread);
 
 		// See the note on idle threads at the top of the file: they run for the
-		// whole window and are excluded from active_time, so counting them
-		// would both dominate the table and break the reconciliation.
+		// whole window and active_time is the time spent outside them, so
+		// counting them would both dominate the table and break the
+		// reconciliation.
 		if (after->priority == B_IDLE_PRIORITY) {
 			idleSum += (after->userTime + after->kernelTime)
 				- (before != NULL ? before->userTime + before->kernelTime : 0);
