@@ -23,7 +23,9 @@
  * killed, so the process then stays behind).
  *
  * Set the interface up first:  ifconfig tap/0 up
- * usage: close1063 [iterations]   (default 3000 per phase; run as root)
+ * usage: close1063 [iterations [pause-us]]
+ *   iterations per phase (default 3000); pause-us between injected frames
+ *   (default 0, flat out). Run as root.
  */
 
 #include <sys/types.h>
@@ -51,6 +53,7 @@ static volatile int sStop;
 static volatile long sWritten;
 static volatile long sProgress;
 static volatile const char* sPhase = "setup";
+static long sInjectPause;	/* microseconds between frames, 0 = flat out */
 
 
 static double
@@ -79,6 +82,8 @@ injector(void* arg)
 			sWritten++;
 		else
 			usleep(100);
+		if (sInjectPause > 0)
+			usleep(sInjectPause);
 	}
 	return NULL;
 }
@@ -125,6 +130,7 @@ int
 main(int argc, char** argv)
 {
 	long iterations = argc > 1 ? atol(argv[1]) : 3000;
+	sInjectPause = argc > 2 ? atol(argv[2]) : 0;
 
 	int fd = socket(AF_LINK, SOCK_DGRAM, 0);
 	struct ifreq ifr;
