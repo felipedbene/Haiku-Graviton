@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b-dir-run2
+# instance: i-05e4cf41e5ebc41c2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm, case dir (a KDL is expected before the fix)
+# start: 20261104T160404Z   end: 20261104T160816Z   rc: 1
+# script sha256: 6430c2bcfacfbcff9f1719393776a0ef7378da8a5b395e27496b4e82b6ccddd9
+# ---- script ----
+# | cd /boot/home/t1118 || exit 1
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ntfs
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | bash ./rename1118.sh $(dev k3) /k3 ./rename1118 dir; echo "rename1118 rc=$?"
+# ---- raw output ----

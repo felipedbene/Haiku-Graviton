@@ -1,0 +1,161 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-0b23ebc40a664fc1e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: builder setup + build at trunk 87b11c0a19: kernel, ntfs before (+#1119), ntfs after (+#1119 +this fix); mkntfs image
+# start: 20261104T154422Z   end: 20261104T154635Z   rc: 1
+# script sha256: 66dc5f4fe0700788260c1f9fb459e7e7be00c64f6a904f265bd91e00bc96bb34
+# ---- script ----
+# | # Cross-build for #1118 (group W) on an Ubuntu arm64 builder (the 150 GiB volume arrives as a
+# | # second disk). Trunk 87b11c0a19 already carries #1086 (arm64 physical map, needed by diskimage
+# | # single-page I/O) and #1033. Revision pinned to canonical's hrev59996. Builds:
+# | #   kernel_arm64.trunk: trunk kernel, in BOTH Haiku arms
+# | #   ntfs.before: trunk + ntfs1115.patch (#1119, needed so the volume can be remounted at all)
+# | #   ntfs.after:  trunk + ntfs1115.patch + ntfs1118.patch (this fix)
+# | # Also makes the mkntfs test image.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | mkfs.ext4 -q -F /dev/nvme1n1 && mkdir -p /mnt/w && mount /dev/nvme1n1 /mnt/w && mkdir -p /mnt/w/t && ln -sfn /mnt/w/t /opt/t || exit 1
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -r; dpkg -s ntfs-3g | grep -E "^Version"
+# | cd /opt/t
+# | git clone -q --filter=blob:none https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg checkout -q 87b11c0a19 && git -C hg log -1 --format='configure at %H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam || exit 1
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 1
+# | tar --zstd -xf /tmp/ct.tar.zst -C . || exit 1
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -1
+# | O=/opt/t/out; mkdir -p $O
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet --recursive s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/src1118/ $O/ && (cd $O && sha256sum *)
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV kernel_arm64 > $O/jam-kernel.log 2>&1 || { tail -40 $O/jam-kernel.log; exit 1; }
+# | cp objects/haiku/arm64/release/system/kernel/kernel_arm64 $O/kernel_arm64.trunk || exit 1
+# | nb() {	# nb <label> <patch...>
+# | 	local l=$1; shift
+# | 	git -C .. checkout -q -f 87b11c0a19
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	rm -rf $A/ntfs
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep -E "ntfs/(kernel_interface|lowntfs)"
+# | 	cp $A/ntfs/ntfs $O/ntfs.$l
+# | }
+# | nb before ntfs1115.patch || exit 1
+# | nb after ntfs1115.patch ntfs1118.patch || exit 1
+# | rm -rf $A/ntfs; jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > /dev/null 2>&1 && cmp $A/ntfs/ntfs $O/ntfs.after && echo "ntfs.after rebuild identical"
+# | git -C .. checkout -q -f 87b11c0a19
+# | cd $O && truncate -s 256M ntfs.img && mkntfs -F -Q -L NTFS1118 ntfs.img > /dev/null 2>&1 || exit 1
+# | sha256sum kernel_arm64.trunk ntfs.before ntfs.after ntfs.img
+# | for f in kernel_arm64.trunk ntfs.before ntfs.after ntfs.img; do aws s3 cp --quiet $f s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/out1118/$f || exit 1; done; echo uploaded
+# ---- raw output ----
+apt rc=0
+7.0.0-1016-aws
+Version: 1:2022.10.3-5ubuntu1.1
+configure at 87b11c0a1969516c2f3c38ca5fbf8da6039eb629 node: issue 978 does not reproduce on canonical 00632cb3 (probe, drivers, evidence) (#1066)
+/usr/local/bin/jam
+Configured successfully!
+549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c
+e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c
+886b7a1c03ca663c93166291e5fcfe00f9d32b90d089d99653a4a01f2a05789c  ntfs1115.patch
+7462e4e0e0919306af495b6612dd89435b275d62f952b805093056d460bfc457  ntfs1118.patch
+cdf5e5a9ee0ccc1f882f4a32977bbf4f8aeecc00877238944f02e93ec7963a88  rename1118.c
+e69d7624e094e2743efeb19dbc075a6905f42486930243a8fed37e2ceb5d75ad  rename1118.sh
+b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c
+50cd71f74b0e6e765b32764ec9579a4e290292c29858efc27909970b8460b5ae  unmount1115.sh
+ .../kernel/file_systems/ntfs/kernel_interface.cpp        | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:80:32: warning: unused variable 'fusecontext' [-Wunused-variable]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:282:66: warning: taking address of packed member of 'union <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:454:36: warning: taking address of packed member of 'union <anonymous>' may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:619:27: warning: unused variable 'of' [-Wunused-variable]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:824:45: warning: 'struct fuse_entry_param' declared inside parameter list will not be visible outside of this definition or declaration
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1053:43: warning: format '%llu' expects argument of type 'long long unsigned int', but argument 3 has type 'u64' {aka 'long unsigned int'} [-Wformat=]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1078:41: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1194:43: warning: format '%llu' expects argument of type 'long long unsigned int', but argument 3 has type 'u64' {aka 'long unsigned int'} [-Wformat=]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1227:33: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1235:41: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1250:33: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1380:41: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1014:36: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+../src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:1016:59: warning: comparison of integer expressions of different signedness: 'ino_t' {aka 'long int'} and 'u64' {aka 'long unsigned int'} [-Wsign-compare]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1129:17: warning: 'ino' may be used uninitialized [-Wmaybe-uninitialized]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1128:12: warning: 'close_state' may be used uninitialized [-Wmaybe-uninitialized]
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ mkfs.ext4 -q -F /dev/nvme1n1
++ mkdir -p /mnt/w
++ mount /dev/nvme1n1 /mnt/w
++ mkdir -p /mnt/w/t
++ ln -sfn /mnt/w/t /opt/t
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file ntfs-3g
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ uname -r
++ dpkg -s ntfs-3g
++ grep -E '^Version'
++ cd /opt/t
++ git clone -q --filter=blob:none https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg checkout -q 87b11c0a19
++ git -C hg log -1 '--format=configure at %H %s'
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ tail -1
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ O=/opt/t/out
++ mkdir -p /opt/t/out
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/src1118/ /opt/t/out/
++ cd /opt/t/out
++ sha256sum atime933.c chmod967.c ntfs1115.patch ntfs1118.patch rename1118.c rename1118.sh silent967.c unmount1115.sh
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 kernel_arm64
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/t/out/kernel_arm64.trunk
++ nb before ntfs1115.patch
++ local l=before
++ shift
++ git -C .. checkout -q -f 87b11c0a19
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/ntfs1115.patch
++ git -C .. apply /opt/t/out/ntfs1115.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ grep -E 'warning:|error:' /opt/t/out/jam-before.log
++ grep -E 'ntfs/(kernel_interface|lowntfs)'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.before
++ nb after ntfs1115.patch ntfs1118.patch
++ local l=after
++ shift
++ git -C .. checkout -q -f 87b11c0a19
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/ntfs1115.patch
++ git -C .. apply /opt/t/out/ntfs1115.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/ntfs1118.patch
+error: patch failed: src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp:688
+error: src/add-ons/kernel/file_systems/ntfs/kernel_interface.cpp: patch does not apply
++ return 1
++ exit 1
+failed to run commands: exit status 1

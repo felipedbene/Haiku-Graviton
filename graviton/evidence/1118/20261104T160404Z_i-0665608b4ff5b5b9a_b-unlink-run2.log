@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b-unlink-run2
+# instance: i-0665608b4ff5b5b9a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm, case unlink (a KDL is expected before the fix)
+# start: 20261104T160404Z   end: 20261104T160815Z   rc: 1
+# script sha256: d222ff08b539cc7dfb9d088dad9e57a6019327e0e8abedae380676283a2f6e0c
+# ---- script ----
+# | cd /boot/home/t1118 || exit 1
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ntfs
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | bash ./rename1118.sh $(dev k3) /k3 ./rename1118 unlink; echo "rename1118 rc=$?"
+# ---- raw output ----

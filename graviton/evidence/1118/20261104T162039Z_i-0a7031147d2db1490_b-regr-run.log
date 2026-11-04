@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b-regr-run
+# instance: i-0a7031147d2db1490   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm: regressions only
+# start: 20261104T162039Z   end: 20261104T162050Z   rc: 0
+# script sha256: f7ec0e6c5936a5f2ddecb87d944127e2b47d39b98c576a61ab5ff1f98a96f997
+# ---- script ----
+# | # #1118 before arm, regressions only (no rename over an existing target, which KDLs this arm):
+# | # unmount1115 3 cycles, silent967, chmod967, atime933 on k2; for the before/after comparison.
+# | cd /boot/home/t1118 || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ntfs
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | echo "=== regressions on k2"
+# | bash ./unmount1115.sh $(dev k2) /k2 3 w | grep -E "^FAIL|SUMMARY|PASS every"; echo "unmount1115 rc=${PIPESTATUS[0]}"
+# | mkdir -p /k2 && mount -t ntfs $(dev k2) /k2 && mkdir /k2/s /k2/m /k2/a
+# | ./silent967 /k2/s | grep -E "^FAIL|SUMMARY"; echo "silent967 rc=${PIPESTATUS[0]}"
+# | ./chmod967 /k2/m | grep -E "^FAIL|SUMMARY"; echo "chmod967 rc=${PIPESTATUS[0]}"
+# | ./atime933 /k2/a | grep -E "^FAIL|SUMMARY"; echo "atime933 rc=${PIPESTATUS[0]}"
+# | cd /; sleep 2; unmount /k2; echo "unmount k2 rc=$?"
+# | echo "still-referenced lines: $(grep -c "still referenced" /var/log/syslog)"
+# ---- raw output ----
+2d3115ffdbf1c4fc979371cbd2c68556f83050d457154487b37e07ecdc476fbe  /boot/system/kernel_arm64
+a43b5e724a2db527861d125297db76cdd2a54a1c31a8d8ecf420dec7ffc63626  /boot/system/add-ons/kernel/file_systems/ntfs
+=== regressions on k2
+PASS every cycle's tree survived the remounts
+SUMMARY rounds=33 failures=0
+unmount1115 rc=0
+FAIL root    chmod(other)          -> errno-2147459058 (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    chmod(0600)           -> errno-2147459058 (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    fchmod(0600)          -> errno-2147459058 (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    fchmodat(other)       -> errno-2147459058 (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    chmod(same|S_ISUID)   -> errno-2147459058 (expect ok    ) asked 004666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    chmod(S_IFDIR|same)   -> ok       (expect refuse) asked 040666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    dir chmod(other)      -> errno-2147459058 (expect ok    ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793809242 ctime same
+FAIL root    dir chmod(S_IFREG|..) -> ok       (expect refuse) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793809242 ctime same
+FAIL root    chown(1002,-1)        -> errno-2147459058 (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    chown(-1,1002)        -> errno-2147459058 (expect ok    ) asked -1:1002   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    chown(1002,1002)      -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    fchown(1002,1002)     -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    lchown(1002,-1)       -> errno-2147459058 (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809242 ctime same
+FAIL root    dir chown(1002,1002)  -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793809242 ctime same
+SUMMARY cases=38 failures=14
+silent967 rc=14
+SUMMARY cases=16 failures=0 refused-by-fs=3
+chmod967 rc=0
+SUMMARY cases=44 failures=0 errno-notes=0 unsupported=2
+atime933 rc=0
+unmount k2 rc=0
+still-referenced lines: 0

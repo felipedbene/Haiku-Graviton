@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b-unlink-run2-setup
+# instance: i-0665608b4ff5b5b9a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm, case unlink: fixed repro, fresh image copy
+# start: 20261104T160352Z   end: 20261104T160403Z   rc: 0
+# script sha256: bd7b636470e0cceeaf51686163fecaf8675b84af03c6696acaa9ec5df8e83d05
+# ---- script ----
+# | # #1118 before arm, case unlink, second try: the first try ran the helper by a relative path, which
+# | # a remount (cd /) broke, so the case never ran. Fetch the fixed rename1118.sh and use a fresh
+# | # image copy k3 (registered here, mounted by the next command).
+# | cd /boot/home/t1118 || exit 1
+# | wget -q -O rename1118.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/rename1118.sh?<PRESIGNED>'
+# | echo 'f031c57d8ab18539d5692e2db5d4025a650093c3be158d7e45e9090a3f1d6e35  rename1118.sh' | sha256sum -c || exit 1
+# | cp ntfs.img k3.img && diskimage register /boot/home/t1118/k3.img
+# ---- raw output ----
+rename1118.sh: OK
+Registered file as disk device "/dev/disk/virtual/files/5/raw" with ID 5.

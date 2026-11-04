@@ -1,0 +1,62 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild3
+# instance: i-0b23ebc40a664fc1e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ntfs.after2 (+#1119 +both fix commits)
+# start: 20261104T160241Z   end: 20261104T160305Z   rc: 0
+# script sha256: 1f8aef765f6cc553564ab3333b997aa9743f3f890bebd173d7c15ced0e088a4b
+# ---- script ----
+# | # #1118 build, step 3: ntfs.after2 = trunk + ntfs1115.patch (#1119) + ntfs1118v2.patch (both fix
+# | # commits: close state before any inode is open, and the ghost removed from the directory it
+# | # was made in). Run 1's after arm (first commit only) left a ".ghost-ntfs-3g-N" per rename.
+# | set -x
+# | O=/opt/t/out; cd /opt/t/hg/generated || exit 1
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/src1118/ntfs1118v2.patch $O/ && sha256sum $O/ntfs1118v2.patch
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | git -C .. checkout -q -f 87b11c0a19
+# | git -C .. apply $O/ntfs1115.patch && git -C .. apply $O/ntfs1118v2.patch || exit 1
+# | git -C .. diff --stat
+# | rm -rf $A/ntfs
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > $O/jam-after2.log 2>&1 || { tail -40 $O/jam-after2.log; exit 1; }
+# | grep -E "warning:" $O/jam-after2.log | grep -E "kernel_interface.cpp:4[0-9][0-9]:|may be used uninit"
+# | cp $A/ntfs/ntfs $O/ntfs.after2
+# | rm -rf $A/ntfs; jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > /dev/null 2>&1 && cmp $A/ntfs/ntfs $O/ntfs.after2 && echo "ntfs.after2 rebuild identical"
+# | git -C .. checkout -q -f 87b11c0a19
+# | sha256sum $O/ntfs.after2; aws s3 cp --quiet $O/ntfs.after2 s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/out1118/ntfs.after2 && echo uploaded
+# ---- raw output ----
+08571c13144910de4593705d967e8012feef3232fa6120e804daf9835c448f44  /opt/t/out/ntfs1118v2.patch
+ .../kernel/file_systems/ntfs/kernel_interface.cpp  | 37 ++++++++++++++++------
+ src/add-ons/kernel/file_systems/ntfs/lowntfs.c     | 31 +++++++++++++++---
+ src/add-ons/kernel/file_systems/ntfs/lowntfs.h     |  3 +-
+ 3 files changed, 56 insertions(+), 15 deletions(-)
+ntfs.after2 rebuild identical
+6b7becd9e4f4ed9f6b6401047330117dc135004992f92200061471139879fe79  /opt/t/out/ntfs.after2
+uploaded
++ O=/opt/t/out
++ cd /opt/t/hg/generated
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/src1118/ntfs1118v2.patch /opt/t/out/
++ sha256sum /opt/t/out/ntfs1118v2.patch
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ git -C .. checkout -q -f 87b11c0a19
++ git -C .. apply /opt/t/out/ntfs1115.patch
++ git -C .. apply /opt/t/out/ntfs1118v2.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ grep -E warning: /opt/t/out/jam-after2.log
++ grep -E 'kernel_interface.cpp:4[0-9][0-9]:|may be used uninit'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.after2
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ cmp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.after2
++ echo 'ntfs.after2 rebuild identical'
++ git -C .. checkout -q -f 87b11c0a19
++ sha256sum /opt/t/out/ntfs.after2
++ aws s3 cp --quiet /opt/t/out/ntfs.after2 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1118/ntfs.after2
++ echo uploaded
