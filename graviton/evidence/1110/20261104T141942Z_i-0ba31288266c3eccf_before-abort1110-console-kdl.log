@@ -1,0 +1,1287 @@
+UEFI firmware (version  built at 09:00:00 on Nov  1 2018)
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01Hacpi_init: found ACPI RSDP signature at 0x00000000786e0014
+acpi: found rsdp at 0x00000000786e0014 oem id: AMAZON, rev 2
+acpi: rsdp points to rsdt at 0x786d0074
+acpi: found valid XSDT at 0x00000000786d00e8
+acpi: searching 8 entries for table 'SPCR'
+acpi: Looking for 'SPCR'. Skipping 'FACP'
+acpi: Looking for 'SPCR'. Skipping 'APIC'
+acpi: Found 'SPCR' @ 0x00000000786d011c
+acpi: spcr pci check: revision 2, length 80, pci 1d0f:8250 at 0:00:01.0
+acpi: spcr pci check: LocateHandleBuffer(PciRootBridgeIo) status 0x0, 1 handle(s)
+acpi: spcr pci check: bridge 0: segment 0, id read ok 0x82501d0f
+acpi: spcr pci check: id 0x82501d0f, command 0x10, BAR 0 0x80090000, BAR 1 0x0
+acpi: spcr pci check: enabled memory decode (command 0x10 -> 0x12)
+acpi: spcr pci check: uart at BAR 0 reads LCR 0x3, LSR 0x60
+acpi: spcr console 0x90a0000, pci 1d0f:8250 at 0:00:01.0 has BAR 0 0x80090000; spcr address is not that device, using the BAR
+discovered uart from acpi: base=80090000, irq=37, clock=0, reg_shift=0
+acpi: searching 8 entries for table 'APIC'
+acpi: Looking for 'APIC'. Skipping 'FACP'
+acpi: Found 'APIC' @ 0x00000000786d0114
+discovered gic from acpi: version=3, gicd=10000000, gicr=10200000 (size fdf0000), its=10080000, 4 pes
+acpi: pmu overflow gsiv (madt gicc performance interrupt) = 23
+acpi: searching 8 entries for table 'GTDT'
+acpi: Looking for 'GTDT'. Skipping 'FACP'
+acpi: Looking for 'GTDT'. Skipping 'APIC'
+acpi: Looking for 'GTDT'. Skipping 'SPCR'
+acpi: Found 'GTDT' @ 0x00000000786d0124
+generic timer from acpi gtdt (revision 2, 96 bytes):
+  frequency: not stated by this table; kernel uses CNTFRQ_EL0
+  counter block: 0xffffffffffffffff (not provided)
+  sec-phys timer interrupt: 29
+  phys timer interrupt: 30
+  virt timer interrupt: 27
+  hyp-phys timer interrupt: 26
+acpi: searching 8 entries for table 'FACP'
+acpi: Found 'FACP' @ 0x00000000786d010c
+discovered psci from acpi: conduit=hvc
+efi/fdt: Probing for device trees from UEFI...
+GOP protocol not found
+Welcome to the DeBeOS boot loader! (based on Haiku)
+Haiku revision: hrev59996
+efi/network: EFI reports network unavaiable
+add_partitions_for(0x000000007842a5b0, mountFS = no)
+add_partitions_for(fd = 0, mountFS = no)
+0x000000007842a640 Partition::Partition
+0x000000007842a640 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 8ee17e9b
+absolute block: 1
+alternate block: 41943039
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 6060a215
+absolute block: 41943039
+alternate block: 1
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 41943007
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+[  0] partition type: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+      unique id: 4706d44c-3e8b-4911-b94e-fde03f9289b5
+      start block: 8192
+      end block: 73727
+      size: 31.999 MB
+      attributes: 0
+      name: EFI system partition
+[  1] partition type: 42465331-3ba3-10f1-802a-4861696b7521
+      unique id: 30f27487-a12a-4440-b6fc-8756a5b34972
+      start block: 73728
+      end block: 41943006
+      size: 20443.983 MB
+      attributes: 0
+      name: Haiku BFS
+  priority: 960
+check for partitioning_system: Intel Partition Map
+intel: Found GPT signature, ignoring.
+check for partitioning_system: Intel Extended Partition
+efi_gpt_scan_partition(cookie = 0x000000007842a720)
+0x000000007842e800 Partition::Partition
+0x000000007842a640 Partition::AddChild 0x000000007842e800
+0x000000007842e800 Partition::SetParent 0x000000007842a640
+new child partition!
+0x000000007842e900 Partition::Partition
+0x000000007842a640 Partition::AddChild 0x000000007842e900
+0x000000007842e900 Partition::SetParent 0x000000007842a640
+new child partition!
+0x000000007842a640 Partition::Scan(): scan child 0x000000007842e800 (start = 4194304, size = 33554432, parent = 0x000000007842a640)!
+0x000000007842e800 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+check for partitioning_system: Intel Partition Map
+check for partitioning_system: Intel Extended Partition
+0x000000007842a640 Partition::Scan(): scan child 0x000000007842e900 (start = 37748736, size = 21437070848, parent = 0x000000007842a640)!
+0x000000007842e900 Partition::Scan()
+check for partitioning_system: GUID Partition Map
+check for partitioning_system: Intel Partition Map
+check for partitioning_system: Intel Extended Partition
+0x000000007842a640 Partition::~Partition
+0x000000007842e800 Partition::SetParent 0x0000000000000000
+0x000000007842e900 Partition::SetParent 0x0000000000000000
+0x000000007842e900 Partition::_Mount check for file_system: BFS Filesystem
+PackageVolumeInfo::SetTo()
+load kernel kernel_arm64...
+smbios: found v2 at 0x000000007bed0000
+smbios: found v3 at 0x000000007beb0000
+Chosen UART:
+  kind: 8250
+  regs: 0x80090000, 0x1000
+  irq: 37
+  clock: 0
+Chosen interrupt controller:
+  kind: gicv3
+  regs: 0x10000000, 0x10000
+        0x10200000, 0xfdf0000
+Generic timer from fdt:
+  frequency: 0 Hz (not stated; kernel uses CNTFRQ_EL0)
+  sec-phys: INTID 29
+  phys: INTID 30
+  virt: INTID 27
+  hyp-phys: INTID 26
+kernel:
+  text: 0xffff000000000000, 0x1cc000
+  data: 0xffff0000001dc000, 0xb3000
+  entry: 0xffff000000092fa0
+rtc: firmware time is 2026-11-04 14:08:42 (1793801322)
+Kernel stack at 0xffff000002671000
+System provided memory map:
+  phys: 0x40000000-0x77b25000, virt: 0x00000000-0x37b25000, size = 0x37b25000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x77b25000-0x785aa000, virt: 0x00000000-0x00a85000, size = 0x00a85000, type: EfiLoaderData (0x2), attr: 0x8
+  phys: 0x785aa000-0x78630000, virt: 0x00000000-0x00086000, size = 0x00086000, type: EfiLoaderCode (0x1), attr: 0x8
+  phys: 0x78630000-0x78640000, virt: 0x00000000-0x00010000, size = 0x00010000, type: EfiACPIMemoryNVS (0xa), attr: 0x8
+  phys: 0x78640000-0x786f0000, virt: 0x00000000-0x000b0000, size = 0x000b0000, type: EfiACPIReclaimMemory (0x9), attr: 0x8
+  phys: 0x786f0000-0x78730000, virt: 0x00000000-0x00040000, size = 0x00040000, type: EfiRuntimeServicesCode (0x5), attr: 0x8000000000000008
+  phys: 0x78730000-0x7a514000, virt: 0x00000000-0x01de4000, size = 0x01de4000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7a514000-0x7a515000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7a515000-0x7a59c000, virt: 0x00000000-0x00087000, size = 0x00087000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7a59c000-0x7b624000, virt: 0x00000000-0x01088000, size = 0x01088000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7b624000-0x7b912000, virt: 0x00000000-0x002ee000, size = 0x002ee000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7b912000-0x7bc00000, virt: 0x00000000-0x002ee000, size = 0x002ee000, type: EfiBootServicesCode (0x3), attr: 0x8
+  phys: 0x7bc00000-0x7bd90000, virt: 0x00000000-0x00190000, size = 0x00190000, type: EfiRuntimeServicesCode (0x5), attr: 0x8000000000000008
+  phys: 0x7bd90000-0x7bfe0000, virt: 0x00000000-0x00250000, size = 0x00250000, type: EfiRuntimeServicesData (0x6), attr: 0x8000000000000008
+  phys: 0x7bfe0000-0x7bfff000, virt: 0x00000000-0x0001f000, size = 0x0001f000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7bfff000-0x7c000000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x7c000000-0x7f290000, virt: 0x00000000-0x03290000, size = 0x03290000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x7f290000-0x7f2c5000, virt: 0x00000000-0x00035000, size = 0x00035000, type: EfiBootServicesCode (0x3), attr: 0x8
+  phys: 0x7f2c5000-0x80000000, virt: 0x00000000-0x00d3b000, size = 0x00d3b000, type: EfiBootServicesData (0x4), attr: 0x8
+  phys: 0x400000000-0x5b6000000, virt: 0x00000000-0x1b6000000, size = 0x1b6000000, type: EfiConventionalMemory (0x7), attr: 0x8
+  phys: 0x09010000-0x09011000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiMemoryMappedIO (0xb), attr: 0x8000000000000001
+  phys: 0x09050000-0x09051000, virt: 0x00000000-0x00001000, size = 0x00001000, type: EfiMemoryMappedIO (0xb), attr: 0x8000000000000001
+Efi loader symbols offset: 0x785aa000:
+Current Exception Level EL1
+TTBR0: 7fffb000 TTBRx: 1de7ec7edbadc0dc SCTLR: 30d5187d TCR: 580803510
+MMU Enabled, Granularity 4KB, bits 48
+Kernel entry accessibility W: 0 R: 0
+kernel_args: version 1, 4209 bytes
+Calling ExitBootServices. So long, EFI!
+Welcome to kernel debugger output!
+DeBeOS -- ARM-first, descended from Haiku/BeOS
+Haiku revision: , debug level: 2
+kernel build roottable-guard-1, compiled Nov  4 2026 10:47:24
+PSCI conduit: hvc
+arm64_pmu: overflow interrupt gsiv from madt = 23 (architected PPI 7)
+arm64_pmu: PMUv3 present (PMUVer 5), 32 bit event counters, enabled by boot setting
+arm64: cpu 0 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64_pmu: 1 of 2 event counters programmed on all CPUs (1 reserved for sampling)
+arm64_pmu:   [0] 0x0008 inst-retired
+arm64_pmu:   [1] 0x0011 cpu-cycles -- sampling, period 10000000 cycles
+early: pulling page 400002000
+early: pulling page 400203000
+early: pulling page 400404000
+early: pulling page 400605000
+kernel malloc: using slab_heap
+early: pulling page 40098f000
+early: pulling page 400b90000
+early: pulling page 400d91000
+early: pulling page 400f92000
+early: pulling page 401193000
+early: pulling page 401394000
+early: pulling page 401595000
+early: pulling page 401796000
+early: pulling page 401997000
+early: pulling page 401b98000
+early: pulling page 401d99000
+early: pulling page 401f9a000
+early: pulling page 40219b000
+early: pulling page 40239c000
+early: pulling page 40259d000
+early: pulling page 40279e000
+early: pulling page 40299f000
+early: pulling page 402ba0000
+early: pulling page 402da1000
+early: pulling page 402fa2000
+early: pulling page 4031a3000
+early: pulling page 4033a4000
+early: pulling page 4035a5000
+early: pulling page 4037a6000
+early: pulling page 4039a7000
+early: pulling page 403ba8000
+early: pulling page 403da9000
+early: pulling page 403faa000
+early: pulling page 4041ab000
+early: pulling page 4043ac000
+early: pulling page 4045ad000
+early: pulling page 4047ae000
+early: pulling page 4049af000
+early: pulling page 404bb0000
+early: pulling page 404db1000
+early: pulling page 404fb2000
+early: pulling page 4051b3000
+early: pulling page 4053b4000
+early: pulling page 4055b5000
+early: pulling page 4057b6000
+early: pulling page 4059b7000
+early: pulling page 405bb8000
+early: pulling page 405db9000
+early: pulling page 405fba000
+early: pulling page 4061bb000
+early: pulling page 4063bc000
+early: pulling page 4065bd000
+early: pulling page 4067be000
+early: pulling page 4069bf000
+early: pulling page 406bc0000
+early: pulling page 406dc1000
+early: pulling page 406fc2000
+early: pulling page 4071c3000
+early: pulling page 4073c4000
+early: pulling page 4075c5000
+early: pulling page 4077c6000
+early: pulling page 4079c7000
+early: pulling page 407bc8000
+early: pulling page 407dc9000
+early: pulling page 407fca000
+early: pulling page 4081cb000
+early: pulling page 4083cc000
+early: pulling page 4085cd000
+early: pulling page 4087ce000
+early: pulling page 4089cf000
+early: pulling page 408bd0000
+early: pulling page 408dd1000
+early: pulling page 408fd2000
+early: pulling page 4091d3000
+early: pulling page 4093d4000
+early: pulling page 4095d5000
+early: pulling page 4097d6000
+early: pulling page 4099d7000
+early: pulling page 409bd8000
+early: pulling page 409dd9000
+early: pulling page 409fda000
+early: pulling page 40a1db000
+early: pulling page 40a3dc000
+early: pulling page 40a5dd000
+early: pulling page 40a7de000
+early: pulling page 40a9df000
+early: pulling page 40abe0000
+early: pulling page 40ade1000
+early: pulling page 40afe2000
+early: pulling page 40b1e3000
+early: pulling page 40b3e4000
+early: pulling page 40b5e5000
+early: pulling page 40b7e6000
+early: pulling page 40b9e7000
+early: pulling page 40bbe8000
+early: pulling page 40bde9000
+early: pulling page 40bfea000
+early: pulling page 40c1eb000
+early: pulling page 40c3ec000
+early: pulling page 40c5ed000
+early: pulling page 40c7ee000
+early: pulling page 40c9ef000
+early: pulling page 40cbf0000
+early: pulling page 40cdf1000
+early: pulling page 40cff2000
+early: pulling page 40d1f3000
+early: pulling page 40d3f4000
+early: pulling page 40d5f5000
+early: pulling page 40d7f6000
+early: pulling page 40d9f7000
+early: pulling page 40dbf8000
+early: pulling page 40ddf9000
+early: pulling page 40dffa000
+early: pulling page 40e1fb000
+early: pulling page 40e3fc000
+early: pulling page 40e5fd000
+early: pulling page 40e7fe000
+early: pulling page 40e9ff000
+early: pulling page 40ec00000
+early: pulling page 40ee01000
+early: pulling page 40f002000
+early: pulling page 40f203000
+early: pulling page 40f404000
+early: pulling page 40f605000
+early: pulling page 40f806000
+early: pulling page 40fa07000
+early: pulling page 40fc08000
+early: pulling page 40fe09000
+early: pulling page 41000a000
+early: pulling page 41020b000
+early: pulling page 41040c000
+early: pulling page 41060d000
+early: pulling page 41080e000
+early: pulling page 410a0f000
+early: pulling page 410c10000
+early: pulling page 410e11000
+early: pulling page 411012000
+early: pulling page 411213000
+early: pulling page 411414000
+early: pulling page 411615000
+early: pulling page 411816000
+early: pulling page 411a17000
+early: pulling page 411c18000
+early: pulling page 411e19000
+early: pulling page 41201a000
+early: pulling page 41221b000
+early: pulling page 41241c000
+early: pulling page 41261d000
+early: pulling page 41281e000
+early: pulling page 412a1f000
+early: pulling page 412c20000
+early: pulling page 412e21000
+early: pulling page 413022000
+early: pulling page 413223000
+early: pulling page 413424000
+early: pulling page 413625000
+early: pulling page 413826000
+early: pulling page 413a27000
+early: pulling page 413c28000
+early: pulling page 413e29000
+early: pulling page 41402a000
+early: pulling page 41422b000
+early: pulling page 41442c000
+early: pulling page 41462d000
+early: pulling page 41482e000
+early: pulling page 414a2f000
+early: pulling page 414c30000
+early: pulling page 414e31000
+early: pulling page 415032000
+early: pulling page 415233000
+early: pulling page 415434000
+early: pulling page 415635000
+early: pulling page 415836000
+early: pulling page 415a37000
+early: pulling page 415c38000
+early: pulling page 415e39000
+early: pulling page 41603a000
+early: pulling page 41623b000
+early: pulling page 41643c000
+early: pulling page 41663d000
+early: pulling page 41683e000
+early: pulling page 416a3f000
+early: pulling page 416c40000
+early: pulling page 416e41000
+early: pulling page 417042000
+early: pulling page 417243000
+early: pulling page 417444000
+early: pulling page 417645000
+early: pulling page 417846000
+early: pulling page 417a47000
+early: pulling page 417c48000
+early: pulling page 417e49000
+early: pulling page 41804a000
+early: pulling page 41824b000
+early: pulling page 41844c000
+early: pulling page 41864d000
+early: pulling page 41884e000
+early: pulling page 418a4f000
+early: pulling page 418c50000
+early: pulling page 418e51000
+early: pulling page 419052000
+early: pulling page 419253000
+early: pulling page 419454000
+early: pulling page 419655000
+early: pulling page 419856000
+early: pulling page 419a57000
+early: pulling page 419c58000
+early: pulling page 419e59000
+early: pulling page 41a05a000
+early: pulling page 41a25b000
+early: pulling page 41a45c000
+early: pulling page 41a65d000
+early: pulling page 41a85e000
+early: pulling page 41aa5f000
+early: pulling page 41ac60000
+early: pulling page 41ae61000
+early: pulling page 41b062000
+early: pulling page 41b263000
+early: pulling page 41b464000
+early: pulling page 41b665000
+early: pulling page 41b866000
+early: pulling page 41ba67000
+early: pulling page 41bc68000
+mark_page_range_in_use(0x0, 0x40000): start page is before free list
+arch_vm_translation_map_init_post_area
+uart 8250: tx fifo reported enabled, tx batch 4 bytes per status poll
+reserve_io_interrupt_vectors: reserved 1020 vectors starting from 0
+gicv3: gicd 0x10000000 (size 0x10000), arch rev 3, typer 0x7a3003, fallback stride 0x20000
+gicv3: region 0 spans 2031 strides for 4 pe(s); walking 4
+gicv3: redistributor region 0: 0x10200000 size 0xfdf0000, stride 0x20000, 4 PEs, arch rev 3
+gicv3: 128 interrupt lines, 0 extended spis, gicd_ctlr 0x52
+gicv3: 4 redistributor(s) across 1 region(s) for 4 cpu(s); 0 report vlpis, 1 report last
+arm64: cpu 1 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 3 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64: cpu 2 SVE enabled, VL 32 bytes (256 bits), CPACR 0x330000
+arm64 CPU: MIDR_EL1 0x411fd401 -- ARM Neoverse-V1 r1p1
+arm64 CPU: core clock 2597993000 Hz (2597 MHz), measured against the generic timer
+arch_timer: generic timer at 1050000000 Hz (CNTFRQ_EL0), max interval 2045222 us, EL1 physical timer on INTID 30 (firmware)
+io-interrupt: vector 30 assigned to CPU 0
+allocate_commpage_entry(2, 8) -> 0x0000000000000200
+arch_rtc_init: firmware time 1793801322 s at 3754548 us uptime
+arch_vm_translation_map_init_post_sem
+scheduler_init: found 4 logical cpus and 0 cache levels
+scheduler switches: single core: false, cpu load tracking: true, core load tracking: true, cpu freq scaling: false
+scheduler: switching to low latency mode
+gicv3-its: typer 0x1ef71: itt entry size 8, 16 event id bits, 16 device id bits, pta 0, up to 65536 collections
+gicv3-its: lpis enabled on 4 redistributor(s), 0 skipped as cpu-less, 14 lpi intid bits, 256 KiB of pending tables, collection target 0x0
+allocate_io_interrupt_vectors: allocated 256 vectors starting from 1020
+gicv3-its: ready, 256 vectors from 1020, 4 collection(s), translater 0x10090040
+slab memory manager: created area 0xffff0000dd001000 (161)
+allocate_commpage_entry(3, 4) -> 0x0000000000000208
+allocate_commpage_entry(4, 72) -> 0x0000000000000210
+allocate_commpage_entry(5, 16) -> 0x0000000000000258
+slab memory manager: created area 0xffff0000dd801000 (163)
+PCI: pci_module_init
+ACPI: RSDP 0x00000000786E0014 000024 (v02 AMAZON)
+ACPI: XSDT 0x00000000786D00E8 000064 (v01 AMAZON AMZNFACP 00000001      01000013)
+ACPI: FACP 0x00000000786B0000 000114 (v06 AMAZON AMZNFACP 00000001 AMZN 00000001)
+ACPI: DSDT 0x0000000078640000 00140C (v02 AMAZON AMZNDSDT 00000001 AMZN 00000001)
+ACPI: FACS 0x0000000078630000 000040
+ACPI: APIC 0x00000000786C0000 0001A8 (v04 AMAZON AMZNAPIC 00000001 AMZN 00000001)
+ACPI: SPCR 0x00000000786A0000 000050 (v02 AMAZON AMZNSPCR 00000001 AMZN 00000001)
+ACPI: GTDT 0x0000000078690000 000060 (v02 AMAZON AMZNGTDT 00000001 AMZN 00000001)
+ACPI: MCFG 0x0000000078680000 00003C (v02 AMAZON AMZNMCFG 00000001 AMZN 00000001)
+ACPI: SLIT 0x0000000078670000 00002D (v01 AMAZON AMZNSLIT 00000001 AMZN 00000001)
+ACPI: IORT 0x0000000078660000 000078 (v01 AMAZON AMZNIORT 00000001 AMZN 00000001)
+ACPI: PPTT 0x0000000078650000 00010C (v02 AMAZON AMZNPPTT 00000001 AMZN 00000001)
+ACPI: Forced DSDT copy: length 0x0140C copied locally, original unmapped
+ACPI: 1 ACPI AML tables successfully acquired and loaded
+publish device: node 0xffff0000009403c0, path acpi/namespace, module bus_managers/acpi/namespace/device_v1
+publish device: node 0xffff0000009403c0, path acpi/call, module bus_managers/acpi/call/device_v1
++ECAMPCIController::InitDriver()
+initialize PCI controller from ACPI
+PCI: range from ACPI [0(1),0(1)] with length 1
+PCI: range from ACPI [80000000(1),ffffffff(1)] with length 80000000
+PCI: range from ACPI [0(1),ffff(1)] with length 10000
+PCI: range from ACPI [400000000000(1),407fffffffff(1)] with length 8000000000
+PCI: ecam region: addr 20000000, segment: 0, buses: 0-ff
+PCI: ECAM at 20000000 (bus 0 base 20000000), segment 0, buses 0-0 from _CRS, 1 decoded, 1 MiB; 0 of 1 MCFG entries are other windows
+-ECAMPCIController::InitDriver()
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+finalize PCI controller from ACPI
+IRQ routing table with 5 entries
+address 0x1ffff; pin 1; source 0xffff000000c742a0 0; pci 0:1 pin 2 func mask 1; bios irq: 255; gsi 37; config 0x0a
+address 0x4ffff; pin 0; source 0xffff000000c74060 0; pci 0:4 pin 1 func mask 1; bios irq: 3; gsi 35; config 0x0a
+address 0x5ffff; pin 0; source 0xffff000000c74180 0; pci 0:5 pin 1 func mask 1; bios irq: 4; gsi 36; config 0x0a
+address 0x1effff; pin 0; source 0xffff000000c742a0 0; pci 0:30 pin 1 func mask 1; bios irq: 5; gsi 37; config 0x0a
+address 0x1fffff; pin 0; source 0xffff000000c743c0 0; pci 0:31 pin 1 func mask 1; bios irq: 6; gsi 38; config 0x0a
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+PCI: 0:00:00.0 vendor 1d0f device 0200 class 06.00.00 rev 00
+PCI: 0:00:01.0 vendor 1d0f device 8250 class 07.00.03 rev 00
+PCI: 0:00:04.0 vendor 1d0f device 8061 class 01.08.02 rev 00
+PCI: 0:00:05.0 vendor 1d0f device ec20 class 02.00.00 rev 00
+PCI: 0:00:1e.0 vendor 1d0f device 8061 class 01.08.02 rev 00
+PCI: 0:00:1f.0 vendor 1d0f device 8061 class 01.08.02 rev 00
+PCI: 6 device(s)
+driver bus_managers/fdt/root/driver_v1 init failed: No such device
+get_boot_partitions(): boot volume message:
+KMessage: buffer: 0xffff0000024e34b0 (size/capacity: 360/360), flags: 0xa
+  field: "partition offset"  (LLNG): 37748736 (0x2400000)
+  field: "packaged"          (BOOL): true
+  field: "boot method"       (LONG): 0 (0x0)
+  field: "disk identifier"   (RAWT): data at 0xffff0000024e3560, 79 bytes
+  field: "_boot_efi smbiosv2root" (LLNG): 2079129600 (0x7bed0000)
+  field: "_boot_efi smbiosv3root" (LLNG): 2078998528 (0x7beb0000)
+get_boot_partitions(): boot method type: 0
+devfs: scanned "": mode 1 -> 1, latched 1, probe No error, legacy No error
+publish device: node 0xffff000000943160, path disk/nvme/0/raw, module drivers/disk/nvme_disk/device_v1
+publish device: node 0xffff0000009433e0, path disk/nvme/1/raw, module drivers/disk/nvme_disk/device_v1
+publish device: node 0xffff0000009435c0, path disk/nvme/2/raw, module drivers/disk/nvme_disk/device_v1
+devfs: scanned "disk": mode 1 -> 1, latched 1, probe No error, legacy No error
+devfs: scanned "disk/nvme": mode 1 -> 1, latched 1, probe No error, legacy No error
+devfs: scanned "disk/nvme/0": mode 1 -> 1, latched 1, probe No error, legacy No error
+nvme_disk: attached to NVMe device "Amazon Elastic Block Store (vol044abfec65984d72e)"
+nvme_disk: 	maximum transfer size: 262144
+nvme_disk: 	qpair count: 2
+nvme_disk: 	io batch size: 8
+nvme_disk: namespace 0
+nvme_disk: 	block size: 512, stripe size: 0
+msix configured for 1 vectors
+msi-x enabled: 0x8002
+nvme_disk: using MSI-X
+io-interrupt: vector 1020 assigned to CPU 1
+DMAResource@0xffff0000008b0328: low/high 0/ffffffffffffffff, max segment count 126, align 4096, boundary 0, max transfer 262144, max segment size 18446744073709551615
+devfs: scanned "disk/nvme/1": mode 1 -> 1, latched 1, probe No error, legacy No error
+nvme_disk: attached to NVMe device "Amazon Elastic Block Store (vol0cb69da2a08e011be)"
+nvme_disk: 	maximum transfer size: 262144
+nvme_disk: 	qpair count: 2
+nvme_disk: 	io batch size: 8
+nvme_disk: namespace 0
+nvme_disk: 	block size: 512, stripe size: 0
+msix configured for 1 vectors
+msi-x enabled: 0x8002
+nvme_disk: using MSI-X
+io-interrupt: vector 1021 assigned to CPU 2
+DMAResource@0xffff0000008b05a8: low/high 0/ffffffffffffffff, max segment count 126, align 4096, boundary 0, max transfer 262144, max segment size 18446744073709551615
+devfs: scanned "disk/nvme/2": mode 1 -> 1, latched 1, probe No error, legacy No error
+nvme_disk: attached to NVMe device "Amazon Elastic Block Store (vol0b4752201df14cb49)"
+nvme_disk: 	maximum transfer size: 262144
+nvme_disk: 	qpair count: 2
+nvme_disk: 	io batch size: 8
+nvme_disk: namespace 0
+nvme_disk: 	block size: 512, stripe size: 0
+msix configured for 1 vectors
+msi-x enabled: 0x8002
+nvme_disk: using MSI-X
+io-interrupt: vector 1022 assigned to CPU 3
+DMAResource@0xffff0000008b0828: low/high 0/ffffffffffffffff, max segment count 126, align 4096, boundary 0, max transfer 262144, max segment size 18446744073709551615
+intel: Found GPT signature, ignoring.
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 8ee17e9b
+absolute block: 1
+alternate block: 41943039
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 6060a215
+absolute block: 41943039
+alternate block: 1
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 41943007
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+[  0] partition type: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+      unique id: 4706d44c-3e8b-4911-b94e-fde03f9289b5
+      start block: 8192
+      end block: 73727
+      size: 31.999 MB
+      attributes: 0
+      name: EFI system partition
+[  1] partition type: 42465331-3ba3-10f1-802a-4861696b7521
+      unique id: 30f27487-a12a-4440-b6fc-8756a5b34972
+      start block: 73728
+      end block: 41943006
+      size: 20443.983 MB
+      attributes: 0
+      name: Haiku BFS
+identify(0, 0xffff0000dd186180)
+efi_gpt_scan_partition(cookie = 0xffff0000008a0460)
+identify(0, 0xffff0000dd1861c8)
+identify(0, 0xffff0000dd186210)
+intel: Found GPT signature, ignoring.
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 98ecaef7
+absolute block: 1
+alternate block: 2097151
+first usable block: 34
+last usable block: 2097118
+disk GUID: 795f1bfc-d69c-40ab-8c21-87893ec16347
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: fd8090da
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 16df2b
+absolute block: 2097151
+alternate block: 1
+first usable block: 34
+last usable block: 2097118
+disk GUID: 795f1bfc-d69c-40ab-8c21-87893ec16347
+entries block: 2097119
+entry size:  128
+entry count: 128
+entries CRC: fd8090da
+[  0] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: cbd664b7-82ee-4d22-be7d-122a5d91f328
+      start block: 2048
+      end block: 67583
+      size: 31.999 MB
+      attributes: 0
+      name: 
+[  1] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: 51c37af4-de61-44cf-9276-104a9ace5029
+      start block: 67584
+      end block: 198655
+      size: 63.999 MB
+      attributes: 0
+      name: 
+[  2] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: d66ad684-f4d8-478a-8ba9-4e77ed50094e
+      start block: 198656
+      end block: 1017855
+      size: 399.999 MB
+      attributes: 0
+      name: 
+[  3] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: 6f2d9014-8149-4c42-b5b1-dc1ae9613a4e
+      start block: 1017856
+      end block: 1148927
+      size: 63.999 MB
+      attributes: 0
+      name: 
+identify(0, 0xffff0000dd186240)
+efi_gpt_scan_partition(cookie = 0xffff0000008a09a0)
+identify(0, 0xffff0000dd186270)
+identify(0, 0xffff0000009dec48)
+identify(0, 0xffff0000009dec78)
+identify(0, 0xffff0000009deca8)
+intel: Found GPT signature, ignoring.
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 71131e94
+absolute block: 1
+alternate block: 2097151
+first usable block: 34
+last usable block: 2097118
+disk GUID: e9af6bbf-51a7-4da3-9785-5a32877528d8
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: 619d4ad3
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: e9e96f48
+absolute block: 2097151
+alternate block: 1
+first usable block: 34
+last usable block: 2097118
+disk GUID: e9af6bbf-51a7-4da3-9785-5a32877528d8
+entries block: 2097119
+entry size:  128
+entry count: 128
+entries CRC: 619d4ad3
+[  0] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: f9946f76-fe68-47dd-8ff2-5d1c9e03f609
+      start block: 2048
+      end block: 67583
+      size: 31.999 MB
+      attributes: 0
+      name: 
+[  1] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: bde4c0e6-dc1a-4df0-8e75-7cf84f90bf08
+      start block: 67584
+      end block: 133119
+      size: 31.999 MB
+      attributes: 0
+      name: 
+[  2] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: aa9958dc-0f19-41ba-9d1d-01f51e815985
+      start block: 133120
+      end block: 198655
+      size: 31.999 MB
+      attributes: 0
+      name: 
+[  3] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: d192f3e7-a8e8-45cd-9a14-6a2b1a55503f
+      start block: 198656
+      end block: 460799
+      size: 127.999 MB
+      attributes: 0
+      name: 
+[  4] partition type: 0fc63daf-8483-4772-8e79-3d69d8477de4
+      unique id: 44521c8d-171a-4d6f-b4b4-279d119138b3
+      start block: 460800
+      end block: 722943
+      size: 127.999 MB
+      attributes: 0
+      name: 
+identify(0, 0xffff0000009decf0)
+efi_gpt_scan_partition(cookie = 0xffff0000008a1260)
+identify(0, 0xffff0000009ded20)
+identify(0, 0xffff0000009decd8)
+identify(0, 0xffff0000009dee40)
+identify(0, 0xffff0000009def60)
+identify(0, 0xffff0000009def90)
+device 0: /dev/disk/nvme/0/raw
+  media status:      No error
+  device flags:      2
+  offset:            0
+  size:              21474836480 (20480 MB)
+  content size:      21474836480
+  block size:        512
+  physical block size: 512
+  child count:       2
+  index:             -1
+  status:            0
+  flags:             5
+  volume:            -1
+  disk system:       partitioning_systems/efi_gpt/v1
+  name:              <NULL>
+  content name:      <NULL>
+  type:              <NULL>
+  content type:      GUID Partition Map
+  params:            <NULL>
+  content params:    <NULL>
+  partition 3: /dev/disk/nvme/0/0
+    offset:            4194304
+    size:              33554432 (32 MB)
+    content size:      33554432
+    block size:        512
+    physical block size: 512
+    child count:       0
+    index:             0
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/fat/v1
+    name:              EFI system partition
+    content name:      haiku boot
+    type:              EFI system data
+    content type:      FAT32 File System
+    params:            <NULL>
+    content params:    <NULL>
+  partition 4: /dev/disk/nvme/0/1
+    offset:            37748736
+    size:              21437070848 (20443.983 MB)
+    content size:      21437069312
+    block size:        2048
+    physical block size: 512
+    child count:       0
+    index:             1
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/bfs/v1
+    name:              Haiku BFS
+    content name:      Haiku
+    type:              Be File System
+    content type:      Be File System
+    params:            <NULL>
+    content params:    <NULL>
+device 1: /dev/disk/nvme/1/raw
+  media status:      No error
+  device flags:      2
+  offset:            0
+  size:              1073741824 (1024 MB)
+  content size:      1073741824
+  block size:        512
+  physical block size: 512
+  child count:       4
+  index:             -1
+  status:            0
+  flags:             5
+  volume:            -1
+  disk system:       partitioning_systems/efi_gpt/v1
+  name:              <NULL>
+  content name:      <NULL>
+  type:              <NULL>
+  content type:      GUID Partition Map
+  params:            <NULL>
+  content params:    <NULL>
+  partition 5: /dev/disk/nvme/1/0
+    offset:            1048576
+    size:              33554432 (32 MB)
+    content size:      33554432
+    block size:        1024
+    physical block size: 512
+    child count:       0
+    index:             0
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      e1k
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+  partition 6: /dev/disk/nvme/1/1
+    offset:            34603008
+    size:              67108864 (64 MB)
+    content size:      67108864
+    block size:        1024
+    physical block size: 512
+    child count:       0
+    index:             1
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      x1k
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+  partition 7: /dev/disk/nvme/1/2
+    offset:            101711872
+    size:              419430400 (400 MB)
+    content size:      419430400
+    block size:        4096
+    physical block size: 512
+    child count:       0
+    index:             2
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      x4k
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+  partition 8: /dev/disk/nvme/1/3
+    offset:            521142272
+    size:              67108864 (64 MB)
+    content size:      67108864
+    block size:        4096
+    physical block size: 512
+    child count:       0
+    index:             3
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      e4k
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+device 2: /dev/disk/nvme/2/raw
+  media status:      No error
+  device flags:      2
+  offset:            0
+  size:              1073741824 (1024 MB)
+  content size:      1073741824
+  block size:        512
+  physical block size: 512
+  child count:       5
+  index:             -1
+  status:            0
+  flags:             5
+  volume:            -1
+  disk system:       partitioning_systems/efi_gpt/v1
+  name:              <NULL>
+  content name:      <NULL>
+  type:              <NULL>
+  content type:      GUID Partition Map
+  params:            <NULL>
+  content params:    <NULL>
+  partition 9: /dev/disk/nvme/2/0
+    offset:            1048576
+    size:              33554432 (32 MB)
+    content size:      33554432
+    block size:        4096
+    physical block size: 512
+    child count:       0
+    index:             0
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      full4k
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+  partition 10: /dev/disk/nvme/2/1
+    offset:            34603008
+    size:              33554432 (32 MB)
+    content size:      33554432
+    block size:        1024
+    physical block size: 512
+    child count:       0
+    index:             1
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      full1k
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+  partition 11: /dev/disk/nvme/2/2
+    offset:            68157440
+    size:              33554432 (32 MB)
+    content size:      33554432
+    block size:        4096
+    physical block size: 512
+    child count:       0
+    index:             2
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      fullx
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+  partition 12: /dev/disk/nvme/2/3
+    offset:            101711872
+    size:              134217728 (128 MB)
+    content size:      134217728
+    block size:        4096
+    physical block size: 512
+    child count:       0
+    index:             3
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      nx4k
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+  partition 13: /dev/disk/nvme/2/4
+    offset:            235929600
+    size:              134217728 (128 MB)
+    content size:      134217728
+    block size:        4096
+    physical block size: 512
+    child count:       0
+    index:             4
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/ext2/v1
+    name:              
+    content name:      ne2
+    type:              Linux data
+    content type:      Linux Extended File System 2/3/4
+    params:            <NULL>
+    content params:    <NULL>
+Identified boot partition by partition offset.
+bfs: mounted "Haiku" (root node at 524288, device = /dev/disk/nvme/0/1)
+Mounted boot partition: /dev/disk/nvme/0/1
+unknown: [4198823:    19] Adding packages from "/boot/system/packages"
+slab memory manager: created area 0xffff0000de001000 (290)
+unknown: [7451964:    19] StringPool usage:
+unknown: [7452493:    19]   total unique strings:        6217,    66240 bytes, overhead: 99472 bytes + 65536 bytes
+unknown: [7453802:    19]   total strings with dups:    39295,   450450 bytes
+unknown: [7454686:    19]   unshared strings:             796
+unknown: [7455395:    19]   bytes saved:               219202
+unknown: [7461267:    19] Adding packages from "/boot/home/config/packages"
+unknown: [7462982:    19] Failed to open packages activation file: No such file or directory
+unknown: [7464031:    19] Loading packages from activation file failed. Loading all packages in packages directory.
+unknown: [7468178:    19] StringPool usage:
+unknown: [7468686:    19]   total unique strings:        6217,    66240 bytes, overhead: 99472 bytes + 65536 bytes
+unknown: [7469989:    19]   total strings with dups:    39306,   450515 bytes
+unknown: [7470885:    19]   unshared strings:             791
+unknown: [7471598:    19]   bytes saved:               219267
+module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ede0, "fat"
+module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ee10, "ext2"
+module: Search for file_cache/launch_speedup/v1 failed.
+publish device: node 0xffff0000009469a0, path disk/virtual/ram/control, module drivers/disk/virtual/ram_disk/control/device_v1
+usb_modeswitch: init_hardware()
+usb_modeswitch: init_driver()
+usb_modeswitch: trying module bus_managers/usb/v3.1
+usb_modeswitch: publish_devices()
+usb_modeswitch: uninit_driver()
+loaded driver /boot/system/add-ons/kernel/drivers/dev/usb_modeswitch
+loaded driver /boot/system/add-ons/kernel/drivers/dev/pty
+loaded driver /boot/system/add-ons/kernel/drivers/dev/null
+loaded driver /boot/system/add-ons/kernel/drivers/dev/dprintf
+con_init: trying module console/frame_buffer/v1
+con_init: trying module console/vga_text/v1
+module: Search for bus_managers/isa/v1 failed.
+text module_init: no isa bus found..
+devfs: scanned "": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme/0": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme/1": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme/2": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/virtual": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/virtual/ram": mode 2 -> 2, latched 2, probe No error, legacy No error
+identify(7, 0xffff0000ddc38438)
+identify(7, 0xffff0000ddc38510)
+identify(7, 0xffff0000009de000)
+identify(7, 0xffff0000009de180)
+identify(7, 0xffff0000009de018)
+identify(7, 0xffff0000009de1c8)
+identify(7, 0xffff0000009de030)
+identify(7, 0xffff0000009de210)
+identify(7, 0xffff0000ddc38540)
+identify(7, 0xffff0000ddc38558)
+io-interrupt: vector 23 assigned to CPU 0
+arm64_pmu: sampling overflow interrupt on INTID 23 (madt gicc performance gsiv), counter [1] cpu-cycles, period 10000000 cycles
+no valid cpufreq module found
+no valid cpuidle module found
+kernel debugger extension "debugger/usb_keyboard/v1": loaded
+kernel debugger extension "debugger/run_on_exit/v1": loaded
+kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+kernel debugger extension "debugger/hangman/v1": loaded
+publish device: node 0xffff00000094bc20, path random, module bus_managers/random/device_v1
+publish device: node 0xffff00000094bc20, path urandom, module bus_managers/random/device_v1
+driver bus_managers/fdt/root/driver_v1 init failed: No such device
+pl061: pin 3 -> _E03 (edge triggered, active high)
+pl061: pin 4 -> _E04 (edge triggered, active high)
+io-interrupt: vector 39 assigned to CPU 1
+pl061: \_SB_.GPO0: 2 event pin(s) armed on irq 39
+publish device: node 0xffff00000094c080, path power/button/power, module drivers/power/acpi_button/device_v1
+publish device: node 0xffff00000094c260, path power/button/sleep, module drivers/power/acpi_button/device_v1
+slab memory manager: created area 0xffff00001e801000 (3485)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+slab memory manager: created area 0xffff00001f001000 (3615)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092dd00, 9, unix)
+unregister_domain(0xffff00000092de00, 1, internet)
+unregister_domain(0xffff00000092dd80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092df00, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092df80, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e080, 9, unix)
+unregister_domain(0xffff00000092e180, 1, internet)
+unregister_domain(0xffff00000092e100, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092e380, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e400, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e500, 9, unix)
+unregister_domain(0xffff00000092e600, 1, internet)
+unregister_domain(0xffff00000092e580, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092e700, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e780, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e880, 9, unix)
+unregister_domain(0xffff00000092e980, 1, internet)
+unregister_domain(0xffff00000092e900, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092ea80, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092eb00, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092ec00, 9, unix)
+unregister_domain(0xffff00000092ed00, 1, internet)
+unregister_domain(0xffff00000092ec80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092ee00, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092ec80, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092ec00, 9, unix)
+unregister_domain(0xffff00000092eb00, 1, internet)
+unregister_domain(0xffff00000092eb80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092ea00, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e900, 1, internet)
+REG: Failed to open shadow passwd DB file "/etc/shadow": No such file or directory
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e580, 9, unix)
+unregister_domain(0xffff00000092e500, 1, internet)
+unregister_domain(0xffff00000092e600, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092e400, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000092e380, 1, internet)
+package_daemon: [10077574:    48] root at "/boot" (device: 3, node: 524288) registered
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+package_daemon: [10080676:    48] network/stack: rxdiag-1 receive drop attribution active
+volume at "/boot/system" registered
+register_domain(9, unix)
+package_daemon: [10083647:    48] register_domain(5, internet6)
+volume at "/boot/home/config" registered
+register_domain(1, internet)
+unregister_domain(0xffff00000092de80, 9, unix)
+unregister_domain(0xffff00000092de00, 1, internet)
+unregister_domain(0xffff00000092dd80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092db80, 5, internet6)
+register_domain(4, link)
+unregister_domain(0xffff00000092cc00, 4, link)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00001eb80f00, 9, unix)
+unregister_domain(0xffff00001eb81000, 1, internet)
+unregister_domain(0xffff00001eb80f80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00001eb81100, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00001eb81280, 1, internet)
+Launching x-vnd.haiku-media_server failed: No such file or directory
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00001eb81080, 9, unix)
+unregister_domain(0xffff00001eb81000, 1, internet)
+unregister_domain(0xffff00001eb80f80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000092cc00, 5, internet6)
+register_domain(1, internet)
+register_domain(5, internet6)
+Test: and [file_exists [/system/bin/FirstBootPrompt], or [not [file_exists [/boot/home/config/settings/Locale settings]], readonly ]] -> 0
+devfs: scanned "power": mode 2 -> 2, latched 2, probe No error, legacy No error
+ena: found an ENA device
+publish device: node 0xffff00000094b900, path net/ena/0, module drivers/network/ena/device_v1
+loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_rndis
+devfs: scanned "power/button": mode 2 -> 2, latched 2, probe No error, legacy No error
+usb_davicom:00.10.131:init_driver::ver.0.9.5
+loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_davicom
+etherpci: init_driver init_driver: etherpci not found
+devfs: scanned "net": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "net/ena": mode 2 -> 2, latched 2, probe No error, legacy No error
+ena: driver build rxbuf-1920, compiled Nov  4 2026 00:11:44 ()
+ena: ena_com_validate_version(): ENA device version: 0.10
+ena: ena_com_validate_version(): ENA controller version: 0.0.1 implementation version 1
+ena: device drives 48 physical address bits
+ena: queue counts (ext v1): tx_sq 4 tx_cq 4 rx_sq 4 rx_cq 4, per-packet tx 17 rx 12, max_tx_header 96
+ena: supported_features 0x14205df6, capabilities 0x1f
+ena: device reports AENQ supported_groups 0xff
+ena: configuring AENQ groups 0x9f
+ena: MAC 0a:ff:df:34:dd:cf, device MTU limit 9216
+ena: offloads: tx 0x3, rx supported 0x7, rx enabled 0x0
+ena: LLQ negotiation: max_llq_num 4, max_llq_depth 1024, max_wide_llq_depth 512, entry_size_recommended 4, entry_size_supported 0x5, accel_mode supported 0x3
+ena: LLQ configured: 256 byte entries, 16 descriptors per entry, max 2 per burst, transmit header limit 224
+ena: offload: tx 0x3 (ipv4 l3 csum 1, ipv4 l4 csum part 1 full 0, ipv6 l4 csum part 0 full 0, tso v4 0 v6 0), rx supported 0x7, rx enabled 0x0
+ena: transmit checksum offload: advertising 0x1
+ena: wide LLQ caps the transmit depth at 512 (was 1024)
+ena: ring sizes: 512 tx, 1024 rx (device limits: 512 tx, 8192 rx, queue-ext feature yes)
+ena: MTU 9001 (device limit 9216, stack ceiling 9001, chain capacity 15090); a frame may span 8 receive and 8 transmit descriptors; receive refill batch 128
+msix configured for 2 vectors
+msi-x enabled: 0x8007
+ena: using MSI-X, management irq 1023, io irq 1024
+io-interrupt: vector 1023 assigned to CPU 2
+io-interrupt: vector 1024 assigned to CPU 3
+ena: interrupt moderation feature not advertised
+ena: interrupt delay resolution 0; rx interval 20, tx interval 50
+ena: first management interrupt delivered
+ena: link is up
+ena: creating queue pair: tx depth 512, rx depth 1024, msix vector 1, tx placement device, tx max header 224
+ena: cdesc sizes: tx 8 bytes (2 words), rx 16 bytes (4 words)
+ena: set device MTU 9001 after queue creation (matching what we report to the stack): ok
+ena: watchdog running: 6000 ms keep-alive timeout, 1000 ms cadence
+register_domain(9, unix)
+ena: attached [build Nov  4 2026 00:11:44]; interrupts so far: 12 management, 0 io
+/dev/net/ena/0: transmit checksum offload 0x1
+register_domain(4, link)
+ena: first io interrupt delivered
+package_daemon: [10201619:    77] The latest volume state is also the currently active one
+package_daemon: [10202664:    77] Volume::InitialVerify((nil), (nil))
+package_daemon: [10217291:    77] Volume::InitialVerify(): volume at "/boot/system" is consistent
+package_daemon: [10218659:    77] Failed to open packages activation file /boot/home/config/packages/administrative/activated-packages: No such file or directory
+package_daemon: [10224698:    77] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+package_daemon: [10226849:    77] The latest volume state is also the currently active one
+package_daemon: [10227995:    77] Volume::InitialVerify(0x73faa83200, (nil))
+package_daemon: [10229483:    77] Volume::InitialVerify(): volume at "/boot/home/config" is consistent
+framebuffer: init_hardware()
+devfs: scanned "graphics": mode 2 -> 2, latched 2, probe No error, legacy No error
+RemoteHWInterface: session cookie for port 10900 published in /boot/system/settings/remote_desktop/session_cookie.10900
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/wacom
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+ps2_hid: init_hardware
+ps2_hid: init_driver
+module: Search for bus_managers/ps2/v1 failed.
+devfs: scanned "input": mode 2 -> 2, latched 2, probe No error, legacy No error
+AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+slab memory manager: created area 0xffff00001f801000 (7740)
+runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+load addon /boot/system/add-ons/input_server/filters/screen_saver failed
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+ext2: DataStream::_GetBlock(): AllocateBlocks() failed()
+ext2: DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+ext2: DataStream::_GetBlock(): AllocateBlocks() failed()
+ext2: DataStream::Enlarge(): _AddForDirectBlocks() failed
+ext2: DataStream::_GetBlock(): AllocateBlocks() failed()
+ext2: DataStream::Enlarge(): _AddForDirectBlocks() failed
+ext2: Inode::Create(): InitDirectory() failed
+ext2: DataStream::_GetBlock(): AllocateBlocks() failed()
+ext2: DataStream::Enlarge(): _AddForDirectBlocks() failed
+ext2: Inode::Create(): InitDirectory() failed
+vnode 8:12 is busy!
+Last message repeated 3361 times.
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+ext2: ExtentStream::Enlarge(): AllocateBlocks() failed()
+Last message repeated 2 times.
+ext2: Inode::Create(): InitDirectory() failed
+ext2: ExtentStream::Enlarge(): AllocateBlocks() failed()
+ext2: Inode::Create(): InitDirectory() failed
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+ext2: AllocationBlockGroup(1,52)::_InitGroup(): Mismatch between counted free blocks (32768/32768) and what is set on the group descriptor (32717)
+PANIC: sparse write attempt: vnode 0xffff000000e90780
+Welcome to Kernel Debugging Land...
+revision: 
+Thread 24 "page writer: /dev/disk/nvme/1/r" running on CPU 3
+stack trace for thread 0x18 "page writer: /dev/disk/nvme/1/r"
+    kernel stack: 0xffff0000002b7000 to 0xffff0000002bc000
+frame            caller     <image>:function + offset
+ 0 ffff0000002bb740 (+ 336) ffff0000000ddcc4   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000002bb790 (+  80) ffff0000000df4e0   <kernel_arm64> kernel_debugger_loop(char const*: 0xffff0000002bb800 "��+", char const*: 0xffff0000000df878 "�@�", std::__va_list: 0x2794bc, int32: -65536) + 0x118
+ 2 ffff0000002bb800 (+ 112) ffff0000000df878   <kernel_arm64> kernel_debugger_internal(char const*: 0xffff0000002bb8c0 "�+", char const*: 0xffff0000000dfcf8 "4B��SA��{Ҩ�_�pC���", std::__va_list: 0x1b9150, int32: -65536) + 0x98
+ 3 ffff0000002bb8c0 (+ 192) ffff0000000dfcf8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000002bb9e0 (+ 288) ffff00000012c7b4   <kernel_arm64> common_file_io_vec_pages(vnode*: 0xffff0000002bbb30, void*: 0xffff000000139298, file_io_vec const*: 0xffff0000ddc5b270, uint64: 0xffff0000002bbc40, iovec const*: 0x2, uint64: 0xffff0000002bbcd0, unsigned int*: 0xffff0000002bbc38, unsigned long*: 0x1, unsigned long*: 0xffff0000002bbc28, true) + 0x4d4
+ 5 ffff0000002bbb30 (+ 336) ffff000000139298   <kernel_arm64> write_file_io_vec_pages + 0x88
+ 6 ffff0000002bbb90 (+  96) ffff0000023f3b28   <ext2> ext2_write_pages(fs_volume*: 0xffff0000002bbcc0, fs_vnode*: 0xffff0000001439ec, void*: 0x0, int64: 239075328, iovec const*: 0xffff0000002bbd90, uint64: 0xffff00001ed68c00, unsigned long*: 0xffff0000002bbd48) + 0xbc
+ 7 ffff0000002bbcc0 (+ 304) ffff0000001439ec   <kernel_arm64> VnodeIO<0x2bbce0>::IO(int64: 5290476290637824, void*: 0x19d1000ffff0000, unsigned long*: 0x100000ffff0000) + 0x4c
+ 8 ffff0000002bbce0 (+  32) ffff00000012cba8   <kernel_arm64> synchronous_io(IORequest*: 0xffff0000002bbd60, DoIO&: 0xffff000000140d68) + 0x60
+ 9 ffff0000002bbd60 (+ 128) ffff000000140d68   <kernel_arm64> vfs_vnode_io.localalias + 0x88
+10 ffff0000002bbdb0 (+  80) ffff00000016fd98   <kernel_arm64> PageWriteTransfer<0x2bbde0>::Schedule[clone .localalias] (uint32: 0xffff0000) + 0x48
+11 ffff0000002bbde0 (+  48) ffff0000001701e4   <kernel_arm64> PageWriterRun<0x2bbe70>::Go[clone .localalias] () + 0x84
+12 ffff0000002bbe70 (+ 144) ffff0000001715dc   <kernel_arm64> ModifiedPageQueue<0x2bbfc0>::_PageWriter[clone .localalias] () + 0x3fc
+13 ffff0000002bbfc0 (+ 336) ffff0000000b7578   <kernel_arm64> common_thread_entry(void*: 0xffff0000002bbfe0) + 0x38
+14 ffff0000002bbfe0 (+  32) ffff0000000b7540   <kernel_arm64> common_thread_entry(void*: 0xffff000000171ae4) + 0x00
+15 ffff000000171ae4 (+   0) ffff000000c7ca48   4:slab area@0xffff000000800000 + 0x47ca48
+16 a9bc7bfd17fffdbf (+   0) a90153f3910003fd   
+

@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: uninit-facts
+# instance: i-04840e5449d344ff2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: dumpe2fs of the Linux-made uninit_bg x4k (group 1 and 2 layout)
+# start: 20261104T142936Z   end: 20261104T142954Z   rc: 0
+# script sha256: d208e26a26c0799f02bbc47dd5e6e5b94407b60b0445c52f6e188122bffd02d9
+# ---- script ----
+# | # Facts for the BLOCK_UNINIT allocator issue: seed1110 p3 x4k as Linux made it (never mounted on Haiku).
+# | set -x
+# | sleep 8
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol09188f625636f3f34 '$9 == v { print $11 }' | sed 's|.*/||'); D=/dev/$D
+# | dumpe2fs -h ${D}p3 2>/dev/null | grep -E "features|Reserved GDT|Blocks per group|Block count|Flex"
+# | dumpe2fs ${D}p3 2>/dev/null | sed -n '/^Group 1:/,/^Group 3:/p'
+# ---- raw output ----
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file uninit_bg dir_nlink extra_isize
+Block count:              102400
+Reserved GDT blocks:      49
+Blocks per group:         32768
+Flex block group size:    16
+Group 1: (Blocks 32768-65535) csum 0x3c3b [INODE_UNINIT, BLOCK_UNINIT]
+  Backup superblock at 32768, Group descriptors at 32769-32769
+  Reserved GDT blocks at 32770-32818
+  Block bitmap at 52 (bg #0 + 52)
+  Inode bitmap at 56 (bg #0 + 56)
+  Inode table at 1659-3258 (bg #0 + 1659)
+  32717 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+  Free blocks: 32819-65535
+  Free inodes: 25601-51200
+Group 2: (Blocks 65536-98303) csum 0xc54e [INODE_UNINIT, BLOCK_UNINIT]
+  Block bitmap at 53 (bg #0 + 53)
+  Inode bitmap at 57 (bg #0 + 57)
+  Inode table at 3259-4858 (bg #0 + 3259)
+  32768 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+  Free blocks: 65536-98303
+  Free inodes: 51201-76800
+Group 3: (Blocks 98304-102399) csum 0xf40c [INODE_UNINIT]
++ sleep 8
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol09188f625636f3f34 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme3n1
++ D=/dev/nvme3n1
++ dumpe2fs -h /dev/nvme3n1p3
++ grep -E 'features|Reserved GDT|Blocks per group|Block count|Flex'
++ dumpe2fs /dev/nvme3n1p3
++ sed -n '/^Group 1:/,/^Group 3:/p'

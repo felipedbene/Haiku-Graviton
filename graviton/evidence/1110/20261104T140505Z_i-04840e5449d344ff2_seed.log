@@ -1,0 +1,316 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed
+# instance: i-04840e5449d344ff2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: seed the two data volumes with Linux mke2fs (seed1110 and seed1079 layouts)
+# start: 20261104T140505Z   end: 20261104T140522Z   rc: 0
+# script sha256: c8408e2bbbb8dbfe7635997f1ad6571bdc3a4b46cdf1021ea7f84d40011aaf03
+# ---- script ----
+# | # Seed volumes for #1110, made by Ubuntu 24.04 mke2fs on the build box (no journal, orphan_file or
+# | # metadata_csum, as in the #1079/#1105 seeds).
+# | # seed1110 (vol-09188f625636f3f34), 1 GiB, GPT, 4 file systems for graviton/scripts/ext2abort1110.sh:
+# | #  p1 e1k  ext2, 1 KiB blocks, 32 MiB: 4 groups
+# | #  p2 x1k  ext4, 1 KiB blocks, flex_bg, 64 MiB: 8 groups
+# | #  p3 x4k  ext4, 4 KiB blocks, flex_bg and uninit_bg, 400 MiB: 4 groups, some BLOCK_UNINIT
+# | #  p4 e4k  ext2, 4 KiB blocks, 64 MiB: one group (the control)
+# | # seed1079 (vol-000b77356d7865f10), 1 GiB, GPT, 5 file systems: graviton/scripts/ext2full1079.sh uses
+# | # p1-p3 (the #1080 seed2 layout); p4/p5 take the plain write/rm regression.
+# | #  p1 full4k ext2 4 KiB 32 MiB, p2 full1k ext2 1 KiB 32 MiB, p3 fullx ext4 32 MiB,
+# | #  p4 nx4k ext4 128 MiB, p5 ne2 ext2 4 KiB 128 MiB; each holds lin-1m (1 MiB random)
+# | set -x
+# | dev() { D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) '$9 == v { print $11 }' | sed 's|.*/||'); echo /dev/$D; }
+# | X="-O ^has_journal,^orphan_file,^metadata_csum"
+# | D=$(dev vol-09188f625636f3f34); echo "seed1110 device $D"; lsblk $D || exit 1
+# | sgdisk -Z $D > /dev/null; sgdisk -n1:0:+32M -n2:0:+64M -n3:0:+400M -n4:0:+64M $D || exit 1
+# | partprobe $D; sleep 2; P=${D}p
+# | mkfs.ext2 -q -F -b 1024 -L e1k ${P}1 && mkfs.ext4 -q -F -b 1024 $X -L x1k ${P}2 && mkfs.ext4 -q -F -O ^has_journal,^orphan_file,^metadata_csum,uninit_bg -L x4k ${P}3 && mkfs.ext2 -q -F -b 4096 -L e4k ${P}4 || exit 1
+# | for n in 1 2 3 4; do
+# | 	echo "== seed1110 p$n"
+# | 	dumpe2fs -h ${P}$n 2>/dev/null | grep -E "volume name|features|Block size|Block count|Free blocks|Free inodes|Blocks per group|Flex block group"
+# | 	echo "groups: $(dumpe2fs ${P}$n 2>/dev/null | grep -c '^Group ')"
+# | 	dumpe2fs ${P}$n 2>/dev/null | grep '^Group '
+# | 	e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck seed1110 p$n rc=$?"; tail -1 /tmp/f.out
+# | done
+# | D=$(dev vol-000b77356d7865f10); echo "seed1079 device $D"; lsblk $D || exit 1
+# | sgdisk -Z $D > /dev/null; sgdisk -n1:0:+32M -n2:0:+32M -n3:0:+32M -n4:0:+128M -n5:0:+128M $D || exit 1
+# | partprobe $D; sleep 2; P=${D}p
+# | mkfs.ext2 -q -F -b 4096 -L full4k ${P}1 && mkfs.ext2 -q -F -b 1024 -L full1k ${P}2 && mkfs.ext4 -q -F $X -L fullx ${P}3 && mkfs.ext4 -q -F $X -L nx4k ${P}4 && mkfs.ext2 -q -F -b 4096 -L ne2 ${P}5 || exit 1
+# | mkdir -p /opt/seed && cd /opt/seed && head -c 1048576 /dev/urandom > lin-1m && md5sum lin-1m
+# | mkdir -p m
+# | for n in 1 2 3 4 5; do
+# | 	mount ${P}$n m || exit 1
+# | 	cp lin-1m m/ && chmod 777 m && chmod 666 m/lin-1m; sync; umount m
+# | 	echo "== seed1079 p$n"; dumpe2fs -h ${P}$n 2>/dev/null | grep -E "volume name|features|Block size"
+# | 	e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck seed1079 p$n rc=$?"; tail -1 /tmp/f.out
+# | done
+# | sync
+# ---- raw output ----
+seed1110 device /dev/nvme1n1
+NAME    MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+nvme1n1 259:4    0   1G  0 disk 
+Creating new GPT entries in memory.
+The operation has completed successfully.
+== seed1110 p1
+Filesystem volume name:   e1k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block count:              32768
+Free blocks:              30310
+Free inodes:              8181
+Block size:               1024
+Blocks per group:         8192
+groups: 4
+Group 0: (Blocks 1-8192)
+Group 1: (Blocks 8193-16384)
+Group 2: (Blocks 16385-24576)
+Group 3: (Blocks 24577-32767)
+e2fsck seed1110 p1 rc=0
+e1k: 11/8192 files (0.0% non-contiguous), 2458/32768 blocks
+== seed1110 p2
+Filesystem volume name:   x1k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block count:              65536
+Free blocks:              60119
+Free inodes:              16373
+Block size:               1024
+Blocks per group:         8192
+Flex block group size:    16
+groups: 9
+Group descriptor size:    64
+Group 0: (Blocks 1-8192)
+Group 1: (Blocks 8193-16384)
+Group 2: (Blocks 16385-24576)
+Group 3: (Blocks 24577-32768)
+Group 4: (Blocks 32769-40960)
+Group 5: (Blocks 40961-49152)
+Group 6: (Blocks 49153-57344)
+Group 7: (Blocks 57345-65535)
+e2fsck seed1110 p2 rc=0
+x1k: 11/16384 files (0.0% non-contiguous), 5417/65536 blocks
+== seed1110 p3
+Filesystem volume name:   x4k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file uninit_bg dir_nlink extra_isize
+Block count:              102400
+Free blocks:              95833
+Free inodes:              102389
+Block size:               4096
+Blocks per group:         32768
+Flex block group size:    16
+groups: 5
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0x56c0
+Group 1: (Blocks 32768-65535) csum 0x3c3b [INODE_UNINIT, BLOCK_UNINIT]
+Group 2: (Blocks 65536-98303) csum 0xc54e [INODE_UNINIT, BLOCK_UNINIT]
+Group 3: (Blocks 98304-102399) csum 0xf40c [INODE_UNINIT]
+e2fsck seed1110 p3 rc=0
+x4k: 11/102400 files (0.0% non-contiguous), 6567/102400 blocks
+== seed1110 p4
+Filesystem volume name:   e4k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block count:              16384
+Free blocks:              15347
+Free inodes:              16373
+Block size:               4096
+Blocks per group:         32768
+groups: 1
+Group 0: (Blocks 0-16383)
+e2fsck seed1110 p4 rc=0
+e4k: 11/16384 files (0.0% non-contiguous), 1037/16384 blocks
+seed1079 device /dev/nvme2n1
+NAME    MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+nvme2n1 259:5    0   1G  0 disk 
+Creating new GPT entries in memory.
+The operation has completed successfully.
+e22ee5d0fcbd74f185ab620f669bc66e  lin-1m
+== seed1079 p1
+Filesystem volume name:   full4k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               4096
+e2fsck seed1079 p1 rc=0
+full4k: 12/8192 files (8.3% non-contiguous), 780/8192 blocks
+== seed1079 p2
+Filesystem volume name:   full1k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               1024
+e2fsck seed1079 p2 rc=0
+full1k: 12/8192 files (8.3% non-contiguous), 3487/32768 blocks
+== seed1079 p3
+Filesystem volume name:   fullx
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               4096
+e2fsck seed1079 p3 rc=0
+fullx: 12/8192 files (8.3% non-contiguous), 781/8192 blocks
+== seed1079 p4
+Filesystem volume name:   nx4k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               4096
+e2fsck seed1079 p4 rc=0
+nx4k: 12/32768 files (0.0% non-contiguous), 2329/32768 blocks
+== seed1079 p5
+Filesystem volume name:   ne2
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               4096
+e2fsck seed1079 p5 rc=0
+ne2: 12/32768 files (8.3% non-contiguous), 2322/32768 blocks
++ X='-O ^has_journal,^orphan_file,^metadata_csum'
+++ dev vol-09188f625636f3f34
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-09188f625636f3f34
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol09188f625636f3f34 '$9 == v { print $11 }'
+++ D=nvme1n1
+++ echo /dev/nvme1n1
++ D=/dev/nvme1n1
++ echo 'seed1110 device /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ sgdisk -Z /dev/nvme1n1
++ sgdisk -n1:0:+32M -n2:0:+64M -n3:0:+400M -n4:0:+64M /dev/nvme1n1
++ partprobe /dev/nvme1n1
++ sleep 2
++ P=/dev/nvme1n1p
++ mkfs.ext2 -q -F -b 1024 -L e1k /dev/nvme1n1p1
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkfs.ext4 -q -F -b 1024 -O '^has_journal,^orphan_file,^metadata_csum' -L x1k /dev/nvme1n1p2
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum,uninit_bg' -L x4k /dev/nvme1n1p3
++ mkfs.ext2 -q -F -b 4096 -L e4k /dev/nvme1n1p4
++ for n in 1 2 3 4
++ echo '== seed1110 p1'
++ dumpe2fs -h /dev/nvme1n1p1
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes|Blocks per group|Flex block group'
+++ dumpe2fs /dev/nvme1n1p1
+++ grep -c '^Group '
++ echo 'groups: 4'
++ dumpe2fs /dev/nvme1n1p1
++ grep '^Group '
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck seed1110 p1 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4
++ echo '== seed1110 p2'
++ dumpe2fs -h /dev/nvme1n1p2
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes|Blocks per group|Flex block group'
+++ dumpe2fs /dev/nvme1n1p2
+++ grep -c '^Group '
++ echo 'groups: 9'
++ dumpe2fs /dev/nvme1n1p2
++ grep '^Group '
++ e2fsck -fn /dev/nvme1n1p2
++ echo 'e2fsck seed1110 p2 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4
++ echo '== seed1110 p3'
++ dumpe2fs -h /dev/nvme1n1p3
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes|Blocks per group|Flex block group'
+++ dumpe2fs /dev/nvme1n1p3
+++ grep -c '^Group '
++ echo 'groups: 5'
++ dumpe2fs /dev/nvme1n1p3
++ grep '^Group '
++ e2fsck -fn /dev/nvme1n1p3
++ echo 'e2fsck seed1110 p3 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4
++ echo '== seed1110 p4'
++ dumpe2fs -h /dev/nvme1n1p4
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes|Blocks per group|Flex block group'
+++ dumpe2fs /dev/nvme1n1p4
+++ grep -c '^Group '
++ echo 'groups: 1'
++ dumpe2fs /dev/nvme1n1p4
++ grep '^Group '
++ e2fsck -fn /dev/nvme1n1p4
++ echo 'e2fsck seed1110 p4 rc=0'
++ tail -1 /tmp/f.out
+++ dev vol-000b77356d7865f10
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-000b77356d7865f10
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol000b77356d7865f10 '$9 == v { print $11 }'
+++ D=nvme2n1
+++ echo /dev/nvme2n1
++ D=/dev/nvme2n1
++ echo 'seed1079 device /dev/nvme2n1'
++ lsblk /dev/nvme2n1
++ sgdisk -Z /dev/nvme2n1
++ sgdisk -n1:0:+32M -n2:0:+32M -n3:0:+32M -n4:0:+128M -n5:0:+128M /dev/nvme2n1
++ partprobe /dev/nvme2n1
++ sleep 2
++ P=/dev/nvme2n1p
++ mkfs.ext2 -q -F -b 4096 -L full4k /dev/nvme2n1p1
++ mkfs.ext2 -q -F -b 1024 -L full1k /dev/nvme2n1p2
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L fullx /dev/nvme2n1p3
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L nx4k /dev/nvme2n1p4
++ mkfs.ext2 -q -F -b 4096 -L ne2 /dev/nvme2n1p5
++ mkdir -p /opt/seed
++ cd /opt/seed
++ head -c 1048576 /dev/urandom
++ md5sum lin-1m
++ mkdir -p m
++ for n in 1 2 3 4 5
++ mount /dev/nvme2n1p1 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ sync
++ umount m
++ echo '== seed1079 p1'
++ dumpe2fs -h /dev/nvme2n1p1
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme2n1p1
++ echo 'e2fsck seed1079 p1 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4 5
++ mount /dev/nvme2n1p2 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ sync
++ umount m
++ echo '== seed1079 p2'
++ dumpe2fs -h /dev/nvme2n1p2
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme2n1p2
++ echo 'e2fsck seed1079 p2 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4 5
++ mount /dev/nvme2n1p3 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ sync
++ umount m
++ echo '== seed1079 p3'
++ dumpe2fs -h /dev/nvme2n1p3
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme2n1p3
++ echo 'e2fsck seed1079 p3 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4 5
++ mount /dev/nvme2n1p4 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ sync
++ umount m
++ echo '== seed1079 p4'
++ dumpe2fs -h /dev/nvme2n1p4
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme2n1p4
++ echo 'e2fsck seed1079 p4 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4 5
++ mount /dev/nvme2n1p5 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ sync
++ umount m
++ echo '== seed1079 p5'
++ dumpe2fs -h /dev/nvme2n1p5
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme2n1p5
++ echo 'e2fsck seed1079 p5 rc=0'
++ tail -1 /tmp/f.out
++ sync
