@@ -23,7 +23,10 @@ LICENSE="OpenSSH"
 # 3, not 2: 2 wrote the keymaker without its execute bit, so the package daemon,
 # which runs post-install scripts with system(3), got exit 126 and generated no
 # host keys at all (issue 987).
-REVISION="3"
+# 4, not 3: the keymaker named the ML-DSA key ssh_host_mldsa44-ed25519_key, but sshd's
+# default HostKey and `ssh-keygen -A` use ssh_host_mldsa44_ed25519_key, so the final
+# `ssh-keygen -A` made a second, unused ML-DSA key (issue 1043).
+REVISION="4"
 SOURCE_URI="https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$portVersion.tar.gz"
 CHECKSUM_SHA256="ef6026dd2aea8d56059638d5d3262902c892ceba9f88395835e0d06d3fb63238"
 PATCHES="openssh-$portVersion.patchset"
@@ -169,9 +172,33 @@ if [ ! -f "$hostKeyDir/ssh_host_ed25519_key" ] ; then
 	_keygen -t ed25519 -f "$hostKeyDir/ssh_host_ed25519_key" -N ""
 fi
 
-if [ ! -f "$hostKeyDir/ssh_host_mldsa44-ed25519_key" ] ; then
+# sshd's default HostKey, and `ssh-keygen -A`, name this key with an underscore
+# (_PATH_HOST_MLDSA44_ED25519_KEY_FILE); the type itself is spelt with a hyphen.
+# A usable key under the hyphenated name -- written by the image's sshd_boot.sh,
+# or left by a keymaker that never ran (REVISION 2's exit 126) -- is adopted
+# rather than joined by a second one. Its public half is rederived, so a
+# missing or stale .pub cannot block that, and the old names are kept as links
+# so anything configured with them still works. An unreadable key (BFS can
+# leave one zero-filled after an unclean power-off) is not adopted.
+mldsaKey="$hostKeyDir/ssh_host_mldsa44_ed25519_key"
+oldMldsaKey="$hostKeyDir/ssh_host_mldsa44-ed25519_key"
+if [ ! -f "$mldsaKey" ] && [ -f "$oldMldsaKey" ] && [ ! -L "$oldMldsaKey" ] \
+		&& ssh-keygen -y -f "$oldMldsaKey" > "$mldsaKey.pub.new" 2>/dev/null ; then
+	if mv "$oldMldsaKey" "$mldsaKey" ; then
+		mv "$mldsaKey.pub.new" "$mldsaKey.pub"
+		rm -f "$oldMldsaKey.pub"
+		ln -s ssh_host_mldsa44_ed25519_key "$oldMldsaKey"
+		ln -s ssh_host_mldsa44_ed25519_key.pub "$oldMldsaKey.pub"
+	else
+		echo "sshd_keymaker: cannot rename $oldMldsaKey" >&2
+		status=1
+	fi
+fi
+rm -f "$mldsaKey.pub.new"
+
+if [ ! -f "$mldsaKey" ] ; then
 	_progress 0.8 "mldsa44-ed25519"
-	_keygen -t mldsa44-ed25519 -f "$hostKeyDir/ssh_host_mldsa44-ed25519_key" -N ""
+	_keygen -t mldsa44-ed25519 -f "$mldsaKey" -N ""
 fi
 
 # generate what's eventually missing
