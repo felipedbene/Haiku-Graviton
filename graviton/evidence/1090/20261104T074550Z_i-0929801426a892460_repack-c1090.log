@@ -1,0 +1,41 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-c1090
+# instance: i-0929801426a892460   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack haiku.hpkg with ext2.c1090
+# start: 20261104T074550Z   end: 20261104T074641Z   rc: 0
+# script sha256: 343f7190c07a7cdce775aaf1d80362c3c525c2265c3534c427edc6222120e87f
+# ---- script ----
+# | # Repack arm "c1090" (one repack box, imaged after each repack): the box's haiku.hpkg with ext2.c1090
+# | # (revision hrev59996); everything else stays canonical's. Method of #898/#933/#1011.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O ext2.c1090 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/Q/out7/ext2.c1090?<PRESIGNED>'
+# | echo 'ea435c03df86341e197c7a3631375de1f09b835137544cc0376c11c9df79ce4c  ext2.c1090' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 $A/ext2
+# | cat ext2.c1090 > $A/ext2
+# | sha256sum x/kernel_arm64 $A/ext2
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+Validating checksum for DeBeOS...done.
+ext2.c1090: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+9865a19d3fa55e456b7d826a44de09521c107154ac2b9ea25b8141424bf90f82  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+435b07250a90c23c13f004db7001dc572e8f6adf22a9eb5b0e44eca81af01734  x/add-ons/kernel/file_systems/ext2
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+ea435c03df86341e197c7a3631375de1f09b835137544cc0376c11c9df79ce4c  x/add-ons/kernel/file_systems/ext2
+----- Package Info ----------------
+header size:                     80
+heap size:                 20503487
+TOC size:                    324054
+package attributes size:       1100
+total size:                20503567
+-----------------------------------
+-rw-r--r-- 1 baron root 20503567 Nov  4 07:46 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20508600 Nov  4 07:44 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b9d68b7ed15982c43d673c51c3d8ff1dea7e3ba3751ce8e350a4f50ee97cd63c  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

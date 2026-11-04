@@ -1,0 +1,195 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild7
+# instance: i-0847105fe134dbedd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ext2 arms S, c1090, c1088, c1089, c1095
+# start: 20261104T073832Z   end: 20261104T073920Z   rc: 0
+# script sha256: dc862bbf701bac01e8f4cbc5796c561ecaf207e2f8b2f2870e20b63a406bb7f0
+# ---- script ----
+# | # Build the ext2 module for #1088/#1089/#1090/#1095, revision pinned to hrev59996, on the #1064
+# | # tip 0da661af9b (PR #1081). Every arm carries S = #1064 + #1080 + #1079 + #1087 (the c1079g
+# | # arm of PR #1096, which must rebuild to 435b0725...), so e2fsck shows only each change's effect:
+# | #  S       S
+# | #  c1090   S + #1090
+# | #  c1088   S + #1090 + #1088
+# | #  c1089   S + #1090 + #1088 + #1089
+# | #  c1095   S + #1095 (on #1087)
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | T=0da661af9b
+# | mbuild() {
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	rm -rf $A/ext2
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok"
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/" | grep -v "address-of-packed-member"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | S="fix1080.patch fix1079.patch fix1087.patch"
+# | mbuild S $S || exit 1
+# | mbuild c1090 $S fix1090.patch || exit 1
+# | mbuild c1088 $S fix1090.patch fix1088.patch || exit 1
+# | mbuild c1089 $S fix1090.patch fix1088.patch fix1089.patch || exit 1
+# | mbuild c1095 $S fix1095.patch || exit 1
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | sha256sum ext2.S ext2.c1090 ext2.c1088 ext2.c1089 ext2.c1095 | tee SHA256SUMS7
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS7 . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/Q/out7/ && echo uploaded
+# ---- raw output ----
+JAM ext2 S ok
+JAM ext2 c1090 ok
+JAM ext2 c1088 ok
+JAM ext2 c1089 ok
+JAM ext2 c1095 ok
+435b07250a90c23c13f004db7001dc572e8f6adf22a9eb5b0e44eca81af01734  ext2.S
+ea435c03df86341e197c7a3631375de1f09b835137544cc0376c11c9df79ce4c  ext2.c1090
+2d54f195047af33d171b12bdd25342cba89d4376a6bb014b44e2d08b3e856a3b  ext2.c1088
+50073ab251dd75e66877a69a20f9b08c2a5f80e9ef5cd229aa8ca2324be776a8  ext2.c1089
+ec1ed53ec3373cc5b8bc9237d2f750edbbe1ef30bf69f9d5adfe030516f7d617  ext2.c1095
+uploaded
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ T=0da661af9b
++ S='fix1080.patch fix1079.patch fix1087.patch'
++ mbuild S fix1080.patch fix1079.patch fix1087.patch
++ l=S
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1079.patch
++ git -C .. apply /opt/t/out/fix1079.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1087.patch
++ git -C .. apply /opt/t/out/fix1087.patch
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 S ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-S.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.S
++ mbuild c1090 fix1080.patch fix1079.patch fix1087.patch fix1090.patch
++ l=c1090
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1079.patch
++ git -C .. apply /opt/t/out/fix1079.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1087.patch
++ git -C .. apply /opt/t/out/fix1087.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1090.patch
++ git -C .. apply /opt/t/out/fix1090.patch
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 c1090 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1090.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1090
++ mbuild c1088 fix1080.patch fix1079.patch fix1087.patch fix1090.patch fix1088.patch
++ l=c1088
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1079.patch
++ git -C .. apply /opt/t/out/fix1079.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1087.patch
++ git -C .. apply /opt/t/out/fix1087.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1090.patch
++ git -C .. apply /opt/t/out/fix1090.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1088.patch
++ git -C .. apply /opt/t/out/fix1088.patch
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 c1088 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1088.log
++ grep -v address-of-packed-member
++ grep ext2/
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1088
++ mbuild c1089 fix1080.patch fix1079.patch fix1087.patch fix1090.patch fix1088.patch fix1089.patch
++ l=c1089
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1079.patch
++ git -C .. apply /opt/t/out/fix1079.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1087.patch
++ git -C .. apply /opt/t/out/fix1087.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1090.patch
++ git -C .. apply /opt/t/out/fix1090.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1088.patch
++ git -C .. apply /opt/t/out/fix1088.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1089.patch
++ git -C .. apply /opt/t/out/fix1089.patch
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 c1089 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1089.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1089
++ mbuild c1095 fix1080.patch fix1079.patch fix1087.patch fix1095.patch
++ l=c1095
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1080.patch
++ git -C .. apply /opt/t/out/fix1080.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1079.patch
++ git -C .. apply /opt/t/out/fix1079.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1087.patch
++ git -C .. apply /opt/t/out/fix1087.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1095.patch
++ git -C .. apply /opt/t/out/fix1095.patch
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 c1095 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1095.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1095
++ git -C .. checkout -q -f 0da661af9b
++ cd /opt/t/out
++ sha256sum ext2.S ext2.c1090 ext2.c1088 ext2.c1089 ext2.c1095
++ tee SHA256SUMS7
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS7 . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/Q/out7/
++ echo uploaded

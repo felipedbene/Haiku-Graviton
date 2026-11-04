@@ -1,0 +1,253 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: S2-linux-check
+# instance: i-0847105fe134dbedd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck + contents of arm S2's data volume vol-05959de38e0262f11
+# start: 20261104T083228Z   end: 20261104T083240Z   rc: 0
+# script sha256: 114f6ec70c4d74fc91df785150459d98a61a754a0d2a101dc38caad9e64c32d5
+# ---- script ----
+# | # Linux check of arm S2's data volume vol-05959de38e0262f11 (seed3 layout) after the Haiku steps: e2fsck -fn
+# | # on both file systems, then the contents the steps should have left (md5s from seed3 and
+# | # from the Haiku logs).
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol05959de38e0262f11 '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; P=${D}p; echo "volume device $D"
+# | for n in 1 2; do echo "== p$n"; e2fsck -fn ${P}$n > /tmp/fsck.out 2>&1; r=$?; cut -c1-240 /tmp/fsck.out | head -40; echo "e2fsck p$n rc=$r"; done
+# | z() { head -c $1 /dev/zero | md5sum | cut -d' ' -f1; }
+# | mkdir -p /opt/chk/m && mount -o ro ${P}1 /opt/chk/m && cd /opt/chk/m && {
+# | 	ls -ls
+# | 	for f in fa fb pn pg h200 ht l200; do [ -f $f ] && { echo "== $f size=$(stat -c %s $f) blocks=$(stat -c %b $f)"; filefrag -v $f | sed -n '4,9p'; }; done
+# | 	[ -f fa ] && echo "fa [0,1M) $(head -c 1048576 fa | md5sum | cut -d' ' -f1) zeros=$(z 1048576); [1M,+64K) $(tail -c +1048577 fa | head -c 65536 | md5sum | cut -d' ' -f1); rest $(tail -c +1114113 fa | md5sum | cut -d' ' -f1) zeros=$(z 15663104)"
+# | 	[ -f fb ] && echo "fb [0,256K) $(head -c 262144 fb | md5sum | cut -d' ' -f1); rest $(tail -c +262145 fb | md5sum | cut -d' ' -f1) zeros=$(z 8126464)"
+# | 	[ -f pn ] && echo "pn [0,1M) $(head -c 1048576 pn | md5sum | cut -d' ' -f1) (pn-1M aaaef829...); [1M,3M) $(tail -c +1048577 pn | md5sum | cut -d' ' -f1)"
+# | 	[ -f pg ] && echo "pg [0,1M) $(head -c 1048576 pg | md5sum | cut -d' ' -f1) (pg-1M 924595f8...); [1M,2M) $(tail -c +1048577 pg | md5sum | cut -d' ' -f1)"
+# | 	[ -f h200 ] && echo "h200 md5 $(md5sum < h200 | cut -d' ' -f1)"
+# | 	[ -f ht ] && echo "ht md5 $(md5sum < ht | cut -d' ' -f1) zeros=$(z 314572800)"
+# | 	[ -f l200 ] && echo "l200 [0,100M) $(head -c 104857600 l200 | md5sum | cut -d' ' -f1) (l200-100M 194063c6...); tail $(tail -c +104857601 l200 | md5sum | cut -d' ' -f1)"
+# | 	cd /; umount /opt/chk/m; }
+# | mount -o ro ${P}2 /opt/chk/m && { ls -ls /opt/chk/m; umount /opt/chk/m; }
+# | dumpe2fs ${P}2 2>/dev/null | grep -E "^Group (10|11|14|15):" -A3 | grep -E "Group|free blocks"
+# ---- raw output ----
+volume device /dev/nvme1n1
+== p1
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Inode 19 has zero length extent
+	(invalid logical block 0, physical block 131072)
+Clear? no
+
+Inode 19 has zero length extent
+	(invalid logical block 32768, physical block 196608)
+Clear? no
+
+Inode 19, i_blocks is 614400, should be 90112.  Fix? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  -(131072--163839) -(196608--229375)
+Fix? no
+
+
+x4k: ********** WARNING: Filesystem still has errors **********
+
+x4k: 19/89760 files (10.5% non-contiguous), 197670/358400 blocks
+e2fsck p1 rc=4
+== p2
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+x1k: 15/76912 files (6.7% non-contiguous), 59819/307200 blocks
+e2fsck p2 rc=0
+total 456720
+ 16384 -rw-rw-rw- 1 root root  16777216 Nov  4 07:40 fa
+  8192 -rw-rw-rw- 1 root root   8388608 Nov  4 07:40 fb
+204800 -rw-r--r-- 1 root root 209715200 Nov  4 08:16 h200
+     ? -????????? ? ?    ?            ?            ? ht
+204800 -rw-rw-rw- 1 root root 209715200 Nov  4 07:40 l200
+    16 drw-rw-rw- 2 root root     16384 Nov  4 07:40 lost+found
+  5120 -rw-rw-rw- 1 root root   1048576 Nov  4 07:40 pg
+  9216 -rw-rw-rw- 1 root root   1048576 Nov  4 07:40 pn
+  8192 -rw-rw-rw- 1 root root         0 Nov  4 07:40 pz
+== fa size=16777216 blocks=32768
+   0:        0..    4095:      36864..     40959:   4096:             last,unwritten,eof
+fa: 1 extent found
+== fb size=8388608 blocks=16384
+   0:        0..    2047:      34816..     36863:   2048:             last,unwritten,eof
+fb: 1 extent found
+== pn size=1048576 blocks=18432
+   0:        0..     255:      33024..     33279:    256:            ,eof
+   1:      256..    2303:      40960..     43007:   2048:      33280: last,unwritten,eof
+pn: 2 extents found
+== pg size=1048576 blocks=10240
+   0:        0..     255:      33280..     33535:    256:            ,eof
+   1:     5120..    6143:      33792..     34815:   1024:      38400: last,unwritten,eof
+pg: 2 extents found
+== h200 size=209715200 blocks=409600
+   0:        0..   26879:       5814..     32693:  26880:            
+   1:    26880..   27135:      33536..     33791:    256:      32694:
+   2:    27136..   29183:      96256..     98303:   2048:      33792:
+   3:    29184..   51199:      98480..    120495:  22016:      98304: last,eof
+h200: 4 extents found
+== l200 size=209715200 blocks=409600
+   0:        0..   32767:      45056..     77823:  32768:            
+   1:    32768..   51199:      77824..     96255:  18432:             last,eof
+l200: 1 extent found
+fa [0,1M) b6d81b360a5672d80c27430f39153e2c zeros=b6d81b360a5672d80c27430f39153e2c; [1M,+64K) fcd6bcb56c1689fcef28b57c22475bad; rest 3e4d40cd2818d6ebc1614fdcfd18fb58 zeros=3e4d40cd2818d6ebc1614fdcfd18fb58
+fb [0,256K) ec87a838931d4d5d2e94a04644788a55; rest 99dc3248d1f10ae2b109d136f27d9fef zeros=99dc3248d1f10ae2b109d136f27d9fef
+pn [0,1M) aaaef82982839da2d4fe24a242351fc4 (pn-1M aaaef829...); [1M,3M) d41d8cd98f00b204e9800998ecf8427e
+pg [0,1M) 924595f843a3d463cbfa84ddf66782a8 (pg-1M 924595f8...); [1M,2M) d41d8cd98f00b204e9800998ecf8427e
+h200 md5 73032f8674211c76be2d919966f91905
+l200 [0,100M) 194063c67bfcd7d7b6ac01fb79b57822 (l200-100M 194063c6...); tail 45655ced452f893db255e4fa0ac5fc6f
+total 38432
+15619 -rw-rw-rw- 1 root root 15992832 Nov  4 07:40 gb
+ 4495 -rw-rw-rw- 1 root root  4602880 Nov  4 07:40 gc
+12305 -rw-rw-rw- 1 root root 12600320 Nov  4 07:41 gx
+ 6001 -rw-rw-rw- 1 root root  6145024 Nov  4 07:41 gy
+   12 drw-rw-rw- 2 root root    12288 Nov  4 07:40 lost+found
+Group 10: (Blocks 81921-90112)
+Group 11: (Blocks 90113-98304)
+Group 14: (Blocks 114689-122880)
+Group 15: (Blocks 122881-131072)
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol05959de38e0262f11 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ D=/dev/nvme1n1
++ P=/dev/nvme1n1p
++ echo 'volume device /dev/nvme1n1'
++ for n in 1 2
++ echo '== p1'
++ e2fsck -fn /dev/nvme1n1p1
++ r=4
++ cut -c1-240 /tmp/fsck.out
++ head -40
++ echo 'e2fsck p1 rc=4'
++ for n in 1 2
++ echo '== p2'
++ e2fsck -fn /dev/nvme1n1p2
++ r=0
++ cut -c1-240 /tmp/fsck.out
++ head -40
++ echo 'e2fsck p2 rc=0'
++ mkdir -p /opt/chk/m
++ mount -o ro /dev/nvme1n1p1 /opt/chk/m
++ cd /opt/chk/m
++ ls -ls
+ls: cannot access 'ht': Structure needs cleaning
++ for f in fa fb pn pg h200 ht l200
++ '[' -f fa ']'
+++ stat -c %s fa
+++ stat -c %b fa
++ echo '== fa size=16777216 blocks=32768'
++ filefrag -v fa
++ sed -n 4,9p
++ for f in fa fb pn pg h200 ht l200
++ '[' -f fb ']'
+++ stat -c %s fb
+++ stat -c %b fb
++ echo '== fb size=8388608 blocks=16384'
++ filefrag -v fb
++ sed -n 4,9p
++ for f in fa fb pn pg h200 ht l200
++ '[' -f pn ']'
+++ stat -c %s pn
+++ stat -c %b pn
++ echo '== pn size=1048576 blocks=18432'
++ filefrag -v pn
++ sed -n 4,9p
++ for f in fa fb pn pg h200 ht l200
++ '[' -f pg ']'
+++ stat -c %s pg
+++ stat -c %b pg
++ echo '== pg size=1048576 blocks=10240'
++ filefrag -v pg
++ sed -n 4,9p
++ for f in fa fb pn pg h200 ht l200
++ '[' -f h200 ']'
+++ stat -c %s h200
+++ stat -c %b h200
++ echo '== h200 size=209715200 blocks=409600'
++ filefrag -v h200
++ sed -n 4,9p
++ for f in fa fb pn pg h200 ht l200
++ '[' -f ht ']'
++ for f in fa fb pn pg h200 ht l200
++ '[' -f l200 ']'
+++ stat -c %s l200
+++ stat -c %b l200
++ echo '== l200 size=209715200 blocks=409600'
++ filefrag -v l200
++ sed -n 4,9p
++ '[' -f fa ']'
+++ head -c 1048576 fa
+++ md5sum
+++ cut '-d ' -f1
+++ z 1048576
+++ head -c 1048576 /dev/zero
+++ md5sum
+++ cut '-d ' -f1
+++ tail -c +1048577 fa
+++ head -c 65536
+++ md5sum
+++ cut '-d ' -f1
+++ tail -c +1114113 fa
+++ md5sum
+++ cut '-d ' -f1
+++ z 15663104
+++ head -c 15663104 /dev/zero
+++ md5sum
+++ cut '-d ' -f1
++ echo 'fa [0,1M) b6d81b360a5672d80c27430f39153e2c zeros=b6d81b360a5672d80c27430f39153e2c; [1M,+64K) fcd6bcb56c1689fcef28b57c22475bad; rest 3e4d40cd2818d6ebc1614fdcfd18fb58 zeros=3e4d40cd2818d6ebc1614fdcfd18fb58'
++ '[' -f fb ']'
+++ head -c 262144 fb
+++ md5sum
+++ cut '-d ' -f1
+++ tail -c +262145 fb
+++ md5sum
+++ cut '-d ' -f1
+++ z 8126464
+++ head -c 8126464 /dev/zero
+++ md5sum
+++ cut '-d ' -f1
++ echo 'fb [0,256K) ec87a838931d4d5d2e94a04644788a55; rest 99dc3248d1f10ae2b109d136f27d9fef zeros=99dc3248d1f10ae2b109d136f27d9fef'
++ '[' -f pn ']'
+++ head -c 1048576 pn
+++ md5sum
+++ cut '-d ' -f1
+++ tail -c +1048577 pn
+++ md5sum
+++ cut '-d ' -f1
++ echo 'pn [0,1M) aaaef82982839da2d4fe24a242351fc4 (pn-1M aaaef829...); [1M,3M) d41d8cd98f00b204e9800998ecf8427e'
++ '[' -f pg ']'
+++ head -c 1048576 pg
+++ md5sum
+++ cut '-d ' -f1
+++ tail -c +1048577 pg
+++ md5sum
+++ cut '-d ' -f1
++ echo 'pg [0,1M) 924595f843a3d463cbfa84ddf66782a8 (pg-1M 924595f8...); [1M,2M) d41d8cd98f00b204e9800998ecf8427e'
++ '[' -f h200 ']'
+++ md5sum
+++ cut '-d ' -f1
++ echo 'h200 md5 73032f8674211c76be2d919966f91905'
++ '[' -f ht ']'
++ '[' -f l200 ']'
+++ head -c 104857600 l200
+++ md5sum
+++ cut '-d ' -f1
+++ tail -c +104857601 l200
+++ md5sum
+++ cut '-d ' -f1
++ echo 'l200 [0,100M) 194063c67bfcd7d7b6ac01fb79b57822 (l200-100M 194063c6...); tail 45655ced452f893db255e4fa0ac5fc6f'
++ cd /
++ umount /opt/chk/m
++ mount -o ro /dev/nvme1n1p2 /opt/chk/m
++ ls -ls /opt/chk/m
++ umount /opt/chk/m
++ dumpe2fs /dev/nvme1n1p2
++ grep -E '^Group (10|11|14|15):' -A3
++ grep -E 'Group|free blocks'

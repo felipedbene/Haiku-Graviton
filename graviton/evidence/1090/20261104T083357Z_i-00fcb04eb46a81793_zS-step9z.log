@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: zS-step9z
+# instance: i-00fcb04eb46a81793   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm zS, step 9z
+# start: 20261104T083357Z   end: 20261104T084403Z   rc: 1
+# script sha256: 22b07b5a4c7d2dda60529f179018e0e25bd8914b1808d9231da8b757e5f58267
+# ---- script ----
+# | # zero-fill check, arm zS: on x1k (1 KiB blocks: no run reaches 32768 blocks, so #1090 is not
+# | # involved), ftruncate a new file up to 100 MiB and another to 8 MiB, then count the kernel's
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | # "failed to lock memory" messages (#1069: single-page I/O on plain NVMe).
+# | before=$(grep -c "failed to lock memory" /var/log/syslog)
+# | mount -t ext2 $DD/1 /ex1k || exit 1
+# | cd /ex1k
+# | truncate -s 100M z100; echo "truncate z100 rc=$?"
+# | truncate -s 8M z8; echo "truncate z8 rc=$?"
+# | sync; ls -ls z100 z8; cd /
+# | unmount /ex1k; echo "unmount x1k rc=$?"
+# | echo "lock-memory failures during this step: $(( $(grep -c 'failed to lock memory' /var/log/syslog) - before ))"
+# ---- raw output ----

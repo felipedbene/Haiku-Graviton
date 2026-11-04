@@ -1,0 +1,71 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: zc1089-step9z
+# instance: i-0f9923903c752c9a5   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm zc1089, step 9z
+# start: 20261104T083413Z   end: 20261104T083424Z   rc: 0
+# script sha256: 15a557cfba0e51d2ffc6d793da4aabb71ddc99a8648ca581bcb6c757030f7ae5
+# ---- script ----
+# | # zero-fill check, arm zc1089: on x1k (1 KiB blocks: no run reaches 32768 blocks, so #1090 is not
+# | # involved), ftruncate a new file up to 100 MiB and another to 8 MiB, then count the kernel's
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | # "failed to lock memory" messages (#1069: single-page I/O on plain NVMe).
+# | before=$(grep -c "failed to lock memory" /var/log/syslog)
+# | mount -t ext2 $DD/1 /ex1k || exit 1
+# | cd /ex1k
+# | truncate -s 100M z100; echo "truncate z100 rc=$?"
+# | truncate -s 8M z8; echo "truncate z8 rc=$?"
+# | sync; ls -ls z100 z8; cd /
+# | unmount /ex1k; echo "unmount x1k rc=$?"
+# | echo "lock-memory failures during this step: $(( $(grep -c 'failed to lock memory' /var/log/syslog) - before ))"
+# ---- raw output ----
+Haiku ip-10-128-4-196.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+2b5c7cecea7f731a3ad47c865bbbf5dbd8f09f2726d8c98aa330376bf884d8d4  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw 
+truncate z100 rc=0
+truncate z8 rc=0
+102401 -rw-r--r-- 1 baron root 104857600 Nov  4 08:34 z100
+  8192 -rw-r--r-- 1 baron root   8388608 Nov  4 08:34 z8
+unmount x1k rc=0
+lock-memory failures during this step: 0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw '
++ mkdir -p /ex4k /ex1k
+++ grep -c 'failed to lock memory' /var/log/syslog
++ before=0
++ mount -t ext2 /dev/disk/nvme/1/1 /ex1k
++ cd /ex1k
++ truncate -s 100M z100
++ echo 'truncate z100 rc=0'
++ truncate -s 8M z8
++ echo 'truncate z8 rc=0'
++ sync
++ ls -ls z100 z8
++ cd /
++ unmount /ex1k
++ echo 'unmount x1k rc=0'
+++ grep -c 'failed to lock memory' /var/log/syslog
++ echo 'lock-memory failures during this step: 0'

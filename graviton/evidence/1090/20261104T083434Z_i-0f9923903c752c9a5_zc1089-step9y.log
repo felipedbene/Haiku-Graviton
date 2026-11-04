@@ -1,0 +1,65 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: zc1089-step9y
+# instance: i-0f9923903c752c9a5   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm zc1089, step 9y
+# start: 20261104T083434Z   end: 20261104T083446Z   rc: 0
+# script sha256: 4bdc24d2baee3285fd3d12689aefc5690a53fb83a91c3f461e037c98cc4831ec
+# ---- script ----
+# | # zero-fill check, arm zc1089: on x4k, ftruncate a new file up to 300 MiB (as step 1090 did),
+# | # and count the kernel's "failed to lock memory" messages (#1069).
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | before=$(grep -c "failed to lock memory" /var/log/syslog)
+# | mount -t ext2 $DD/0 /ex4k || exit 1
+# | cd /ex4k
+# | truncate -s 300M z300; echo "truncate z300 rc=$?"
+# | sync; ls -ls z300; cd /
+# | unmount /ex4k; echo "unmount x4k rc=$?"
+# | echo "lock-memory failures during this step: $(( $(grep -c 'failed to lock memory' /var/log/syslog) - before ))"
+# ---- raw output ----
+Haiku ip-10-128-4-196.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+2b5c7cecea7f731a3ad47c865bbbf5dbd8f09f2726d8c98aa330376bf884d8d4  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw 
+truncate z300 rc=0
+307200 -rw-r--r-- 1 baron root 314572800 Nov  4 08:34 z300
+unmount x4k rc=0
+lock-memory failures during this step: 1
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw '
++ mkdir -p /ex4k /ex1k
+++ grep -c 'failed to lock memory' /var/log/syslog
++ before=0
++ mount -t ext2 /dev/disk/nvme/1/0 /ex4k
++ cd /ex4k
++ truncate -s 300M z300
++ echo 'truncate z300 rc=0'
++ sync
++ ls -ls z300
++ cd /
++ unmount /ex4k
++ echo 'unmount x4k rc=0'
+++ grep -c 'failed to lock memory' /var/log/syslog
++ echo 'lock-memory failures during this step: 1'

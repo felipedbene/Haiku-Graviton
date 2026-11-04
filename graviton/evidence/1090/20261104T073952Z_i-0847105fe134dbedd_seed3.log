@@ -1,0 +1,276 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed3
+# instance: i-0847105fe134dbedd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: partition the seed EBS volume for #1088/#1089/#1090/#1095
+# start: 20261104T073952Z   end: 20261104T074009Z   rc: 0
+# script sha256: c0426416ae4bf4946f60ca9f44544fd421ff1a2e84925211b004b5931c15d906
+# ---- script ----
+# | # Seed volume for #1088/#1089/#1090/#1095: one 2 GiB EBS volume, GPT, two file systems made by
+# | # Ubuntu mke2fs (ext4, no journal/orphan_file/metadata_csum; flex_bg on):
+# | #  p1 x4k  4 KiB blocks, 1400 MiB:
+# | #     junk-then-fallocate: 64 MiB of random data written and removed first, so preallocated
+# | #       blocks hold stale data;
+# | #     fa   fallocate -l 16M (uninitialized, inside EOF)       -> Haiku md5 (zeros), 64 KiB at 1 MiB
+# | #     fb   fallocate -l 8M                                    -> Haiku writes 256 KiB at 0
+# | #     pn   1 MiB data + fallocate -n -o 1M -l 8M (past EOF)   -> Haiku appends 2 MiB
+# | #     pz   empty + fallocate -n -l 8M (past EOF)              -> Haiku rm
+# | #     pg   1 MiB data + fallocate -n -o 20M -l 4M (gap)       -> Haiku appends 1 MiB
+# | #     l200 200 MiB written by Linux (32768-block extents)     -> Haiku truncate 100M, append 1 MiB
+# | #  p2 x1k  1 KiB blocks (8192 blocks per group), 300 MiB:
+# | #     gb   one extent crossing a group boundary and ending on the last block of a group
+# | #     gc   control: one extent crossing a boundary, not ending on one   -> Haiku rm both
+# | # Expected md5s, computed here, go in this log.
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0e298e160ef60b0f1 '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "seed device $D"; lsblk $D || exit 1
+# | sgdisk -Z $D > /dev/null; sgdisk -n1:0:+1400M -n2:0:+300M $D || exit 1
+# | partprobe $D; sleep 2; P=${D}p
+# | X="-O ^has_journal,^orphan_file,^metadata_csum"
+# | mkfs.ext4 -q -F $X -L x4k ${P}1 && mkfs.ext4 -q -F -b 1024 $X -L x1k ${P}2 || exit 1
+# | mkdir -p /opt/seed3/m && cd /opt/seed3
+# | mount ${P}1 m || exit 1
+# | (cd m && chmod 777 .
+# | head -c 64M /dev/urandom > junk; sync; rm junk; sync
+# | fallocate -l 16M fa; fallocate -l 8M fb
+# | head -c 1M /dev/urandom > pn; fallocate -n -o 1M -l 8M pn
+# | : > pz; fallocate -n -l 8M pz
+# | head -c 1M /dev/urandom > pg; fallocate -n -o 20M -l 4M pg
+# | head -c 200M /dev/urandom > l200
+# | sync; chmod 666 *
+# | for f in fa fb pn pz pg l200; do echo "== $f size=$(stat -c %s $f) blocks=$(stat -c %b $f)"; filefrag -v $f | sed -n '4,9p'; done
+# | echo "fa-16M-zeros $(head -c 16M /dev/zero | md5sum | cut -d' ' -f1)"
+# | echo "pn-1M $(md5sum < pn | cut -d' ' -f1)"
+# | echo "pg-1M $(md5sum < pg | cut -d' ' -f1)"
+# | echo "l200-100M $(head -c 100M l200 | md5sum | cut -d' ' -f1)"
+# | st=$(filefrag -v fa | awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }')
+# | echo "fa first physical block $st; md5 of its first 1 MiB on disk: $(dd if=${P}1 bs=4096 skip=$st count=256 status=none | md5sum | cut -d' ' -f1)")
+# | umount m
+# | mount ${P}2 m || exit 1
+# | (cd m && chmod 777 .
+# | # gb: grow one file with fallocate until it is a single extent that crosses a group boundary
+# | # and ends on the last block of a group (Haiku numbering: (block - 1) % 8192 == 8191)
+# | fallocate -l 64K probe; s=$(filefrag -v probe | awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }'); rm probe
+# | echo "probe start $s"
+# | fallocate -l 1K gb; s=$(filefrag -v gb | awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }')
+# | want=$(( (8192 - ((s - 1) % 8192)) + 8192 ))
+# | echo "gb start $s, blocks wanted $want"
+# | fallocate -l ${want}K gb
+# | dd if=/dev/urandom of=gb bs=1K count=$want conv=notrunc status=none
+# | fallocate -l 1K gc; s2=$(filefrag -v gc | awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }')
+# | fallocate -l $(( (8192 - ((s2 - 1) % 8192)) + 4000 ))K gc
+# | dd if=/dev/urandom of=gc bs=1K count=$(( (8192 - ((s2 - 1) % 8192)) + 4000 )) conv=notrunc status=none
+# | sync; chmod 666 *
+# | for f in gb gc; do echo "== $f"; filefrag -v $f | sed -n '4,8p'; done)
+# | umount m
+# | for n in 1 2; do echo "== p$n"; dumpe2fs -h ${P}$n 2>/dev/null | grep -E "volume name|features|Block size|Blocks per group"; e2fsck -fn ${P}$n; echo "e2fsck p$n rc=$?"; done
+# | sync
+# ---- raw output ----
+seed device /dev/nvme1n1
+NAME    MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+nvme1n1 259:4    0   2G  0 disk 
+Creating new GPT entries in memory.
+The operation has completed successfully.
+== fa size=16777216 blocks=32768
+   0:        0..    4095:      36864..     40959:   4096:             last,unwritten,eof
+fa: 1 extent found
+== fb size=8388608 blocks=16384
+   0:        0..    2047:      34816..     36863:   2048:             last,unwritten,eof
+fb: 1 extent found
+== pn size=1048576 blocks=18432
+   0:        0..     255:      33024..     33279:    256:            ,eof
+   1:      256..    2303:      40960..     43007:   2048:      33280: last,unwritten,eof
+pn: 2 extents found
+== pz size=0 blocks=16384
+   0:        0..    2047:      43008..     45055:   2048:             last,unwritten,eof
+pz: 1 extent found
+== pg size=1048576 blocks=10240
+   0:        0..     255:      33280..     33535:    256:            ,eof
+   1:     5120..    6143:      33792..     34815:   1024:      38400: last,unwritten,eof
+pg: 2 extents found
+== l200 size=209715200 blocks=409600
+   0:        0..   51199:      45056..     96255:  51200:             last,eof
+l200: 1 extent found
+fa-16M-zeros 2c7ab85a893283e98c931e9511add182
+pn-1M aaaef82982839da2d4fe24a242351fc4
+pg-1M 924595f843a3d463cbfa84ddf66782a8
+l200-100M 194063c67bfcd7d7b6ac01fb79b57822
+fa first physical block 36864; md5 of its first 1 MiB on disk: 41aa8fa6219ad7dd3a1b6dc877d7d0c8
+probe start 7897
+gb start 8959, blocks wanted 15618
+== gb
+   0:        0..       0:       8959..      8959:      1:            
+   1:        1..    2045:      16388..     18432:   2045:       8960:
+   2:     2046..    4090:      32772..     34816:   2045:      18433:
+   3:     4091..    6135:      49156..     51200:   2045:      34817:
+   4:     6136..    8180:      65540..     67584:   2045:      51201:
+== gc
+   0:        0..       0:      81426..     81426:      1:            
+   1:        1..    4494:       8960..     13453:   4494:      81427: last,eof
+gc: 2 extents found
+== p1
+Filesystem volume name:   x4k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               4096
+Blocks per group:         32768
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+x4k: 17/89760 files (11.8% non-contiguous), 69670/358400 blocks
+e2fsck p1 rc=0
+== p2
+Filesystem volume name:   x1k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               1024
+Blocks per group:         8192
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+x1k: 13/76912 files (7.7% non-contiguous), 41513/307200 blocks
+e2fsck p2 rc=0
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0e298e160ef60b0f1 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ D=/dev/nvme1n1
++ echo 'seed device /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ sgdisk -Z /dev/nvme1n1
++ sgdisk -n1:0:+1400M -n2:0:+300M /dev/nvme1n1
++ partprobe /dev/nvme1n1
++ sleep 2
++ P=/dev/nvme1n1p
++ X='-O ^has_journal,^orphan_file,^metadata_csum'
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L x4k /dev/nvme1n1p1
++ mkfs.ext4 -q -F -b 1024 -O '^has_journal,^orphan_file,^metadata_csum' -L x1k /dev/nvme1n1p2
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkdir -p /opt/seed3/m
++ cd /opt/seed3
++ mount /dev/nvme1n1p1 m
++ cd m
++ chmod 777 .
++ head -c 64M /dev/urandom
++ sync
++ rm junk
++ sync
++ fallocate -l 16M fa
++ fallocate -l 8M fb
++ head -c 1M /dev/urandom
++ fallocate -n -o 1M -l 8M pn
++ :
++ fallocate -n -l 8M pz
++ head -c 1M /dev/urandom
++ fallocate -n -o 20M -l 4M pg
++ head -c 200M /dev/urandom
++ sync
++ chmod 666 fa fb l200 lost+found pg pn pz
++ for f in fa fb pn pz pg l200
+++ stat -c %s fa
+++ stat -c %b fa
++ echo '== fa size=16777216 blocks=32768'
++ filefrag -v fa
++ sed -n 4,9p
++ for f in fa fb pn pz pg l200
+++ stat -c %s fb
+++ stat -c %b fb
++ echo '== fb size=8388608 blocks=16384'
++ filefrag -v fb
++ sed -n 4,9p
++ for f in fa fb pn pz pg l200
+++ stat -c %s pn
+++ stat -c %b pn
++ echo '== pn size=1048576 blocks=18432'
++ filefrag -v pn
++ sed -n 4,9p
++ for f in fa fb pn pz pg l200
+++ stat -c %s pz
+++ stat -c %b pz
++ echo '== pz size=0 blocks=16384'
++ filefrag -v pz
++ sed -n 4,9p
++ for f in fa fb pn pz pg l200
+++ stat -c %s pg
+++ stat -c %b pg
++ echo '== pg size=1048576 blocks=10240'
++ filefrag -v pg
++ sed -n 4,9p
++ for f in fa fb pn pz pg l200
+++ stat -c %s l200
+++ stat -c %b l200
++ echo '== l200 size=209715200 blocks=409600'
++ filefrag -v l200
++ sed -n 4,9p
+++ head -c 16M /dev/zero
+++ md5sum
+++ cut '-d ' -f1
++ echo 'fa-16M-zeros 2c7ab85a893283e98c931e9511add182'
+++ md5sum
+++ cut '-d ' -f1
++ echo 'pn-1M aaaef82982839da2d4fe24a242351fc4'
+++ md5sum
+++ cut '-d ' -f1
++ echo 'pg-1M 924595f843a3d463cbfa84ddf66782a8'
+++ head -c 100M l200
+++ md5sum
+++ cut '-d ' -f1
++ echo 'l200-100M 194063c67bfcd7d7b6ac01fb79b57822'
+++ filefrag -v fa
+++ awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }'
++ st=36864
+++ dd if=/dev/nvme1n1p1 bs=4096 skip=36864 count=256 status=none
+++ md5sum
+++ cut '-d ' -f1
++ echo 'fa first physical block 36864; md5 of its first 1 MiB on disk: 41aa8fa6219ad7dd3a1b6dc877d7d0c8'
++ umount m
++ mount /dev/nvme1n1p2 m
++ cd m
++ chmod 777 .
++ fallocate -l 64K probe
+++ filefrag -v probe
+++ awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }'
++ s=7897
++ rm probe
++ echo 'probe start 7897'
++ fallocate -l 1K gb
+++ filefrag -v gb
+++ awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }'
++ s=8959
++ want=15618
++ echo 'gb start 8959, blocks wanted 15618'
++ fallocate -l 15618K gb
++ dd if=/dev/urandom of=gb bs=1K count=15618 conv=notrunc status=none
++ fallocate -l 1K gc
+++ filefrag -v gc
+++ awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }'
++ s2=81426
++ fallocate -l 4495K gc
++ dd if=/dev/urandom of=gc bs=1K count=4495 conv=notrunc status=none
++ sync
++ chmod 666 gb gc lost+found
++ for f in gb gc
++ echo '== gb'
++ filefrag -v gb
++ sed -n 4,8p
++ for f in gb gc
++ echo '== gc'
++ filefrag -v gc
++ sed -n 4,8p
++ umount m
++ for n in 1 2
++ echo '== p1'
++ dumpe2fs -h /dev/nvme1n1p1
++ grep -E 'volume name|features|Block size|Blocks per group'
++ e2fsck -fn /dev/nvme1n1p1
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p1 rc=0'
++ for n in 1 2
++ echo '== p2'
++ dumpe2fs -h /dev/nvme1n1p2
++ grep -E 'volume name|features|Block size|Blocks per group'
++ e2fsck -fn /dev/nvme1n1p2
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p2 rc=0'
++ sync
