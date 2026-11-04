@@ -107,6 +107,9 @@ public:
 			const ipv6_packet_key& Key() const { return fKey; }
 			FragmentPacket*&	HashTableLink() { return fNext; }
 
+			bool				StopTimer();
+			void				Orphan() { fOrphaned = true; }
+
 	static	void				StaleTimer(struct net_timer* timer, void* data);
 
 private:
@@ -116,6 +119,9 @@ private:
 			int32				fBytesLeft;
 			FragmentList		fFragments;
 			net_timer			fTimer;
+			bool				fOrphaned;
+				// taken out of the hash while StaleTimer() was already running
+				// for it; StaleTimer() deletes it
 			bool				fReceivedLastFragment;
 			uint8*				fHeaders;
 				// the first fragment's headers in front of its fragment header
@@ -388,6 +394,7 @@ FragmentPacket::FragmentPacket(const ipv6_packet_key &key)
 	fHeadersLength(0),
 	fNextHeaderField(0)
 {
+	fOrphaned = false;
 	gStackModule->init_timer(&fTimer, FragmentPacket::StaleTimer, this);
 }
 
@@ -616,6 +623,29 @@ FragmentPacket::Reassemble(net_buffer* to)
 }
 
 
+/*!	Makes sure StaleTimer() will not run for this packet. Must be called with
+	sFragmentLock held, after the packet has been taken out of the hash.
+	Returns \c false if that is too late: the timer has fired, and its hook is
+	waiting for sFragmentLock. The packet must then not be deleted, but handed
+	to the hook with Orphan().
+
+	set_timer(-1), which the destructor calls, is not enough: it cancels a
+	scheduled timer only, and the timer may have been scheduled again by
+	AddFragment() while the hook that already fired was waiting for the lock.
+	wait_for_timer() cannot be used either, as the hook needs sFragmentLock.
+*/
+bool
+FragmentPacket::StopTimer()
+{
+	gStackModule->cancel_timer(&fTimer);
+	return !gStackModule->is_timer_running(&fTimer);
+		// The timer thread marks the timer running in the same critical
+		// section in which it takes it off the list, so once cancel_timer()
+		// has had the timer lock, a hook that will run is visible here. It
+		// cannot have finished, since it needs sFragmentLock first.
+}
+
+
 /*static*/ void
 FragmentPacket::StaleTimer(struct net_timer* timer, void* data)
 {
@@ -623,6 +653,13 @@ FragmentPacket::StaleTimer(struct net_timer* timer, void* data)
 	TRACE("Assembling FragmentPacket %p timed out!", packet);
 
 	MutexLocker locker(&sFragmentLock);
+	if (packet->fOrphaned) {
+		// It was completed while this hook waited for the lock, and is no
+		// longer in the hash; whoever completed it left it to be freed here.
+		locker.Unlock();
+		delete packet;
+		return;
+	}
 	sFragmentHash.Remove(packet);
 	locker.Unlock();
 
@@ -770,7 +807,10 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 			// anymore
 
 		status = packet->Reassemble(buffer);
-		delete packet;
+		if (packet->StopTimer())
+			delete packet;
+		else
+			packet->Orphan();
 
 		// _buffer does not change
 		return status;
