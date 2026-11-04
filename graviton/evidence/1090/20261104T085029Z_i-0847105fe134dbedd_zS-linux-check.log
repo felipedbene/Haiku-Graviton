@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: zS-linux-check
+# instance: i-0847105fe134dbedd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck + contents of arm zS's data volume vol-0575dd1a46d5746a5
+# start: 20261104T085029Z   end: 20261104T085041Z   rc: 0
+# script sha256: 83e3bf8920f94df8cec5b6972e972a78851477da68de8f6ee6ecd90c885fee8f
+# ---- script ----
+# | # Linux check of arm zS's zero-fill files (volume vol-0575dd1a46d5746a5): e2fsck -fn, and how much of each
+# | # ftruncate'd file is not zero.
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0575dd1a46d5746a5 '$9 == v { print $11 }' | sed 's|.*/||')
+# | P=/dev/${D}p
+# | for n in 1 2; do e2fsck -fn ${P}$n > /tmp/fsck.out 2>&1; echo "e2fsck p$n rc=$?"; grep -v "^Pass\|^e2fsck 1" /tmp/fsck.out | head -8; done
+# | mkdir -p /opt/chk/m
+# | for n in 1 2; do mount -o ro ${P}$n /opt/chk/m || continue; for f in /opt/chk/m/z*; do [ -f $f ] || continue
+# | 	echo "$f size=$(stat -c %s $f) nonzero 4K blocks: $(od -An -v -tx1 -w4096 $f | grep -c '[1-9a-f]')"; done; umount /opt/chk/m; done
+# ---- raw output ----
+e2fsck p1 rc=0
+x4k: 17/89760 files (11.8% non-contiguous), 69670/358400 blocks
+e2fsck p2 rc=4
+Inode 16 has zero length extent
+	(invalid logical block 16384, physical block 139265)
+Clear? no
+
+Inode 16 has zero length extent
+	(invalid logical block 49152, physical block 172033)
+Clear? no
+
+/opt/chk/m/z100 size=104857600 nonzero 4K blocks: 0
+/opt/chk/m/z8 size=0 nonzero 4K blocks: 0
+od: /opt/chk/m/z100: Input/output error

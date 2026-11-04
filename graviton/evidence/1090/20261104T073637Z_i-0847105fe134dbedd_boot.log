@@ -1,0 +1,13 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: boot
+# instance: i-0847105fe134dbedd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: install the AWS CLI on the builder
+# start: 20261104T073637Z   end: 20261104T073706Z   rc: 0
+# script sha256: a7282435569a787a1e487351fc19f7a52d7b70961fc494fbfe054c74bde9360c
+# ---- script ----
+# | # Bootstrap the AWS CLI on the new builder, so ssm-run can stage scripts too large to inline.
+# | export DEBIAN_FRONTEND=noninteractive
+# | apt-get update -qq && apt-get install -y -qq unzip curl > /dev/null 2>&1
+# | curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && cd /tmp && unzip -q -o a.zip && ./aws/install > /dev/null 2>&1; command -v aws
+# ---- raw output ----
+/usr/local/bin/aws
