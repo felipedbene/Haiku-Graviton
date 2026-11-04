@@ -1,0 +1,237 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-xbuild
+# instance: i-0d697ac086b4008db   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3 cross-build: base, P (PR 1063 round 2), Q (PR 1063 now), R (Q + #1078), S (R + #1059 + #1061)
+# start: 20261104T053046Z   end: 20261104T053317Z   rc: 0
+# script sha256: f3595a3abc3c004fe708808979268122c210d60efddd2c03bd22dae4479e70fe
+# ---- script ----
+# | # Round 3 cross-build (method of #933/#947): stack + ethernet_frame for base (trunk) and
+# | #  P = trunk + PR 1063 as of round 2, Q = PR 1063 now (capture start/stop serialized),
+# | #  R = Q + #1078, S = R + #1059 + #1061 (with the exact name compare).
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/J
+# | mkdir -p /opt/j && cd /opt/j && rm -rf hg buildtools out && mkdir out
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg checkout -q a9954f424a && git -C hg log -1 --format='trunk %H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -1
+# | N=objects/haiku/arm64/release/add-ons/kernel/network
+# | for n in P Q R S; do aws s3 cp --quiet $OUT/r3/$n.patch /opt/j/$n.patch; done; sha256sum /opt/j/*.patch
+# | build() {	# build <label> [patch]
+# | 	git -C .. checkout -q -f a9954f424a; git -C .. clean -q -fd -- src headers
+# | 	if [ -n "$2" ]; then git -C .. apply /opt/j/$2 || return 1; git -C .. diff --stat | tail -1; fi
+# | 	rm -rf $N/stack $N/datalink_protocols/ethernet_frame
+# | 	jam -q -j$(nproc) stack ethernet_frame > /opt/j/out/jam-$1.log 2>&1; rc=$?
+# | 	echo "JAM $1 rc=$rc warnings in touched files:"; grep -E "warning:|error:" /opt/j/out/jam-$1.log | grep -E "link\.cpp|ethernet_frame\.cpp|interfaces\.(cpp|h)" | head
+# | 	[ $rc = 0 ] || { tail -40 /opt/j/out/jam-$1.log; return 1; }
+# | 	mkdir -p /opt/j/out/$1 && cp $N/stack/stack $N/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/$1/
+# | }
+# | build base || exit 1
+# | for n in P Q R S; do build $n $n.patch || exit 1; done
+# | git -C .. checkout -q -f a9954f424a
+# | cd /opt/j/out && sha256sum */stack */ethernet_frame | sort -k2
+# | for n in P Q R S; do for f in stack ethernet_frame; do aws s3 cp --quiet $n/$f $OUT/r3/mod/$n/$f || exit 6; done; done
+# | aws s3 ls --recursive $OUT/r3/mod/ | wc -l
+# ---- raw output ----
+apt rc=0
+trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620 evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+Configured successfully!
+c8417217b972b418e6f645c23ebbc52ed4478007cec345a392796a791be45cc4  /opt/j/P.patch
+bfbe1f736845214b588c8341047dd2fa2420d9432ff8d7489d8e17568a5ed695  /opt/j/Q.patch
+86d7fbc9be8103f4c32797a9fbf271d3d148bad66b2e3b295bc0658a96660a36  /opt/j/R.patch
+f0d8086b3e2de83f14fbd4eecfc29c87aae24fcb44dd0f1bbe909760ae876530  /opt/j/S.patch
+JAM base rc=0 warnings in touched files:
+ 2 files changed, 107 insertions(+), 10 deletions(-)
+JAM P rc=0 warnings in touched files:
+ 2 files changed, 118 insertions(+), 10 deletions(-)
+JAM Q rc=0 warnings in touched files:
+ 2 files changed, 155 insertions(+), 32 deletions(-)
+JAM R rc=0 warnings in touched files:
+ 4 files changed, 195 insertions(+), 40 deletions(-)
+JAM S rc=0 warnings in touched files:
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  P/ethernet_frame
+3a5ed5be02235786d09cb0955ae55d0d2a68d2725744b6070aeb35c027d4cfbb  P/stack
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  Q/ethernet_frame
+854e4a75a798d6cb339aaec08d8db88bef9c318172fa610b9d5934e856934f2e  Q/stack
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  R/ethernet_frame
+35114d71dea05ea4c09d34d5899597b083914bedcf8181543800322954a108fb  R/stack
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  S/ethernet_frame
+9643497d3db020aa022f8235c30a2a050c24db1837536f19a2d8bf62b199c759  S/stack
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  base/ethernet_frame
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  base/stack
+8
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J
++ mkdir -p /opt/j
++ cd /opt/j
++ rm -rf hg buildtools out
++ mkdir out
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg checkout -q a9954f424a
++ git -C hg log -1 '--format=trunk %H %s'
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ tail -1
+++ nproc
++ ../configure --cross-tools-prefix /opt/j/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ N=objects/haiku/arm64/release/add-ons/kernel/network
++ for n in P Q R S
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/P.patch /opt/j/P.patch
++ for n in P Q R S
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/Q.patch /opt/j/Q.patch
++ for n in P Q R S
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/R.patch /opt/j/R.patch
++ for n in P Q R S
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/S.patch /opt/j/S.patch
++ sha256sum /opt/j/P.patch /opt/j/Q.patch /opt/j/R.patch /opt/j/S.patch
++ build base
++ git -C .. checkout -q -f a9954f424a
++ git -C .. clean -q -fd -- src headers
++ '[' -n '' ']'
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/network/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame
+++ nproc
++ jam -q -j32 stack ethernet_frame
++ rc=0
++ echo 'JAM base rc=0 warnings in touched files:'
++ grep -E 'warning:|error:' /opt/j/out/jam-base.log
++ grep -E 'link\.cpp|ethernet_frame\.cpp|interfaces\.(cpp|h)'
++ head
++ '[' 0 = 0 ']'
++ mkdir -p /opt/j/out/base
++ cp objects/haiku/arm64/release/add-ons/kernel/network/stack/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/base/
++ for n in P Q R S
++ build P P.patch
++ git -C .. checkout -q -f a9954f424a
++ git -C .. clean -q -fd -- src headers
++ '[' -n P.patch ']'
++ git -C .. apply /opt/j/P.patch
++ git -C .. diff --stat
++ tail -1
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/network/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame
+++ nproc
++ jam -q -j32 stack ethernet_frame
++ rc=0
++ echo 'JAM P rc=0 warnings in touched files:'
++ grep -E 'warning:|error:' /opt/j/out/jam-P.log
++ grep -E 'link\.cpp|ethernet_frame\.cpp|interfaces\.(cpp|h)'
++ head
++ '[' 0 = 0 ']'
++ mkdir -p /opt/j/out/P
++ cp objects/haiku/arm64/release/add-ons/kernel/network/stack/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/P/
++ for n in P Q R S
++ build Q Q.patch
++ git -C .. checkout -q -f a9954f424a
++ git -C .. clean -q -fd -- src headers
++ '[' -n Q.patch ']'
++ git -C .. apply /opt/j/Q.patch
++ git -C .. diff --stat
++ tail -1
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/network/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame
+++ nproc
++ jam -q -j32 stack ethernet_frame
++ rc=0
++ echo 'JAM Q rc=0 warnings in touched files:'
++ grep -E 'warning:|error:' /opt/j/out/jam-Q.log
++ grep -E 'link\.cpp|ethernet_frame\.cpp|interfaces\.(cpp|h)'
++ head
++ '[' 0 = 0 ']'
++ mkdir -p /opt/j/out/Q
++ cp objects/haiku/arm64/release/add-ons/kernel/network/stack/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/Q/
++ for n in P Q R S
++ build R R.patch
++ git -C .. checkout -q -f a9954f424a
++ git -C .. clean -q -fd -- src headers
++ '[' -n R.patch ']'
++ git -C .. apply /opt/j/R.patch
++ git -C .. diff --stat
++ tail -1
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/network/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame
+++ nproc
++ jam -q -j32 stack ethernet_frame
++ rc=0
++ echo 'JAM R rc=0 warnings in touched files:'
++ grep -E 'warning:|error:' /opt/j/out/jam-R.log
++ grep -E 'link\.cpp|ethernet_frame\.cpp|interfaces\.(cpp|h)'
++ head
++ '[' 0 = 0 ']'
++ mkdir -p /opt/j/out/R
++ cp objects/haiku/arm64/release/add-ons/kernel/network/stack/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/R/
++ for n in P Q R S
++ build S S.patch
++ git -C .. checkout -q -f a9954f424a
++ git -C .. clean -q -fd -- src headers
++ '[' -n S.patch ']'
++ git -C .. apply /opt/j/S.patch
++ git -C .. diff --stat
++ tail -1
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/network/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame
+++ nproc
++ jam -q -j32 stack ethernet_frame
++ rc=0
++ echo 'JAM S rc=0 warnings in touched files:'
++ grep -E 'warning:|error:' /opt/j/out/jam-S.log
++ grep -E 'link\.cpp|ethernet_frame\.cpp|interfaces\.(cpp|h)'
++ head
++ '[' 0 = 0 ']'
++ mkdir -p /opt/j/out/S
++ cp objects/haiku/arm64/release/add-ons/kernel/network/stack/stack objects/haiku/arm64/release/add-ons/kernel/network/datalink_protocols/ethernet_frame/ethernet_frame /opt/j/out/S/
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/j/out
++ sort -k2
++ sha256sum P/stack Q/stack R/stack S/stack base/stack P/ethernet_frame Q/ethernet_frame R/ethernet_frame S/ethernet_frame base/ethernet_frame
++ for n in P Q R S
++ for f in stack ethernet_frame
++ aws s3 cp --quiet P/stack s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/P/stack
++ for f in stack ethernet_frame
++ aws s3 cp --quiet P/ethernet_frame s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/P/ethernet_frame
++ for n in P Q R S
++ for f in stack ethernet_frame
++ aws s3 cp --quiet Q/stack s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/Q/stack
++ for f in stack ethernet_frame
++ aws s3 cp --quiet Q/ethernet_frame s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/Q/ethernet_frame
++ for n in P Q R S
++ for f in stack ethernet_frame
++ aws s3 cp --quiet R/stack s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/R/stack
++ for f in stack ethernet_frame
++ aws s3 cp --quiet R/ethernet_frame s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/R/ethernet_frame
++ for n in P Q R S
++ for f in stack ethernet_frame
++ aws s3 cp --quiet S/stack s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/S/stack
++ for f in stack ethernet_frame
++ aws s3 cp --quiet S/ethernet_frame s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/S/ethernet_frame
++ aws s3 ls --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/J/r3/mod/
++ wc -l
