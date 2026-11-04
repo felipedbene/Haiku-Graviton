@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-stock3-peer-tcpdump-start
+# instance: i-09ddec06eb5a8d1ea   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux peer: start tcpdump for the round 2 stock3 run
+# start: 20261104T044759Z   end: 20261104T044809Z   rc: 0
+# script sha256: faeedcee5be2d9f341f5db8e64d582654c928aded082abf52e451836d7a6f768
+# ---- script ----
+# | cd /opt/j; pkill tcpdump; rm -f cap.pcap
+# | nohup timeout 600 tcpdump -i ens5 -nn -e -U -w cap.pcap 'not tcp port 443 and not tcp port 22 and (arp or icmp or udp port 9 or ether proto 0x88b5 or ip6)' > tcpdump.err 2>&1 &
+# | sleep 2; cat tcpdump.err; echo started
+# ---- raw output ----
+started

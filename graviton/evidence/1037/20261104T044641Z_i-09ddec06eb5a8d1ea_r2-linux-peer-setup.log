@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-linux-peer-setup
+# instance: i-09ddec06eb5a8d1ea   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 2 Linux peer: gcc, tcpdump, linksend1037
+# start: 20261104T044641Z   end: 20261104T044716Z   rc: 0
+# script sha256: 3366f546fbb6eaed5cdc3f569c0798628f327e2787d81b19708f30182fc60211
+# ---- script ----
+# | export DEBIAN_FRONTEND=noninteractive
+# | apt-get update -qq; apt-get install -y -qq gcc libc6-dev tcpdump > /tmp/apt.log 2>&1; echo apt rc=$?
+# | mkdir -p /opt/j && cd /opt/j && curl -sSf -o linksend1037.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src/linksend1037.c?<PRESIGNED>' && gcc -O2 -Wall -Wextra -Wno-unused-parameter -o linksend1037 linksend1037.c; echo "compile rc=$?"
+# | sha256sum linksend1037.c linksend1037; ip -br addr | grep ens5; ip -br link | grep ens5
+# ---- raw output ----
+apt rc=0
+compile rc=0
+40d4a161ce2a8a7a05995817e7c6d9db60a5cbff56fd825161f058c32d84ea0d  linksend1037.c
+9c2ed5162b0007c0f32b1379358f4271c57fc775a1321ed70d717403cc573ee5  linksend1037
+ens5             UP             10.128.5.150/22 metric 100 fe80::4ff:d0ff:fe85:92d9/64 
+ens5             UP             06:ff:d0:85:92:d9 <BROADCAST,MULTICAST,UP,LOWER_UP> 

@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-D-close-with-traffic
+# instance: i-0594a8d4646875a34   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 2, arm D: close1063 (3000 bind/close and 3000 capture start/stop with 0x88b5 frames arriving through tap/0, ~20 us apart)
+# start: 20261104T045157Z   end: 20261104T045208Z   rc: 0
+# script sha256: b62d136d203f6ae345aed3ebf4e89b8a7310de7bb472d3aaaafc227ea99d3193
+# ---- script ----
+# | # Close bound and capturing link sockets while frames of their type arrive (TAP injection, ~20 us
+# | # between frames). A HANG line means a deadlock: the thread is stuck and the TAP device with it.
+# | cd /boot/home/j
+# | ifconfig tap/0 up; ifconfig tap/0 | head -1
+# | ./close1063 3000 20; echo "close1063 exit=$?"
+# | ifconfig tap/0 | grep -E "Receive"
+# | echo "--- is the stack still usable? (a new AF_LINK bind on ENA, ifconfig)"
+# | ./link1059 /dev/net/ena/0 | grep -E "^mac-own|RESULT"
+# ---- raw output ----
+tap/0	Hardware type: Ethernet, Address: 12:2c:bc:53:cb:4e
+tap/0: mac 12:2c:bc:53:cb:4e, 3000 iterations per phase
+bind-close       PASS  3000/3000 bound, 3000 received a frame before close, 0.7s, frames written 41254
+capture-stop     PASS  3000/3000 started, 3000 received, 3000 stopped, 0.7s, frames written 90821
+RESULT failures=0
+close1063 exit=0
+	Receive: 90821 packets, 0 errors, 4177766 bytes, 0 mcasts, 0 dropped
+--- is the stack still usable? (a new AF_LINK bind on ENA, ifconfig)
+mac-own                    PASS  bind=0 -> bound, left the device from its MAC; source 06:ff:f5:f7:bf:bd; expected bound here
+RESULT failures=0
