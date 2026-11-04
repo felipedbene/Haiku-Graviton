@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: hang-rate-32x20
+# instance: i-01d97a9fa6e0a2193   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T025033Z   end: 20261104T025036Z   rc: 0
+# script sha256: 3b36127e1544058a8588bbaa5fe40bda0f76a1d2db8393829a0fa305bcee35e5
+# ---- script ----
+# | echo "== measurement script /tmp/m978.sh"; cat /tmp/m978.sh; echo "== log /boot/home/m978-r2-32x20.log"; cat /boot/home/m978-r2-32x20.log
+# ---- raw output ----
+== measurement script /tmp/m978.sh
+# m978.sh <node> <srcdir> <label> <rounds> [conc]  -- issue 978 hang rate
+set -u
+NODE=$1; SRC=$2; LABEL=$3; R=$4; C=${5:-16}
+T=parallel/test-child-process-fork-closed-channel-segfault
+P=/tmp/node-fork-closed-channel-probe.js
+cd $SRC || exit 1
+echo "## host: $(uname -a)"; echo "## node: $($NODE --version) label=$LABEL rounds=$R"
+sha256sum test/$T.js $P
+echo "######## probe: $R rounds of $C concurrent copies (watchdog 30 s)"
+tot=0; hung=0; other=0; r=0
+mkdir -p /tmp/p978; : > /tmp/p978-send2.txt
+while [ $r -lt $R ]; do r=$((r+1)); j=0
+  while [ $j -lt $C ]; do j=$((j+1)); ( : | timeout 90 $NODE $P 30000 > /tmp/p978/$j.out 2>&1; echo $? > /tmp/p978/$j.rc ) & done
+  wait
+  j=0; while [ $j -lt $C ]; do j=$((j+1)); tot=$((tot+1)); rc=$(cat /tmp/p978/$j.rc)
+    grep -ho "send2=.*" /tmp/p978/$j.out >> /tmp/p978-send2.txt
+    case $rc in 0) ;; 3) hung=$((hung+1)); [ $hung -le 4 ] && { echo "--- hung run (round $r copy $j)"; cat /tmp/p978/$j.out; } ;; *) other=$((other+1)); [ $other -le 3 ] && { echo "--- rc=$rc (round $r copy $j)"; tail -15 /tmp/p978/$j.out; } ;; esac
+  done
+done
+echo "RESULT probe: runs=$tot hung=$hung other_fail=$other"
+echo "  send2 outcomes: $(sort /tmp/p978-send2.txt | uniq -c | tr "\n" " ")"
+echo "######## original test: tools/test.py -j $C --repeat $((R*C)) --timeout 120"
+: | python3 tools/test.py --shell=$NODE -j $C -p tap --timeout 120 --repeat $((R*C)) $T > /tmp/rep978.tap 2>&1
+echo "RESULT test.py: ok=$(grep -c '^ok ' /tmp/rep978.tap) notok=$(grep -c '^not ok ' /tmp/rep978.tap) timeout=$(grep -c '^    timeout$' /tmp/rep978.tap)"
+awk '/^not ok/{p=1;n++} p&&n<=1' /tmp/rep978.tap | head -20
+echo M978_DONE
+== log /boot/home/m978-r2-32x20.log
+## host: Haiku ip-10-128-12-42.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+## node: v24.22.2 label=haiku-t2-c32 rounds=20
+ac9f6384d8a9eef84704dd1967ce0561ee087363c976ec36002e07273d409a2f  test/parallel/test-child-process-fork-closed-channel-segfault.js
+2a776e2472435d5426f0c6bb5058f1c0acb9e86592ab5c9555aa66cc5f042b46  /tmp/node-fork-closed-channel-probe.js
+######## probe: 20 rounds of 32 concurrent copies (watchdog 30 s)
+RESULT probe: runs=640 hung=0 other_fail=0
+  send2 outcomes:       4 send2=ERR_IPC_CHANNEL_CLOSED      10 send2=none     626 send2=ok 
+######## original test: tools/test.py -j 32 --repeat 640 --timeout 120
+RESULT test.py: ok=640 notok=0 timeout=0
+M978_DONE

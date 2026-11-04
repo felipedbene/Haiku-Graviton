@@ -1,0 +1,55 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: probe-alongside-full-parallel-suite
+# instance: i-01d97a9fa6e0a2193   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T030445Z   end: 20261104T030448Z   rc: 0
+# script sha256: cde245736b0be8ee730b5cfe360e7c02131e6da31730af2340e669498a92f67d
+# ---- script ----
+# | echo "== measurement script /tmp/m978s.sh"; cat /tmp/m978s.sh; echo "== log /boot/home/m978s.log"; cat /boot/home/m978s.log
+# ---- raw output ----
+== measurement script /tmp/m978s.sh
+# m978s.sh -- issue 978 under the issue's original load: the full parallel suite at -j 16,
+# with the probe run 16-way in rounds alongside it for the suite's whole duration
+set -u
+export PATH=/boot/home/config/non-packaged/bin:$PATH
+cd /boot/home/node-src/node-v24.22.2 || exit 1
+uname -a; node --version; sha256sum /tmp/node-fork-closed-channel-probe.js
+( : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap parallel > /tmp/suite978.tap 2>&1; echo done > /tmp/suite978.done ) &
+rm -f /tmp/suite978.done; tot=0; hung=0; other=0; r=0; mkdir -p /tmp/q978
+while [ ! -f /tmp/suite978.done ]; do r=$((r+1)); j=0
+  while [ $j -lt 16 ]; do j=$((j+1)); ( : | timeout 90 node /tmp/node-fork-closed-channel-probe.js 30000 > /tmp/q978/$j.out 2>&1; echo $? > /tmp/q978/$j.rc ) & done; wait_n=0
+  j=0; while [ $j -lt 16 ]; do j=$((j+1)); while [ ! -f /tmp/q978/$j.rc ]; do sleep 1; done; done
+  j=0; while [ $j -lt 16 ]; do j=$((j+1)); tot=$((tot+1)); rc=$(cat /tmp/q978/$j.rc); rm -f /tmp/q978/$j.rc
+    case $rc in 0) ;; 3) hung=$((hung+1)); [ $hung -le 4 ] && cat /tmp/q978/$j.out ;; *) other=$((other+1)); [ $other -le 3 ] && tail -12 /tmp/q978/$j.out ;; esac; done
+done
+echo "RESULT probe alongside the suite: rounds=$r runs=$tot hung=$hung other_fail=$other"
+echo "RESULT suite: ok=$(grep -c '^ok ' /tmp/suite978.tap) notok=$(grep -c '^not ok ' /tmp/suite978.tap) timeout=$(grep -c '^    timeout$' /tmp/suite978.tap)"
+grep -E "^(not )?ok .*fork-closed-channel" /tmp/suite978.tap
+grep '^not ok' /tmp/suite978.tap
+echo M978S_DONE
+== log /boot/home/m978s.log
+Haiku ip-10-128-12-42.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+v24.22.2
+2a776e2472435d5426f0c6bb5058f1c0acb9e86592ab5c9555aa66cc5f042b46  /tmp/node-fork-closed-channel-probe.js
+RESULT probe alongside the suite: rounds=137 runs=2192 hung=0 other_fail=0
+RESULT suite: ok=4586 notok=19 timeout=0
+ok 211 parallel/test-child-process-fork-closed-channel-segfault
+not ok 176 parallel/test-child-process-default-options
+not ok 186 parallel/test-child-process-env
+not ok 188 parallel/test-child-process-exec-env
+not ok 608 parallel/test-cwd-enoent-improved-message
+not ok 635 parallel/test-debugger-probe-activation
+not ok 1164 parallel/test-fs-link
+not ok 1191 parallel/test-fs-promises
+not ok 1288 parallel/test-fs-rmSync-special-char-additional-error
+not ok 1304 parallel/test-fs-stat-date
+not ok 1837 parallel/test-http-writable-true-after-close
+not ok 2665 parallel/test-permission-fs-symlink-target-write
+not ok 2717 parallel/test-process-dlopen-error-message-crash
+not ok 2734 parallel/test-process-euid-egid
+not ok 3217 parallel/test-repl-underscore
+not ok 3326 parallel/test-setproctitle
+not ok 4063 parallel/test-util-exception-with-host-port
+not ok 4112 parallel/test-trace-events-fs-async
+not ok 4119 parallel/test-trace-events-fs-sync
+not ok 4544 parallel/test-worker-memory
+M978S_DONE

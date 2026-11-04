@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-hang-rate-16x20 (Linux control: Ubuntu 24.04 arm64, c8g.4xlarge, official node-v24.22.2-linux-arm64)
+# instance: i-0f1c6489ec848075a   region: us-west-2   transport: ssm (graviton/scripts/ssm-run)
+# start: 20261104T025307Z   rc: 0
+# ---- script ----
+# | echo "== measurement script /tmp/m978.sh"; cat /tmp/m978.sh; echo "== log /root/m978.log"; cat /root/m978.log
+# ---- raw output ----
+== measurement script /tmp/m978.sh
+# m978.sh <node> <srcdir> <label> <rounds> [conc]  -- issue 978 hang rate
+set -u
+NODE=$1; SRC=$2; LABEL=$3; R=$4; C=${5:-16}
+T=parallel/test-child-process-fork-closed-channel-segfault
+P=/tmp/node-fork-closed-channel-probe.js
+cd $SRC || exit 1
+echo "## host: $(uname -a)"; echo "## node: $($NODE --version) label=$LABEL rounds=$R"
+sha256sum test/$T.js $P
+echo "######## probe: $R rounds of $C concurrent copies (watchdog 30 s)"
+tot=0; hung=0; other=0; r=0
+mkdir -p /tmp/p978; : > /tmp/p978-send2.txt
+while [ $r -lt $R ]; do r=$((r+1)); j=0
+  while [ $j -lt $C ]; do j=$((j+1)); ( : | timeout 90 $NODE $P 30000 > /tmp/p978/$j.out 2>&1; echo $? > /tmp/p978/$j.rc ) & done
+  wait
+  j=0; while [ $j -lt $C ]; do j=$((j+1)); tot=$((tot+1)); rc=$(cat /tmp/p978/$j.rc)
+    grep -ho "send2=.*" /tmp/p978/$j.out >> /tmp/p978-send2.txt
+    case $rc in 0) ;; 3) hung=$((hung+1)); [ $hung -le 4 ] && { echo "--- hung run (round $r copy $j)"; cat /tmp/p978/$j.out; } ;; *) other=$((other+1)); [ $other -le 3 ] && { echo "--- rc=$rc (round $r copy $j)"; tail -15 /tmp/p978/$j.out; } ;; esac
+  done
+done
+echo "RESULT probe: runs=$tot hung=$hung other_fail=$other"
+echo "  send2 outcomes: $(sort /tmp/p978-send2.txt | uniq -c | tr "\n" " ")"
+echo "######## original test: tools/test.py -j $C --repeat $((R*C)) --timeout 120"
+: | python3 tools/test.py --shell=$NODE -j $C -p tap --timeout 120 --repeat $((R*C)) $T > /tmp/rep978.tap 2>&1
+echo "RESULT test.py: ok=$(grep -c '^ok ' /tmp/rep978.tap) notok=$(grep -c '^not ok ' /tmp/rep978.tap) timeout=$(grep -c '^    timeout$' /tmp/rep978.tap)"
+awk '/^not ok/{p=1;n++} p&&n<=1' /tmp/rep978.tap | head -20
+echo M978_DONE
+== log /root/m978.log
+## host: Linux ip-10-128-14-203 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+## node: v24.22.2 label=linux-c8g4xl rounds=20
+ac9f6384d8a9eef84704dd1967ce0561ee087363c976ec36002e07273d409a2f  test/parallel/test-child-process-fork-closed-channel-segfault.js
+2a776e2472435d5426f0c6bb5058f1c0acb9e86592ab5c9555aa66cc5f042b46  /tmp/node-fork-closed-channel-probe.js
+######## probe: 20 rounds of 16 concurrent copies (watchdog 30 s)
+RESULT probe: runs=320 hung=0 other_fail=0
+  send2 outcomes:       2 send2=ERR_IPC_CHANNEL_CLOSED       4 send2=none     314 send2=ok 
+######## original test: tools/test.py -j 16 --repeat 320 --timeout 120
+RESULT test.py: ok=320 notok=0 timeout=0
+M978_DONE
