@@ -23,6 +23,34 @@ HG_SSH_DIR ?= /opt/haiku/ssh ;
 HG_SSH_IMAGE_DIR = $(HG_SSH_DIR)/image ;
 HG_SSH_PACKAGE = openssh_debeos-10.4p1-1-arm64.hpkg ;
 
+# --- non-bootstrap icu74: decided here, before the Jamfile runs ------------
+# Issue 1121. Unlike ncurses6, which reaches the image only as a dependency the
+# solver resolves, icu74 is added BY NAME by the top-level Jamfile
+# (`AddHaikuImageSystemPackages ... coreutils icu74 wget`), and that resolves to
+# the index's icu74-74.1_bootstrap-1. Force-adding the issue-1018 file beside
+# it put two instances of one package into system/packages, and the image
+# solver stopped with "cannot install both icu74-74.1-6 and
+# icu74-74.1_bootstrap-1". So when the pool has the file, the by-name add has to
+# be suppressed, and this file is read before the Jamfile, which is the only
+# point where that can still happen: AddHaikuImagePackages skips any package
+# already marked HAIKU_PACKAGE_ADDED. The file itself is added in
+# UserBuildConfigRulePreImage below, under the same decision. icu74_devel is
+# not on the image (only the icu build feature extracts it, to compile
+# against), so it does not have to move with the runtime package.
+#
+# Exact filename, as for ncurses6: `icu74-*` would match the bootstrap file too.
+# cross-build.yml's pool guard reads the `local icuFileName = ...` line.
+local icuFileName = icu74-74.1-6-arm64.hpkg ;
+HG_ICU74_FILE = $(icuFileName) ;
+if $(HG_POOL_DIR) && [ Glob $(HG_POOL_DIR) : $(icuFileName) ] {
+	HG_ICU74_PACKAGE = <hg-pool>$(icuFileName) ;
+	SEARCH on $(HG_ICU74_PACKAGE) = $(HG_POOL_DIR) ;
+	local icuIndexPackage = [ IsPackageAvailable icu74 : nameResolved ] ;
+	if $(icuIndexPackage) {
+		HAIKU_PACKAGE_ADDED on $(icuIndexPackage) = 1 ;
+	}
+}
+
 rule UserBuildConfigRulePreImage
 {
 	# The hook fires more than once for an MMC build (each image definition
@@ -304,20 +332,17 @@ rule UserBuildConfigRulePreImage
 	# the same lib:libicu* = 74.1 (compat >= 74), and icu74_devel's bootstrap
 	# build requires only icu74 == 74.1, so it still resolves against it.
 	#
-	# Exact filename, as above: `icu74-*` would match the bootstrap file too.
-	if $(HG_POOL_DIR) {
-		local icuFileName = icu74-74.1-6-arm64.hpkg ;
-		if [ Glob $(HG_POOL_DIR) : $(icuFileName) ] {
-			local icuPackage = <hg-pool>$(icuFileName) ;
-			SEARCH on $(icuPackage) = $(HG_POOL_DIR) ;
-			Echo "haiku-graviton: baking non-bootstrap" $(icuFileName)
-				"so ICU finds its data (issue 1018)" ;
-			AddPackageFilesToHaikuImage system packages : $(icuPackage) ;
-		} else {
-			Echo "haiku-graviton: no" $(icuFileName) "in pool -- the image"
-				"will ship the bootstrap icu74, whose data directory does not"
-				"exist (issue 1018)" ;
-		}
+	# The pool check and the filename are at the top of this file, because the
+	# Jamfile's by-name icu74 add has to be suppressed before it runs (issue
+	# 1121); HG_ICU74_PACKAGE is set there only when the exact file is present.
+	if $(HG_ICU74_PACKAGE) {
+		Echo "haiku-graviton: baking non-bootstrap" $(HG_ICU74_FILE)
+			"so ICU finds its data (issue 1018)" ;
+		AddPackageFilesToHaikuImage system packages : $(HG_ICU74_PACKAGE) ;
+	} else if $(HG_POOL_DIR) {
+		Echo "haiku-graviton: no" $(HG_ICU74_FILE) "in pool -- the image"
+			"will ship the bootstrap icu74, whose data directory does not"
+			"exist (issue 1018)" ;
 	}
 
 	# --- exactly one thing must own port 22 --------------------------------
