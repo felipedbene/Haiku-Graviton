@@ -174,8 +174,10 @@ LinkProtocol::Bind(const sockaddr* address)
 		// based handlers!
 		status_t status = register_device_handler(boundTo->device, fBoundType,
 			&LinkProtocol::_ReceiveData, this);
-		if (status != B_OK)
+		if (status != B_OK) {
+			put_device_interface(boundTo);
 			return status;
+		}
 	} else
 		fBoundType = 0;
 
@@ -197,8 +199,10 @@ LinkProtocol::Unbind()
 	if (fBoundToDevice == NULL)
 		return B_BAD_VALUE;
 
-	unregister_device_handler(fBoundToDevice->device, fBoundType);
+	if (fBoundType != 0)
+		unregister_device_handler(fBoundToDevice->device, fBoundType);
 	put_device_interface(fBoundToDevice);
+	fBoundToDevice = NULL;
 
 	socket->bound_to_device = 0;
 	socket->address.ss_len = 0;
