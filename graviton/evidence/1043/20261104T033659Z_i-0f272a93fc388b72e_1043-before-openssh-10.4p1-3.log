@@ -1,0 +1,65 @@
+# 20261104T033659Z instance=i-0f272a93fc388b72e label=1043-before-openssh-10.4p1-3
+# script:
+#   uname -a
+#   sha256sum /boot/home/openssh-10.4p1-3-arm64.hpkg
+#   sh /boot/home/check.sh /boot/home/openssh-10.4p1-3-arm64.hpkg 2>&1 | grep -v -E "randomart|^\+|^\||Your (identification|public)|fingerprint is|^SHA256"
+# output:
+ssm-run: command 4f9e6bc9-6b8e-4a6b-877f-c1f4cce205a3 on i-0f272a93fc388b72e (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-87976-0af800)
+Haiku ip-10-128-6-27.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+991879e6b310f562162c160660898301bb5b4e7c4a62c2bfde875bbae13260eb  /boot/home/openssh-10.4p1-3-arm64.hpkg
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
+== before install
+-rw------- 1 baron root  411 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_ed25519_key
+-rw-r--r-- 1 baron root   96 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+Continue? [yes/no] (yes) :        libedit-20230828_3.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libedit-20230828_3.1-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_03:37:03"
+[system] Cleaning up ...
+[system] Done.
+<system>    openssh                10.4p1-3                       arm64
+== after install
+-- files
+-rw------- 1 baron root 4006 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root 4051 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1925 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-- distinct ML-DSA keys
+2
+-- sshd -T hostkeys (/boot/system/settings/ssh/sshd_config)
+MISSING none
+MISSING ssh-ed25519-cert-v01@openssh.com,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521-cert-v01@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256-cert-v01@openssh.com,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,sk-ssh-ed25519@openssh.com,sk-ecdsa-sha2-nistp256@openssh.com,webauthn-sk-ecdsa-sha2-nistp256@openssh.com,rsa-sha2-512,rsa-sha2-256
+present /boot/system/settings/ssh/ssh_host_ed25519_key
+-- sshd -T hostkeys (/boot/system/data/openssh/sshd_config.default)
+MISSING none
+MISSING ssh-ed25519-cert-v01@openssh.com,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521-cert-v01@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256-cert-v01@openssh.com,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,sk-ssh-ed25519@openssh.com,sk-ecdsa-sha2-nistp256@openssh.com,webauthn-sk-ecdsa-sha2-nistp256@openssh.com,rsa-sha2-512,rsa-sha2-256
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_rsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ecdsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ed25519_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_mldsa44_ed25519_key
+== re-run 1: keymaker rc=0
+== re-run 2: keymaker rc=0
+/boot/home/check.sh: line 44: cmp: command not found
+re-runs idempotent: NO
+-- files
+-rw------- 1 baron root 4006 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root 4051 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1925 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-- distinct ML-DSA keys
+2
+-- sshd -T hostkeys (/boot/system/settings/ssh/sshd_config)
+MISSING none
+MISSING ssh-ed25519-cert-v01@openssh.com,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521-cert-v01@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256-cert-v01@openssh.com,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,sk-ssh-ed25519@openssh.com,sk-ecdsa-sha2-nistp256@openssh.com,webauthn-sk-ecdsa-sha2-nistp256@openssh.com,rsa-sha2-512,rsa-sha2-256
+present /boot/system/settings/ssh/ssh_host_ed25519_key
+-- sshd -T hostkeys (/boot/system/data/openssh/sshd_config.default)
+MISSING none
+MISSING ssh-ed25519-cert-v01@openssh.com,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521-cert-v01@openssh.com,sk-ssh-ed25519-cert-v01@openssh.com,sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,webauthn-sk-ecdsa-sha2-nistp256-cert-v01@openssh.com,rsa-sha2-512-cert-v01@openssh.com,rsa-sha2-256-cert-v01@openssh.com,ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,sk-ssh-ed25519@openssh.com,sk-ecdsa-sha2-nistp256@openssh.com,webauthn-sk-ecdsa-sha2-nistp256@openssh.com,rsa-sha2-512,rsa-sha2-256
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_rsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ecdsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ed25519_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_mldsa44_ed25519_key
+ssm-run: Success
+# ssm-run rc=0

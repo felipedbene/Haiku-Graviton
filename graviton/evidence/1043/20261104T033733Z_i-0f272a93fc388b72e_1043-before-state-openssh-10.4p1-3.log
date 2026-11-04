@@ -1,0 +1,41 @@
+# 20261104T033733Z instance=i-0f272a93fc388b72e label=1043-before-state-openssh-10.4p1-3
+# script:
+#   sh /boot/home/check.sh --state-only 2>&1
+# output:
+ssm-run: command 732a3088-ca13-45da-8d94-ea8251aa0eed on i-0f272a93fc388b72e (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-88720-082bcb)
+/boot/system/bin/sshd : string : openssh-10.4p1-3-arm64.hpkg
+<system>    openssh                10.4p1-3                       arm64
+== after install
+-- files
+-rw------- 1 baron root 4006 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root 4051 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1925 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-- distinct ML-DSA keys
+2
+-- sshd -T hostkeys (/boot/system/settings/ssh/sshd_config)
+present /boot/system/settings/ssh/ssh_host_ed25519_key
+-- sshd -T hostkeys (/boot/system/data/openssh/sshd_config.default)
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_rsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ecdsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ed25519_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_mldsa44_ed25519_key
+== re-run 1: keymaker rc=0
+== re-run 2: keymaker rc=0
+re-runs idempotent: yes
+-- files
+-rw------- 1 baron root 4006 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:35 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+-rw------- 1 baron root 4051 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1925 Nov  4 03:37 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-- distinct ML-DSA keys
+2
+-- sshd -T hostkeys (/boot/system/settings/ssh/sshd_config)
+present /boot/system/settings/ssh/ssh_host_ed25519_key
+-- sshd -T hostkeys (/boot/system/data/openssh/sshd_config.default)
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_rsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ecdsa_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_ed25519_key
+present /packages/openssh-10.4p1-3/.settings/ssh/ssh_host_mldsa44_ed25519_key
+ssm-run: Success
+# ssm-run rc=0

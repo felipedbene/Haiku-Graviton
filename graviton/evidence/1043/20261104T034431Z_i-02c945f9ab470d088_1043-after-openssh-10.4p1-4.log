@@ -1,0 +1,84 @@
+# 20261104T034431Z instance=i-02c945f9ab470d088 label=1043-after-openssh-10.4p1-4
+# script:
+#   uname -a
+#   sha256sum /boot/home/openssh-10.4p1-4-arm64.hpkg
+#   echo "== image ML-DSA key before install"; ssh-keygen -l -f /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+#   sh /boot/home/check.sh /boot/home/openssh-10.4p1-4-arm64.hpkg 2>&1
+#   d=/boot/system/settings/ssh; k=/boot/system/boot/post-install/sshd_keymaker.sh
+#   echo "== adopted key is the image's key"; ssh-keygen -l -f $d/ssh_host_mldsa44_ed25519_key
+#   echo "== scenario: all host keys removed"
+#   mkdir -p /tmp/s1 && mv $d/ssh_host_* /tmp/s1/
+#   $k >/dev/null 2>&1; echo "keymaker rc=$?"; ls -la $d/ssh_host_*mldsa* 2>&1
+#   echo "== scenario: zero-filled hyphenated key, no underscore key"
+#   rm -f $d/ssh_host_mldsa44*
+#   head -c 4006 /dev/zero > $d/ssh_host_mldsa44-ed25519_key; chmod 600 $d/ssh_host_mldsa44-ed25519_key
+#   $k >/dev/null 2>&1; echo "keymaker rc=$?"; ls -la $d/ssh_host_*mldsa* 2>&1
+#   ssh-keygen -y -f $d/ssh_host_mldsa44_ed25519_key >/dev/null 2>&1 && echo "underscore key valid"
+#   echo "== sshd -t with the package default config"; /boot/system/bin/sshd -t -f /boot/system/data/openssh/sshd_config.default; echo "sshd -t rc=$?"
+# output:
+ssm-run: command a336b7e3-d5f7-4d8b-8089-16ccef204341 on i-02c945f9ab470d088 (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-97250-8333de)
+Haiku ip-10-128-11-204.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+d042aaa394fc9c49a95c50bbd578d5b32a5537df4412194d29eb6db7629faf24  /boot/home/openssh-10.4p1-4-arm64.hpkg
+== image ML-DSA key before install
+256 SHA256:UaZHSXotjhGSULf/WEBhqXuODbPslSJLfe3VAmz3+a0 baron@shredder (MLDSA44-ED25519)
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
+== before install
+-rw------- 1 baron root  411 Nov  4 03:43 /boot/system/settings/ssh/ssh_host_ed25519_key
+-rw-r--r-- 1 baron root   96 Nov  4 03:43 /boot/system/settings/ssh/ssh_host_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  4 03:43 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:43 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub
+Continue? [yes/no] (yes) :        libedit-20230828_3.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libedit-20230828_3.1-1-arm64.hpkg...done.
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_03:44:33"
+[system] Cleaning up ...
+[system] Done.
+<system>    openssh                10.4p1-4                       arm64
+== after install
+-- files
+lrwxrwxrwx 1 baron root   28 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key -> ssh_host_mldsa44_ed25519_key
+lrwxrwxrwx 1 baron root   32 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub -> ssh_host_mldsa44_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  4 03:43 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-- distinct ML-DSA keys
+1
+-- sshd -T hostkeys (/boot/system/settings/ssh/sshd_config)
+present /boot/system/settings/ssh/ssh_host_ed25519_key
+-- sshd -T hostkeys (/boot/system/data/openssh/sshd_config.default)
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_rsa_key
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_ecdsa_key
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_ed25519_key
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_mldsa44_ed25519_key
+== re-run 1: keymaker rc=0
+== re-run 2: keymaker rc=0
+re-runs idempotent: yes
+-- files
+lrwxrwxrwx 1 baron root   28 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key -> ssh_host_mldsa44_ed25519_key
+lrwxrwxrwx 1 baron root   32 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key.pub -> ssh_host_mldsa44_ed25519_key.pub
+-rw------- 1 baron root 4006 Nov  4 03:43 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1892 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+-- distinct ML-DSA keys
+1
+-- sshd -T hostkeys (/boot/system/settings/ssh/sshd_config)
+present /boot/system/settings/ssh/ssh_host_ed25519_key
+-- sshd -T hostkeys (/boot/system/data/openssh/sshd_config.default)
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_rsa_key
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_ecdsa_key
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_ed25519_key
+present /packages/openssh-10.4p1-4/.settings/ssh/ssh_host_mldsa44_ed25519_key
+== adopted key is the image's key
+256 SHA256:UaZHSXotjhGSULf/WEBhqXuODbPslSJLfe3VAmz3+a0 baron@shredder (MLDSA44-ED25519)
+== scenario: all host keys removed
+keymaker rc=0
+-rw------- 1 baron root 4051 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1927 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+== scenario: zero-filled hyphenated key, no underscore key
+keymaker rc=0
+-rw------- 1 baron root 4006 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44-ed25519_key
+-rw------- 1 baron root 4051 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key
+-rw-r--r-- 1 baron root 1927 Nov  4 03:44 /boot/system/settings/ssh/ssh_host_mldsa44_ed25519_key.pub
+underscore key valid
+== sshd -t with the package default config
+sshd -t rc=0
+ssm-run: Success
+# ssm-run rc=0
