@@ -22,7 +22,15 @@
  *              short:   [0,8) M=1, [24,32) M=1, then a last fragment
  *                       [16,24) that ends before data already received;
  *              twoends: [0,8) M=1, last [16,24), then a second last
- *                       fragment [8,16) with a different end.
+ *                       fragment [8,16) with a different end;
+ *              covered: [0,1008) M=1, then a last fragment [1000,1008)
+ *                       wholly inside it;
+ *              overlap: [0,1008) M=1, then a last fragment [1000,1016)
+ *                       partly over it: IPv6 only (RFC 5722), reported as
+ *                       INFO for IPv4, where either outcome is allowed;
+ *              short total length (IPv4): a header length of 60 with a
+ *                       total length of 20.
+ *            "last fragment twice, then the middle" must be delivered.
  *            The bytes of "past" and "short" are chosen so that joining the
  *            pieces back to back gives a valid UDP datagram, so a receiver
  *            that does that delivers it and the row fails.
@@ -363,16 +371,26 @@ struct piece {
 };
 
 
+enum {
+	kDeliver = 0,
+	kDrop = 1,
+	kEither = 2
+		// either is conformant; reported, not counted
+};
+
+
 /*!	Sends a UDP datagram of \a length bytes as \a pieces, and checks that it is
-	delivered intact, or with \a expectDrop, that it is not delivered at all.
+	delivered intact (kDeliver), that it is not delivered at all (kDrop), or
+	only reports which happened (kEither).
 */
 static void
 crafted(int family, const char* label, size_t length,
-	const struct piece* pieces, int count, int expectDrop)
+	const struct piece* pieces, int count, int expect)
 {
 	char name[96], detail[160];
 	snprintf(name, sizeof(name), "%s %s %s", family_name(family),
-		expectDrop ? "drop" : "deliver", label);
+		expect == kDrop ? "drop" : (expect == kDeliver ? "deliver" : "either"),
+		label);
 
 	unsigned short port = sPort++;
 	int receiver = bind_receiver(family, port);
@@ -400,7 +418,7 @@ crafted(int family, const char* label, size_t length,
 	ssize_t received = recv(receiver, in, sizeof(in), 0);
 	int intact = received == (ssize_t)(length - 8)
 		&& memcmp(in, udp + 8, length - 8) == 0;
-	if (expectDrop) {
+	if (expect == kDrop) {
 		if (received < 0)
 			snprintf(detail, sizeof(detail), "not delivered, as required");
 		else {
@@ -409,13 +427,93 @@ crafted(int family, const char* label, size_t length,
 					: "");
 		}
 		result(name, received < 0, detail);
-	} else {
+	} else if (expect == kDeliver) {
 		snprintf(detail, sizeof(detail), "received %zd of %zu%s", received,
 			length - 8, intact ? ", intact"
 				: (received < 0 ? " (NOT DELIVERED within 1 s)" : ", WRONG"));
 		result(name, intact, detail);
+	} else {
+		printf("%-50s INFO  %s\n", name, received < 0 ? "not delivered"
+			: (intact ? "delivered intact" : "delivered, WRONG CONTENT"));
+		fflush(stdout);
+		if (received >= 0 && !intact)
+			sFailures++;
 	}
 
+	free(udp);
+	close(receiver);
+}
+
+
+/*!	One fragment whose header says it is 60 bytes long but whose total length
+	is only 20, followed by the last fragment that would complete it if the
+	fragment's length, total length minus header length, wrapped around to
+	65496. Must not be delivered, and must not upset the receiver.
+	(Linux rewrites the total length of an IP_HDRINCL packet, so on Linux
+	this row only shows the second fragment being dropped.)
+*/
+static void
+short_total_length_row(void)
+{
+	const char* name = "v4 drop total length shorter than the header";
+	char detail[160];
+	unsigned short port = sPort++;
+	int receiver = bind_receiver(AF_INET, port);
+	if (receiver < 0) {
+		snprintf(detail, sizeof(detail), "bind: %s", strerror(errno));
+		result(name, 0, detail);
+		return;
+	}
+	uint32_t ident = ++sIdent;
+
+	unsigned char packet[68];
+	memset(packet, 0, sizeof(packet));
+	packet[0] = 0x4f;
+		// header length 60: 40 bytes of zero options (end of list)
+	packet[2] = 0; packet[3] = 20;
+	packet[4] = (ident >> 8) & 0xff; packet[5] = ident & 0xff;
+	packet[6] = 0x20;
+		// more fragments, offset 0
+	packet[8] = 64;
+	packet[9] = IPPROTO_UDP;
+	packet[12] = 127; packet[15] = 1;
+	packet[16] = 127; packet[19] = 1;
+	uint16_t checksum = ip_checksum(packet, 60);
+	packet[10] = checksum >> 8; packet[11] = checksum & 0xff;
+	unsigned char* udp = make_udp(AF_INET, port, 8);
+	memcpy(packet + 60, udp, 8);
+
+	int fd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+	int on = 1;
+	int status = -1;
+	if (fd >= 0 && setsockopt(fd, IPPROTO_IP, IP_HDRINCL, &on, sizeof(on))
+			== 0) {
+		struct sockaddr_in to;
+		memset(&to, 0, sizeof(to));
+		to.sin_family = AF_INET;
+		to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		status = sendto(fd, packet, sizeof(packet), 0, (struct sockaddr*)&to,
+			sizeof(to)) == (ssize_t)sizeof(packet) ? 0 : -1;
+	}
+	int error = errno;
+	if (fd >= 0)
+		close(fd);
+	if (status == 0) {
+		unsigned char tail[8];
+		fill(tail, sizeof(tail), 7);
+		status = send_fragment(AF_INET, tail, sizeof(tail), 65496, 0, ident);
+		error = errno;
+	}
+	if (status != 0) {
+		snprintf(detail, sizeof(detail), "raw send: %s", strerror(error));
+		result(name, 0, detail);
+	} else {
+		unsigned char in[4096];
+		ssize_t received = recv(receiver, in, sizeof(in), 0);
+		snprintf(detail, sizeof(detail), "%s", received < 0
+			? "not delivered, as required" : "DELIVERED, but must be dropped");
+		result(name, received < 0, detail);
+	}
 	free(udp);
 	close(receiver);
 }
@@ -460,6 +558,30 @@ crafted_rows(int family)
 		shortLast, 3, 1);
 	crafted(family, "twoends: second last fragment, other end", kShort,
 		twoEnds, 3, 1);
+
+	// A last fragment that is a duplicate: exactly, before the datagram is
+	// complete; and wholly inside data already held, which must not make the
+	// datagram look complete (it is dropped, or the datagram abandoned).
+	const struct piece lastTwice[] = { { 0, 1000, 0, 1 },
+		{ 2000, 1000, 2000, 0 }, { 2000, 1000, 2000, 0 },
+		{ 1000, 1000, 1000, 1 } };
+	const struct piece lastCovered[] = { { 0, 1008, 0, 1 },
+		{ 1000, 8, 1000, 0 } };
+	crafted(family, "last fragment twice, then the middle", kLength,
+		lastTwice, 4, kDeliver);
+	crafted(family, "last fragment inside held data", 1008, lastCovered, 2,
+		kDrop);
+
+	// A last fragment that partly overlaps held data, with the same bytes.
+	// RFC 5722 requires IPv6 to abandon the datagram; RFC 791 lets IPv4 keep
+	// either copy.
+	const struct piece lastOverlaps[] = { { 0, 1008, 0, 1 },
+		{ 1000, 16, 1000, 0 } };
+	crafted(family, "last fragment overlapping held data", 1016, lastOverlaps,
+		2, family == AF_INET6 ? kDrop : kEither);
+
+	if (family == AF_INET)
+		short_total_length_row();
 }
 
 

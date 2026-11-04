@@ -78,9 +78,7 @@ public:
 									net_buffer* buffer, bool lastFragment);
 			status_t			Reassemble(net_buffer* to);
 
-			bool				IsComplete() const
-									{ return fReceivedLastFragment
-										&& fBytesLeft == 0; }
+			bool				IsComplete() const;
 
 			const ipv4_packet_key& Key() const { return fKey; }
 			FragmentPacket*&	HashTableLink() { return fNext; }
@@ -95,7 +93,8 @@ private:
 			struct ipv4_packet_key fKey;
 			uint32				fIndex;
 			bool				fReceivedLastFragment;
-			int32				fBytesLeft;
+			uint32				fEnd;
+				// where the last fragment ends, once it has arrived
 			FragmentList		fFragments;
 			net_timer			fTimer;
 			bool				fOrphaned;
@@ -260,7 +259,7 @@ FragmentPacket::FragmentPacket(const ipv4_packet_key& key)
 	fKey(key),
 	fIndex(0),
 	fReceivedLastFragment(false),
-	fBytesLeft(IP_MAXPACKET)
+	fEnd(0)
 {
 	fOrphaned = false;
 	gStackModule->init_timer(&fTimer, FragmentPacket::StaleTimer, this);
@@ -291,6 +290,23 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		// invalid fragment
 		return B_BAD_DATA;
 	}
+
+	// Once the end of the datagram is known, nothing may lie past it, and the
+	// last fragment may not end before data already received (RFC 8200 4.5,
+	// RFC 791). Such a fragment is dropped; it would otherwise be delivered
+	// with the data around it, or keep the datagram from ever completing.
+	uint16 dataEnd = fFragments.IsEmpty() ? 0 : fFragments.Last()->fragment.end;
+		// the fragments are kept sorted and without overlaps
+	if (lastFragment) {
+		if (fReceivedLastFragment ? end != fEnd : end < dataEnd)
+			return B_BAD_DATA;
+	} else if (fReceivedLastFragment && end > fEnd)
+		return B_BAD_DATA;
+
+	// The end is only recorded once the fragment is stored below: one whose
+	// data is all held already is freed, and would leave a complete-looking
+	// datagram with no buffer of this call to reassemble into.
+	const uint16 datagramEnd = end;
 
 	// Search for a position in the list to insert the fragment
 
@@ -352,16 +368,10 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		}
 
 		fFragments.InsertBefore(next, buffer);
-
-		// cut down existing hole
-		fBytesLeft -= end - start;
-
-		if (lastFragment && !fReceivedLastFragment) {
+		if (lastFragment) {
 			fReceivedLastFragment = true;
-			fBytesLeft -= IP_MAXPACKET - end;
+			fEnd = datagramEnd;
 		}
-
-		TRACE("    hole length: %d", (int)fBytesLeft);
 
 		return B_OK;
 	} else if (next != NULL && next->fragment.start == end) {
@@ -380,16 +390,10 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		}
 
 		fFragments.InsertBefore(afterNext, buffer);
-
-		// cut down existing hole
-		fBytesLeft -= end - start;
-
-		if (lastFragment && !fReceivedLastFragment) {
+		if (lastFragment) {
 			fReceivedLastFragment = true;
-			fBytesLeft -= IP_MAXPACKET - end;
+			fEnd = datagramEnd;
 		}
-
-		TRACE("    hole length: %d", (int)fBytesLeft);
 
 		return B_OK;
 	}
@@ -401,18 +405,33 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 	buffer->fragment.start = start;
 	buffer->fragment.end = end;
 	fFragments.InsertBefore(next, buffer);
-
-	// update length of the hole, if any
-	fBytesLeft -= end - start;
-
-	if (lastFragment && !fReceivedLastFragment) {
+	if (lastFragment) {
 		fReceivedLastFragment = true;
-		fBytesLeft -= IP_MAXPACKET - end;
+		fEnd = datagramEnd;
 	}
 
-	TRACE("    hole length: %d", (int)fBytesLeft);
-
 	return B_OK;
+}
+
+
+/*!	Returns whether the fragments cover every byte from 0 to the end of the
+	last fragment. Counting the bytes received is not enough: a fragment past
+	the end used to make up for a hole.
+*/
+bool
+FragmentPacket::IsComplete() const
+{
+	if (!fReceivedLastFragment)
+		return false;
+
+	uint32 covered = 0;
+	FragmentList::ConstIterator iterator = fFragments.GetIterator();
+	while (net_buffer* fragment = iterator.Next()) {
+		if (fragment->fragment.start != covered)
+			return false;
+		covered = fragment->fragment.end;
+	}
+	return covered == fEnd;
 }
 
 
@@ -447,6 +466,9 @@ FragmentPacket::Reassemble(net_buffer* to)
 
 	to->index = fIndex;
 		// reset the buffer's device index
+	to->buffer_flags &= ~NET_BUFFER_L4_CHECKSUM_VALID;
+		// That came with the fragment that is now the buffer, and said
+		// nothing about the datagram: the layer-4 checksum has to be checked.
 
 	return B_OK;
 }
@@ -458,9 +480,9 @@ FragmentPacket::Reassemble(net_buffer* to)
 	waiting for sFragmentLock. The packet must then not be deleted, but handed
 	to the hook with Orphan().
 
-	set_timer(-1), which the destructor calls, is not enough: it cancels a
-	scheduled timer only, and the timer may have been scheduled again by
-	AddFragment() while the hook that already fired was waiting for the lock.
+	set_timer(-1), which the destructor calls, is not enough: it only takes a
+	timer off the list of scheduled ones, and does not wait for a hook that
+	has already fired and is waiting for the lock.
 	wait_for_timer() cannot be used either, as the hook needs sFragmentLock.
 */
 bool
@@ -593,6 +615,16 @@ reassemble_fragments(const ipv4_header &header, net_buffer** _buffer)
 	key.id = header.id;
 	key.protocol = header.protocol;
 
+	uint16 fragmentOffset = header.FragmentOffset();
+	uint32 start = (fragmentOffset & IP_FRAGMENT_OFFSET_MASK) << 3;
+	uint32 end = start + header.TotalLength() - header.HeaderLength();
+	bool lastFragment = (fragmentOffset & IP_MORE_FRAGMENTS) == 0;
+
+	// A datagram cannot be longer than IP_MAXPACKET with its header; an end
+	// past that wrapped around in 16 bits before.
+	if (end + header.HeaderLength() > IP_MAXPACKET)
+		return B_BAD_DATA;
+
 	// TODO: Make locking finer grained.
 	MutexLocker locker(&sFragmentLock);
 
@@ -611,13 +643,8 @@ reassemble_fragments(const ipv4_header &header, net_buffer** _buffer)
 		}
 	}
 
-	uint16 fragmentOffset = header.FragmentOffset();
-	uint16 start = (fragmentOffset & IP_FRAGMENT_OFFSET_MASK) << 3;
-	uint16 end = start + header.TotalLength() - header.HeaderLength();
-	bool lastFragment = (fragmentOffset & IP_MORE_FRAGMENTS) == 0;
-
-	TRACE("   Received IPv4 %sfragment of size %d, offset %d.",
-		lastFragment ? "last ": "", end - start, start);
+	TRACE("   Received IPv4 %sfragment of size %" B_PRIu32 ", offset %"
+		B_PRIu32 ".", lastFragment ? "last ": "", end - start, start);
 
 	// Remove header unless this is the first fragment
 	if (start != 0)
@@ -1932,8 +1959,11 @@ ipv4_receive_data(net_buffer* buffer)
 	uint16 packetLength = header.TotalLength();
 	headerLength = header.HeaderLength();
 	if (packetLength > buffer->size
-		|| headerLength < sizeof(ipv4_header))
+		|| headerLength < sizeof(ipv4_header)
+		|| packetLength < headerLength)
 		return B_BAD_DATA;
+			// a total length short of the header would make the fragment
+			// length, computed from the two, wrap around
 
 	if ((buffer->buffer_flags & NET_BUFFER_L3_CHECKSUM_VALID) == 0) {
 		if (gBufferModule->checksum(buffer, 0, headerLength, true) != 0)

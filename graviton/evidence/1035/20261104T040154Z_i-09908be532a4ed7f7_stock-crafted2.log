@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-crafted2
+# instance: i-09908be532a4ed7f7   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T040154Z   end: 20261104T040218Z   rc: 0
+# script sha256: f0a5a35cc772e814c16cdd14204deb7737a123c12eb106b7d2f14c5154734448
+# ---- script ----
+# | cd /boot/home/wL || exit 1
+# | uname -a
+# | echo "--- loaded network images (stock: overrides not loaded until boot)"
+# | listimage 1 | grep -E 'network/(stack|protocols/ipv)'
+# | ifconfig loop | grep -i mtu
+# | ./ipfragconf -c
+# | echo "rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-12-14.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- loaded network images (stock: overrides not loaded until boot)
+ 2077 0xffff0000020c2000 0xffff0000020e4000     0          0 /boot/system/add-ons/kernel/network/stack
+ 2092 0xffff0000023e0000 0xffff0000023eb000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv4
+ 2096 0xffff0000023ed000 0xffff0000023f8000     0          0 /boot/system/add-ons/kernel/network/protocols/ipv6
+	MTU: 65536, Metric: 0, up loopback link
+  loopback alive after: start
+v4 deliver in order                                PASS  received 2992 of 2992, intact
+v4 deliver reversed                                PASS  received 2992 of 2992, intact
+v4 deliver middle first                            PASS  received 2992 of 2992, intact
+v4 deliver duplicate middle                        PASS  received 2992 of 2992, intact
+v4 deliver last fragment first                     PASS  received 2992 of 2992, intact
+v4 drop gap (middle missing)                       PASS  not delivered, as required
+v4 drop past: data past the last fragment          FAIL  DELIVERED 16 bytes (the joined pieces), but must be dropped
+v4 drop short: last ends before received data      FAIL  DELIVERED 16 bytes (the joined pieces), but must be dropped
+v4 drop twoends: second last fragment, other end   FAIL  DELIVERED 16 bytes (the joined pieces), but must be dropped
+v4 deliver last fragment twice, then the middle    PASS  received 2992 of 2992, intact
+v4 drop last fragment inside held data             PASS  not delivered, as required
+v4 either last fragment overlapping held data      INFO  delivered intact
+v4 drop total length shorter than the header       PASS  not delivered, as required
+v6 deliver in order                                FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+v6 deliver reversed                                FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+v6 deliver middle first                            FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+v6 deliver duplicate middle                        FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+v6 deliver last fragment first                     FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+v6 drop gap (middle missing)                       PASS  not delivered, as required
+v6 drop past: data past the last fragment          PASS  not delivered, as required
+v6 drop short: last ends before received data      PASS  not delivered, as required
+v6 drop twoends: second last fragment, other end   PASS  not delivered, as required
+v6 deliver last fragment twice, then the middle    FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+v6 drop last fragment inside held data             PASS  not delivered, as required
+v6 drop last fragment overlapping held data        PASS  not delivered, as required
+  loopback alive after: crafted rows
+FAILURES 9
+rc=9
