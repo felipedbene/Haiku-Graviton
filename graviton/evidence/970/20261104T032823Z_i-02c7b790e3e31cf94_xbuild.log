@@ -1,0 +1,254 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-02c7b790e3e31cf94   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build trunk/fix1026/fix1027/both kernels at a9954f424a (hrev59996), each with vfs.o/FileDevice.o forced to rebuild, and the fat_fuse/bfs_fuse host tools before/after the fuse fix
+# start: 20261104T032823Z   end: 20261104T032924Z   rc: 0
+# script sha256: 8f3f071d8393b061e2e045a617f38e69d43aa017c45e4aefd90c6198409cf19b
+# ---- script ----
+# | # Build from trunk a9954f424a, revision pinned to canonical's hrev59996 (method of #898):
+# | #  trunk:    <revisioned>kernel_arm64 (to show the build reproduces canonical's kernel)
+# | #  fix1026:  trunk + fix1026.patch (vfs.cpp) -> kernel_arm64
+# | #  fix1027:  trunk + fix1027.patch (FileDevice.cpp) -> kernel_arm64
+# | #  both:     trunk + both -> kernel_arm64 (combined regression arm)
+# | #  fuse:     <build>fat_fuse and <build>bfs_fuse, trunk and trunk + fixfuse.patch (host tools)
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUTS=s3://haiku-graviton-$ACCT-us-west-2/bugfix/E/out2
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | REV=hrev59996
+# | R=objects/haiku/arm64/release/system/kernel
+# | T=a9954f424a
+# | kbuild() {	# kbuild <label> [patch...]
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	# jam compares 1 s mtimes, and checkout + apply land in the same second as the
+# | 	# previous compile: drop the two touched objects and the kernel so they rebuild
+# | 	rm -f $R/revisioned/kernel_arm64 $R/kernel_arm64 $R/fs/vfs.o $R/device_manager/FileDevice.o
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" > $O/jam-k-$l.log 2>&1 || { tail -40 $O/jam-k-$l.log; return 1; }
+# | 	echo "JAM kernel $l ok wall=$(( $(date +%s) - s ))s"
+# | 	grep -E "warning:|error:" $O/jam-k-$l.log | grep -E "vfs.cpp|FileDevice.cpp"
+# | 	cp $R/revisioned/kernel_arm64 $O/kernel_arm64.$l
+# | }
+# | kbuild trunk || exit 1
+# | kbuild fix1026 fix1026.patch || exit 1
+# | kbuild fix1027 fix1027.patch || exit 1
+# | kbuild both fix1026.patch fix1027.patch || exit 1
+# | kbuild trunk2 || exit 1
+# | cmp $O/kernel_arm64.trunk $O/kernel_arm64.trunk2 && echo "kernel trunk rebuild identical"
+# | fbuild() {	# fbuild <label> [patch]
+# | 	git -C .. checkout -q -f $T
+# | 	[ -n "$2" ] && { git -C .. apply $O/$2 || return 1; }
+# | 	find objects -path "*tools/fs_shell*" -name "fuse.o" -delete; find objects -name fat_fuse -o -name bfs_fuse | xargs -r rm -f
+# | 	jam -q -j$(nproc) "<build>fat_fuse" "<build>bfs_fuse" > $O/jam-fuse-$1.log 2>&1; echo "JAM <build>fat_fuse <build>bfs_fuse $1 rc=$?"
+# | 	grep -E "error|warning:.*fuse.cpp" $O/jam-fuse-$1.log | head -5
+# | 	find objects -name "fat_fuse" -o -name "bfs_fuse" | grep -v "\.o$" | head -2 | xargs -r ls -l
+# | 	find objects -path "*fs_shell*" -name "fuse.o" | xargs -r ls -l
+# | }
+# | fbuild trunk
+# | fbuild fixfuse fixfuse.patch
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for l in trunk fix1026 fix1027 both trunk2; do echo "$l: snooze refs in free_vnode region: $(${X}objdump -d --no-show-raw-insn kernel_arm64.$l | grep -c "bl.*<snooze>")"; done
+# | cmp -l kernel_arm64.trunk kernel_arm64.trunk2 | wc -l
+# | sha256sum kernel_arm64.* | tee SHA256SUMS2
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include SHA256SUMS2 . $OUTS/ && echo uploaded
+# ---- raw output ----
+JAM kernel trunk ok wall=7s
+ src/system/kernel/fs/vfs.cpp | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+JAM kernel fix1026 ok wall=8s
+ src/system/kernel/device_manager/FileDevice.cpp | 95 +++++++++++++++++++++----
+ 1 file changed, 83 insertions(+), 12 deletions(-)
+JAM kernel fix1027 ok wall=8s
+ src/system/kernel/device_manager/FileDevice.cpp | 95 +++++++++++++++++++++----
+ src/system/kernel/fs/vfs.cpp                    | 15 +++-
+ 2 files changed, 97 insertions(+), 13 deletions(-)
+JAM kernel both ok wall=8s
+JAM kernel trunk2 ok wall=8s
+kernel trunk rebuild identical
+JAM <build>fat_fuse <build>bfs_fuse trunk rc=0
+-rwxr-xr-x 1 root root 730032 Nov  4 03:29 objects/linux/arm64/release/tools/bfs_shell/bfs_fuse
+-rwxr-xr-x 1 root root 643320 Nov  4 03:29 objects/linux/arm64/release/tools/fat_shell/fat_fuse
+-rw-r--r-- 1 root root 24808 Nov  4 03:29 objects/linux/arm64/release/tools/fs_shell/fuse.o
+JAM <build>fat_fuse <build>bfs_fuse fixfuse rc=0
+-rwxr-xr-x 1 root root 730056 Nov  4 03:29 objects/linux/arm64/release/tools/bfs_shell/bfs_fuse
+-rwxr-xr-x 1 root root 643296 Nov  4 03:29 objects/linux/arm64/release/tools/fat_shell/fat_fuse
+-rw-r--r-- 1 root root 24856 Nov  4 03:29 objects/linux/arm64/release/tools/fs_shell/fuse.o
+trunk: snooze refs in free_vnode region: 0
+fix1026: snooze refs in free_vnode region: 0
+fix1027: snooze refs in free_vnode region: 0
+both: snooze refs in free_vnode region: 0
+trunk2: snooze refs in free_vnode region: 0
+0
+e925aaa5624101f77bc8000a62a3851a714f5c76f57a23261ced16591343671c  kernel_arm64.both
+b29b97a45d2722c9a7a974068dcafeb25d17bb231bc3a9cc9edd89ab1fbb19d0  kernel_arm64.fix1026
+02b50d0dc255f26907847bdacb4370f442d03ea134b816f7a96a0b18101fc3e5  kernel_arm64.fix1027
+cbfd80cd1ff6c1220b7b75abac1155aa341a963773727adfddefc91e12283243  kernel_arm64.trunk
+cbfd80cd1ff6c1220b7b75abac1155aa341a963773727adfddefc91e12283243  kernel_arm64.trunk2
+uploaded
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUTS=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/out2
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ REV=hrev59996
++ R=objects/haiku/arm64/release/system/kernel
++ T=a9954f424a
++ kbuild trunk
++ l=trunk
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
+++ date +%s
++ s=1793762908
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel trunk ok wall=7s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-trunk.log
++ grep -E 'vfs.cpp|FileDevice.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk
++ kbuild fix1026 fix1026.patch
++ l=fix1026
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1026.patch
++ git -C .. apply /opt/t/out/fix1026.patch
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
+++ date +%s
++ s=1793762915
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel fix1026 ok wall=8s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1026.log
++ grep -E 'vfs.cpp|FileDevice.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1026
++ kbuild fix1027 fix1027.patch
++ l=fix1027
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1027.patch
++ git -C .. apply /opt/t/out/fix1027.patch
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
+++ date +%s
++ s=1793762923
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel fix1027 ok wall=8s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1027.log
++ grep -E 'vfs.cpp|FileDevice.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1027
++ kbuild both fix1026.patch fix1027.patch
++ l=both
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1026.patch
++ git -C .. apply /opt/t/out/fix1026.patch
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1027.patch
++ git -C .. apply /opt/t/out/fix1027.patch
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
+++ date +%s
++ s=1793762931
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel both ok wall=8s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-both.log
++ grep -E 'vfs.cpp|FileDevice.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.both
++ kbuild trunk2
++ l=trunk2
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ rm -f objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 objects/haiku/arm64/release/system/kernel/kernel_arm64 objects/haiku/arm64/release/system/kernel/fs/vfs.o objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o
+++ date +%s
++ s=1793762939
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
++ echo 'JAM kernel trunk2 ok wall=8s'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-trunk2.log
++ grep -E 'vfs.cpp|FileDevice.cpp'
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk2
++ cmp /opt/t/out/kernel_arm64.trunk /opt/t/out/kernel_arm64.trunk2
++ echo 'kernel trunk rebuild identical'
++ fbuild trunk
++ git -C .. checkout -q -f a9954f424a
++ '[' -n '' ']'
++ find objects -path '*tools/fs_shell*' -name fuse.o -delete
++ find objects -name fat_fuse -o -name bfs_fuse
++ xargs -r rm -f
+++ nproc
++ jam -q -j64 '<build>fat_fuse' '<build>bfs_fuse'
++ echo 'JAM <build>fat_fuse <build>bfs_fuse trunk rc=0'
++ grep -E 'error|warning:.*fuse.cpp' /opt/t/out/jam-fuse-trunk.log
++ head -5
++ find objects -name fat_fuse -o -name bfs_fuse
++ grep -v '\.o$'
++ head -2
++ xargs -r ls -l
++ find objects -path '*fs_shell*' -name fuse.o
++ xargs -r ls -l
++ fbuild fixfuse fixfuse.patch
++ git -C .. checkout -q -f a9954f424a
++ '[' -n fixfuse.patch ']'
++ git -C .. apply /opt/t/out/fixfuse.patch
++ find objects -path '*tools/fs_shell*' -name fuse.o -delete
++ find objects -name fat_fuse -o -name bfs_fuse
++ xargs -r rm -f
+++ nproc
++ jam -q -j64 '<build>fat_fuse' '<build>bfs_fuse'
++ echo 'JAM <build>fat_fuse <build>bfs_fuse fixfuse rc=0'
++ grep -E 'error|warning:.*fuse.cpp' /opt/t/out/jam-fuse-fixfuse.log
++ head -5
++ find objects -name fat_fuse -o -name bfs_fuse
++ grep -v '\.o$'
++ head -2
++ xargs -r ls -l
++ find objects -path '*fs_shell*' -name fuse.o
++ xargs -r ls -l
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ for l in trunk fix1026 fix1027 both trunk2
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn kernel_arm64.trunk
+++ grep -c 'bl.*<snooze>'
++ echo 'trunk: snooze refs in free_vnode region: 0'
++ for l in trunk fix1026 fix1027 both trunk2
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn kernel_arm64.fix1026
+++ grep -c 'bl.*<snooze>'
++ echo 'fix1026: snooze refs in free_vnode region: 0'
++ for l in trunk fix1026 fix1027 both trunk2
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn kernel_arm64.fix1027
+++ grep -c 'bl.*<snooze>'
++ echo 'fix1027: snooze refs in free_vnode region: 0'
++ for l in trunk fix1026 fix1027 both trunk2
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn kernel_arm64.both
+++ grep -c 'bl.*<snooze>'
++ echo 'both: snooze refs in free_vnode region: 0'
++ for l in trunk fix1026 fix1027 both trunk2
+++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-objdump -d --no-show-raw-insn kernel_arm64.trunk2
+++ grep -c 'bl.*<snooze>'
++ echo 'trunk2: snooze refs in free_vnode region: 0'
++ cmp -l kernel_arm64.trunk kernel_arm64.trunk2
++ wc -l
++ sha256sum kernel_arm64.both kernel_arm64.fix1026 kernel_arm64.fix1027 kernel_arm64.trunk kernel_arm64.trunk2
++ tee SHA256SUMS2
++ aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include SHA256SUMS2 . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/out2/
++ echo uploaded
