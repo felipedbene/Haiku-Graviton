@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4-unmount-retry
+# instance: i-03041483120410e2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4: retry the FAT unmount that returned EBUSY right after the verify read
+# start: 20261104T063135Z   end: 20261104T063147Z   rc: 1
+# script sha256: 164a95dd0b5e3f4ff47f3a8e4c7ff54a4df24566cb1c9ac432a926ed36fc8e6f
+# ---- script ----
+# | sleep 5; unmount /f1069; echo "unmount /f1069 rc=$?"; mount | grep -c f1069
+# ---- raw output ----
+unmount /f1069 rc=0
+0
+failed to run commands: exit status 1

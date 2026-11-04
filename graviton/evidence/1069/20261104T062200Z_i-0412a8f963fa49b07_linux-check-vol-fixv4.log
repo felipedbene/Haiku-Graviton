@@ -1,0 +1,34 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-check-vol-fixv4
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux cross-check of arm fixv4's second EBS volume (first 256 MiB, as Haiku left it after the ext2 round): e2fsck, md5 of every file through Linux ext2
+# start: 20261104T062200Z   end: 20261104T062211Z   rc: 0
+# script sha256: f98b5ec51625e2c032552925fa1298f85f8751c3cbf5bf365447ae1999eb0f24
+# ---- script ----
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/R
+# | mkdir -p /opt/chkv && cd /opt/chkv && rm -rf ./* && mkdir m
+# | aws s3 cp --quiet $B/up/vol-fixv4.img vol.img && sha256sum vol.img
+# | e2fsck -fn vol.img; echo "e2fsck rc=$?"
+# | mount -t ext2 -o loop,ro vol.img m && (cd m && md5sum lin-1m lin-small h-2b h-3b h-4k h-1m) && umount m
+# | true
+# ---- raw output ----
+f80d7b9fd10ccbc50a58cb4facc5a580b5892068021f8391957dfbdcf79506e1  vol.img
+Pass 1: Checking inodes, blocks, and sizes
+Inode 17, i_blocks is 128, should be 2056.  Fix? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+
+vol.img: ********** WARNING: Filesystem still has errors **********
+
+vol.img: 17/65536 files (5.9% non-contiguous), 4658/65536 blocks
+e2fsck rc=4
+05f30910592f99ac5cc4dabcfd2126a2  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+d16fb36f0911f878998c136191af705e  h-3b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+6dafaf082b4ba3c9c927f7c7974cf429  h-1m
+e2fsck 1.47.0 (5-Feb-2023)

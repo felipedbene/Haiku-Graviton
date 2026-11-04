@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: peer-start
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: start nettput-peer.py on the builder, port 5307 (peer for the ENA throughput A/B)
+# start: 20261104T050841Z   end: 20261104T050852Z   rc: 0
+# script sha256: 0579aa65c2762e86eab2f2a713b874b719d09f76a2a7a17e7293e87d703b28ea
+# ---- script ----
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/R
+# | mkdir -p /opt/nettput && cd /opt/nettput && aws s3 cp --quiet $B/src/nettput-peer.py . && sha256sum nettput-peer.py
+# | nohup python3 /opt/nettput/nettput-peer.py -p 5307 > /tmp/nettput-peer-5307.log 2>&1 < /dev/null &
+# | sleep 2; ss -ltnp | grep 5307
+# ---- raw output ----
+aabbc0fcfe26216f89ad7f9a36e42986d1e56bccbdbfb4e1f2bc494652bdaf62  nettput-peer.py
+LISTEN 0      64           0.0.0.0:5307      0.0.0.0:*    users:(("python3",pid=23363,fd=3))       

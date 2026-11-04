@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-vol-write
+# instance: i-075bc9c9e1e5dc3c8   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base: which device is /boot; then ebsvol1069 write phase on the ext2 volume seeded on the second EBS volume (nvme/1)
+# start: 20261104T061144Z   end: 20261104T061224Z   rc: 0
+# script sha256: 098881fcc440ebac11c3a3612243aa50bd8c7ec610f5065b24a3c072f6f5ccc8
+# ---- script ----
+# | df /boot | tail -2
+# | cd /boot/home/t1069v
+# | sh ebsvol1069.sh write /dev/disk/nvme/1/raw /v1069 ext2
+# ---- raw output ----
+   Free Nodes: 0
+   Root Inode: 524288
+05f30910592f99ac5cc4dabcfd2126a2  /v1069/lin-1m
+693e9af84d3dfcc71e640e005bdc5e2e  /v1069/lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+d16fb36f0911f878998c136191af705e  h-3b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+1499f3d0a8d83e1ae173de72b5e6eac3  h-1m
+lock failures logged during this phase: 1

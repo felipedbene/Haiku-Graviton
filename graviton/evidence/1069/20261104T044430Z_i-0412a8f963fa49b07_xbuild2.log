@@ -1,0 +1,164 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: rebuild trunk / fix1069 / trunk2 kernel_arm64 with the two touched files' mtimes forced past every object (jam 1 s mtime trap), so each arm recompiles every dependent of arch_kernel.h
+# start: 20261104T044430Z   end: 20261104T044529Z   rc: 0
+# script sha256: 936dc24ceeb5a727dde3690b9c8888383f2406c9d120aad7ab7a0645e2125bd3
+# ---- script ----
+# | set -x
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUTS=s3://haiku-graviton-$ACCT-us-west-2/bugfix/R/out
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | REV=hrev59996
+# | R=objects/haiku/arm64/release/system/kernel
+# | T=a9954f424a
+# | F="headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp"
+# | kbuild() {	# kbuild <label> [patch...]
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	sleep 2; (cd .. && touch $F); sleep 2
+# | 	rm -rf $R
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" > $O/jam-k-$l.log 2>&1 || { tail -40 $O/jam-k-$l.log; return 1; }
+# | 	echo "JAM kernel $l ok wall=$(( $(date +%s) - s ))s, compiles: $(grep -c '^C++\|^Cc' $O/jam-k-$l.log)"
+# | 	grep -E "warning:|error:" $O/jam-k-$l.log | grep -E "arch_vm_translation_map|arch_kernel.h" | head
+# | 	cp $R/revisioned/kernel_arm64 $O/kernel_arm64.$l
+# | }
+# | kbuild trunk || exit 1
+# | kbuild fix1069 fix1069.patch || exit 1
+# | kbuild trunk2 || exit 1
+# | kbuild fix1069b fix1069.patch || exit 1
+# | cmp $O/kernel_arm64.trunk $O/kernel_arm64.trunk2 && echo "kernel trunk rebuild identical"
+# | cmp $O/kernel_arm64.fix1069 $O/kernel_arm64.fix1069b && echo "kernel fix1069 rebuild identical"
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | sha256sum kernel_arm64.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include SHA256SUMS . $OUTS/ && echo uploaded
+# ---- raw output ----
+JAM kernel trunk ok wall=8s, compiles: 273
+ headers/private/kernel/arch/arm64/arch_kernel.h       |  6 +++++-
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp     | 19 ++++++++++++++++++-
+ 2 files changed, 23 insertions(+), 2 deletions(-)
+JAM kernel fix1069 ok wall=9s, compiles: 273
+JAM kernel trunk2 ok wall=9s, compiles: 273
+ headers/private/kernel/arch/arm64/arch_kernel.h       |  6 +++++-
+ .../kernel/arch/arm64/arch_vm_translation_map.cpp     | 19 ++++++++++++++++++-
+ 2 files changed, 23 insertions(+), 2 deletions(-)
+JAM kernel fix1069b ok wall=9s, compiles: 273
+/opt/t/out/kernel_arm64.trunk /opt/t/out/kernel_arm64.trunk2 differ: byte 1749033, line 4879
+/opt/t/out/kernel_arm64.fix1069 /opt/t/out/kernel_arm64.fix1069b differ: byte 1749033, line 4889
+81017b85270e499530dd3fbf956ea3877d71b674083017fb0a7f657d984860b3  kernel_arm64.fix1069
+5d353507f39508a35aba1c1e51cc5821707d49dd740e32433f53f2c7be7fd578  kernel_arm64.fix1069b
+f2f188f966d070c30bb77a2b5bed7a7ca096d2331d6475563e92394cc023329c  kernel_arm64.trunk
+e78ddd259440a0e89a8bd72dc2e7d710ed17b527607ecceb973b79ea8bd02577  kernel_arm64.trunk2
+uploaded
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ OUTS=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ REV=hrev59996
++ R=objects/haiku/arm64/release/system/kernel
++ T=a9954f424a
++ F='headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp'
++ kbuild trunk
++ l=trunk
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793767478
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
+++ grep -c '^C++\|^Cc' /opt/t/out/jam-k-trunk.log
++ echo 'JAM kernel trunk ok wall=8s, compiles: 273'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-trunk.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk
++ kbuild fix1069 fix1069.patch
++ l=fix1069
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1069.patch
++ git -C .. apply /opt/t/out/fix1069.patch
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793767490
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
+++ grep -c '^C++\|^Cc' /opt/t/out/jam-k-fix1069.log
++ echo 'JAM kernel fix1069 ok wall=9s, compiles: 273'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1069.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1069
++ kbuild trunk2
++ l=trunk2
++ shift
++ git -C .. checkout -q -f a9954f424a
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793767503
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
+++ grep -c '^C++\|^Cc' /opt/t/out/jam-k-trunk2.log
++ echo 'JAM kernel trunk2 ok wall=9s, compiles: 273'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-trunk2.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.trunk2
++ kbuild fix1069b fix1069.patch
++ l=fix1069b
++ shift
++ git -C .. checkout -q -f a9954f424a
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1069.patch
++ git -C .. apply /opt/t/out/fix1069.patch
++ git -C .. diff --stat
++ sleep 2
++ cd ..
++ touch headers/private/kernel/arch/arm64/arch_kernel.h src/system/kernel/arch/arm64/arch_vm_translation_map.cpp
++ sleep 2
++ rm -rf objects/haiku/arm64/release/system/kernel
+++ date +%s
++ s=1793767516
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 '<revisioned>kernel_arm64'
+++ date +%s
+++ grep -c '^C++\|^Cc' /opt/t/out/jam-k-fix1069b.log
++ echo 'JAM kernel fix1069b ok wall=9s, compiles: 273'
++ grep -E 'warning:|error:' /opt/t/out/jam-k-fix1069b.log
++ grep -E 'arch_vm_translation_map|arch_kernel.h'
++ head
++ cp objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 /opt/t/out/kernel_arm64.fix1069b
++ cmp /opt/t/out/kernel_arm64.trunk /opt/t/out/kernel_arm64.trunk2
++ cmp /opt/t/out/kernel_arm64.fix1069 /opt/t/out/kernel_arm64.fix1069b
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
++ sha256sum kernel_arm64.fix1069 kernel_arm64.fix1069b kernel_arm64.trunk kernel_arm64.trunk2
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/R/out/
++ echo uploaded

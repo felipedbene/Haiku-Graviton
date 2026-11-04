@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4-vol-setup
+# instance: i-03041483120410e2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4: kernel checksum; the second EBS volume's device node; fetch the Linux-made ext2 image and ebsvol1069.sh (sha256 checked); seed the volume with the image
+# start: 20261104T061930Z   end: 20261104T061946Z   rc: 0
+# script sha256: 2f1bd2c5eb9282510c3e8ddf814633423a78d58a97e201d1e6e158fe3bb0a651
+# ---- script ----
+# | uname -a; sha256sum /boot/system/kernel_arm64
+# | echo "physical map area count: $(listarea 1 | grep -c 'physical map area')"
+# | ls /dev/disk/nvme/
+# | for d in /dev/disk/nvme/*/raw; do echo "$d: $(diskimage 2>/dev/null >/dev/null; ls -l $d | awk '{print $5}')"; done
+# | pkgman install -y wget 2>&1 | tail -1
+# | rm -rf /boot/home/t1069v && mkdir -p /boot/home/t1069v && cd /boot/home/t1069v
+# | wget -q -O ext2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/img/ext2.img?<PRESIGNED>'
+# | wget -q -O ebsvol1069.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/src/ebsvol1069.sh?<PRESIGNED>'
+# | printf '%s\n' 'cf5c59c3361a6d7d612496f18c26ee8d4c47f05d7b0040271798d12d098d1b58  ext2.img' '7e65e7b1b27a4e14d64066c861caca8ff9c2a0aab56ad967b749ed25bdd27928  ebsvol1069.sh' | sha256sum -c
+# | DEV=$(ls -d /dev/disk/nvme/*/raw | grep -v '/0/raw' | head -1); echo "second volume: $DEV"
+# | mount | grep -c nvme/1 || true
+# | sh ebsvol1069.sh seed $DEV ext2.img
+# | echo "lock failures so far this boot: $(grep -c 'failed to lock memory' /var/log/syslog)"
+# ---- raw output ----
+Haiku ip-10-128-6-48.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 06:10:16 arm64 other Haiku
+9969097b342e5f3539ae2dafa2103745df8dd75df418332c69035f0671693b87  /boot/system/kernel_arm64
+physical map area count: 1
+0
+1
+/dev/disk/nvme/0/raw: 0
+/dev/disk/nvme/1/raw: 0
+Validating checksum for DeBeOS...done.
+ext2.img: OK
+ebsvol1069.sh: OK
+second volume: /dev/disk/nvme/1/raw
+0
+268435456 bytes (268 MB, 256 MiB) copied, 1.05412 s, 255 MB/s
+lock failures so far this boot: 0

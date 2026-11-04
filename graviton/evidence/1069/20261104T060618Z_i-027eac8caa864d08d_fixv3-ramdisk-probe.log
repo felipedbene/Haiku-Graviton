@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv3-ramdisk-probe
+# instance: i-027eac8caa864d08d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv3: make a kernel area large enough to land in the newly reachable kernel VA (a 4 GiB ram disk), write through it, and see where it went
+# start: 20261104T060618Z   end: 20261104T060631Z   rc: 1
+# script sha256: 9eefaa6ba6d40c972f80535c29d756830fba66e56d0b62281e714a45f5cf1826
+# ---- script ----
+# | which ramdisk; ramdisk 2>&1 | head -5
+# | ramdisk create 4G 2>&1 | tail -2
+# | ls /dev/disk/virtual/ram/ 2>&1
+# | listarea 1 | grep -iE "ram ?disk|ramdisk" | head
+# ---- raw output ----
+Usage: ramdisk <command> [ <options> ]
+Controls RAM disk devices.
+
+Commands:
+  create (-s <size> | <path>)
+Error: Failed to resolve path "4G": No such file or directory
+control
+/tmp/run-27648-286bdd.sh: line 1: which: command not found
+failed to run commands: exit status 1

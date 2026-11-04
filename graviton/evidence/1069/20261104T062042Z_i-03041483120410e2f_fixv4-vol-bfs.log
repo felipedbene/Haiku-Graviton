@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4-vol-bfs
+# instance: i-03041483120410e2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4: BFS round on the same second volume: mkbfs, write the small files, sync, unmount, mount again, md5 from disk
+# start: 20261104T062042Z   end: 20261104T062119Z   rc: 0
+# script sha256: 737036649a7787923835594118ca26b1427ea00ab13fe59fcd316c2d462a04e6
+# ---- script ----
+# | cd /boot/home/t1069v
+# | sh ebsvol1069.sh mkbfs /dev/disk/nvme/1/raw
+# | sh ebsvol1069.sh write /dev/disk/nvme/1/raw /b1069 bfs
+# | sh ebsvol1069.sh unmount /b1069
+# | sh ebsvol1069.sh verify /dev/disk/nvme/1/raw /b1069 bfs
+# | sh ebsvol1069.sh unmount /b1069
+# ---- raw output ----
+DiskDeviceJobQueue::Execute(): executing job: N8BPrivate13InitializeJobE
+mkfs rc=0
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+d16fb36f0911f878998c136191af705e  h-3b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+cd296affc72c47ff055539c1cbca76d7  h-1m
+lock failures logged during this phase: 0
+unmount /b1069 rc=0
+h-2b: OK
+h-3b: OK
+h-4k: OK
+h-1m: OK
+verify rc=0
+lock failures logged during this phase: 0
+unmount /b1069 rc=0

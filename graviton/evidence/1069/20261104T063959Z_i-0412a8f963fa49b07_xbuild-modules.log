@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: with the final patch applied: build the add-ons that use IS_KERNEL_ADDRESS (nvme_disk, ena, virtio_net, scsi_disk, ram_disk) and the EFI loader, which include arch_kernel.h
+# start: 20261104T063959Z   end: 20261104T064023Z   rc: 0
+# script sha256: 63472d46222065f3c6c57684965fc61a585a8aab5889b089d70c54ed2feb9e94
+# ---- script ----
+# | O=/opt/t/out
+# | cd /opt/t/hg/generated
+# | git -C .. checkout -q -f a9954f424a && git -C .. apply $O/fix1069final.patch
+# | sleep 2; (cd .. && touch headers/private/kernel/arch/arm64/arch_kernel.h); sleep 2
+# | jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 nvme_disk ena virtio_net scsi_disk ram_disk haiku_loader.efi > $O/jam-mods.log 2>&1; echo "jam rc=$?"
+# | grep -E "error:" $O/jam-mods.log | head -5
+# | grep -cE "^C\+\+|^Cc" $O/jam-mods.log
+# | for m in nvme_disk ena virtio_net scsi_disk ram_disk haiku_loader.efi; do f=$(find objects -name $m -type f -newer ../headers/private/kernel/arch/arm64/arch_kernel.h | head -1); echo "$m: ${f:-NOT REBUILT}"; done
+# | git -C .. checkout -q -f a9954f424a
+# ---- raw output ----
+jam rc=1
+../src/system/boot/platform/generic/video_splash.cpp:23:10: fatal error: zlib.h: No such file or directory
+../src/system/boot/loader/file_systems/tarfs/tarfs.cpp:21:10: fatal error: zlib.h: No such file or directory
+../src/kits/support/ZlibCompressionAlgorithm.cpp:15:10: fatal error: zlib.h: No such file or directory
+315
+nvme_disk: objects/haiku/arm64/release/add-ons/kernel/drivers/disk/nvme/nvme_disk
+ena: objects/haiku/arm64/release/add-ons/kernel/drivers/network/ether/ena/ena
+virtio_net: objects/haiku/arm64/release/add-ons/kernel/drivers/network/ether/virtio/virtio_net
+scsi_disk: objects/haiku/arm64/release/add-ons/kernel/drivers/disk/scsi/scsi_disk/scsi_disk
+ram_disk: objects/haiku/arm64/release/add-ons/kernel/drivers/disk/virtual/ram_disk/ram_disk
+haiku_loader.efi: NOT REBUILT

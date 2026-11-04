@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv3-ramdisk-probe2
+# instance: i-027eac8caa864d08d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv3: a 4 GiB ram disk (kernel area), where it lands, then write 64 MiB through it
+# start: 20261104T060639Z   end: 20261104T060650Z   rc: 0
+# script sha256: d66d30d545a1c7d0508ab8b4cd05c1d6295aca7a3b59e7fe3c01f824ff9aa2ab
+# ---- script ----
+# | ramdisk create -s 4294967296 2>&1 | tail -2
+# | ls /dev/disk/virtual/ram/
+# | listarea 1 | grep -iE "ram" | head -5
+# | D=$(ls -d /dev/disk/virtual/ram/*/raw | head -1); echo "dev $D"
+# | dd if=/dev/urandom of=$D bs=1048576 count=64 2>&1 | tail -1
+# | dd if=$D bs=1048576 count=64 2>/dev/null | md5sum
+# | listarea 1 | grep -iE "ram" | head -5
+# ---- raw output ----
+RAM disk device created as "/dev/disk/virtual/ram/0/raw"
+0
+control
+14065               ipv6_datagram_text  0xffff0000019f8000     4000     4000     0     0     0    2   50
+14066               ipv6_datagram_data  0xffff0000019fc000     1000     1000     0     0     0    2   30
+  325                    ram_disk_text  0xffff000002142000     7000     7000     0     0     0    2   50
+  326                    ram_disk_data  0xffff000002149000     1000     1000     0     0     0    2   30
+ 4417              loopback_frame_text  0xffff000002202000     1000     1000     0     0     0    2   50
+dev /dev/disk/virtual/ram/0/raw
+67108864 bytes (67 MB, 64 MiB) copied, 4.85601 s, 13.8 MB/s
+d25429d9ae20aa1b3047612c55b3ce9c  -
+14065               ipv6_datagram_text  0xffff0000019f8000     4000     4000     0     0     0    2   50
+14066               ipv6_datagram_data  0xffff0000019fc000     1000     1000     0     0     0    2   30
+  325                    ram_disk_text  0xffff000002142000     7000     7000     0     0     0    2   50
+  326                    ram_disk_data  0xffff000002149000     1000     1000     0     0     0    2   30
+ 4417              loopback_frame_text  0xffff000002202000     1000     1000     0     0     0    2   50

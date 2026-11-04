@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4dh-mmap1069
+# instance: i-0e93eb1d56509f0ba   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4dh: mmap/munmap stress (graviton/scripts/mmap1069.c, cross-built), 3 x 3000 iterations, plus 4 concurrent copies; kernel area count before/after
+# start: 20261104T062810Z   end: 20261104T063123Z   rc: 1
+# script sha256: 9b4bead9c12fb7c6d166f1e9e3118c5fec8bd10f5159f1aee7dbfb5ad685d9ed
+# ---- script ----
+# | cd /boot/home && wget -q -O mmap1069 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/src/mmap1069?<PRESIGNED>' && echo '08d18d3b318b4688d0cd35f623177a2004ef836257cba84372ed16f09f393556  mmap1069' | sha256sum -c && chmod +x mmap1069
+# | echo "kernel areas before: $(listarea 1 | grep -c '^ ')"
+# | for r in 1 2 3; do s=$(date +%s); ./mmap1069 3000; echo "rc=$? wall=$(( $(date +%s) - s ))s"; done
+# | s=$(date +%s); for c in 1 2 3 4; do ./mmap1069 2000 > /tmp/mm.$c 2>&1 & done; wait; cat /tmp/mm.1 /tmp/mm.2 /tmp/mm.3 /tmp/mm.4; echo "4 concurrent wall=$(( $(date +%s) - s ))s"
+# | echo "kernel areas after: $(listarea 1 | grep -c '^ ')"
+# | grep -ciE "panic|page fault" /var/log/syslog
+# ---- raw output ----
+mmap1069: OK
+kernel areas before: 390
+mmap1069: PASS (3000 iterations)
+rc=0 wall=46s
+mmap1069: PASS (3000 iterations)
+rc=0 wall=46s
+mmap1069: PASS (3000 iterations)
+rc=0 wall=48s
+mmap1069: PASS (2000 iterations)
+mmap1069: PASS (2000 iterations)
+mmap1069: PASS (2000 iterations)
+mmap1069: PASS (2000 iterations)
+4 concurrent wall=42s
+kernel areas after: 390
+0
+failed to run commands: exit status 1

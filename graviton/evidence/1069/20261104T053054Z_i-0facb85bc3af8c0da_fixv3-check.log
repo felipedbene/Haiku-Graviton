@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv3-check
+# instance: i-0facb85bc3af8c0da   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: kernel checksum and physical map area presence
+# start: 20261104T053054Z   end: 20261104T053105Z   rc: 0
+# script sha256: a5152689c8f2a5f5e3801b90c34c698435ddf9a90fe32932245cbd9e45e07a9b
+# ---- script ----
+# | sha256sum /boot/system/kernel_arm64; echo "physical map area count: $(listarea 1 | grep -c 'physical map area')"
+# ---- raw output ----
+c1de2ed518bf5b5055816efc95f51973cb32b077161ca2ff16e6664f3a2af945  /boot/system/kernel_arm64
+physical map area count: 1

@@ -1,0 +1,37 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-fixv3
+# instance: i-012c888402e0ab6ba   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical haiku.hpkg with kernel_arm64.fix1069v3; everything else stays canonical's. A fresh launch of an image of this box boots it (method of #898/#933/#1027)
+# start: 20261104T053808Z   end: 20261104T053913Z   rc: 0
+# script sha256: fd2a48b10717a2557d3f797e63c180389c4c333f7907cc4eb1b540d96209b16a
+# ---- script ----
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O kernel_arm64.fix1069v3 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/out/kernel_arm64.fix1069v3?<PRESIGNED>'
+# | echo '1dbd045697772e0ef2d52209f3114989eabefbd3066877437ec8bcf04452c4a5  kernel_arm64.fix1069v3' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | sha256sum x/kernel_arm64
+# | cat kernel_arm64.fix1069v3 > x/kernel_arm64
+# | sha256sum x/kernel_arm64
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# | 
+# ---- raw output ----
+[system] Done.
+kernel_arm64.fix1069v3: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+1dbd045697772e0ef2d52209f3114989eabefbd3066877437ec8bcf04452c4a5  x/kernel_arm64
+----- Package Info ----------------
+header size:                     80
+heap size:                 20507843
+TOC size:                    324054
+package attributes size:       1100
+total size:                20507923
+-----------------------------------
+-rw-r--r-- 1 baron root 20507923 Nov  4 05:39 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+ec400a2aa02aa5d4a3ef81fe76c1803b2e28852306e498a2861e475566773542  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

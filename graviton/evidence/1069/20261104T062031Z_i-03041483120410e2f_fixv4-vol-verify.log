@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv4-vol-verify
+# instance: i-03041483120410e2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv4: unmount the ext2 data volume, mount it again and md5 every file from disk, unmount; dump the volume's first 256 MiB and upload it for the Linux check
+# start: 20261104T062031Z   end: 20261104T062042Z   rc: 0
+# script sha256: 3d6db1998d1e2bdb2b384ad99ce478dbb4080ff509e2ab0120f51acadb951522
+# ---- script ----
+# | cd /boot/home/t1069v
+# | sh ebsvol1069.sh unmount /v1069
+# | sh ebsvol1069.sh verify /dev/disk/nvme/1/raw /v1069 ext2
+# | sh ebsvol1069.sh unmount /v1069
+# | sh ebsvol1069.sh dump /dev/disk/nvme/1/raw /boot/home/t1069v/vol.img
+# | wget -q --method=PUT --body-file=/boot/home/t1069v/vol.img -O /dev/null 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/bugfix/R/up/vol-fixv4.img?<PRESIGNED>' && echo uploaded
+# | rm -f /boot/home/t1069v/vol.img
+# ---- raw output ----
+unmount /v1069 rc=0
+05f30910592f99ac5cc4dabcfd2126a2  /v1069/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /v1069/lin-small
+h-2b: OK
+h-3b: OK
+h-4k: OK
+h-1m: OK
+verify rc=0
+lock failures logged during this phase: 0
+unmount /v1069 rc=0
+268435456 bytes (268 MB, 256 MiB) copied, 1.04956 s, 256 MB/s
+f80d7b9fd10ccbc50a58cb4facc5a580b5892068021f8391957dfbdcf79506e1  /boot/home/t1069v/vol.img
+uploaded

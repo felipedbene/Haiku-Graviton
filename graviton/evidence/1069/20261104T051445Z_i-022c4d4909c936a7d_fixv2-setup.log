@@ -1,0 +1,102 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv2-setup
+# instance: i-022c4d4909c936a7d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv2: kernel checksum, kernel area list (physical map area?), boot-log physmap lines; test images, repro script and mmap1069.c (sha256 checked); diskimage register
+# start: 20261104T051445Z   end: 20261104T051508Z   rc: 0
+# script sha256: 5ce5e2f88d755c53c04602ccb07680636eefd1d483e319a1ff8a0d41379bb50c
+# ---- script ----
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64
+# | echo "--- kernel areas: physical map / uart / overflow"
+# | listarea 1 | grep -E "physical map|uart map|overflow"
+# | echo "physical map area count: $(listarea 1 | grep -c 'physical map area')"
+# | echo "kernel areas total: $(listarea 1 | grep -c '^ ')"
+# | echo "--- boot log physmap lines"
+# | grep -E "reserve_boot_loader_ranges|failed to create the|post_area" /var/log/syslog | head
+# | echo "--- highest kernel area bases (sorted)"
+# | listarea 1 | awk '$0 ~ /0xffff/ {for(i=1;i<=NF;i++) if ($i ~ /^0xffff/) print $i, $0}' | sort | tail -5 | cut -c1-120
+# | pkgman install -y wget 2>&1 | tail -1
+# | rm -rf /boot/home/t1069 && mkdir -p /boot/home/t1069 && cd /boot/home/t1069
+# | wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/img/fat.img?<PRESIGNED>'
+# | wget -q -O ext2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/img/ext2.img?<PRESIGNED>'
+# | wget -q -O diskimage1027.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/src/diskimage1027.sh?<PRESIGNED>'
+# | wget -q -O mmap1069.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/src/mmap1069.c?<PRESIGNED>'
+# | printf '%s\n' '8cace9b744f0cb3d1c2f15662cbf647f334ea5c9bff57584b554fcc48543ce4b  fat.img' 'cf5c59c3361a6d7d612496f18c26ee8d4c47f05d7b0040271798d12d098d1b58  ext2.img' '2567b4ff3cf0dce0fce99756bc4fe4793f2cb859ffe220657e422806471fb358  diskimage1027.sh' '16623d9720c40d3b3694e9ed1d644cd61022836143dfbe9ad376a9bdeae98e9d  mmap1069.c' | sha256sum -c
+# | gcc -O2 -Wall -o mmap1069 mmap1069.c; echo "gcc rc=$?"
+# | sh diskimage1027.sh register /boot/home/t1069/fat.img /boot/home/t1069/ext2.img
+# | echo "lock failures so far: $(grep -c 'failed to lock memory' /var/log/syslog)"
+# | true
+# ---- raw output ----
+Haiku ip-10-128-5-81.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 05:06:53 arm64 other Haiku
+c1de2ed518bf5b5055816efc95f51973cb32b077161ca2ff16e6664f3a2af945  /boot/system/kernel_arm64
+--- kernel areas: physical map / uart / overflow
+    2              debug uart map area  0xffff00000268a000     1000        0     0     0     0    1   10
+    1                physical map area  0xffffff0000000000 8000000000        0     0     0     0    1   10
+  119              overflow protection  0xfffffffffffff000     1000        0     0     0     0    0    0
+physical map area count: 1
+kernel areas total: 356
+--- boot log physmap lines
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff0040000000, 946012160
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff0078730000, 55377920
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff007bfe0000, 67239936
+KERN: reserve_boot_loader_ranges(): Skipping range: 0xffffff0400000000, 15804137472
+KERN: arch_vm_translation_map_init_post_area
+KERN: arch_vm_translation_map_init_post_area
+--- highest kernel area bases (sorted)
+0xffff0000deadb000   122                freed heap memory  0xffff0000deadb000    40000        0     0     0     0    0  
+0xffffbeefdeadb000   123                freed heap memory  0xffffbeefdeadb000    40000        0     0     0     0    0  
+0xffffccccccccc000   121        uninitialized heap memory  0xffffccccccccc000    40000        0     0     0     0    0  
+0xffffff0000000000     1                physical map area  0xffffff0000000000 8000000000        0     0     0     0    1
+0xfffffffffffff000   119              overflow protection  0xfffffffffffff000     1000        0     0     0     0    0  
+Validating checksum for DeBeOS...done.
+fat.img: OK
+ext2.img: OK
+diskimage1027.sh: OK
+mmap1069.c: OK
+gcc rc=127
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
+Registered file as disk device "/dev/disk/virtual/files/4/raw" with ID 4.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1069/fat.img           /dev/disk/virtual/files/3/raw
+     4  /boot/home/t1069/ext2.img          /dev/disk/virtual/files/4/raw
+lock failures so far: 0
++ uname -a
++ sha256sum /boot/system/kernel_arm64
++ echo '--- kernel areas: physical map / uart / overflow'
++ listarea 1
++ grep -E 'physical map|uart map|overflow'
+++ listarea 1
+++ grep -c 'physical map area'
++ echo 'physical map area count: 1'
+++ listarea 1
+++ grep -c '^ '
++ echo 'kernel areas total: 356'
++ echo '--- boot log physmap lines'
++ grep -E 'reserve_boot_loader_ranges|failed to create the|post_area' /var/log/syslog
++ head
++ echo '--- highest kernel area bases (sorted)'
++ listarea 1
++ awk '$0 ~ /0xffff/ {for(i=1;i<=NF;i++) if ($i ~ /^0xffff/) print $i, $0}'
++ sort
++ tail -5
++ cut -c1-120
++ pkgman install -y wget
++ tail -1
++ rm -rf /boot/home/t1069
++ mkdir -p /boot/home/t1069
++ cd /boot/home/t1069
++ wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/img/fat.img?<PRESIGNED>'
++ wget -q -O ext2.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/img/ext2.img?<PRESIGNED>'
++ wget -q -O diskimage1027.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/src/diskimage1027.sh?<PRESIGNED>'
++ wget -q -O mmap1069.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/R/src/mmap1069.c?<PRESIGNED>'
++ printf '%s\n' '8cace9b744f0cb3d1c2f15662cbf647f334ea5c9bff57584b554fcc48543ce4b  fat.img' 'cf5c59c3361a6d7d612496f18c26ee8d4c47f05d7b0040271798d12d098d1b58  ext2.img' '2567b4ff3cf0dce0fce99756bc4fe4793f2cb859ffe220657e422806471fb358  diskimage1027.sh' '16623d9720c40d3b3694e9ed1d644cd61022836143dfbe9ad376a9bdeae98e9d  mmap1069.c'
++ sha256sum -c
++ gcc -O2 -Wall -o mmap1069 mmap1069.c
+/tmp/run-86631-8fddf7.sh: line 19: gcc: command not found
++ echo 'gcc rc=127'
++ sh diskimage1027.sh register /boot/home/t1069/fat.img /boot/home/t1069/ext2.img
+++ grep -c 'failed to lock memory' /var/log/syslog
++ echo 'lock failures so far: 0'
++ true

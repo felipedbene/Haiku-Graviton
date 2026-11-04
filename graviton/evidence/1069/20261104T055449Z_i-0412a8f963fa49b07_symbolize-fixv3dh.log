@@ -1,0 +1,23 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: symbolize-fixv3dh
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: symbolize the fixv3dh (debug heap) boot panic stack with the v3 kernel's symbols
+# start: 20261104T055449Z   end: 20261104T055500Z   rc: 0
+# script sha256: 6e298103284c81bf9a3372d6370f7e06fc28529a7dcd89334169c261defca65b
+# ---- script ----
+# | cd /opt/t/out
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | ${X}readelf -lW kernel_arm64.fix1069v3 | grep LOAD | head -2
+# | for a in ffff00000016cc58 ffff00000018f92c ffff000000192df4 ffff000000159ec4 ffff000000163eac ffff000000164994 ffff0000000ecee0 ffff0000000ed9a8 ffff000000164c64; do echo "$a $(${X}addr2line -f -C -e kernel_arm64.fix1069v3 0x$a | head -1)"; done
+# ---- raw output ----
+  LOAD           0x000000 0xffff000000000000 0xffff000000000000 0x1cb89c 0x1cb89c R E 0x10000
+  LOAD           0x1cc000 0xffff0000001dc000 0xffff0000001dc000 0x022bd0 0x0b2d38 RW  0x10000
+ffff00000016cc58 vm_page_allocate_page
+ffff00000018f92c VMSAv8TranslationMap::GetOrMakeTable(unsigned long, int, int, vm_page_reservation*) [clone .localalias]
+ffff000000192df4 VMSAv8TranslationMap::Map(unsigned long, unsigned long, unsigned int, unsigned int, vm_page_reservation*) [clone .localalias]
+ffff000000159ec4 map_page(VMArea*, vm_page*, unsigned long, unsigned int, vm_page_reservation*)
+ffff000000163eac vm_create_anonymous_area.localalias
+ffff000000164994 create_area@@KERNEL_BASE
+ffff0000000ecee0 debug_heap_init_post_area()
+ffff0000000ed9a8 heap_init_post_area
+ffff000000164c64 vm_init

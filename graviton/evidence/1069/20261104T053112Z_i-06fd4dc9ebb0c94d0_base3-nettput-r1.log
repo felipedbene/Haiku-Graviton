@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base3-nettput-r1
+# instance: i-06fd4dc9ebb0c94d0   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base3: ENA bulk TCP throughput rep 1 against nettput-peer.py on the builder 10.128.6.143:5307 (same AZ), 1 GiB transmit then receive, MTU as booted
+# start: 20261104T053112Z   end: 20261104T053123Z   rc: 0
+# script sha256: c2883ca770f3412bb0d28632c743f3f025d2837555a4008cb652241645c3fbb9
+# ---- script ----
+# | ifconfig /dev/net/ena/0 | grep -E "MTU|inet " | head -2
+# | nettput -c 10.128.6.143 -p 5307 -n 1G -L tx 2>&1 | grep -E "throughput|cost per MiB|elapsed"
+# | nettput -c 10.128.6.143 -p 5307 -n 1G -r -L rx 2>&1 | grep -E "throughput|cost per MiB|elapsed"
+# ---- raw output ----
+	inet addr: 10.128.7.75, Bcast: 10.128.7.255, Mask: 255.255.252.0
+	MTU: 9001, Metric: 0, up broadcast link auto-configured
+  elapsed         : 1.089 s
+  throughput      : 7885.4 Mbit/s (940.0 MiB/s)
+  cost per MiB    : 1660 us of cpu
+  elapsed         : 0.989 s
+  throughput      : 8684.0 Mbit/s (1035.2 MiB/s)
+  cost per MiB    : 2019 us of cpu

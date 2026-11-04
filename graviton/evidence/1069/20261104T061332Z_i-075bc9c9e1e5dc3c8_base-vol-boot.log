@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-vol-boot
+# instance: i-075bc9c9e1e5dc3c8   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base: the same small writes on the BFS boot volume (nvme/0), synced, with the lock failures logged meanwhile
+# start: 20261104T061332Z   end: 20261104T061414Z   rc: 0
+# script sha256: 3ec8beecb85834988377ec134713c3ed6e4352980f55464c245e9ba53d106242
+# ---- script ----
+# | cd /boot/home/t1069v
+# | sh ebsvol1069.sh boot
+# ---- raw output ----
+401b30e3b8b5d629635a5c613cdb7919  1/h-2b
+401b30e3b8b5d629635a5c613cdb7919  2/h-2b
+401b30e3b8b5d629635a5c613cdb7919  3/h-2b
+401b30e3b8b5d629635a5c613cdb7919  4/h-2b
+401b30e3b8b5d629635a5c613cdb7919  5/h-2b
+401b30e3b8b5d629635a5c613cdb7919  6/h-2b
+boot volume: lock failures logged while 32 small files were synced: 0

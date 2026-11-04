@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv3-area-placement
+# instance: i-027eac8caa864d08d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv3 (after the regression runs): every kernel area whose base lies above the old KERNEL_TOP, and the 8 highest below it
+# start: 20261104T060700Z   end: 20261104T060711Z   rc: 0
+# script sha256: bf9a0dfa1be3392cf9516309223526ddc58a92b8bc61bfde72d0708e7e61814f
+# ---- script ----
+# | listarea 1 | awk '{for(i=1;i<=NF;i++) if ($i ~ /^0xffff[0-9a-f]+$/) {print $i, $0; break}}' | sort > /tmp/a.txt
+# | echo "above 0xffff007fffffffff:"; awk '$1 > "0xffff007fffffffff"' /tmp/a.txt | cut -c1-110
+# | echo "highest below:"; awk '$1 <= "0xffff007fffffffff"' /tmp/a.txt | tail -8 | cut -c1-110
+# ---- raw output ----
+above 0xffff007fffffffff:
+0xffffbeefdeadb000   123                freed heap memory  0xffffbeefdeadb000    40000        0     0     0   
+0xffffccccccccc000   121        uninitialized heap memory  0xffffccccccccc000    40000        0     0     0   
+0xffffff0000000000     1                physical map area  0xffffff0000000000 8000000000        0     0     0 
+0xfffffffffffff000   119              overflow protection  0xfffffffffffff000     1000        0     0     0   
+highest below:
+0xffff0000deab7000 13404                    cached kstack  0xffff0000deab7000     5000     4000     0     0   
+0xffff0000deabc000 13405                    cached kstack  0xffff0000deabc000     5000     4000     0     0   
+0xffff0000deac1000 13406                    cached kstack  0xffff0000deac1000     5000     4000     0     0   
+0xffff0000deac6000 13407                    cached kstack  0xffff0000deac6000     5000     4000     0     0   
+0xffff0000deacb000 13408                    cached kstack  0xffff0000deacb000     5000     4000     0     0   
+0xffff0000dead0000 13409                    cached kstack  0xffff0000dead0000     5000     4000     0     0   
+0xffff0000dead5000 112588                       dma buffer  0xffff0000dead5000     4000     4000     0     0  
+0xffff0000deadb000   122                freed heap memory  0xffff0000deadb000    40000        0     0     0   

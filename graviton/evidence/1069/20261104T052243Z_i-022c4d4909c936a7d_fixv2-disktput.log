@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fixv2-disktput
+# instance: i-022c4d4909c936a7d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm fixv2: disktput through BFS on the root EBS volume: 1 GiB file; seqwrite 1M x4 (cached), then O_NOCACHE seqread 256K x1/x8, randread 4K x8, randwrite 4K x8, 15 s per cell, 3 reps interleaved
+# start: 20261104T052243Z   end: 20261104T052650Z   rc: 0
+# script sha256: 69850c07142d7e7430bf793530b273123bbcbc7526408b4c02a200b89d2ef38a
+# ---- script ----
+# | cd /boot/home && rm -f bench.dat
+# | F=/boot/home/bench.dat
+# | disktput -f $F -m seqwrite -b 1M -t 4 -n 1G -s 1G -S -J -L init 2>&1 | grep -E "^DISKTPUT|throughput"
+# | for r in 1 2 3; do
+# |   for c in "seqread 256K 1" "seqread 256K 8" "randread 4K 8" "randwrite 4K 8"; do
+# |     set -- $c
+# |     disktput -f $F -m $1 -b $2 -t $3 -T 15 -s 1G -D -J -L "$1-$2-t$3-r$r" 2>&1 | grep "^DISKTPUT"
+# |   done
+# |   disktput -f $F -m seqwrite -b 1M -t 4 -T 15 -s 1G -J -L "seqwrite-1M-t4-cached-r$r" 2>&1 | grep "^DISKTPUT"
+# | done
+# | rm -f $F
+# ---- raw output ----
+  throughput      : 109.6 MiB/s (919.1 Mbit/s)
+DISKTPUT	seqwrite	1048576	4	cached	109.56	110	12214	598	46514	1508	0	3827507
+DISKTPUT	seqread	262144	1	nocache	16.69	67	14975	18361	42688	585	0	101652
+DISKTPUT	seqread	262144	8	nocache	133.37	533	14987	10019	45377	393	0	140757
+DISKTPUT	randread	4096	8	nocache	12.50	3199	2500	2664	3341	18623	0	5358
+DISKTPUT	randwrite	4096	8	nocache	8.28	2120	3773	3706	6338	10022	0	7320
+DISKTPUT	seqwrite	1048576	4	cached	132.85	133	30085	9543	9887	1335	0	13092786
+DISKTPUT	seqread	262144	1	nocache	130.45	522	1916	1998	2228	127	0	4001
+DISKTPUT	seqread	262144	8	nocache	125.13	501	15973	15990	16219	402	0	29348
+DISKTPUT	randread	4096	8	nocache	12.50	3199	2500	2665	3363	18395	0	5337
+DISKTPUT	randwrite	4096	8	nocache	8.42	2156	3710	3723	5584	12378	0	7362
+DISKTPUT	seqwrite	1048576	4	cached	205.94	206	19407	10046	247288	1723	0	1854122
+DISKTPUT	seqread	262144	1	nocache	125.41	502	1993	1999	2194	128	0	3166
+DISKTPUT	seqread	262144	8	nocache	125.13	501	15973	15990	16222	393	0	28860
+DISKTPUT	randread	4096	8	nocache	12.50	3199	2500	2665	3009	22546	0	5331
+DISKTPUT	randwrite	4096	8	nocache	8.33	2132	3753	3702	6344	10090	0	7379
+DISKTPUT	seqwrite	1048576	4	cached	141.48	141	28244	9820	13326	1371	0	11966337

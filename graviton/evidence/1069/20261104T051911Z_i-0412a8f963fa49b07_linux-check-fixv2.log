@@ -1,0 +1,44 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-check-fixv2
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux cross-check of the fixv2 images: fsck, then md5 of every file through Linux vfat/ext2 (compare with Haiku's)
+# start: 20261104T051911Z   end: 20261104T051928Z   rc: 0
+# script sha256: 11b6290864326c79fac8858fb5efaf6c677524fde654ee3fb286e9842f798717
+# ---- script ----
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/R
+# | mkdir -p /opt/chk && cd /opt/chk && rm -rf ./* && mkdir m
+# | aws s3 cp --quiet $B/up/fat-fixv2.img fat.img && aws s3 cp --quiet $B/up/ext2-fixv2.img ext2.img && sha256sum fat.img ext2.img
+# | fsck.vfat -n fat.img; echo "fsck.vfat rc=$?"
+# | e2fsck -fn ext2.img; echo "e2fsck rc=$?"
+# | mount -t vfat -o loop,ro fat.img m && (cd m && md5sum lin-1m lin-small h-2b h-4k h-1m) && umount m
+# | mount -t ext2 -o loop,ro ext2.img m && (cd m && md5sum lin-1m lin-small h-2b h-4k h-1m) && umount m
+# | true
+# ---- raw output ----
+4c1c2e4125a01c3fe3af3752f95b2732d123e16c57f3319d4f5956d6f7679a99  fat.img
+8a61b1a0222813f619989822f6f7aca435dbb36c62613455408e9de504cdef4f  ext2.img
+fsck.fat 4.2 (2021-01-31)
+fat.img: 8 files, 4109/516190 clusters
+fsck.vfat rc=0
+Pass 1: Checking inodes, blocks, and sizes
+Inode 16, i_blocks is 128, should be 2056.  Fix? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+
+ext2.img: ********** WARNING: Filesystem still has errors **********
+
+ext2.img: 16/65536 files (6.3% non-contiguous), 4657/65536 blocks
+e2fsck rc=4
+05f30910592f99ac5cc4dabcfd2126a2  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+7836e7513ffaf512c40343b5ec8382c5  h-1m
+05f30910592f99ac5cc4dabcfd2126a2  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+ce94ca44f102ae4ad86686429884ccfd  h-1m
+e2fsck 1.47.0 (5-Feb-2023)

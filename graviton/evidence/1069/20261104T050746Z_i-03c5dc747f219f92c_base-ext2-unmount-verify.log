@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-ext2-unmount-verify
+# instance: i-03c5dc747f219f92c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base: unmount ext2, then mount again and md5 every file from disk (cache gone with the unmount), unmount
+# start: 20261104T050746Z   end: 20261104T050757Z   rc: 0
+# script sha256: 44b847f34640341c6f5431efc3ec01253440cf22f68ebdff01e732994ee58c17
+# ---- script ----
+# | cd /boot/home/t1069
+# | sh diskimage1027.sh unmount /e1069
+# | sh diskimage1027.sh verify /dev/disk/virtual/files/4/raw /e1069 ext2
+# | sh diskimage1027.sh unmount /e1069
+# | echo "lock failures this boot so far: $(grep -c 'failed to lock memory' /var/log/syslog)"
+# | true
+# ---- raw output ----
+unmount /e1069 rc=0
+05f30910592f99ac5cc4dabcfd2126a2  /e1069/lin-1m
+h-2b: FAILED open or read
+h-4k: FAILED open or read
+h-1m: OK
+verify rc=1
+unmount /e1069 rc=0
+lock failures this boot so far: 450
+md5sum: /e1069/lin-small: Bad address
+md5sum: h-2b: Bad address
+md5sum: h-4k: Bad address
+md5sum: WARNING: 2 listed files could not be read

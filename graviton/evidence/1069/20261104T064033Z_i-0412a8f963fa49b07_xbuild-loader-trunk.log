@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-loader-trunk
+# instance: i-0412a8f963fa49b07   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: control: does haiku_loader.efi build on unpatched trunk in this builder tree? (zlib.h missing in the previous run)
+# start: 20261104T064033Z   end: 20261104T064044Z   rc: 0
+# script sha256: 71cfe12613222c1710f9ac928bb67d9df76d6d4d9665d4c4e4761f785b6d0a46
+# ---- script ----
+# | cd /opt/t/hg/generated && git -C .. checkout -q -f a9954f424a && git -C .. status --short | head -3
+# | jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 haiku_loader.efi > /opt/t/out/jam-loader-trunk.log 2>&1; echo "jam rc=$?"
+# | grep -E "error:" /opt/t/out/jam-loader-trunk.log | head -3
+# ---- raw output ----
+jam rc=1
+../src/system/boot/loader/file_systems/tarfs/tarfs.cpp:21:10: fatal error: zlib.h: No such file or directory
+../src/kits/support/ZlibCompressionAlgorithm.cpp:15:10: fatal error: zlib.h: No such file or directory
+/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/kits/support/ZlibCompressionAlgorithm.cpp" -Os -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -fno-rtti -include ../headers/private/kernel/util/kernel_cpp.h -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -DBOOT_ARCHIVE_IMAGE_OFFSET=192 -fpic -fno-stack-protector -fPIC -fshort-wchar -Wno-error=unused-variable -Wno-error=main -../src/system/boot/platform/generic/video_splash.cpp:23:10: fatal error: zlib.h: No such file or directory
