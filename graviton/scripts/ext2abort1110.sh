@@ -5,8 +5,10 @@
 #
 # The data volume is a second EBS volume with four file systems made by Linux mke2fs
 # (graviton/evidence/1110/*_seed.log): p1 "e1k" (ext2, 1 KiB blocks, 4 groups), p2 "x1k"
-# (ext4, 1 KiB blocks, flex_bg, 8 groups), p3 "x4k" (ext4, 4 KiB blocks, flex_bg and
-# uninit_bg, 4 groups) and p4 "e4k" (ext2, 4 KiB blocks, one group: the control).
+# (ext4, 1 KiB blocks, flex_bg, 8 groups), p3 "x4k" (ext4, 4 KiB blocks, flex_bg, 4 groups)
+# and p4 "e4k" (ext2, 4 KiB blocks, one group: the control). p3 is made without uninit_bg:
+# with it, the first allocation in a BLOCK_UNINIT group overwrites that group's backup
+# superblock and the page writer panics (issue 1113), on either side of this fix.
 # On each: write until ENOSPC (the failed write aborts), mkdir (InitDirectory runs out of
 # space after the inode was allocated: abort), rm the fillers (writes the descriptor
 # blocks), unmount. Then mount again, which re-checks every group's free block count against
