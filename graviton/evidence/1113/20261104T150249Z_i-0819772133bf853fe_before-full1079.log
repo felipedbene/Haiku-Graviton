@@ -1,0 +1,218 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-full1079
+# instance: i-0819772133bf853fe   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm before: ext2full1079.sh on seed1079 (regression)
+# start: 20261104T150249Z   end: 20261104T150311Z   rc: 0
+# script sha256: 0711a5b0bcdb14838b9dc38ebede30dc10b84b03c943a6804181e0ba92c996dc
+# ---- script ----
+# | #!/bin/sh
+# | #
+# | # ext2full1079.sh -- issue 1079: write until an ext2 volume is full, on Haiku.
+# | #
+# | # The data volume is laid out as in graviton/evidence/1080/*_seed2.log: p1 "full4k" (ext2,
+# | # 4 KiB blocks), p2 "full1k" (ext2, 1 KiB blocks) and p3 "fullx" (ext4, extents), 32 MiB
+# | # each. On each: write 64 MiB until ENOSPC, ftruncate a file up to 100 MiB (also ENOSPC),
+# | # remove both and write 2 MiB again. Expected: ENOSPC and no KDL; then e2fsck -fn clean on
+# | # Linux, and "after" with the md5 printed here.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/4 ] && [ ! -e $d/5 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no 5-partition data disk"; exit 1; }
+# | dd if=/dev/urandom of=/boot/home/chunk2m bs=65536 count=32 2>/dev/null
+# | echo "chunk2m md5 $(md5sum < /boot/home/chunk2m)"
+# | n=0
+# | for l in full4k full1k fullx; do
+# | 	mkdir -p /e$l && mount -t ext2 $DD/$n /e$l || { echo "mount $l failed"; exit 1; }
+# | 	n=$((n + 1))
+# | 	cd /e$l
+# | 	echo "=== $l"; df -k . | tail -1
+# | 	dd if=/dev/urandom of=fill bs=65536 count=1000 2>&1 | tail -3; echo "dd fill rc=$?"
+# | 	ls -ls fill; df -k . | tail -1
+# | 	echo "fill md5 $(md5sum < fill)"
+# | 	truncate -s 100M big; echo "truncate up 100M rc=$?"
+# | 	ls -ls big 2>&1
+# | 	sync
+# | 	rm -f fill big; echo "rm rc=$?"
+# | 	cat /boot/home/chunk2m > after; echo "write 2M after rm rc=$?"
+# | 	ls -ls; df -k . | tail -1
+# | 	sync; cd /
+# | 	unmount /e$l; echo "unmount $l rc=$?"
+# | done
+# | sync
+# ---- raw output ----
+Haiku ip-10-128-15-254.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 14:53:54 arm64 other Haiku
+c74348868114a1aa15e543641cc08c808b9385a0ea372422abb51ab03ae04542  /boot/system/kernel_arm64
+c848da31623d11d3f1848397df3203bf10b2452af039876eaf182f20e893c44a  /boot/system/add-ons/kernel/file_systems/ext2
+chunk2m md5 a0e15874aaf76ccd36e7d9546d60d745  -
+=== full4k
+   Root Inode: 2
+463+0 records in
+462+0 records out
+30277632 bytes (30 MB, 29 MiB) copied, 4.23407 s, 7.2 MB/s
+dd fill rc=1
+29604 -rw-r--r-- 1 baron root 30277632 Nov  4 15:02 fill
+   Root Inode: 2
+fill md5 aef7c9860089a24ac37a9eb98fe6ed6c  -
+truncate up 100M rc=1
+0 -rw-r--r-- 1 baron root 0 Nov  4 15:02 big
+rm rc=0
+write 2M after rm rc=0
+total 3096
+2052 -rw-r--r-- 1 baron root 2097152 Nov  4 15:02 after
+1028 -rw-rw-rw- 1 baron root 1048576 Nov  4 14:52 lin-1m
+  16 drwx------ 2 baron root   16384 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount full4k rc=0
+=== full1k
+   Root Inode: 2
+456+0 records in
+455+0 records out
+29818880 bytes (30 MB, 28 MiB) copied, 4.68557 s, 6.4 MB/s
+dd fill rc=1
+29235 -rw-r--r-- 1 baron root 29818880 Nov  4 15:03 fill
+   Root Inode: 2
+fill md5 055e7266f20210d0f7f02aafeb1a5779  -
+truncate up 100M rc=1
+0 -rw-r--r-- 1 baron root 0 Nov  4 15:03 big
+rm rc=0
+write 2M after rm rc=0
+total 3098
+2057 -rw-r--r-- 1 baron root 2097152 Nov  4 15:03 after
+1029 -rw-rw-rw- 1 baron root 1048576 Nov  4 14:52 lin-1m
+  12 drwx------ 2 baron root   12288 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount full1k rc=0
+=== fullx
+   Root Inode: 2
+464+0 records in
+463+0 records out
+30343168 bytes (30 MB, 29 MiB) copied, 3.54818 s, 8.6 MB/s
+dd fill rc=1
+29632 -rw-r--r-- 1 baron root 30343168 Nov  4 15:03 fill
+   Root Inode: 2
+fill md5 645b2015975908a51e19fb60d723e060  -
+truncate up 100M rc=1
+0 -rw-r--r-- 1 baron root 0 Nov  4 15:03 big
+rm rc=0
+write 2M after rm rc=0
+total 3088
+2048 -rw-r--r-- 1 baron root 2097152 Nov  4 15:03 after
+1024 -rw-rw-rw- 1 baron root 1048576 Nov  4 14:52 lin-1m
+  16 drwx------ 2 baron root   16384 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount fullx rc=0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/4 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/4 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/2/4 ']'
++ '[' '!' -e /dev/disk/nvme/2/5 ']'
++ DD=/dev/disk/nvme/2
++ '[' -n /dev/disk/nvme/2 ']'
++ dd if=/dev/urandom of=/boot/home/chunk2m bs=65536 count=32
+++ md5sum
++ echo 'chunk2m md5 a0e15874aaf76ccd36e7d9546d60d745  -'
++ n=0
++ for l in full4k full1k fullx
++ mkdir -p /efull4k
++ mount -t ext2 /dev/disk/nvme/2/0 /efull4k
++ n=1
++ cd /efull4k
++ echo '=== full4k'
++ df -k .
++ tail -1
++ dd if=/dev/urandom of=fill bs=65536 count=1000
++ tail -3
++ echo 'dd fill rc=1'
++ ls -ls fill
++ df -k .
++ tail -1
+++ md5sum
++ echo 'fill md5 aef7c9860089a24ac37a9eb98fe6ed6c  -'
++ truncate -s 100M big
+truncate: failed to truncate 'big' at 104857600 bytes: No space left on device
++ echo 'truncate up 100M rc=1'
++ ls -ls big
++ sync
++ rm -f fill big
++ echo 'rm rc=0'
++ cat /boot/home/chunk2m
++ echo 'write 2M after rm rc=0'
++ ls -ls
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /efull4k
++ echo 'unmount full4k rc=0'
++ for l in full4k full1k fullx
++ mkdir -p /efull1k
++ mount -t ext2 /dev/disk/nvme/2/1 /efull1k
++ n=2
++ cd /efull1k
++ echo '=== full1k'
++ df -k .
++ tail -1
++ dd if=/dev/urandom of=fill bs=65536 count=1000
++ tail -3
++ echo 'dd fill rc=1'
++ ls -ls fill
++ df -k .
++ tail -1
+++ md5sum
++ echo 'fill md5 055e7266f20210d0f7f02aafeb1a5779  -'
++ truncate -s 100M big
+truncate: failed to truncate 'big' at 104857600 bytes: No space left on device
++ echo 'truncate up 100M rc=1'
++ ls -ls big
++ sync
++ rm -f fill big
++ echo 'rm rc=0'
++ cat /boot/home/chunk2m
++ echo 'write 2M after rm rc=0'
++ ls -ls
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /efull1k
++ echo 'unmount full1k rc=0'
++ for l in full4k full1k fullx
++ mkdir -p /efullx
++ mount -t ext2 /dev/disk/nvme/2/2 /efullx
++ n=3
++ cd /efullx
++ echo '=== fullx'
++ df -k .
++ tail -1
++ dd if=/dev/urandom of=fill bs=65536 count=1000
++ tail -3
++ echo 'dd fill rc=1'
++ ls -ls fill
++ df -k .
++ tail -1
+++ md5sum
++ echo 'fill md5 645b2015975908a51e19fb60d723e060  -'
++ truncate -s 100M big
+truncate: failed to truncate 'big' at 104857600 bytes: No space left on device
++ echo 'truncate up 100M rc=1'
++ ls -ls big
++ sync
++ rm -f fill big
++ echo 'rm rc=0'
++ cat /boot/home/chunk2m
++ echo 'write 2M after rm rc=0'
++ ls -ls
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /efullx
++ echo 'unmount fullx rc=0'
++ sync

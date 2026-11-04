@@ -1,0 +1,613 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: backup-compare
+# instance: i-04f9ec8e98b9e956b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: byte compare of every backup superblock/GDT/reserved GDT region against the pristine seed, both arms
+# start: 20261104T150643Z   end: 20261104T150700Z   rc: 0
+# script sha256: cb6448fa253b9527333fc99c52a3a60fc14d27d7995e9e51dcc0bb7643d252f6
+# ---- script ----
+# | # Did Haiku write over any superblock backup or backup descriptor table? Neither Haiku's ext2 nor this
+# | # test ever writes them on purpose, so on each seed1113 file system the blocks of every backup group's
+# | # superblock, descriptors and reserved descriptors must be byte-identical to a pristine copy of the seed
+# | # (vol-0c4ea62a23cc31a3b, made from snap-0c2b07ad31e741948). Also: e2fsck -fn -b <backup> on the pristine
+# | # copy, to see what a backup-superblock check reports on a volume Haiku never touched.
+# | #  arm before: vol-0c996ba1587777183   arm after: vol-087d689cd532b46e4
+# | set -x
+# | sleep 5
+# | dev() { D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) '$9 == v { print $11 }' | sed 's|.*/||'); echo /dev/$D; }
+# | S=$(dev vol-0c4ea62a23cc31a3b); lsblk $S || exit 1
+# | for n in 1 2 3 4; do
+# | 	P=${S}p$n; bs=$(dumpe2fs -h $P 2>/dev/null | awk '/^Block size/ { print $3 }')
+# | 	for b in $(dumpe2fs $P 2>/dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'); do
+# | 		e2fsck -fn -b $b -B $bs $P > /tmp/b.out 2>&1; echo "pristine p$n e2fsck -b $b rc=$?: $(grep -iE 'corrupt|bad magic' /tmp/b.out | head -1)"
+# | 	done
+# | done
+# | for arm in before:vol-0c996ba1587777183 after:vol-087d689cd532b46e4; do
+# | 	a=${arm%%:*}; D=$(dev ${arm##*:}); echo "##### arm $a $D"
+# | 	for n in 1 2 3 4; do
+# | 		P=${S}p$n; Q=${D}p$n; bs=$(dumpe2fs -h $P 2>/dev/null | awk '/^Block size/ { print $3 }')
+# | 		rgdt=$(dumpe2fs -h $P 2>/dev/null | awk '/^Reserved GDT blocks/ { print $4 }')
+# | 		dumpe2fs $P 2>/dev/null | sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p' | while read sb gend; do
+# | 			cnt=$((gend - sb + 1 + rgdt))
+# | 			h1=$(dd if=$P bs=$bs skip=$sb count=$cnt 2>/dev/null | sha256sum | cut -c1-16)
+# | 			h2=$(dd if=$Q bs=$bs skip=$sb count=$cnt 2>/dev/null | sha256sum | cut -c1-16)
+# | 			[ "$h1" = "$h2" ] && r=identical || r=DIFFERENT
+# | 			echo "$a p$n backup group at $sb, $cnt blocks (sb + gdt + reserved gdt): $r ($h1 vs $h2)"
+# | 		done
+# | 	done
+# | done
+# ---- raw output ----
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme9n1     259:46   0    1G  0 disk 
+├─nvme9n1p1 259:47   0  400M  0 part 
+├─nvme9n1p2 259:48   0   64M  0 part 
+├─nvme9n1p3 259:49   0   64M  0 part 
+└─nvme9n1p4 259:50   0  400M  0 part 
+pristine p1 e2fsck -b 32768 rc=12: Inode 23 has corrupt extent header.  Clear inode? no
+pristine p1 e2fsck -b 98304 rc=12: Inode 23 has corrupt extent header.  Clear inode? no
+pristine p2 e2fsck -b 8193 rc=12: 
+pristine p2 e2fsck -b 24577 rc=12: 
+pristine p2 e2fsck -b 40961 rc=12: 
+pristine p2 e2fsck -b 57345 rc=12: 
+pristine p3 e2fsck -b 8193 rc=12: Inode 24 has corrupt extent header.  Clear inode? no
+pristine p3 e2fsck -b 24577 rc=12: Inode 24 has corrupt extent header.  Clear inode? no
+pristine p3 e2fsck -b 40961 rc=12: Inode 24 has corrupt extent header.  Clear inode? no
+pristine p3 e2fsck -b 57345 rc=12: Inode 24 has corrupt extent header.  Clear inode? no
+pristine p4 e2fsck -b 32768 rc=12: Inode 30 has corrupt extent header.  Clear inode? no
+pristine p4 e2fsck -b 98304 rc=12: Inode 30 has corrupt extent header.  Clear inode? no
+##### arm before /dev/nvme1n1
+before p1 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): DIFFERENT (346dbbd0d425e4b8 vs 50845dbd6b96baa2)
+before p1 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (be81c851f59ef313 vs be81c851f59ef313)
+before p2 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (2495d7a1d4435ba1 vs 84398211bea97a25)
+before p2 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (d9e893c473919ab2 vs c532e0ae30ce2c57)
+before p2 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (a43f5e90de1cad97 vs 74fc48a67cb0e8fa)
+before p2 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (96326ba0a747a1ce vs 96326ba0a747a1ce)
+before p3 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (d8470c8effe2e080 vs 2af19f74cb544303)
+before p3 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (2a77cd0b0bff775d vs 3a84e2071fbcd4da)
+before p3 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (34ed696de1a7074c vs 77906fc7725d7177)
+before p3 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (5d77e0533f47110a vs 5d77e0533f47110a)
+before p4 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): DIFFERENT (118495974a8e0ef6 vs 50845dbd6b96baa2)
+before p4 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (226aff6d26d94a0c vs 226aff6d26d94a0c)
+##### arm after /dev/nvme2n1
+after p1 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): identical (346dbbd0d425e4b8 vs 346dbbd0d425e4b8)
+after p1 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (be81c851f59ef313 vs be81c851f59ef313)
+after p2 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): identical (2495d7a1d4435ba1 vs 2495d7a1d4435ba1)
+after p2 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): identical (d9e893c473919ab2 vs d9e893c473919ab2)
+after p2 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): identical (a43f5e90de1cad97 vs a43f5e90de1cad97)
+after p2 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (96326ba0a747a1ce vs 96326ba0a747a1ce)
+after p3 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): identical (d8470c8effe2e080 vs d8470c8effe2e080)
+after p3 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): identical (2a77cd0b0bff775d vs 2a77cd0b0bff775d)
+after p3 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): identical (34ed696de1a7074c vs 34ed696de1a7074c)
+after p3 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (5d77e0533f47110a vs 5d77e0533f47110a)
+after p4 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): identical (118495974a8e0ef6 vs 118495974a8e0ef6)
+after p4 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (226aff6d26d94a0c vs 226aff6d26d94a0c)
++ sleep 5
+++ dev vol-0c4ea62a23cc31a3b
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-0c4ea62a23cc31a3b
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0c4ea62a23cc31a3b '$9 == v { print $11 }'
+++ D=nvme9n1
+++ echo /dev/nvme9n1
++ S=/dev/nvme9n1
++ lsblk /dev/nvme9n1
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p1
+++ dumpe2fs -h /dev/nvme9n1p1
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs /dev/nvme9n1p1
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 32768 -B 4096 /dev/nvme9n1p1
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p1 e2fsck -b 32768 rc=12: Inode 23 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 98304 -B 4096 /dev/nvme9n1p1
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p1 e2fsck -b 98304 rc=12: Inode 23 has corrupt extent header.  Clear inode? no'
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p2
+++ dumpe2fs -h /dev/nvme9n1p2
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs /dev/nvme9n1p2
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 8193 -B 1024 /dev/nvme9n1p2
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p2 e2fsck -b 8193 rc=12: '
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 24577 -B 1024 /dev/nvme9n1p2
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p2 e2fsck -b 24577 rc=12: '
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 40961 -B 1024 /dev/nvme9n1p2
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p2 e2fsck -b 40961 rc=12: '
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 57345 -B 1024 /dev/nvme9n1p2
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p2 e2fsck -b 57345 rc=12: '
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p3
+++ dumpe2fs -h /dev/nvme9n1p3
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs /dev/nvme9n1p3
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 8193 -B 1024 /dev/nvme9n1p3
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p3 e2fsck -b 8193 rc=12: Inode 24 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 24577 -B 1024 /dev/nvme9n1p3
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p3 e2fsck -b 24577 rc=12: Inode 24 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 40961 -B 1024 /dev/nvme9n1p3
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p3 e2fsck -b 40961 rc=12: Inode 24 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 57345 -B 1024 /dev/nvme9n1p3
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p3 e2fsck -b 57345 rc=12: Inode 24 has corrupt extent header.  Clear inode? no'
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p4
+++ dumpe2fs -h /dev/nvme9n1p4
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs /dev/nvme9n1p4
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 32768 -B 4096 /dev/nvme9n1p4
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p4 e2fsck -b 32768 rc=12: Inode 30 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 98304 -B 4096 /dev/nvme9n1p4
+++ grep -iE 'corrupt|bad magic' /tmp/b.out
+++ head -1
++ echo 'pristine p4 e2fsck -b 98304 rc=12: Inode 30 has corrupt extent header.  Clear inode? no'
++ for arm in before:vol-0c996ba1587777183 after:vol-087d689cd532b46e4
++ a=before
+++ dev vol-0c996ba1587777183
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-0c996ba1587777183
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0c996ba1587777183 '$9 == v { print $11 }'
+++ D=nvme1n1
+++ echo /dev/nvme1n1
++ D=/dev/nvme1n1
++ echo '##### arm before /dev/nvme1n1'
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p1
++ Q=/dev/nvme1n1p1
+++ dumpe2fs -h /dev/nvme9n1p1
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs -h /dev/nvme9n1p1
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=49
++ dumpe2fs /dev/nvme9n1p1
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p1 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=346dbbd0d425e4b8
+++ dd if=/dev/nvme1n1p1 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=50845dbd6b96baa2
++ '[' 346dbbd0d425e4b8 = 50845dbd6b96baa2 ']'
++ r=DIFFERENT
++ echo 'before p1 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): DIFFERENT (346dbbd0d425e4b8 vs 50845dbd6b96baa2)'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p1 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=be81c851f59ef313
+++ dd if=/dev/nvme1n1p1 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=be81c851f59ef313
++ '[' be81c851f59ef313 = be81c851f59ef313 ']'
++ r=identical
++ echo 'before p1 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (be81c851f59ef313 vs be81c851f59ef313)'
++ read sb gend
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p2
++ Q=/dev/nvme1n1p2
+++ dumpe2fs -h /dev/nvme9n1p2
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs -h /dev/nvme9n1p2
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=256
++ dumpe2fs /dev/nvme9n1p2
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=2495d7a1d4435ba1
+++ dd if=/dev/nvme1n1p2 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=84398211bea97a25
++ '[' 2495d7a1d4435ba1 = 84398211bea97a25 ']'
++ r=DIFFERENT
++ echo 'before p2 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (2495d7a1d4435ba1 vs 84398211bea97a25)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=d9e893c473919ab2
+++ dd if=/dev/nvme1n1p2 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=c532e0ae30ce2c57
++ '[' d9e893c473919ab2 = c532e0ae30ce2c57 ']'
++ r=DIFFERENT
++ echo 'before p2 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (d9e893c473919ab2 vs c532e0ae30ce2c57)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=a43f5e90de1cad97
+++ dd if=/dev/nvme1n1p2 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=74fc48a67cb0e8fa
++ '[' a43f5e90de1cad97 = 74fc48a67cb0e8fa ']'
++ r=DIFFERENT
++ echo 'before p2 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (a43f5e90de1cad97 vs 74fc48a67cb0e8fa)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=96326ba0a747a1ce
+++ dd if=/dev/nvme1n1p2 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=96326ba0a747a1ce
++ '[' 96326ba0a747a1ce = 96326ba0a747a1ce ']'
++ r=identical
++ echo 'before p2 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (96326ba0a747a1ce vs 96326ba0a747a1ce)'
++ read sb gend
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p3
++ Q=/dev/nvme1n1p3
+++ dumpe2fs -h /dev/nvme9n1p3
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs -h /dev/nvme9n1p3
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=256
++ dumpe2fs /dev/nvme9n1p3
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=d8470c8effe2e080
+++ dd if=/dev/nvme1n1p3 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=2af19f74cb544303
++ '[' d8470c8effe2e080 = 2af19f74cb544303 ']'
++ r=DIFFERENT
++ echo 'before p3 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (d8470c8effe2e080 vs 2af19f74cb544303)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=2a77cd0b0bff775d
+++ dd if=/dev/nvme1n1p3 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=3a84e2071fbcd4da
++ '[' 2a77cd0b0bff775d = 3a84e2071fbcd4da ']'
++ r=DIFFERENT
++ echo 'before p3 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (2a77cd0b0bff775d vs 3a84e2071fbcd4da)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=34ed696de1a7074c
+++ dd if=/dev/nvme1n1p3 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=77906fc7725d7177
++ '[' 34ed696de1a7074c = 77906fc7725d7177 ']'
++ r=DIFFERENT
++ echo 'before p3 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): DIFFERENT (34ed696de1a7074c vs 77906fc7725d7177)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=5d77e0533f47110a
+++ dd if=/dev/nvme1n1p3 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=5d77e0533f47110a
++ '[' 5d77e0533f47110a = 5d77e0533f47110a ']'
++ r=identical
++ echo 'before p3 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (5d77e0533f47110a vs 5d77e0533f47110a)'
++ read sb gend
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p4
++ Q=/dev/nvme1n1p4
+++ dumpe2fs -h /dev/nvme9n1p4
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs -h /dev/nvme9n1p4
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=49
++ dumpe2fs /dev/nvme9n1p4
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p4 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=118495974a8e0ef6
+++ dd if=/dev/nvme1n1p4 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=50845dbd6b96baa2
++ '[' 118495974a8e0ef6 = 50845dbd6b96baa2 ']'
++ r=DIFFERENT
++ echo 'before p4 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): DIFFERENT (118495974a8e0ef6 vs 50845dbd6b96baa2)'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p4 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=226aff6d26d94a0c
+++ dd if=/dev/nvme1n1p4 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=226aff6d26d94a0c
++ '[' 226aff6d26d94a0c = 226aff6d26d94a0c ']'
++ r=identical
++ echo 'before p4 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (226aff6d26d94a0c vs 226aff6d26d94a0c)'
++ read sb gend
++ for arm in before:vol-0c996ba1587777183 after:vol-087d689cd532b46e4
++ a=after
+++ dev vol-087d689cd532b46e4
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-087d689cd532b46e4
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol087d689cd532b46e4 '$9 == v { print $11 }'
+++ D=nvme2n1
+++ echo /dev/nvme2n1
++ D=/dev/nvme2n1
++ echo '##### arm after /dev/nvme2n1'
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p1
++ Q=/dev/nvme2n1p1
+++ dumpe2fs -h /dev/nvme9n1p1
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs -h /dev/nvme9n1p1
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=49
++ dumpe2fs /dev/nvme9n1p1
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p1 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=346dbbd0d425e4b8
+++ dd if=/dev/nvme2n1p1 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=346dbbd0d425e4b8
++ '[' 346dbbd0d425e4b8 = 346dbbd0d425e4b8 ']'
++ r=identical
++ echo 'after p1 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): identical (346dbbd0d425e4b8 vs 346dbbd0d425e4b8)'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p1 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=be81c851f59ef313
+++ dd if=/dev/nvme2n1p1 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=be81c851f59ef313
++ '[' be81c851f59ef313 = be81c851f59ef313 ']'
++ r=identical
++ echo 'after p1 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (be81c851f59ef313 vs be81c851f59ef313)'
++ read sb gend
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p2
++ Q=/dev/nvme2n1p2
+++ dumpe2fs -h /dev/nvme9n1p2
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs -h /dev/nvme9n1p2
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=256
++ dumpe2fs /dev/nvme9n1p2
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=2495d7a1d4435ba1
+++ dd if=/dev/nvme2n1p2 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=2495d7a1d4435ba1
++ '[' 2495d7a1d4435ba1 = 2495d7a1d4435ba1 ']'
++ r=identical
++ echo 'after p2 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): identical (2495d7a1d4435ba1 vs 2495d7a1d4435ba1)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=d9e893c473919ab2
+++ dd if=/dev/nvme2n1p2 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=d9e893c473919ab2
++ '[' d9e893c473919ab2 = d9e893c473919ab2 ']'
++ r=identical
++ echo 'after p2 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): identical (d9e893c473919ab2 vs d9e893c473919ab2)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=a43f5e90de1cad97
+++ dd if=/dev/nvme2n1p2 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=a43f5e90de1cad97
++ '[' a43f5e90de1cad97 = a43f5e90de1cad97 ']'
++ r=identical
++ echo 'after p2 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): identical (a43f5e90de1cad97 vs a43f5e90de1cad97)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p2 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=96326ba0a747a1ce
+++ dd if=/dev/nvme2n1p2 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=96326ba0a747a1ce
++ '[' 96326ba0a747a1ce = 96326ba0a747a1ce ']'
++ r=identical
++ echo 'after p2 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (96326ba0a747a1ce vs 96326ba0a747a1ce)'
++ read sb gend
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p3
++ Q=/dev/nvme2n1p3
+++ dumpe2fs -h /dev/nvme9n1p3
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs -h /dev/nvme9n1p3
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=256
++ dumpe2fs /dev/nvme9n1p3
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=d8470c8effe2e080
+++ dd if=/dev/nvme2n1p3 bs=1024 skip=8193 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=d8470c8effe2e080
++ '[' d8470c8effe2e080 = d8470c8effe2e080 ']'
++ r=identical
++ echo 'after p3 backup group at 8193, 258 blocks (sb + gdt + reserved gdt): identical (d8470c8effe2e080 vs d8470c8effe2e080)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=2a77cd0b0bff775d
+++ dd if=/dev/nvme2n1p3 bs=1024 skip=24577 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=2a77cd0b0bff775d
++ '[' 2a77cd0b0bff775d = 2a77cd0b0bff775d ']'
++ r=identical
++ echo 'after p3 backup group at 24577, 258 blocks (sb + gdt + reserved gdt): identical (2a77cd0b0bff775d vs 2a77cd0b0bff775d)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=34ed696de1a7074c
+++ dd if=/dev/nvme2n1p3 bs=1024 skip=40961 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=34ed696de1a7074c
++ '[' 34ed696de1a7074c = 34ed696de1a7074c ']'
++ r=identical
++ echo 'after p3 backup group at 40961, 258 blocks (sb + gdt + reserved gdt): identical (34ed696de1a7074c vs 34ed696de1a7074c)'
++ read sb gend
++ cnt=258
+++ dd if=/dev/nvme9n1p3 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h1=5d77e0533f47110a
+++ dd if=/dev/nvme2n1p3 bs=1024 skip=57345 count=258
+++ sha256sum
+++ cut -c1-16
++ h2=5d77e0533f47110a
++ '[' 5d77e0533f47110a = 5d77e0533f47110a ']'
++ r=identical
++ echo 'after p3 backup group at 57345, 258 blocks (sb + gdt + reserved gdt): identical (5d77e0533f47110a vs 5d77e0533f47110a)'
++ read sb gend
++ for n in 1 2 3 4
++ P=/dev/nvme9n1p4
++ Q=/dev/nvme2n1p4
+++ dumpe2fs -h /dev/nvme9n1p4
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs -h /dev/nvme9n1p4
+++ awk '/^Reserved GDT blocks/ { print $4 }'
++ rgdt=49
++ dumpe2fs /dev/nvme9n1p4
++ sed -n 's/.*Backup superblock at \([0-9]*\), Group descriptors at \([0-9]*\)-\([0-9]*\).*/\1 \3/p'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p4 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=118495974a8e0ef6
+++ dd if=/dev/nvme2n1p4 bs=4096 skip=32768 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=118495974a8e0ef6
++ '[' 118495974a8e0ef6 = 118495974a8e0ef6 ']'
++ r=identical
++ echo 'after p4 backup group at 32768, 51 blocks (sb + gdt + reserved gdt): identical (118495974a8e0ef6 vs 118495974a8e0ef6)'
++ read sb gend
++ cnt=51
+++ dd if=/dev/nvme9n1p4 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h1=226aff6d26d94a0c
+++ dd if=/dev/nvme2n1p4 bs=4096 skip=98304 count=51
+++ sha256sum
+++ cut -c1-16
++ h2=226aff6d26d94a0c
++ '[' 226aff6d26d94a0c = 226aff6d26d94a0c ']'
++ r=identical
++ echo 'after p4 backup group at 98304, 51 blocks (sb + gdt + reserved gdt): identical (226aff6d26d94a0c vs 226aff6d26d94a0c)'
++ read sb gend

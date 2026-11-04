@@ -1,0 +1,5403 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-uninit1113
+# instance: i-0639c4478ad43496f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm before: ext2uninit1113.sh on seed1113
+# start: 20261104T150112Z   end: 20261104T150203Z   rc: 0
+# script sha256: b1d6becc52b5483fc6cad36fb342146e73f7efbd37deba5a3b75371c3b7f3d03
+# ---- script ----
+# | #!/bin/sh
+# | #
+# | # ext2uninit1113.sh -- issue 1113: the first allocation in a BLOCK_UNINIT ext4 group must not
+# | # land on that group's superblock backup, descriptor table or other metadata.
+# | #
+# | # The data volume is a second EBS volume with four file systems made by Linux mke2fs
+# | # (graviton/evidence/1113/*_seed1113.log), all with BLOCK_UNINIT groups:
+# | #  p1 u4k: ext4, 4 KiB blocks, flex_bg, uninit_bg, 400 MiB (4 groups; the #1113 layout)
+# | #  p2 u1k: ext4, 1 KiB blocks, flex_bg, uninit_bg, 64 MiB (8 groups)
+# | #  p3 n1k: ext4, 1 KiB blocks, uninit_bg, no flex_bg, 64 MiB (8 groups; each group's bitmaps
+# | #          and inode table are inside it, and groups 3, 5 and 7 hold backups)
+# | #  p4 m4k: ext4, 4 KiB blocks, flex_bg, metadata_csum (which brings BLOCK_UNINIT), 256 MiB
+# | # On each: fill with 1 MiB random chunks until ENOSPC, then with one-block files until one fails,
+# | # md5 the fill, unmount and mount again (drops the caches), md5 it again, rm everything, mkdir and
+# | # rmdir, unmount. Then mount once more: AllocationBlockGroup::Initialize() checks each group's
+# | # free count against its bitmap.
+# | # Expected after the fix: the two md5s agree, no "Mismatch" in the syslog, no KDL, and Linux
+# | # e2fsck -fn clean on all four, on the primary superblock and on every backup.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/3 ] && [ ! -e $d/4 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no 4-partition data disk"; exit 1; }
+# | dd if=/dev/urandom of=/boot/home/chunk1m bs=65536 count=16 2>/dev/null
+# | n=0
+# | for l in u4k u1k n1k m4k; do
+# | 	mkdir -p /v$l && mount -t ext2 $DD/$n /v$l || { echo "mount $l failed"; exit 1; }
+# | 	cd /v$l
+# | 	echo "=== $l"; df -k . | tail -1
+# | 	c=0
+# | 	while [ $c -lt 1000 ] && cat /boot/home/chunk1m >> fill 2>/dev/null; do c=$((c + 1)); done
+# | 	echo "1 MiB chunks: $c"
+# | 	ls -ls fill
+# | 	i=0
+# | 	while [ $i -lt 4000 ] && printf x > s$i 2>/dev/null; do i=$((i + 1)); done
+# | 	echo "one-block files: $i"; df -k . | tail -1
+# | 	sync
+# | 	m1=$(md5sum < fill); echo "fill md5 before remount $m1"
+# | 	cd /; unmount /v$l; echo "unmount $l rc=$?"
+# | 	mount -t ext2 $DD/$n /v$l; echo "remount $l rc=$?"
+# | 	cd /v$l
+# | 	m2=$(md5sum < fill); echo "fill md5 after remount $m2"
+# | 	[ "$m1" = "$m2" ] && echo "fill md5 $l: same" || echo "fill md5 $l: DIFFERENT"
+# | 	rm -f fill s*; echo "rm rc=$?"
+# | 	mkdir d; echo "mkdir after rm rc=$?"
+# | 	rmdir d; echo "rmdir rc=$?"
+# | 	ls -la; df -k . | tail -1
+# | 	sync; cd /
+# | 	unmount /v$l; echo "unmount $l rc=$?"
+# | 	n=$((n + 1))
+# | done
+# | sync
+# | n=0
+# | for l in u4k u1k n1k m4k; do
+# | 	mount -t ext2 $DD/$n /v$l; echo "final mount $l rc=$?"
+# | 	n=$((n + 1))
+# | 	touch /v$l/probe; echo "final mount $l write rc=$?"
+# | 	rm /v$l/probe
+# | 	unmount /v$l; echo "unmount $l rc=$?"
+# | done
+# | sync
+# | grep -E "ext2|Mismatch|uninitialized group" /var/log/syslog | grep -v "disk system" | tail -40
+# ---- raw output ----
+Haiku ip-10-128-13-156.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 14:53:54 arm64 other Haiku
+c74348868114a1aa15e543641cc08c808b9385a0ea372422abb51ab03ae04542  /boot/system/kernel_arm64
+c848da31623d11d3f1848397df3203bf10b2452af039876eaf182f20e893c44a  /boot/system/add-ons/kernel/file_systems/ext2
+=== u4k
+   Root Inode: 2
+1 MiB chunks: 374
+383492 -rw-r--r-- 1 baron root 392691712 Nov  4 15:01 fill
+one-block files: 11
+   Root Inode: 2
+fill md5 before remount 1d7086d3c5df74c7f26c7ae7cebb438c  -
+unmount u4k rc=0
+remount u4k rc=0
+fill md5 after remount 1d7086d3c5df74c7f26c7ae7cebb438c  -
+fill md5 u4k: same
+rm rc=1
+mkdir after rm rc=1
+rmdir rc=1
+total 383556
+drwxr-xr-x 3 baron root      4096 Nov  4 14:52 .
+drwxr-xr-x 1 baron root         0 Nov  4 15:01 ..
+-rw-r--r-- 1 baron root 392691712 Nov  4 15:01 fill
+drwx------ 2 baron root     16384 Nov  4 14:52 lost+found
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s0
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s1
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s10
+-rw-r--r-- 1 baron root         0 Nov  4 15:01 s11
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s2
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s3
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s4
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s5
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s6
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s7
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s8
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s9
+   Root Inode: 2
+unmount u4k rc=0
+=== u1k
+   Root Inode: 2
+1 MiB chunks: 59
+60673 -rw-r--r-- 1 baron root 62128128 Nov  4 15:01 fill
+one-block files: 216
+   Root Inode: 2
+fill md5 before remount 252ec619f373bad06068580509581f40  -
+unmount u1k rc=0
+remount u1k rc=0
+fill md5 after remount 252ec619f373bad06068580509581f40  -
+fill md5 u1k: same
+rm rc=1
+mkdir after rm rc=1
+rmdir rc=1
+total 60906
+drwxr-xr-x 3 baron root     5120 Nov  4 14:52 .
+drwxr-xr-x 1 baron root        0 Nov  4 15:01 ..
+-rw-r--r-- 1 baron root 62128128 Nov  4 15:01 fill
+drwx------ 2 baron root    12288 Nov  4 14:52 lost+found
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s0
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s1
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s10
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s100
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s101
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s102
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s103
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s104
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s105
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s106
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s107
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s108
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s109
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s11
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s110
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s111
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s112
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s113
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s114
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s115
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s116
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s117
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s118
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s119
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s12
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s120
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s121
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s122
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s123
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s124
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s125
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s126
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s127
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s128
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s129
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s13
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s130
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s131
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s132
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s133
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s134
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s135
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s136
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s137
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s138
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s139
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s14
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s140
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s141
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s142
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s143
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s144
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s145
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s146
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s147
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s148
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s149
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s15
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s150
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s151
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s152
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s153
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s154
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s155
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s156
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s157
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s158
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s159
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s16
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s160
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s161
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s162
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s163
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s164
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s165
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s166
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s167
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s168
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s169
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s17
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s170
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s171
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s172
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s173
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s174
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s175
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s176
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s177
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s178
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s179
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s18
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s180
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s181
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s182
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s183
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s184
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s185
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s186
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s187
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s188
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s189
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s19
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s190
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s191
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s192
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s193
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s194
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s195
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s196
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s197
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s198
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s199
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s2
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s20
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s200
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s201
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s202
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s203
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s204
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s205
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s206
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s207
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s208
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s209
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s21
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s210
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s211
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s212
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s213
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s214
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s215
+-rw-r--r-- 1 baron root        0 Nov  4 15:01 s216
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s22
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s23
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s24
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s25
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s26
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s27
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s28
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s29
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s3
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s30
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s31
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s32
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s33
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s34
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s35
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s36
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s37
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s38
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s39
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s4
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s40
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s41
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s42
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s43
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s44
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s45
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s46
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s47
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s48
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s49
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s5
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s50
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s51
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s52
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s53
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s54
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s55
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s56
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s57
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s58
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s59
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s6
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s60
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s61
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s62
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s63
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s64
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s65
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s66
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s67
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s68
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s69
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s7
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s70
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s71
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s72
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s73
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s74
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s75
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s76
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s77
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s78
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s79
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s8
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s80
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s81
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s82
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s83
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s84
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s85
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s86
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s87
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s88
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s89
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s9
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s90
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s91
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s92
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s93
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s94
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s95
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s96
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s97
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s98
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s99
+   Root Inode: 2
+unmount u1k rc=0
+=== n1k
+   Root Inode: 2
+1 MiB chunks: 62
+63745 -rw-r--r-- 1 baron root 65273856 Nov  4 15:01 fill
+one-block files: 228
+   Root Inode: 2
+fill md5 before remount 2b29684d7e5eb6aed57f2e4f2d2168a8  -
+unmount n1k rc=0
+remount n1k rc=0
+fill md5 after remount 2e95b6ca5a47f51a603598c100a67089  -
+fill md5 n1k: DIFFERENT
+rm rc=1
+mkdir after rm rc=1
+rmdir rc=1
+total 63990
+drwxr-xr-x 3 baron root     5120 Nov  4 14:52 .
+drwxr-xr-x 1 baron root        0 Nov  4 15:01 ..
+-rw-r--r-- 1 baron root 65273856 Nov  4 15:01 fill
+drwx------ 2 baron root    12288 Nov  4 14:52 lost+found
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s0
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s1
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s10
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s100
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s101
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s102
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s103
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s104
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s105
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s106
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s107
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s108
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s109
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s11
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s110
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s111
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s112
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s113
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s114
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s115
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s116
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s117
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s118
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s119
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s12
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s120
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s121
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s122
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s123
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s124
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s125
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s126
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s127
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s128
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s129
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s13
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s130
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s131
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s132
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s133
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s134
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s135
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s136
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s137
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s138
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s139
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s14
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s140
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s141
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s142
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s143
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s144
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s145
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s146
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s147
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s148
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s149
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s15
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s150
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s151
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s152
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s153
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s154
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s155
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s156
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s157
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s158
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s159
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s16
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s160
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s161
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s162
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s163
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s164
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s165
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s166
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s167
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s168
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s169
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s17
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s170
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s171
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s172
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s173
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s174
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s175
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s176
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s177
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s178
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s179
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s18
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s180
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s181
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s182
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s183
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s184
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s185
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s186
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s187
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s188
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s189
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s19
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s190
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s191
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s192
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s193
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s194
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s195
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s196
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s197
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s198
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s199
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s2
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s20
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s200
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s201
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s202
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s203
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s204
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s205
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s206
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s207
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s208
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s209
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s21
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s210
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s211
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s212
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s213
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s214
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s215
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s216
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s217
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s218
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s219
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s22
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s220
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s221
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s222
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s223
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s224
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s225
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s226
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s227
+-rw-r--r-- 1 baron root        0 Nov  4 15:01 s228
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s23
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s24
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s25
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s26
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s27
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s28
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s29
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s3
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s30
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s31
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s32
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s33
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s34
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s35
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s36
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s37
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s38
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s39
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s4
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s40
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s41
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s42
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s43
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s44
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s45
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s46
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s47
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s48
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s49
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s5
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s50
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s51
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s52
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s53
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s54
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s55
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s56
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s57
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s58
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s59
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s6
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s60
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s61
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s62
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s63
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s64
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s65
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s66
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s67
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s68
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s69
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s7
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s70
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s71
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s72
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s73
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s74
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s75
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s76
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s77
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s78
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s79
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s8
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s80
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s81
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s82
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s83
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s84
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s85
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s86
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s87
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s88
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s89
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s9
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s90
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s91
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s92
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s93
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s94
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s95
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s96
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s97
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s98
+-rw-r--r-- 1 baron root        1 Nov  4 15:01 s99
+   Root Inode: 2
+unmount n1k rc=0
+=== m4k
+   Root Inode: 2
+1 MiB chunks: 374
+383492 -rw-r--r-- 1 baron root 392691712 Nov  4 15:01 fill
+one-block files: 11
+   Root Inode: 2
+fill md5 before remount 1d7086d3c5df74c7f26c7ae7cebb438c  -
+unmount m4k rc=0
+remount m4k rc=0
+fill md5 after remount 1d7086d3c5df74c7f26c7ae7cebb438c  -
+fill md5 m4k: same
+rm rc=1
+mkdir after rm rc=1
+rmdir rc=1
+total 383556
+drwxr-xr-x 3 baron root      4096 Nov  4 14:53 .
+drwxr-xr-x 1 baron root         0 Nov  4 15:01 ..
+-rw-r--r-- 1 baron root 392691712 Nov  4 15:01 fill
+drwx------ 2 baron root     16384 Nov  4 14:53 lost+found
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s0
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s1
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s10
+-rw-r--r-- 1 baron root         0 Nov  4 15:01 s11
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s2
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s3
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s4
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s5
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s6
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s7
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s8
+-rw-r--r-- 1 baron root         1 Nov  4 15:01 s9
+   Root Inode: 2
+unmount m4k rc=0
+final mount u4k rc=0
+final mount u4k write rc=1
+unmount u4k rc=0
+final mount u1k rc=0
+final mount u1k write rc=1
+unmount u1k rc=0
+final mount n1k rc=0
+final mount n1k write rc=1
+unmount n1k rc=0
+final mount m4k rc=0
+final mount m4k write rc=1
+unmount m4k rc=0
+KERN: module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ee10, "ext2"
+KERN: [34mext2:[0m AllocationBlockGroup(1,52)::_InitGroup(): Mismatch between counted free blocks (32768/32768) and what is set on the group descriptor (32717)
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+KERN: [34mext2:[0m AllocationBlockGroup(1,260)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7934)
+KERN: [34mext2:[0m AllocationBlockGroup(3,262)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7934)
+KERN: [34mext2:[0m AllocationBlockGroup(5,264)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7934)
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+KERN: [34mext2:[0m AllocationBlockGroup(1,8967)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7420)
+KERN: [34mext2:[0m AllocationBlockGroup(2,16905)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7678)
+KERN: [34mext2:[0m AllocationBlockGroup(3,25359)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7420)
+KERN: [34mext2:[0m AllocationBlockGroup(4,33297)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7678)
+KERN: [34mext2:[0m AllocationBlockGroup(5,41751)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7420)
+KERN: [34mext2:[0m AllocationBlockGroup(6,49689)::_InitGroup(): Mismatch between counted free blocks (8192/8192) and what is set on the group descriptor (7678)
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m AllocationBlockGroup(1,8967)::Initialize(): Mismatch between counted free blocks (4090/8192) and what is set on the group descriptor (0)
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+KERN: [34mext2:[0m AllocationBlockGroup(1,52)::_InitGroup(): Mismatch between counted free blocks (32768/32768) and what is set on the group descriptor (32717)
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+KERN: [34mext2:[0m AllocationBlockGroup(1,8967)::Initialize(): Mismatch between counted free blocks (4090/8192) and what is set on the group descriptor (0)
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/3 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/3 ']'
++ '[' '!' -e /dev/disk/nvme/1/4 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
++ dd if=/dev/urandom of=/boot/home/chunk1m bs=65536 count=16
++ n=0
++ for l in u4k u1k n1k m4k
++ mkdir -p /vu4k
++ mount -t ext2 /dev/disk/nvme/1/0 /vu4k
++ cd /vu4k
++ echo '=== u4k'
++ df -k .
++ tail -1
++ c=0
++ '[' 0 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=1
++ '[' 1 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=2
++ '[' 2 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=3
++ '[' 3 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=4
++ '[' 4 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=5
++ '[' 5 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=6
++ '[' 6 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=7
++ '[' 7 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=8
++ '[' 8 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=9
++ '[' 9 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=10
++ '[' 10 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=11
++ '[' 11 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=12
++ '[' 12 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=13
++ '[' 13 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=14
++ '[' 14 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=15
++ '[' 15 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=16
++ '[' 16 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=17
++ '[' 17 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=18
++ '[' 18 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=19
++ '[' 19 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=20
++ '[' 20 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=21
++ '[' 21 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=22
++ '[' 22 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=23
++ '[' 23 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=24
++ '[' 24 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=25
++ '[' 25 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=26
++ '[' 26 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=27
++ '[' 27 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=28
++ '[' 28 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=29
++ '[' 29 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=30
++ '[' 30 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=31
++ '[' 31 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=32
++ '[' 32 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=33
++ '[' 33 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=34
++ '[' 34 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=35
++ '[' 35 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=36
++ '[' 36 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=37
++ '[' 37 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=38
++ '[' 38 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=39
++ '[' 39 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=40
++ '[' 40 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=41
++ '[' 41 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=42
++ '[' 42 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=43
++ '[' 43 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=44
++ '[' 44 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=45
++ '[' 45 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=46
++ '[' 46 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=47
++ '[' 47 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=48
++ '[' 48 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=49
++ '[' 49 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=50
++ '[' 50 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=51
++ '[' 51 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=52
++ '[' 52 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=53
++ '[' 53 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=54
++ '[' 54 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=55
++ '[' 55 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=56
++ '[' 56 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=57
++ '[' 57 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=58
++ '[' 58 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=59
++ '[' 59 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=60
++ '[' 60 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=61
++ '[' 61 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=62
++ '[' 62 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=63
++ '[' 63 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=64
++ '[' 64 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=65
++ '[' 65 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=66
++ '[' 66 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=67
++ '[' 67 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=68
++ '[' 68 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=69
++ '[' 69 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=70
++ '[' 70 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=71
++ '[' 71 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=72
++ '[' 72 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=73
++ '[' 73 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=74
++ '[' 74 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=75
++ '[' 75 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=76
++ '[' 76 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=77
++ '[' 77 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=78
++ '[' 78 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=79
++ '[' 79 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=80
++ '[' 80 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=81
++ '[' 81 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=82
++ '[' 82 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=83
++ '[' 83 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=84
++ '[' 84 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=85
++ '[' 85 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=86
++ '[' 86 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=87
++ '[' 87 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=88
++ '[' 88 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=89
++ '[' 89 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=90
++ '[' 90 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=91
++ '[' 91 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=92
++ '[' 92 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=93
++ '[' 93 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=94
++ '[' 94 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=95
++ '[' 95 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=96
++ '[' 96 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=97
++ '[' 97 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=98
++ '[' 98 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=99
++ '[' 99 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=100
++ '[' 100 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=101
++ '[' 101 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=102
++ '[' 102 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=103
++ '[' 103 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=104
++ '[' 104 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=105
++ '[' 105 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=106
++ '[' 106 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=107
++ '[' 107 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=108
++ '[' 108 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=109
++ '[' 109 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=110
++ '[' 110 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=111
++ '[' 111 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=112
++ '[' 112 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=113
++ '[' 113 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=114
++ '[' 114 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=115
++ '[' 115 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=116
++ '[' 116 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=117
++ '[' 117 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=118
++ '[' 118 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=119
++ '[' 119 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=120
++ '[' 120 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=121
++ '[' 121 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=122
++ '[' 122 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=123
++ '[' 123 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=124
++ '[' 124 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=125
++ '[' 125 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=126
++ '[' 126 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=127
++ '[' 127 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=128
++ '[' 128 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=129
++ '[' 129 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=130
++ '[' 130 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=131
++ '[' 131 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=132
++ '[' 132 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=133
++ '[' 133 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=134
++ '[' 134 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=135
++ '[' 135 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=136
++ '[' 136 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=137
++ '[' 137 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=138
++ '[' 138 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=139
++ '[' 139 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=140
++ '[' 140 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=141
++ '[' 141 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=142
++ '[' 142 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=143
++ '[' 143 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=144
++ '[' 144 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=145
++ '[' 145 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=146
++ '[' 146 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=147
++ '[' 147 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=148
++ '[' 148 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=149
++ '[' 149 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=150
++ '[' 150 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=151
++ '[' 151 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=152
++ '[' 152 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=153
++ '[' 153 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=154
++ '[' 154 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=155
++ '[' 155 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=156
++ '[' 156 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=157
++ '[' 157 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=158
++ '[' 158 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=159
++ '[' 159 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=160
++ '[' 160 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=161
++ '[' 161 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=162
++ '[' 162 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=163
++ '[' 163 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=164
++ '[' 164 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=165
++ '[' 165 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=166
++ '[' 166 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=167
++ '[' 167 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=168
++ '[' 168 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=169
++ '[' 169 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=170
++ '[' 170 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=171
++ '[' 171 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=172
++ '[' 172 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=173
++ '[' 173 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=174
++ '[' 174 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=175
++ '[' 175 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=176
++ '[' 176 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=177
++ '[' 177 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=178
++ '[' 178 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=179
++ '[' 179 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=180
++ '[' 180 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=181
++ '[' 181 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=182
++ '[' 182 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=183
++ '[' 183 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=184
++ '[' 184 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=185
++ '[' 185 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=186
++ '[' 186 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=187
++ '[' 187 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=188
++ '[' 188 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=189
++ '[' 189 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=190
++ '[' 190 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=191
++ '[' 191 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=192
++ '[' 192 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=193
++ '[' 193 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=194
++ '[' 194 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=195
++ '[' 195 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=196
++ '[' 196 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=197
++ '[' 197 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=198
++ '[' 198 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=199
++ '[' 199 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=200
++ '[' 200 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=201
++ '[' 201 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=202
++ '[' 202 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=203
++ '[' 203 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=204
++ '[' 204 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=205
++ '[' 205 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=206
++ '[' 206 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=207
++ '[' 207 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=208
++ '[' 208 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=209
++ '[' 209 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=210
++ '[' 210 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=211
++ '[' 211 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=212
++ '[' 212 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=213
++ '[' 213 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=214
++ '[' 214 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=215
++ '[' 215 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=216
++ '[' 216 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=217
++ '[' 217 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=218
++ '[' 218 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=219
++ '[' 219 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=220
++ '[' 220 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=221
++ '[' 221 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=222
++ '[' 222 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=223
++ '[' 223 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=224
++ '[' 224 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=225
++ '[' 225 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=226
++ '[' 226 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=227
++ '[' 227 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=228
++ '[' 228 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=229
++ '[' 229 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=230
++ '[' 230 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=231
++ '[' 231 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=232
++ '[' 232 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=233
++ '[' 233 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=234
++ '[' 234 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=235
++ '[' 235 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=236
++ '[' 236 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=237
++ '[' 237 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=238
++ '[' 238 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=239
++ '[' 239 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=240
++ '[' 240 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=241
++ '[' 241 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=242
++ '[' 242 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=243
++ '[' 243 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=244
++ '[' 244 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=245
++ '[' 245 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=246
++ '[' 246 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=247
++ '[' 247 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=248
++ '[' 248 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=249
++ '[' 249 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=250
++ '[' 250 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=251
++ '[' 251 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=252
++ '[' 252 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=253
++ '[' 253 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=254
++ '[' 254 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=255
++ '[' 255 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=256
++ '[' 256 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=257
++ '[' 257 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=258
++ '[' 258 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=259
++ '[' 259 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=260
++ '[' 260 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=261
++ '[' 261 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=262
++ '[' 262 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=263
++ '[' 263 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=264
++ '[' 264 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=265
++ '[' 265 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=266
++ '[' 266 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=267
++ '[' 267 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=268
++ '[' 268 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=269
++ '[' 269 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=270
++ '[' 270 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=271
++ '[' 271 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=272
++ '[' 272 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=273
++ '[' 273 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=274
++ '[' 274 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=275
++ '[' 275 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=276
++ '[' 276 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=277
++ '[' 277 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=278
++ '[' 278 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=279
++ '[' 279 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=280
++ '[' 280 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=281
++ '[' 281 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=282
++ '[' 282 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=283
++ '[' 283 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=284
++ '[' 284 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=285
++ '[' 285 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=286
++ '[' 286 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=287
++ '[' 287 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=288
++ '[' 288 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=289
++ '[' 289 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=290
++ '[' 290 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=291
++ '[' 291 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=292
++ '[' 292 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=293
++ '[' 293 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=294
++ '[' 294 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=295
++ '[' 295 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=296
++ '[' 296 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=297
++ '[' 297 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=298
++ '[' 298 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=299
++ '[' 299 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=300
++ '[' 300 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=301
++ '[' 301 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=302
++ '[' 302 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=303
++ '[' 303 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=304
++ '[' 304 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=305
++ '[' 305 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=306
++ '[' 306 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=307
++ '[' 307 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=308
++ '[' 308 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=309
++ '[' 309 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=310
++ '[' 310 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=311
++ '[' 311 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=312
++ '[' 312 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=313
++ '[' 313 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=314
++ '[' 314 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=315
++ '[' 315 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=316
++ '[' 316 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=317
++ '[' 317 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=318
++ '[' 318 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=319
++ '[' 319 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=320
++ '[' 320 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=321
++ '[' 321 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=322
++ '[' 322 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=323
++ '[' 323 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=324
++ '[' 324 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=325
++ '[' 325 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=326
++ '[' 326 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=327
++ '[' 327 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=328
++ '[' 328 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=329
++ '[' 329 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=330
++ '[' 330 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=331
++ '[' 331 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=332
++ '[' 332 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=333
++ '[' 333 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=334
++ '[' 334 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=335
++ '[' 335 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=336
++ '[' 336 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=337
++ '[' 337 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=338
++ '[' 338 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=339
++ '[' 339 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=340
++ '[' 340 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=341
++ '[' 341 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=342
++ '[' 342 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=343
++ '[' 343 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=344
++ '[' 344 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=345
++ '[' 345 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=346
++ '[' 346 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=347
++ '[' 347 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=348
++ '[' 348 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=349
++ '[' 349 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=350
++ '[' 350 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=351
++ '[' 351 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=352
++ '[' 352 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=353
++ '[' 353 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=354
++ '[' 354 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=355
++ '[' 355 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=356
++ '[' 356 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=357
++ '[' 357 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=358
++ '[' 358 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=359
++ '[' 359 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=360
++ '[' 360 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=361
++ '[' 361 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=362
++ '[' 362 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=363
++ '[' 363 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=364
++ '[' 364 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=365
++ '[' 365 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=366
++ '[' 366 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=367
++ '[' 367 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=368
++ '[' 368 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=369
++ '[' 369 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=370
++ '[' 370 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=371
++ '[' 371 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=372
++ '[' 372 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=373
++ '[' 373 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=374
++ '[' 374 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ echo '1 MiB chunks: 374'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 4000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 4000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 4000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 4000 ']'
++ printf x
++ i=4
++ '[' 4 -lt 4000 ']'
++ printf x
++ i=5
++ '[' 5 -lt 4000 ']'
++ printf x
++ i=6
++ '[' 6 -lt 4000 ']'
++ printf x
++ i=7
++ '[' 7 -lt 4000 ']'
++ printf x
++ i=8
++ '[' 8 -lt 4000 ']'
++ printf x
++ i=9
++ '[' 9 -lt 4000 ']'
++ printf x
++ i=10
++ '[' 10 -lt 4000 ']'
++ printf x
++ i=11
++ '[' 11 -lt 4000 ']'
++ printf x
++ echo 'one-block files: 11'
++ df -k .
++ tail -1
++ sync
+++ md5sum
++ m1='1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ echo 'fill md5 before remount 1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ cd /
++ unmount /vu4k
++ echo 'unmount u4k rc=0'
++ mount -t ext2 /dev/disk/nvme/1/0 /vu4k
++ echo 'remount u4k rc=0'
++ cd /vu4k
+++ md5sum
++ m2='1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ echo 'fill md5 after remount 1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ '[' '1d7086d3c5df74c7f26c7ae7cebb438c  -' = '1d7086d3c5df74c7f26c7ae7cebb438c  -' ']'
++ echo 'fill md5 u4k: same'
++ rm -f fill s0 s1 s10 s11 s2 s3 s4 s5 s6 s7 s8 s9
+rm: cannot remove 'fill': Read-only file system
+rm: cannot remove 's0': Read-only file system
+rm: cannot remove 's1': Read-only file system
+rm: cannot remove 's10': Read-only file system
+rm: cannot remove 's11': Read-only file system
+rm: cannot remove 's2': Read-only file system
+rm: cannot remove 's3': Read-only file system
+rm: cannot remove 's4': Read-only file system
+rm: cannot remove 's5': Read-only file system
+rm: cannot remove 's6': Read-only file system
+rm: cannot remove 's7': Read-only file system
+rm: cannot remove 's8': Read-only file system
+rm: cannot remove 's9': Read-only file system
++ echo 'rm rc=1'
++ mkdir d
+mkdir: cannot create directory 'd': Read-only file system
++ echo 'mkdir after rm rc=1'
++ rmdir d
+rmdir: failed to remove 'd': Read-only file system
++ echo 'rmdir rc=1'
++ ls -la
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /vu4k
++ echo 'unmount u4k rc=0'
++ n=1
++ for l in u4k u1k n1k m4k
++ mkdir -p /vu1k
++ mount -t ext2 /dev/disk/nvme/1/1 /vu1k
++ cd /vu1k
++ echo '=== u1k'
++ df -k .
++ tail -1
++ c=0
++ '[' 0 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=1
++ '[' 1 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=2
++ '[' 2 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=3
++ '[' 3 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=4
++ '[' 4 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=5
++ '[' 5 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=6
++ '[' 6 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=7
++ '[' 7 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=8
++ '[' 8 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=9
++ '[' 9 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=10
++ '[' 10 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=11
++ '[' 11 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=12
++ '[' 12 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=13
++ '[' 13 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=14
++ '[' 14 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=15
++ '[' 15 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=16
++ '[' 16 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=17
++ '[' 17 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=18
++ '[' 18 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=19
++ '[' 19 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=20
++ '[' 20 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=21
++ '[' 21 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=22
++ '[' 22 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=23
++ '[' 23 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=24
++ '[' 24 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=25
++ '[' 25 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=26
++ '[' 26 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=27
++ '[' 27 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=28
++ '[' 28 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=29
++ '[' 29 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=30
++ '[' 30 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=31
++ '[' 31 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=32
++ '[' 32 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=33
++ '[' 33 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=34
++ '[' 34 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=35
++ '[' 35 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=36
++ '[' 36 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=37
++ '[' 37 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=38
++ '[' 38 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=39
++ '[' 39 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=40
++ '[' 40 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=41
++ '[' 41 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=42
++ '[' 42 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=43
++ '[' 43 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=44
++ '[' 44 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=45
++ '[' 45 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=46
++ '[' 46 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=47
++ '[' 47 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=48
++ '[' 48 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=49
++ '[' 49 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=50
++ '[' 50 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=51
++ '[' 51 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=52
++ '[' 52 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=53
++ '[' 53 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=54
++ '[' 54 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=55
++ '[' 55 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=56
++ '[' 56 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=57
++ '[' 57 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=58
++ '[' 58 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=59
++ '[' 59 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ echo '1 MiB chunks: 59'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 4000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 4000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 4000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 4000 ']'
++ printf x
++ i=4
++ '[' 4 -lt 4000 ']'
++ printf x
++ i=5
++ '[' 5 -lt 4000 ']'
++ printf x
++ i=6
++ '[' 6 -lt 4000 ']'
++ printf x
++ i=7
++ '[' 7 -lt 4000 ']'
++ printf x
++ i=8
++ '[' 8 -lt 4000 ']'
++ printf x
++ i=9
++ '[' 9 -lt 4000 ']'
++ printf x
++ i=10
++ '[' 10 -lt 4000 ']'
++ printf x
++ i=11
++ '[' 11 -lt 4000 ']'
++ printf x
++ i=12
++ '[' 12 -lt 4000 ']'
++ printf x
++ i=13
++ '[' 13 -lt 4000 ']'
++ printf x
++ i=14
++ '[' 14 -lt 4000 ']'
++ printf x
++ i=15
++ '[' 15 -lt 4000 ']'
++ printf x
++ i=16
++ '[' 16 -lt 4000 ']'
++ printf x
++ i=17
++ '[' 17 -lt 4000 ']'
++ printf x
++ i=18
++ '[' 18 -lt 4000 ']'
++ printf x
++ i=19
++ '[' 19 -lt 4000 ']'
++ printf x
++ i=20
++ '[' 20 -lt 4000 ']'
++ printf x
++ i=21
++ '[' 21 -lt 4000 ']'
++ printf x
++ i=22
++ '[' 22 -lt 4000 ']'
++ printf x
++ i=23
++ '[' 23 -lt 4000 ']'
++ printf x
++ i=24
++ '[' 24 -lt 4000 ']'
++ printf x
++ i=25
++ '[' 25 -lt 4000 ']'
++ printf x
++ i=26
++ '[' 26 -lt 4000 ']'
++ printf x
++ i=27
++ '[' 27 -lt 4000 ']'
++ printf x
++ i=28
++ '[' 28 -lt 4000 ']'
++ printf x
++ i=29
++ '[' 29 -lt 4000 ']'
++ printf x
++ i=30
++ '[' 30 -lt 4000 ']'
++ printf x
++ i=31
++ '[' 31 -lt 4000 ']'
++ printf x
++ i=32
++ '[' 32 -lt 4000 ']'
++ printf x
++ i=33
++ '[' 33 -lt 4000 ']'
++ printf x
++ i=34
++ '[' 34 -lt 4000 ']'
++ printf x
++ i=35
++ '[' 35 -lt 4000 ']'
++ printf x
++ i=36
++ '[' 36 -lt 4000 ']'
++ printf x
++ i=37
++ '[' 37 -lt 4000 ']'
++ printf x
++ i=38
++ '[' 38 -lt 4000 ']'
++ printf x
++ i=39
++ '[' 39 -lt 4000 ']'
++ printf x
++ i=40
++ '[' 40 -lt 4000 ']'
++ printf x
++ i=41
++ '[' 41 -lt 4000 ']'
++ printf x
++ i=42
++ '[' 42 -lt 4000 ']'
++ printf x
++ i=43
++ '[' 43 -lt 4000 ']'
++ printf x
++ i=44
++ '[' 44 -lt 4000 ']'
++ printf x
++ i=45
++ '[' 45 -lt 4000 ']'
++ printf x
++ i=46
++ '[' 46 -lt 4000 ']'
++ printf x
++ i=47
++ '[' 47 -lt 4000 ']'
++ printf x
++ i=48
++ '[' 48 -lt 4000 ']'
++ printf x
++ i=49
++ '[' 49 -lt 4000 ']'
++ printf x
++ i=50
++ '[' 50 -lt 4000 ']'
++ printf x
++ i=51
++ '[' 51 -lt 4000 ']'
++ printf x
++ i=52
++ '[' 52 -lt 4000 ']'
++ printf x
++ i=53
++ '[' 53 -lt 4000 ']'
++ printf x
++ i=54
++ '[' 54 -lt 4000 ']'
++ printf x
++ i=55
++ '[' 55 -lt 4000 ']'
++ printf x
++ i=56
++ '[' 56 -lt 4000 ']'
++ printf x
++ i=57
++ '[' 57 -lt 4000 ']'
++ printf x
++ i=58
++ '[' 58 -lt 4000 ']'
++ printf x
++ i=59
++ '[' 59 -lt 4000 ']'
++ printf x
++ i=60
++ '[' 60 -lt 4000 ']'
++ printf x
++ i=61
++ '[' 61 -lt 4000 ']'
++ printf x
++ i=62
++ '[' 62 -lt 4000 ']'
++ printf x
++ i=63
++ '[' 63 -lt 4000 ']'
++ printf x
++ i=64
++ '[' 64 -lt 4000 ']'
++ printf x
++ i=65
++ '[' 65 -lt 4000 ']'
++ printf x
++ i=66
++ '[' 66 -lt 4000 ']'
++ printf x
++ i=67
++ '[' 67 -lt 4000 ']'
++ printf x
++ i=68
++ '[' 68 -lt 4000 ']'
++ printf x
++ i=69
++ '[' 69 -lt 4000 ']'
++ printf x
++ i=70
++ '[' 70 -lt 4000 ']'
++ printf x
++ i=71
++ '[' 71 -lt 4000 ']'
++ printf x
++ i=72
++ '[' 72 -lt 4000 ']'
++ printf x
++ i=73
++ '[' 73 -lt 4000 ']'
++ printf x
++ i=74
++ '[' 74 -lt 4000 ']'
++ printf x
++ i=75
++ '[' 75 -lt 4000 ']'
++ printf x
++ i=76
++ '[' 76 -lt 4000 ']'
++ printf x
++ i=77
++ '[' 77 -lt 4000 ']'
++ printf x
++ i=78
++ '[' 78 -lt 4000 ']'
++ printf x
++ i=79
++ '[' 79 -lt 4000 ']'
++ printf x
++ i=80
++ '[' 80 -lt 4000 ']'
++ printf x
++ i=81
++ '[' 81 -lt 4000 ']'
++ printf x
++ i=82
++ '[' 82 -lt 4000 ']'
++ printf x
++ i=83
++ '[' 83 -lt 4000 ']'
++ printf x
++ i=84
++ '[' 84 -lt 4000 ']'
++ printf x
++ i=85
++ '[' 85 -lt 4000 ']'
++ printf x
++ i=86
++ '[' 86 -lt 4000 ']'
++ printf x
++ i=87
++ '[' 87 -lt 4000 ']'
++ printf x
++ i=88
++ '[' 88 -lt 4000 ']'
++ printf x
++ i=89
++ '[' 89 -lt 4000 ']'
++ printf x
++ i=90
++ '[' 90 -lt 4000 ']'
++ printf x
++ i=91
++ '[' 91 -lt 4000 ']'
++ printf x
++ i=92
++ '[' 92 -lt 4000 ']'
++ printf x
++ i=93
++ '[' 93 -lt 4000 ']'
++ printf x
++ i=94
++ '[' 94 -lt 4000 ']'
++ printf x
++ i=95
++ '[' 95 -lt 4000 ']'
++ printf x
++ i=96
++ '[' 96 -lt 4000 ']'
++ printf x
++ i=97
++ '[' 97 -lt 4000 ']'
++ printf x
++ i=98
++ '[' 98 -lt 4000 ']'
++ printf x
++ i=99
++ '[' 99 -lt 4000 ']'
++ printf x
++ i=100
++ '[' 100 -lt 4000 ']'
++ printf x
++ i=101
++ '[' 101 -lt 4000 ']'
++ printf x
++ i=102
++ '[' 102 -lt 4000 ']'
++ printf x
++ i=103
++ '[' 103 -lt 4000 ']'
++ printf x
++ i=104
++ '[' 104 -lt 4000 ']'
++ printf x
++ i=105
++ '[' 105 -lt 4000 ']'
++ printf x
++ i=106
++ '[' 106 -lt 4000 ']'
++ printf x
++ i=107
++ '[' 107 -lt 4000 ']'
++ printf x
++ i=108
++ '[' 108 -lt 4000 ']'
++ printf x
++ i=109
++ '[' 109 -lt 4000 ']'
++ printf x
++ i=110
++ '[' 110 -lt 4000 ']'
++ printf x
++ i=111
++ '[' 111 -lt 4000 ']'
++ printf x
++ i=112
++ '[' 112 -lt 4000 ']'
++ printf x
++ i=113
++ '[' 113 -lt 4000 ']'
++ printf x
++ i=114
++ '[' 114 -lt 4000 ']'
++ printf x
++ i=115
++ '[' 115 -lt 4000 ']'
++ printf x
++ i=116
++ '[' 116 -lt 4000 ']'
++ printf x
++ i=117
++ '[' 117 -lt 4000 ']'
++ printf x
++ i=118
++ '[' 118 -lt 4000 ']'
++ printf x
++ i=119
++ '[' 119 -lt 4000 ']'
++ printf x
++ i=120
++ '[' 120 -lt 4000 ']'
++ printf x
++ i=121
++ '[' 121 -lt 4000 ']'
++ printf x
++ i=122
++ '[' 122 -lt 4000 ']'
++ printf x
++ i=123
++ '[' 123 -lt 4000 ']'
++ printf x
++ i=124
++ '[' 124 -lt 4000 ']'
++ printf x
++ i=125
++ '[' 125 -lt 4000 ']'
++ printf x
++ i=126
++ '[' 126 -lt 4000 ']'
++ printf x
++ i=127
++ '[' 127 -lt 4000 ']'
++ printf x
++ i=128
++ '[' 128 -lt 4000 ']'
++ printf x
++ i=129
++ '[' 129 -lt 4000 ']'
++ printf x
++ i=130
++ '[' 130 -lt 4000 ']'
++ printf x
++ i=131
++ '[' 131 -lt 4000 ']'
++ printf x
++ i=132
++ '[' 132 -lt 4000 ']'
++ printf x
++ i=133
++ '[' 133 -lt 4000 ']'
++ printf x
++ i=134
++ '[' 134 -lt 4000 ']'
++ printf x
++ i=135
++ '[' 135 -lt 4000 ']'
++ printf x
++ i=136
++ '[' 136 -lt 4000 ']'
++ printf x
++ i=137
++ '[' 137 -lt 4000 ']'
++ printf x
++ i=138
++ '[' 138 -lt 4000 ']'
++ printf x
++ i=139
++ '[' 139 -lt 4000 ']'
++ printf x
++ i=140
++ '[' 140 -lt 4000 ']'
++ printf x
++ i=141
++ '[' 141 -lt 4000 ']'
++ printf x
++ i=142
++ '[' 142 -lt 4000 ']'
++ printf x
++ i=143
++ '[' 143 -lt 4000 ']'
++ printf x
++ i=144
++ '[' 144 -lt 4000 ']'
++ printf x
++ i=145
++ '[' 145 -lt 4000 ']'
++ printf x
++ i=146
++ '[' 146 -lt 4000 ']'
++ printf x
++ i=147
++ '[' 147 -lt 4000 ']'
++ printf x
++ i=148
++ '[' 148 -lt 4000 ']'
++ printf x
++ i=149
++ '[' 149 -lt 4000 ']'
++ printf x
++ i=150
++ '[' 150 -lt 4000 ']'
++ printf x
++ i=151
++ '[' 151 -lt 4000 ']'
++ printf x
++ i=152
++ '[' 152 -lt 4000 ']'
++ printf x
++ i=153
++ '[' 153 -lt 4000 ']'
++ printf x
++ i=154
++ '[' 154 -lt 4000 ']'
++ printf x
++ i=155
++ '[' 155 -lt 4000 ']'
++ printf x
++ i=156
++ '[' 156 -lt 4000 ']'
++ printf x
++ i=157
++ '[' 157 -lt 4000 ']'
++ printf x
++ i=158
++ '[' 158 -lt 4000 ']'
++ printf x
++ i=159
++ '[' 159 -lt 4000 ']'
++ printf x
++ i=160
++ '[' 160 -lt 4000 ']'
++ printf x
++ i=161
++ '[' 161 -lt 4000 ']'
++ printf x
++ i=162
++ '[' 162 -lt 4000 ']'
++ printf x
++ i=163
++ '[' 163 -lt 4000 ']'
++ printf x
++ i=164
++ '[' 164 -lt 4000 ']'
++ printf x
++ i=165
++ '[' 165 -lt 4000 ']'
++ printf x
++ i=166
++ '[' 166 -lt 4000 ']'
++ printf x
++ i=167
++ '[' 167 -lt 4000 ']'
++ printf x
++ i=168
++ '[' 168 -lt 4000 ']'
++ printf x
++ i=169
++ '[' 169 -lt 4000 ']'
++ printf x
++ i=170
++ '[' 170 -lt 4000 ']'
++ printf x
++ i=171
++ '[' 171 -lt 4000 ']'
++ printf x
++ i=172
++ '[' 172 -lt 4000 ']'
++ printf x
++ i=173
++ '[' 173 -lt 4000 ']'
++ printf x
++ i=174
++ '[' 174 -lt 4000 ']'
++ printf x
++ i=175
++ '[' 175 -lt 4000 ']'
++ printf x
++ i=176
++ '[' 176 -lt 4000 ']'
++ printf x
++ i=177
++ '[' 177 -lt 4000 ']'
++ printf x
++ i=178
++ '[' 178 -lt 4000 ']'
++ printf x
++ i=179
++ '[' 179 -lt 4000 ']'
++ printf x
++ i=180
++ '[' 180 -lt 4000 ']'
++ printf x
++ i=181
++ '[' 181 -lt 4000 ']'
++ printf x
++ i=182
++ '[' 182 -lt 4000 ']'
++ printf x
++ i=183
++ '[' 183 -lt 4000 ']'
++ printf x
++ i=184
++ '[' 184 -lt 4000 ']'
++ printf x
++ i=185
++ '[' 185 -lt 4000 ']'
++ printf x
++ i=186
++ '[' 186 -lt 4000 ']'
++ printf x
++ i=187
++ '[' 187 -lt 4000 ']'
++ printf x
++ i=188
++ '[' 188 -lt 4000 ']'
++ printf x
++ i=189
++ '[' 189 -lt 4000 ']'
++ printf x
++ i=190
++ '[' 190 -lt 4000 ']'
++ printf x
++ i=191
++ '[' 191 -lt 4000 ']'
++ printf x
++ i=192
++ '[' 192 -lt 4000 ']'
++ printf x
++ i=193
++ '[' 193 -lt 4000 ']'
++ printf x
++ i=194
++ '[' 194 -lt 4000 ']'
++ printf x
++ i=195
++ '[' 195 -lt 4000 ']'
++ printf x
++ i=196
++ '[' 196 -lt 4000 ']'
++ printf x
++ i=197
++ '[' 197 -lt 4000 ']'
++ printf x
++ i=198
++ '[' 198 -lt 4000 ']'
++ printf x
++ i=199
++ '[' 199 -lt 4000 ']'
++ printf x
++ i=200
++ '[' 200 -lt 4000 ']'
++ printf x
++ i=201
++ '[' 201 -lt 4000 ']'
++ printf x
++ i=202
++ '[' 202 -lt 4000 ']'
++ printf x
++ i=203
++ '[' 203 -lt 4000 ']'
++ printf x
++ i=204
++ '[' 204 -lt 4000 ']'
++ printf x
++ i=205
++ '[' 205 -lt 4000 ']'
++ printf x
++ i=206
++ '[' 206 -lt 4000 ']'
++ printf x
++ i=207
++ '[' 207 -lt 4000 ']'
++ printf x
++ i=208
++ '[' 208 -lt 4000 ']'
++ printf x
++ i=209
++ '[' 209 -lt 4000 ']'
++ printf x
++ i=210
++ '[' 210 -lt 4000 ']'
++ printf x
++ i=211
++ '[' 211 -lt 4000 ']'
++ printf x
++ i=212
++ '[' 212 -lt 4000 ']'
++ printf x
++ i=213
++ '[' 213 -lt 4000 ']'
++ printf x
++ i=214
++ '[' 214 -lt 4000 ']'
++ printf x
++ i=215
++ '[' 215 -lt 4000 ']'
++ printf x
++ i=216
++ '[' 216 -lt 4000 ']'
++ printf x
++ echo 'one-block files: 216'
++ df -k .
++ tail -1
++ sync
+++ md5sum
++ m1='252ec619f373bad06068580509581f40  -'
++ echo 'fill md5 before remount 252ec619f373bad06068580509581f40  -'
++ cd /
++ unmount /vu1k
++ echo 'unmount u1k rc=0'
++ mount -t ext2 /dev/disk/nvme/1/1 /vu1k
++ echo 'remount u1k rc=0'
++ cd /vu1k
+++ md5sum
++ m2='252ec619f373bad06068580509581f40  -'
++ echo 'fill md5 after remount 252ec619f373bad06068580509581f40  -'
++ '[' '252ec619f373bad06068580509581f40  -' = '252ec619f373bad06068580509581f40  -' ']'
++ echo 'fill md5 u1k: same'
++ rm -f fill s0 s1 s10 s100 s101 s102 s103 s104 s105 s106 s107 s108 s109 s11 s110 s111 s112 s113 s114 s115 s116 s117 s118 s119 s12 s120 s121 s122 s123 s124 s125 s126 s127 s128 s129 s13 s130 s131 s132 s133 s134 s135 s136 s137 s138 s139 s14 s140 s141 s142 s143 s144 s145 s146 s147 s148 s149 s15 s150 s151 s152 s153 s154 s155 s156 s157 s158 s159 s16 s160 s161 s162 s163 s164 s165 s166 s167 s168 s169 s17 s170 s171 s172 s173 s174 s175 s176 s177 s178 s179 s18 s180 s181 s182 s183 s184 s185 s186 s187 s188 s189 s19 s190 s191 s192 s193 s194 s195 s196 s197 s198 s199 s2 s20 s200 s201 s202 s203 s204 s205 s206 s207 s208 s209 s21 s210 s211 s212 s213 s214 s215 s216 s22 s23 s24 s25 s26 s27 s28 s29 s3 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s4 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s5 s50 s51 s52 s53 s54 s55 s56 s57 s58 s59 s6 s60 s61 s62 s63 s64 s65 s66 s67 s68 s69 s7 s70 s71 s72 s73 s74 s75 s76 s77 s78 s79 s8 s80 s81 s82 s83 s84 s85 s86 s87 s88 s89 s9 s90 s91 s92 s93 s94 s95 s96 s97 s98 s99
+rm: cannot remove 'fill': Read-only file system
+rm: cannot remove 's0': Read-only file system
+rm: cannot remove 's1': Read-only file system
+rm: cannot remove 's10': Read-only file system
+rm: cannot remove 's100': Read-only file system
+rm: cannot remove 's101': Read-only file system
+rm: cannot remove 's102': Read-only file system
+rm: cannot remove 's103': Read-only file system
+rm: cannot remove 's104': Read-only file system
+rm: cannot remove 's105': Read-only file system
+rm: cannot remove 's106': Read-only file system
+rm: cannot remove 's107': Read-only file system
+rm: cannot remove 's108': Read-only file system
+rm: cannot remove 's109': Read-only file system
+rm: cannot remove 's11': Read-only file system
+rm: cannot remove 's110': Read-only file system
+rm: cannot remove 's111': Read-only file system
+rm: cannot remove 's112': Read-only file system
+rm: cannot remove 's113': Read-only file system
+rm: cannot remove 's114': Read-only file system
+rm: cannot remove 's115': Read-only file system
+rm: cannot remove 's116': Read-only file system
+rm: cannot remove 's117': Read-only file system
+rm: cannot remove 's118': Read-only file system
+rm: cannot remove 's119': Read-only file system
+rm: cannot remove 's12': Read-only file system
+rm: cannot remove 's120': Read-only file system
+rm: cannot remove 's121': Read-only file system
+rm: cannot remove 's122': Read-only file system
+rm: cannot remove 's123': Read-only file system
+rm: cannot remove 's124': Read-only file system
+rm: cannot remove 's125': Read-only file system
+rm: cannot remove 's126': Read-only file system
+rm: cannot remove 's127': Read-only file system
+rm: cannot remove 's128': Read-only file system
+rm: cannot remove 's129': Read-only file system
+rm: cannot remove 's13': Read-only file system
+rm: cannot remove 's130': Read-only file system
+rm: cannot remove 's131': Read-only file system
+rm: cannot remove 's132': Read-only file system
+rm: cannot remove 's133': Read-only file system
+rm: cannot remove 's134': Read-only file system
+rm: cannot remove 's135': Read-only file system
+rm: cannot remove 's136': Read-only file system
+rm: cannot remove 's137': Read-only file system
+rm: cannot remove 's138': Read-only file system
+rm: cannot remove 's139': Read-only file system
+rm: cannot remove 's14': Read-only file system
+rm: cannot remove 's140': Read-only file system
+rm: cannot remove 's141': Read-only file system
+rm: cannot remove 's142': Read-only file system
+rm: cannot remove 's143': Read-only file system
+rm: cannot remove 's144': Read-only file system
+rm: cannot remove 's145': Read-only file system
+rm: cannot remove 's146': Read-only file system
+rm: cannot remove 's147': Read-only file system
+rm: cannot remove 's148': Read-only file system
+rm: cannot remove 's149': Read-only file system
+rm: cannot remove 's15': Read-only file system
+rm: cannot remove 's150': Read-only file system
+rm: cannot remove 's151': Read-only file system
+rm: cannot remove 's152': Read-only file system
+rm: cannot remove 's153': Read-only file system
+rm: cannot remove 's154': Read-only file system
+rm: cannot remove 's155': Read-only file system
+rm: cannot remove 's156': Read-only file system
+rm: cannot remove 's157': Read-only file system
+rm: cannot remove 's158': Read-only file system
+rm: cannot remove 's159': Read-only file system
+rm: cannot remove 's16': Read-only file system
+rm: cannot remove 's160': Read-only file system
+rm: cannot remove 's161': Read-only file system
+rm: cannot remove 's162': Read-only file system
+rm: cannot remove 's163': Read-only file system
+rm: cannot remove 's164': Read-only file system
+rm: cannot remove 's165': Read-only file system
+rm: cannot remove 's166': Read-only file system
+rm: cannot remove 's167': Read-only file system
+rm: cannot remove 's168': Read-only file system
+rm: cannot remove 's169': Read-only file system
+rm: cannot remove 's17': Read-only file system
+rm: cannot remove 's170': Read-only file system
+rm: cannot remove 's171': Read-only file system
+rm: cannot remove 's172': Read-only file system
+rm: cannot remove 's173': Read-only file system
+rm: cannot remove 's174': Read-only file system
+rm: cannot remove 's175': Read-only file system
+rm: cannot remove 's176': Read-only file system
+rm: cannot remove 's177': Read-only file system
+rm: cannot remove 's178': Read-only file system
+rm: cannot remove 's179': Read-only file system
+rm: cannot remove 's18': Read-only file system
+rm: cannot remove 's180': Read-only file system
+rm: cannot remove 's181': Read-only file system
+rm: cannot remove 's182': Read-only file system
+rm: cannot remove 's183': Read-only file system
+rm: cannot remove 's184': Read-only file system
+rm: cannot remove 's185': Read-only file system
+rm: cannot remove 's186': Read-only file system
+rm: cannot remove 's187': Read-only file system
+rm: cannot remove 's188': Read-only file system
+rm: cannot remove 's189': Read-only file system
+rm: cannot remove 's19': Read-only file system
+rm: cannot remove 's190': Read-only file system
+rm: cannot remove 's191': Read-only file system
+rm: cannot remove 's192': Read-only file system
+rm: cannot remove 's193': Read-only file system
+rm: cannot remove 's194': Read-only file system
+rm: cannot remove 's195': Read-only file system
+rm: cannot remove 's196': Read-only file system
+rm: cannot remove 's197': Read-only file system
+rm: cannot remove 's198': Read-only file system
+rm: cannot remove 's199': Read-only file system
+rm: cannot remove 's2': Read-only file system
+rm: cannot remove 's20': Read-only file system
+rm: cannot remove 's200': Read-only file system
+rm: cannot remove 's201': Read-only file system
+rm: cannot remove 's202': Read-only file system
+rm: cannot remove 's203': Read-only file system
+rm: cannot remove 's204': Read-only file system
+rm: cannot remove 's205': Read-only file system
+rm: cannot remove 's206': Read-only file system
+rm: cannot remove 's207': Read-only file system
+rm: cannot remove 's208': Read-only file system
+rm: cannot remove 's209': Read-only file system
+rm: cannot remove 's21': Read-only file system
+rm: cannot remove 's210': Read-only file system
+rm: cannot remove 's211': Read-only file system
+rm: cannot remove 's212': Read-only file system
+rm: cannot remove 's213': Read-only file system
+rm: cannot remove 's214': Read-only file system
+rm: cannot remove 's215': Read-only file system
+rm: cannot remove 's216': Read-only file system
+rm: cannot remove 's22': Read-only file system
+rm: cannot remove 's23': Read-only file system
+rm: cannot remove 's24': Read-only file system
+rm: cannot remove 's25': Read-only file system
+rm: cannot remove 's26': Read-only file system
+rm: cannot remove 's27': Read-only file system
+rm: cannot remove 's28': Read-only file system
+rm: cannot remove 's29': Read-only file system
+rm: cannot remove 's3': Read-only file system
+rm: cannot remove 's30': Read-only file system
+rm: cannot remove 's31': Read-only file system
+rm: cannot remove 's32': Read-only file system
+rm: cannot remove 's33': Read-only file system
+rm: cannot remove 's34': Read-only file system
+rm: cannot remove 's35': Read-only file system
+rm: cannot remove 's36': Read-only file system
+rm: cannot remove 's37': Read-only file system
+rm: cannot remove 's38': Read-only file system
+rm: cannot remove 's39': Read-only file system
+rm: cannot remove 's4': Read-only file system
+rm: cannot remove 's40': Read-only file system
+rm: cannot remove 's41': Read-only file system
+rm: cannot remove 's42': Read-only file system
+rm: cannot remove 's43': Read-only file system
+rm: cannot remove 's44': Read-only file system
+rm: cannot remove 's45': Read-only file system
+rm: cannot remove 's46': Read-only file system
+rm: cannot remove 's47': Read-only file system
+rm: cannot remove 's48': Read-only file system
+rm: cannot remove 's49': Read-only file system
+rm: cannot remove 's5': Read-only file system
+rm: cannot remove 's50': Read-only file system
+rm: cannot remove 's51': Read-only file system
+rm: cannot remove 's52': Read-only file system
+rm: cannot remove 's53': Read-only file system
+rm: cannot remove 's54': Read-only file system
+rm: cannot remove 's55': Read-only file system
+rm: cannot remove 's56': Read-only file system
+rm: cannot remove 's57': Read-only file system
+rm: cannot remove 's58': Read-only file system
+rm: cannot remove 's59': Read-only file system
+rm: cannot remove 's6': Read-only file system
+rm: cannot remove 's60': Read-only file system
+rm: cannot remove 's61': Read-only file system
+rm: cannot remove 's62': Read-only file system
+rm: cannot remove 's63': Read-only file system
+rm: cannot remove 's64': Read-only file system
+rm: cannot remove 's65': Read-only file system
+rm: cannot remove 's66': Read-only file system
+rm: cannot remove 's67': Read-only file system
+rm: cannot remove 's68': Read-only file system
+rm: cannot remove 's69': Read-only file system
+rm: cannot remove 's7': Read-only file system
+rm: cannot remove 's70': Read-only file system
+rm: cannot remove 's71': Read-only file system
+rm: cannot remove 's72': Read-only file system
+rm: cannot remove 's73': Read-only file system
+rm: cannot remove 's74': Read-only file system
+rm: cannot remove 's75': Read-only file system
+rm: cannot remove 's76': Read-only file system
+rm: cannot remove 's77': Read-only file system
+rm: cannot remove 's78': Read-only file system
+rm: cannot remove 's79': Read-only file system
+rm: cannot remove 's8': Read-only file system
+rm: cannot remove 's80': Read-only file system
+rm: cannot remove 's81': Read-only file system
+rm: cannot remove 's82': Read-only file system
+rm: cannot remove 's83': Read-only file system
+rm: cannot remove 's84': Read-only file system
+rm: cannot remove 's85': Read-only file system
+rm: cannot remove 's86': Read-only file system
+rm: cannot remove 's87': Read-only file system
+rm: cannot remove 's88': Read-only file system
+rm: cannot remove 's89': Read-only file system
+rm: cannot remove 's9': Read-only file system
+rm: cannot remove 's90': Read-only file system
+rm: cannot remove 's91': Read-only file system
+rm: cannot remove 's92': Read-only file system
+rm: cannot remove 's93': Read-only file system
+rm: cannot remove 's94': Read-only file system
+rm: cannot remove 's95': Read-only file system
+rm: cannot remove 's96': Read-only file system
+rm: cannot remove 's97': Read-only file system
+rm: cannot remove 's98': Read-only file system
+rm: cannot remove 's99': Read-only file system
++ echo 'rm rc=1'
++ mkdir d
+mkdir: cannot create directory 'd': Read-only file system
++ echo 'mkdir after rm rc=1'
++ rmdir d
+rmdir: failed to remove 'd': Read-only file system
++ echo 'rmdir rc=1'
++ ls -la
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /vu1k
++ echo 'unmount u1k rc=0'
++ n=2
++ for l in u4k u1k n1k m4k
++ mkdir -p /vn1k
++ mount -t ext2 /dev/disk/nvme/1/2 /vn1k
++ cd /vn1k
++ echo '=== n1k'
++ df -k .
++ tail -1
++ c=0
++ '[' 0 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=1
++ '[' 1 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=2
++ '[' 2 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=3
++ '[' 3 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=4
++ '[' 4 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=5
++ '[' 5 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=6
++ '[' 6 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=7
++ '[' 7 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=8
++ '[' 8 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=9
++ '[' 9 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=10
++ '[' 10 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=11
++ '[' 11 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=12
++ '[' 12 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=13
++ '[' 13 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=14
++ '[' 14 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=15
++ '[' 15 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=16
++ '[' 16 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=17
++ '[' 17 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=18
++ '[' 18 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=19
++ '[' 19 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=20
++ '[' 20 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=21
++ '[' 21 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=22
++ '[' 22 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=23
++ '[' 23 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=24
++ '[' 24 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=25
++ '[' 25 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=26
++ '[' 26 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=27
++ '[' 27 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=28
++ '[' 28 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=29
++ '[' 29 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=30
++ '[' 30 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=31
++ '[' 31 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=32
++ '[' 32 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=33
++ '[' 33 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=34
++ '[' 34 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=35
++ '[' 35 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=36
++ '[' 36 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=37
++ '[' 37 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=38
++ '[' 38 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=39
++ '[' 39 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=40
++ '[' 40 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=41
++ '[' 41 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=42
++ '[' 42 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=43
++ '[' 43 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=44
++ '[' 44 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=45
++ '[' 45 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=46
++ '[' 46 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=47
++ '[' 47 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=48
++ '[' 48 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=49
++ '[' 49 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=50
++ '[' 50 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=51
++ '[' 51 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=52
++ '[' 52 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=53
++ '[' 53 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=54
++ '[' 54 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=55
++ '[' 55 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=56
++ '[' 56 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=57
++ '[' 57 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=58
++ '[' 58 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=59
++ '[' 59 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=60
++ '[' 60 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=61
++ '[' 61 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=62
++ '[' 62 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ echo '1 MiB chunks: 62'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 4000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 4000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 4000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 4000 ']'
++ printf x
++ i=4
++ '[' 4 -lt 4000 ']'
++ printf x
++ i=5
++ '[' 5 -lt 4000 ']'
++ printf x
++ i=6
++ '[' 6 -lt 4000 ']'
++ printf x
++ i=7
++ '[' 7 -lt 4000 ']'
++ printf x
++ i=8
++ '[' 8 -lt 4000 ']'
++ printf x
++ i=9
++ '[' 9 -lt 4000 ']'
++ printf x
++ i=10
++ '[' 10 -lt 4000 ']'
++ printf x
++ i=11
++ '[' 11 -lt 4000 ']'
++ printf x
++ i=12
++ '[' 12 -lt 4000 ']'
++ printf x
++ i=13
++ '[' 13 -lt 4000 ']'
++ printf x
++ i=14
++ '[' 14 -lt 4000 ']'
++ printf x
++ i=15
++ '[' 15 -lt 4000 ']'
++ printf x
++ i=16
++ '[' 16 -lt 4000 ']'
++ printf x
++ i=17
++ '[' 17 -lt 4000 ']'
++ printf x
++ i=18
++ '[' 18 -lt 4000 ']'
++ printf x
++ i=19
++ '[' 19 -lt 4000 ']'
++ printf x
++ i=20
++ '[' 20 -lt 4000 ']'
++ printf x
++ i=21
++ '[' 21 -lt 4000 ']'
++ printf x
++ i=22
++ '[' 22 -lt 4000 ']'
++ printf x
++ i=23
++ '[' 23 -lt 4000 ']'
++ printf x
++ i=24
++ '[' 24 -lt 4000 ']'
++ printf x
++ i=25
++ '[' 25 -lt 4000 ']'
++ printf x
++ i=26
++ '[' 26 -lt 4000 ']'
++ printf x
++ i=27
++ '[' 27 -lt 4000 ']'
++ printf x
++ i=28
++ '[' 28 -lt 4000 ']'
++ printf x
++ i=29
++ '[' 29 -lt 4000 ']'
++ printf x
++ i=30
++ '[' 30 -lt 4000 ']'
++ printf x
++ i=31
++ '[' 31 -lt 4000 ']'
++ printf x
++ i=32
++ '[' 32 -lt 4000 ']'
++ printf x
++ i=33
++ '[' 33 -lt 4000 ']'
++ printf x
++ i=34
++ '[' 34 -lt 4000 ']'
++ printf x
++ i=35
++ '[' 35 -lt 4000 ']'
++ printf x
++ i=36
++ '[' 36 -lt 4000 ']'
++ printf x
++ i=37
++ '[' 37 -lt 4000 ']'
++ printf x
++ i=38
++ '[' 38 -lt 4000 ']'
++ printf x
++ i=39
++ '[' 39 -lt 4000 ']'
++ printf x
++ i=40
++ '[' 40 -lt 4000 ']'
++ printf x
++ i=41
++ '[' 41 -lt 4000 ']'
++ printf x
++ i=42
++ '[' 42 -lt 4000 ']'
++ printf x
++ i=43
++ '[' 43 -lt 4000 ']'
++ printf x
++ i=44
++ '[' 44 -lt 4000 ']'
++ printf x
++ i=45
++ '[' 45 -lt 4000 ']'
++ printf x
++ i=46
++ '[' 46 -lt 4000 ']'
++ printf x
++ i=47
++ '[' 47 -lt 4000 ']'
++ printf x
++ i=48
++ '[' 48 -lt 4000 ']'
++ printf x
++ i=49
++ '[' 49 -lt 4000 ']'
++ printf x
++ i=50
++ '[' 50 -lt 4000 ']'
++ printf x
++ i=51
++ '[' 51 -lt 4000 ']'
++ printf x
++ i=52
++ '[' 52 -lt 4000 ']'
++ printf x
++ i=53
++ '[' 53 -lt 4000 ']'
++ printf x
++ i=54
++ '[' 54 -lt 4000 ']'
++ printf x
++ i=55
++ '[' 55 -lt 4000 ']'
++ printf x
++ i=56
++ '[' 56 -lt 4000 ']'
++ printf x
++ i=57
++ '[' 57 -lt 4000 ']'
++ printf x
++ i=58
++ '[' 58 -lt 4000 ']'
++ printf x
++ i=59
++ '[' 59 -lt 4000 ']'
++ printf x
++ i=60
++ '[' 60 -lt 4000 ']'
++ printf x
++ i=61
++ '[' 61 -lt 4000 ']'
++ printf x
++ i=62
++ '[' 62 -lt 4000 ']'
++ printf x
++ i=63
++ '[' 63 -lt 4000 ']'
++ printf x
++ i=64
++ '[' 64 -lt 4000 ']'
++ printf x
++ i=65
++ '[' 65 -lt 4000 ']'
++ printf x
++ i=66
++ '[' 66 -lt 4000 ']'
++ printf x
++ i=67
++ '[' 67 -lt 4000 ']'
++ printf x
++ i=68
++ '[' 68 -lt 4000 ']'
++ printf x
++ i=69
++ '[' 69 -lt 4000 ']'
++ printf x
++ i=70
++ '[' 70 -lt 4000 ']'
++ printf x
++ i=71
++ '[' 71 -lt 4000 ']'
++ printf x
++ i=72
++ '[' 72 -lt 4000 ']'
++ printf x
++ i=73
++ '[' 73 -lt 4000 ']'
++ printf x
++ i=74
++ '[' 74 -lt 4000 ']'
++ printf x
++ i=75
++ '[' 75 -lt 4000 ']'
++ printf x
++ i=76
++ '[' 76 -lt 4000 ']'
++ printf x
++ i=77
++ '[' 77 -lt 4000 ']'
++ printf x
++ i=78
++ '[' 78 -lt 4000 ']'
++ printf x
++ i=79
++ '[' 79 -lt 4000 ']'
++ printf x
++ i=80
++ '[' 80 -lt 4000 ']'
++ printf x
++ i=81
++ '[' 81 -lt 4000 ']'
++ printf x
++ i=82
++ '[' 82 -lt 4000 ']'
++ printf x
++ i=83
++ '[' 83 -lt 4000 ']'
++ printf x
++ i=84
++ '[' 84 -lt 4000 ']'
++ printf x
++ i=85
++ '[' 85 -lt 4000 ']'
++ printf x
++ i=86
++ '[' 86 -lt 4000 ']'
++ printf x
++ i=87
++ '[' 87 -lt 4000 ']'
++ printf x
++ i=88
++ '[' 88 -lt 4000 ']'
++ printf x
++ i=89
++ '[' 89 -lt 4000 ']'
++ printf x
++ i=90
++ '[' 90 -lt 4000 ']'
++ printf x
++ i=91
++ '[' 91 -lt 4000 ']'
++ printf x
++ i=92
++ '[' 92 -lt 4000 ']'
++ printf x
++ i=93
++ '[' 93 -lt 4000 ']'
++ printf x
++ i=94
++ '[' 94 -lt 4000 ']'
++ printf x
++ i=95
++ '[' 95 -lt 4000 ']'
++ printf x
++ i=96
++ '[' 96 -lt 4000 ']'
++ printf x
++ i=97
++ '[' 97 -lt 4000 ']'
++ printf x
++ i=98
++ '[' 98 -lt 4000 ']'
++ printf x
++ i=99
++ '[' 99 -lt 4000 ']'
++ printf x
++ i=100
++ '[' 100 -lt 4000 ']'
++ printf x
++ i=101
++ '[' 101 -lt 4000 ']'
++ printf x
++ i=102
++ '[' 102 -lt 4000 ']'
++ printf x
++ i=103
++ '[' 103 -lt 4000 ']'
++ printf x
++ i=104
++ '[' 104 -lt 4000 ']'
++ printf x
++ i=105
++ '[' 105 -lt 4000 ']'
++ printf x
++ i=106
++ '[' 106 -lt 4000 ']'
++ printf x
++ i=107
++ '[' 107 -lt 4000 ']'
++ printf x
++ i=108
++ '[' 108 -lt 4000 ']'
++ printf x
++ i=109
++ '[' 109 -lt 4000 ']'
++ printf x
++ i=110
++ '[' 110 -lt 4000 ']'
++ printf x
++ i=111
++ '[' 111 -lt 4000 ']'
++ printf x
++ i=112
++ '[' 112 -lt 4000 ']'
++ printf x
++ i=113
++ '[' 113 -lt 4000 ']'
++ printf x
++ i=114
++ '[' 114 -lt 4000 ']'
++ printf x
++ i=115
++ '[' 115 -lt 4000 ']'
++ printf x
++ i=116
++ '[' 116 -lt 4000 ']'
++ printf x
++ i=117
++ '[' 117 -lt 4000 ']'
++ printf x
++ i=118
++ '[' 118 -lt 4000 ']'
++ printf x
++ i=119
++ '[' 119 -lt 4000 ']'
++ printf x
++ i=120
++ '[' 120 -lt 4000 ']'
++ printf x
++ i=121
++ '[' 121 -lt 4000 ']'
++ printf x
++ i=122
++ '[' 122 -lt 4000 ']'
++ printf x
++ i=123
++ '[' 123 -lt 4000 ']'
++ printf x
++ i=124
++ '[' 124 -lt 4000 ']'
++ printf x
++ i=125
++ '[' 125 -lt 4000 ']'
++ printf x
++ i=126
++ '[' 126 -lt 4000 ']'
++ printf x
++ i=127
++ '[' 127 -lt 4000 ']'
++ printf x
++ i=128
++ '[' 128 -lt 4000 ']'
++ printf x
++ i=129
++ '[' 129 -lt 4000 ']'
++ printf x
++ i=130
++ '[' 130 -lt 4000 ']'
++ printf x
++ i=131
++ '[' 131 -lt 4000 ']'
++ printf x
++ i=132
++ '[' 132 -lt 4000 ']'
++ printf x
++ i=133
++ '[' 133 -lt 4000 ']'
++ printf x
++ i=134
++ '[' 134 -lt 4000 ']'
++ printf x
++ i=135
++ '[' 135 -lt 4000 ']'
++ printf x
++ i=136
++ '[' 136 -lt 4000 ']'
++ printf x
++ i=137
++ '[' 137 -lt 4000 ']'
++ printf x
++ i=138
++ '[' 138 -lt 4000 ']'
++ printf x
++ i=139
++ '[' 139 -lt 4000 ']'
++ printf x
++ i=140
++ '[' 140 -lt 4000 ']'
++ printf x
++ i=141
++ '[' 141 -lt 4000 ']'
++ printf x
++ i=142
++ '[' 142 -lt 4000 ']'
++ printf x
++ i=143
++ '[' 143 -lt 4000 ']'
++ printf x
++ i=144
++ '[' 144 -lt 4000 ']'
++ printf x
++ i=145
++ '[' 145 -lt 4000 ']'
++ printf x
++ i=146
++ '[' 146 -lt 4000 ']'
++ printf x
++ i=147
++ '[' 147 -lt 4000 ']'
++ printf x
++ i=148
++ '[' 148 -lt 4000 ']'
++ printf x
++ i=149
++ '[' 149 -lt 4000 ']'
++ printf x
++ i=150
++ '[' 150 -lt 4000 ']'
++ printf x
++ i=151
++ '[' 151 -lt 4000 ']'
++ printf x
++ i=152
++ '[' 152 -lt 4000 ']'
++ printf x
++ i=153
++ '[' 153 -lt 4000 ']'
++ printf x
++ i=154
++ '[' 154 -lt 4000 ']'
++ printf x
++ i=155
++ '[' 155 -lt 4000 ']'
++ printf x
++ i=156
++ '[' 156 -lt 4000 ']'
++ printf x
++ i=157
++ '[' 157 -lt 4000 ']'
++ printf x
++ i=158
++ '[' 158 -lt 4000 ']'
++ printf x
++ i=159
++ '[' 159 -lt 4000 ']'
++ printf x
++ i=160
++ '[' 160 -lt 4000 ']'
++ printf x
++ i=161
++ '[' 161 -lt 4000 ']'
++ printf x
++ i=162
++ '[' 162 -lt 4000 ']'
++ printf x
++ i=163
++ '[' 163 -lt 4000 ']'
++ printf x
++ i=164
++ '[' 164 -lt 4000 ']'
++ printf x
++ i=165
++ '[' 165 -lt 4000 ']'
++ printf x
++ i=166
++ '[' 166 -lt 4000 ']'
++ printf x
++ i=167
++ '[' 167 -lt 4000 ']'
++ printf x
++ i=168
++ '[' 168 -lt 4000 ']'
++ printf x
++ i=169
++ '[' 169 -lt 4000 ']'
++ printf x
++ i=170
++ '[' 170 -lt 4000 ']'
++ printf x
++ i=171
++ '[' 171 -lt 4000 ']'
++ printf x
++ i=172
++ '[' 172 -lt 4000 ']'
++ printf x
++ i=173
++ '[' 173 -lt 4000 ']'
++ printf x
++ i=174
++ '[' 174 -lt 4000 ']'
++ printf x
++ i=175
++ '[' 175 -lt 4000 ']'
++ printf x
++ i=176
++ '[' 176 -lt 4000 ']'
++ printf x
++ i=177
++ '[' 177 -lt 4000 ']'
++ printf x
++ i=178
++ '[' 178 -lt 4000 ']'
++ printf x
++ i=179
++ '[' 179 -lt 4000 ']'
++ printf x
++ i=180
++ '[' 180 -lt 4000 ']'
++ printf x
++ i=181
++ '[' 181 -lt 4000 ']'
++ printf x
++ i=182
++ '[' 182 -lt 4000 ']'
++ printf x
++ i=183
++ '[' 183 -lt 4000 ']'
++ printf x
++ i=184
++ '[' 184 -lt 4000 ']'
++ printf x
++ i=185
++ '[' 185 -lt 4000 ']'
++ printf x
++ i=186
++ '[' 186 -lt 4000 ']'
++ printf x
++ i=187
++ '[' 187 -lt 4000 ']'
++ printf x
++ i=188
++ '[' 188 -lt 4000 ']'
++ printf x
++ i=189
++ '[' 189 -lt 4000 ']'
++ printf x
++ i=190
++ '[' 190 -lt 4000 ']'
++ printf x
++ i=191
++ '[' 191 -lt 4000 ']'
++ printf x
++ i=192
++ '[' 192 -lt 4000 ']'
++ printf x
++ i=193
++ '[' 193 -lt 4000 ']'
++ printf x
++ i=194
++ '[' 194 -lt 4000 ']'
++ printf x
++ i=195
++ '[' 195 -lt 4000 ']'
++ printf x
++ i=196
++ '[' 196 -lt 4000 ']'
++ printf x
++ i=197
++ '[' 197 -lt 4000 ']'
++ printf x
++ i=198
++ '[' 198 -lt 4000 ']'
++ printf x
++ i=199
++ '[' 199 -lt 4000 ']'
++ printf x
++ i=200
++ '[' 200 -lt 4000 ']'
++ printf x
++ i=201
++ '[' 201 -lt 4000 ']'
++ printf x
++ i=202
++ '[' 202 -lt 4000 ']'
++ printf x
++ i=203
++ '[' 203 -lt 4000 ']'
++ printf x
++ i=204
++ '[' 204 -lt 4000 ']'
++ printf x
++ i=205
++ '[' 205 -lt 4000 ']'
++ printf x
++ i=206
++ '[' 206 -lt 4000 ']'
++ printf x
++ i=207
++ '[' 207 -lt 4000 ']'
++ printf x
++ i=208
++ '[' 208 -lt 4000 ']'
++ printf x
++ i=209
++ '[' 209 -lt 4000 ']'
++ printf x
++ i=210
++ '[' 210 -lt 4000 ']'
++ printf x
++ i=211
++ '[' 211 -lt 4000 ']'
++ printf x
++ i=212
++ '[' 212 -lt 4000 ']'
++ printf x
++ i=213
++ '[' 213 -lt 4000 ']'
++ printf x
++ i=214
++ '[' 214 -lt 4000 ']'
++ printf x
++ i=215
++ '[' 215 -lt 4000 ']'
++ printf x
++ i=216
++ '[' 216 -lt 4000 ']'
++ printf x
++ i=217
++ '[' 217 -lt 4000 ']'
++ printf x
++ i=218
++ '[' 218 -lt 4000 ']'
++ printf x
++ i=219
++ '[' 219 -lt 4000 ']'
++ printf x
++ i=220
++ '[' 220 -lt 4000 ']'
++ printf x
++ i=221
++ '[' 221 -lt 4000 ']'
++ printf x
++ i=222
++ '[' 222 -lt 4000 ']'
++ printf x
++ i=223
++ '[' 223 -lt 4000 ']'
++ printf x
++ i=224
++ '[' 224 -lt 4000 ']'
++ printf x
++ i=225
++ '[' 225 -lt 4000 ']'
++ printf x
++ i=226
++ '[' 226 -lt 4000 ']'
++ printf x
++ i=227
++ '[' 227 -lt 4000 ']'
++ printf x
++ i=228
++ '[' 228 -lt 4000 ']'
++ printf x
++ echo 'one-block files: 228'
++ df -k .
++ tail -1
++ sync
+++ md5sum
++ m1='2b29684d7e5eb6aed57f2e4f2d2168a8  -'
++ echo 'fill md5 before remount 2b29684d7e5eb6aed57f2e4f2d2168a8  -'
++ cd /
++ unmount /vn1k
++ echo 'unmount n1k rc=0'
++ mount -t ext2 /dev/disk/nvme/1/2 /vn1k
++ echo 'remount n1k rc=0'
++ cd /vn1k
+++ md5sum
++ m2='2e95b6ca5a47f51a603598c100a67089  -'
++ echo 'fill md5 after remount 2e95b6ca5a47f51a603598c100a67089  -'
++ '[' '2b29684d7e5eb6aed57f2e4f2d2168a8  -' = '2e95b6ca5a47f51a603598c100a67089  -' ']'
++ echo 'fill md5 n1k: DIFFERENT'
++ rm -f fill s0 s1 s10 s100 s101 s102 s103 s104 s105 s106 s107 s108 s109 s11 s110 s111 s112 s113 s114 s115 s116 s117 s118 s119 s12 s120 s121 s122 s123 s124 s125 s126 s127 s128 s129 s13 s130 s131 s132 s133 s134 s135 s136 s137 s138 s139 s14 s140 s141 s142 s143 s144 s145 s146 s147 s148 s149 s15 s150 s151 s152 s153 s154 s155 s156 s157 s158 s159 s16 s160 s161 s162 s163 s164 s165 s166 s167 s168 s169 s17 s170 s171 s172 s173 s174 s175 s176 s177 s178 s179 s18 s180 s181 s182 s183 s184 s185 s186 s187 s188 s189 s19 s190 s191 s192 s193 s194 s195 s196 s197 s198 s199 s2 s20 s200 s201 s202 s203 s204 s205 s206 s207 s208 s209 s21 s210 s211 s212 s213 s214 s215 s216 s217 s218 s219 s22 s220 s221 s222 s223 s224 s225 s226 s227 s228 s23 s24 s25 s26 s27 s28 s29 s3 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s4 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s5 s50 s51 s52 s53 s54 s55 s56 s57 s58 s59 s6 s60 s61 s62 s63 s64 s65 s66 s67 s68 s69 s7 s70 s71 s72 s73 s74 s75 s76 s77 s78 s79 s8 s80 s81 s82 s83 s84 s85 s86 s87 s88 s89 s9 s90 s91 s92 s93 s94 s95 s96 s97 s98 s99
+rm: cannot remove 'fill': Read-only file system
+rm: cannot remove 's0': Read-only file system
+rm: cannot remove 's1': Read-only file system
+rm: cannot remove 's10': Read-only file system
+rm: cannot remove 's100': Read-only file system
+rm: cannot remove 's101': Read-only file system
+rm: cannot remove 's102': Read-only file system
+rm: cannot remove 's103': Read-only file system
+rm: cannot remove 's104': Read-only file system
+rm: cannot remove 's105': Read-only file system
+rm: cannot remove 's106': Read-only file system
+rm: cannot remove 's107': Read-only file system
+rm: cannot remove 's108': Read-only file system
+rm: cannot remove 's109': Read-only file system
+rm: cannot remove 's11': Read-only file system
+rm: cannot remove 's110': Read-only file system
+rm: cannot remove 's111': Read-only file system
+rm: cannot remove 's112': Read-only file system
+rm: cannot remove 's113': Read-only file system
+rm: cannot remove 's114': Read-only file system
+rm: cannot remove 's115': Read-only file system
+rm: cannot remove 's116': Read-only file system
+rm: cannot remove 's117': Read-only file system
+rm: cannot remove 's118': Read-only file system
+rm: cannot remove 's119': Read-only file system
+rm: cannot remove 's12': Read-only file system
+rm: cannot remove 's120': Read-only file system
+rm: cannot remove 's121': Read-only file system
+rm: cannot remove 's122': Read-only file system
+rm: cannot remove 's123': Read-only file system
+rm: cannot remove 's124': Read-only file system
+rm: cannot remove 's125': Read-only file system
+rm: cannot remove 's126': Read-only file system
+rm: cannot remove 's127': Read-only file system
+rm: cannot remove 's128': Read-only file system
+rm: cannot remove 's129': Read-only file system
+rm: cannot remove 's13': Read-only file system
+rm: cannot remove 's130': Read-only file system
+rm: cannot remove 's131': Read-only file system
+rm: cannot remove 's132': Read-only file system
+rm: cannot remove 's133': Read-only file system
+rm: cannot remove 's134': Read-only file system
+rm: cannot remove 's135': Read-only file system
+rm: cannot remove 's136': Read-only file system
+rm: cannot remove 's137': Read-only file system
+rm: cannot remove 's138': Read-only file system
+rm: cannot remove 's139': Read-only file system
+rm: cannot remove 's14': Read-only file system
+rm: cannot remove 's140': Read-only file system
+rm: cannot remove 's141': Read-only file system
+rm: cannot remove 's142': Read-only file system
+rm: cannot remove 's143': Read-only file system
+rm: cannot remove 's144': Read-only file system
+rm: cannot remove 's145': Read-only file system
+rm: cannot remove 's146': Read-only file system
+rm: cannot remove 's147': Read-only file system
+rm: cannot remove 's148': Read-only file system
+rm: cannot remove 's149': Read-only file system
+rm: cannot remove 's15': Read-only file system
+rm: cannot remove 's150': Read-only file system
+rm: cannot remove 's151': Read-only file system
+rm: cannot remove 's152': Read-only file system
+rm: cannot remove 's153': Read-only file system
+rm: cannot remove 's154': Read-only file system
+rm: cannot remove 's155': Read-only file system
+rm: cannot remove 's156': Read-only file system
+rm: cannot remove 's157': Read-only file system
+rm: cannot remove 's158': Read-only file system
+rm: cannot remove 's159': Read-only file system
+rm: cannot remove 's16': Read-only file system
+rm: cannot remove 's160': Read-only file system
+rm: cannot remove 's161': Read-only file system
+rm: cannot remove 's162': Read-only file system
+rm: cannot remove 's163': Read-only file system
+rm: cannot remove 's164': Read-only file system
+rm: cannot remove 's165': Read-only file system
+rm: cannot remove 's166': Read-only file system
+rm: cannot remove 's167': Read-only file system
+rm: cannot remove 's168': Read-only file system
+rm: cannot remove 's169': Read-only file system
+rm: cannot remove 's17': Read-only file system
+rm: cannot remove 's170': Read-only file system
+rm: cannot remove 's171': Read-only file system
+rm: cannot remove 's172': Read-only file system
+rm: cannot remove 's173': Read-only file system
+rm: cannot remove 's174': Read-only file system
+rm: cannot remove 's175': Read-only file system
+rm: cannot remove 's176': Read-only file system
+rm: cannot remove 's177': Read-only file system
+rm: cannot remove 's178': Read-only file system
+rm: cannot remove 's179': Read-only file system
+rm: cannot remove 's18': Read-only file system
+rm: cannot remove 's180': Read-only file system
+rm: cannot remove 's181': Read-only file system
+rm: cannot remove 's182': Read-only file system
+rm: cannot remove 's183': Read-only file system
+rm: cannot remove 's184': Read-only file system
+rm: cannot remove 's185': Read-only file system
+rm: cannot remove 's186': Read-only file system
+rm: cannot remove 's187': Read-only file system
+rm: cannot remove 's188': Read-only file system
+rm: cannot remove 's189': Read-only file system
+rm: cannot remove 's19': Read-only file system
+rm: cannot remove 's190': Read-only file system
+rm: cannot remove 's191': Read-only file system
+rm: cannot remove 's192': Read-only file system
+rm: cannot remove 's193': Read-only file system
+rm: cannot remove 's194': Read-only file system
+rm: cannot remove 's195': Read-only file system
+rm: cannot remove 's196': Read-only file system
+rm: cannot remove 's197': Read-only file system
+rm: cannot remove 's198': Read-only file system
+rm: cannot remove 's199': Read-only file system
+rm: cannot remove 's2': Read-only file system
+rm: cannot remove 's20': Read-only file system
+rm: cannot remove 's200': Read-only file system
+rm: cannot remove 's201': Read-only file system
+rm: cannot remove 's202': Read-only file system
+rm: cannot remove 's203': Read-only file system
+rm: cannot remove 's204': Read-only file system
+rm: cannot remove 's205': Read-only file system
+rm: cannot remove 's206': Read-only file system
+rm: cannot remove 's207': Read-only file system
+rm: cannot remove 's208': Read-only file system
+rm: cannot remove 's209': Read-only file system
+rm: cannot remove 's21': Read-only file system
+rm: cannot remove 's210': Read-only file system
+rm: cannot remove 's211': Read-only file system
+rm: cannot remove 's212': Read-only file system
+rm: cannot remove 's213': Read-only file system
+rm: cannot remove 's214': Read-only file system
+rm: cannot remove 's215': Read-only file system
+rm: cannot remove 's216': Read-only file system
+rm: cannot remove 's217': Read-only file system
+rm: cannot remove 's218': Read-only file system
+rm: cannot remove 's219': Read-only file system
+rm: cannot remove 's22': Read-only file system
+rm: cannot remove 's220': Read-only file system
+rm: cannot remove 's221': Read-only file system
+rm: cannot remove 's222': Read-only file system
+rm: cannot remove 's223': Read-only file system
+rm: cannot remove 's224': Read-only file system
+rm: cannot remove 's225': Read-only file system
+rm: cannot remove 's226': Read-only file system
+rm: cannot remove 's227': Read-only file system
+rm: cannot remove 's228': Read-only file system
+rm: cannot remove 's23': Read-only file system
+rm: cannot remove 's24': Read-only file system
+rm: cannot remove 's25': Read-only file system
+rm: cannot remove 's26': Read-only file system
+rm: cannot remove 's27': Read-only file system
+rm: cannot remove 's28': Read-only file system
+rm: cannot remove 's29': Read-only file system
+rm: cannot remove 's3': Read-only file system
+rm: cannot remove 's30': Read-only file system
+rm: cannot remove 's31': Read-only file system
+rm: cannot remove 's32': Read-only file system
+rm: cannot remove 's33': Read-only file system
+rm: cannot remove 's34': Read-only file system
+rm: cannot remove 's35': Read-only file system
+rm: cannot remove 's36': Read-only file system
+rm: cannot remove 's37': Read-only file system
+rm: cannot remove 's38': Read-only file system
+rm: cannot remove 's39': Read-only file system
+rm: cannot remove 's4': Read-only file system
+rm: cannot remove 's40': Read-only file system
+rm: cannot remove 's41': Read-only file system
+rm: cannot remove 's42': Read-only file system
+rm: cannot remove 's43': Read-only file system
+rm: cannot remove 's44': Read-only file system
+rm: cannot remove 's45': Read-only file system
+rm: cannot remove 's46': Read-only file system
+rm: cannot remove 's47': Read-only file system
+rm: cannot remove 's48': Read-only file system
+rm: cannot remove 's49': Read-only file system
+rm: cannot remove 's5': Read-only file system
+rm: cannot remove 's50': Read-only file system
+rm: cannot remove 's51': Read-only file system
+rm: cannot remove 's52': Read-only file system
+rm: cannot remove 's53': Read-only file system
+rm: cannot remove 's54': Read-only file system
+rm: cannot remove 's55': Read-only file system
+rm: cannot remove 's56': Read-only file system
+rm: cannot remove 's57': Read-only file system
+rm: cannot remove 's58': Read-only file system
+rm: cannot remove 's59': Read-only file system
+rm: cannot remove 's6': Read-only file system
+rm: cannot remove 's60': Read-only file system
+rm: cannot remove 's61': Read-only file system
+rm: cannot remove 's62': Read-only file system
+rm: cannot remove 's63': Read-only file system
+rm: cannot remove 's64': Read-only file system
+rm: cannot remove 's65': Read-only file system
+rm: cannot remove 's66': Read-only file system
+rm: cannot remove 's67': Read-only file system
+rm: cannot remove 's68': Read-only file system
+rm: cannot remove 's69': Read-only file system
+rm: cannot remove 's7': Read-only file system
+rm: cannot remove 's70': Read-only file system
+rm: cannot remove 's71': Read-only file system
+rm: cannot remove 's72': Read-only file system
+rm: cannot remove 's73': Read-only file system
+rm: cannot remove 's74': Read-only file system
+rm: cannot remove 's75': Read-only file system
+rm: cannot remove 's76': Read-only file system
+rm: cannot remove 's77': Read-only file system
+rm: cannot remove 's78': Read-only file system
+rm: cannot remove 's79': Read-only file system
+rm: cannot remove 's8': Read-only file system
+rm: cannot remove 's80': Read-only file system
+rm: cannot remove 's81': Read-only file system
+rm: cannot remove 's82': Read-only file system
+rm: cannot remove 's83': Read-only file system
+rm: cannot remove 's84': Read-only file system
+rm: cannot remove 's85': Read-only file system
+rm: cannot remove 's86': Read-only file system
+rm: cannot remove 's87': Read-only file system
+rm: cannot remove 's88': Read-only file system
+rm: cannot remove 's89': Read-only file system
+rm: cannot remove 's9': Read-only file system
+rm: cannot remove 's90': Read-only file system
+rm: cannot remove 's91': Read-only file system
+rm: cannot remove 's92': Read-only file system
+rm: cannot remove 's93': Read-only file system
+rm: cannot remove 's94': Read-only file system
+rm: cannot remove 's95': Read-only file system
+rm: cannot remove 's96': Read-only file system
+rm: cannot remove 's97': Read-only file system
+rm: cannot remove 's98': Read-only file system
+rm: cannot remove 's99': Read-only file system
++ echo 'rm rc=1'
++ mkdir d
+mkdir: cannot create directory 'd': Read-only file system
++ echo 'mkdir after rm rc=1'
++ rmdir d
+rmdir: failed to remove 'd': Read-only file system
++ echo 'rmdir rc=1'
++ ls -la
++ tail -1
++ df -k .
++ sync
++ cd /
++ unmount /vn1k
++ echo 'unmount n1k rc=0'
++ n=3
++ for l in u4k u1k n1k m4k
++ mkdir -p /vm4k
++ mount -t ext2 /dev/disk/nvme/1/3 /vm4k
++ cd /vm4k
++ echo '=== m4k'
++ df -k .
++ tail -1
++ c=0
++ '[' 0 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=1
++ '[' 1 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=2
++ '[' 2 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=3
++ '[' 3 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=4
++ '[' 4 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=5
++ '[' 5 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=6
++ '[' 6 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=7
++ '[' 7 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=8
++ '[' 8 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=9
++ '[' 9 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=10
++ '[' 10 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=11
++ '[' 11 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=12
++ '[' 12 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=13
++ '[' 13 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=14
++ '[' 14 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=15
++ '[' 15 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=16
++ '[' 16 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=17
++ '[' 17 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=18
++ '[' 18 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=19
++ '[' 19 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=20
++ '[' 20 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=21
++ '[' 21 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=22
++ '[' 22 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=23
++ '[' 23 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=24
++ '[' 24 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=25
++ '[' 25 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=26
++ '[' 26 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=27
++ '[' 27 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=28
++ '[' 28 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=29
++ '[' 29 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=30
++ '[' 30 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=31
++ '[' 31 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=32
++ '[' 32 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=33
++ '[' 33 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=34
++ '[' 34 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=35
++ '[' 35 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=36
++ '[' 36 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=37
++ '[' 37 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=38
++ '[' 38 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=39
++ '[' 39 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=40
++ '[' 40 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=41
++ '[' 41 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=42
++ '[' 42 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=43
++ '[' 43 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=44
++ '[' 44 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=45
++ '[' 45 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=46
++ '[' 46 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=47
++ '[' 47 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=48
++ '[' 48 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=49
++ '[' 49 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=50
++ '[' 50 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=51
++ '[' 51 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=52
++ '[' 52 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=53
++ '[' 53 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=54
++ '[' 54 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=55
++ '[' 55 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=56
++ '[' 56 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=57
++ '[' 57 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=58
++ '[' 58 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=59
++ '[' 59 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=60
++ '[' 60 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=61
++ '[' 61 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=62
++ '[' 62 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=63
++ '[' 63 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=64
++ '[' 64 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=65
++ '[' 65 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=66
++ '[' 66 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=67
++ '[' 67 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=68
++ '[' 68 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=69
++ '[' 69 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=70
++ '[' 70 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=71
++ '[' 71 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=72
++ '[' 72 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=73
++ '[' 73 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=74
++ '[' 74 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=75
++ '[' 75 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=76
++ '[' 76 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=77
++ '[' 77 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=78
++ '[' 78 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=79
++ '[' 79 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=80
++ '[' 80 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=81
++ '[' 81 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=82
++ '[' 82 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=83
++ '[' 83 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=84
++ '[' 84 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=85
++ '[' 85 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=86
++ '[' 86 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=87
++ '[' 87 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=88
++ '[' 88 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=89
++ '[' 89 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=90
++ '[' 90 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=91
++ '[' 91 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=92
++ '[' 92 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=93
++ '[' 93 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=94
++ '[' 94 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=95
++ '[' 95 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=96
++ '[' 96 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=97
++ '[' 97 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=98
++ '[' 98 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=99
++ '[' 99 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=100
++ '[' 100 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=101
++ '[' 101 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=102
++ '[' 102 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=103
++ '[' 103 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=104
++ '[' 104 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=105
++ '[' 105 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=106
++ '[' 106 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=107
++ '[' 107 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=108
++ '[' 108 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=109
++ '[' 109 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=110
++ '[' 110 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=111
++ '[' 111 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=112
++ '[' 112 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=113
++ '[' 113 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=114
++ '[' 114 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=115
++ '[' 115 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=116
++ '[' 116 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=117
++ '[' 117 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=118
++ '[' 118 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=119
++ '[' 119 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=120
++ '[' 120 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=121
++ '[' 121 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=122
++ '[' 122 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=123
++ '[' 123 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=124
++ '[' 124 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=125
++ '[' 125 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=126
++ '[' 126 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=127
++ '[' 127 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=128
++ '[' 128 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=129
++ '[' 129 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=130
++ '[' 130 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=131
++ '[' 131 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=132
++ '[' 132 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=133
++ '[' 133 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=134
++ '[' 134 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=135
++ '[' 135 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=136
++ '[' 136 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=137
++ '[' 137 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=138
++ '[' 138 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=139
++ '[' 139 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=140
++ '[' 140 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=141
++ '[' 141 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=142
++ '[' 142 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=143
++ '[' 143 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=144
++ '[' 144 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=145
++ '[' 145 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=146
++ '[' 146 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=147
++ '[' 147 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=148
++ '[' 148 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=149
++ '[' 149 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=150
++ '[' 150 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=151
++ '[' 151 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=152
++ '[' 152 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=153
++ '[' 153 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=154
++ '[' 154 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=155
++ '[' 155 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=156
++ '[' 156 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=157
++ '[' 157 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=158
++ '[' 158 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=159
++ '[' 159 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=160
++ '[' 160 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=161
++ '[' 161 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=162
++ '[' 162 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=163
++ '[' 163 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=164
++ '[' 164 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=165
++ '[' 165 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=166
++ '[' 166 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=167
++ '[' 167 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=168
++ '[' 168 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=169
++ '[' 169 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=170
++ '[' 170 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=171
++ '[' 171 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=172
++ '[' 172 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=173
++ '[' 173 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=174
++ '[' 174 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=175
++ '[' 175 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=176
++ '[' 176 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=177
++ '[' 177 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=178
++ '[' 178 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=179
++ '[' 179 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=180
++ '[' 180 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=181
++ '[' 181 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=182
++ '[' 182 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=183
++ '[' 183 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=184
++ '[' 184 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=185
++ '[' 185 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=186
++ '[' 186 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=187
++ '[' 187 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=188
++ '[' 188 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=189
++ '[' 189 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=190
++ '[' 190 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=191
++ '[' 191 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=192
++ '[' 192 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=193
++ '[' 193 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=194
++ '[' 194 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=195
++ '[' 195 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=196
++ '[' 196 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=197
++ '[' 197 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=198
++ '[' 198 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=199
++ '[' 199 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=200
++ '[' 200 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=201
++ '[' 201 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=202
++ '[' 202 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=203
++ '[' 203 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=204
++ '[' 204 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=205
++ '[' 205 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=206
++ '[' 206 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=207
++ '[' 207 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=208
++ '[' 208 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=209
++ '[' 209 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=210
++ '[' 210 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=211
++ '[' 211 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=212
++ '[' 212 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=213
++ '[' 213 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=214
++ '[' 214 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=215
++ '[' 215 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=216
++ '[' 216 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=217
++ '[' 217 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=218
++ '[' 218 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=219
++ '[' 219 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=220
++ '[' 220 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=221
++ '[' 221 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=222
++ '[' 222 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=223
++ '[' 223 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=224
++ '[' 224 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=225
++ '[' 225 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=226
++ '[' 226 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=227
++ '[' 227 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=228
++ '[' 228 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=229
++ '[' 229 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=230
++ '[' 230 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=231
++ '[' 231 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=232
++ '[' 232 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=233
++ '[' 233 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=234
++ '[' 234 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=235
++ '[' 235 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=236
++ '[' 236 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=237
++ '[' 237 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=238
++ '[' 238 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=239
++ '[' 239 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=240
++ '[' 240 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=241
++ '[' 241 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=242
++ '[' 242 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=243
++ '[' 243 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=244
++ '[' 244 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=245
++ '[' 245 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=246
++ '[' 246 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=247
++ '[' 247 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=248
++ '[' 248 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=249
++ '[' 249 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=250
++ '[' 250 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=251
++ '[' 251 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=252
++ '[' 252 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=253
++ '[' 253 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=254
++ '[' 254 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=255
++ '[' 255 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=256
++ '[' 256 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=257
++ '[' 257 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=258
++ '[' 258 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=259
++ '[' 259 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=260
++ '[' 260 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=261
++ '[' 261 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=262
++ '[' 262 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=263
++ '[' 263 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=264
++ '[' 264 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=265
++ '[' 265 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=266
++ '[' 266 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=267
++ '[' 267 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=268
++ '[' 268 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=269
++ '[' 269 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=270
++ '[' 270 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=271
++ '[' 271 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=272
++ '[' 272 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=273
++ '[' 273 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=274
++ '[' 274 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=275
++ '[' 275 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=276
++ '[' 276 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=277
++ '[' 277 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=278
++ '[' 278 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=279
++ '[' 279 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=280
++ '[' 280 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=281
++ '[' 281 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=282
++ '[' 282 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=283
++ '[' 283 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=284
++ '[' 284 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=285
++ '[' 285 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=286
++ '[' 286 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=287
++ '[' 287 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=288
++ '[' 288 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=289
++ '[' 289 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=290
++ '[' 290 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=291
++ '[' 291 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=292
++ '[' 292 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=293
++ '[' 293 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=294
++ '[' 294 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=295
++ '[' 295 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=296
++ '[' 296 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=297
++ '[' 297 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=298
++ '[' 298 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=299
++ '[' 299 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=300
++ '[' 300 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=301
++ '[' 301 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=302
++ '[' 302 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=303
++ '[' 303 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=304
++ '[' 304 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=305
++ '[' 305 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=306
++ '[' 306 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=307
++ '[' 307 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=308
++ '[' 308 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=309
++ '[' 309 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=310
++ '[' 310 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=311
++ '[' 311 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=312
++ '[' 312 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=313
++ '[' 313 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=314
++ '[' 314 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=315
++ '[' 315 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=316
++ '[' 316 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=317
++ '[' 317 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=318
++ '[' 318 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=319
++ '[' 319 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=320
++ '[' 320 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=321
++ '[' 321 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=322
++ '[' 322 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=323
++ '[' 323 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=324
++ '[' 324 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=325
++ '[' 325 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=326
++ '[' 326 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=327
++ '[' 327 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=328
++ '[' 328 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=329
++ '[' 329 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=330
++ '[' 330 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=331
++ '[' 331 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=332
++ '[' 332 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=333
++ '[' 333 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=334
++ '[' 334 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=335
++ '[' 335 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=336
++ '[' 336 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=337
++ '[' 337 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=338
++ '[' 338 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=339
++ '[' 339 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=340
++ '[' 340 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=341
++ '[' 341 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=342
++ '[' 342 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=343
++ '[' 343 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=344
++ '[' 344 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=345
++ '[' 345 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=346
++ '[' 346 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=347
++ '[' 347 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=348
++ '[' 348 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=349
++ '[' 349 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=350
++ '[' 350 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=351
++ '[' 351 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=352
++ '[' 352 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=353
++ '[' 353 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=354
++ '[' 354 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=355
++ '[' 355 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=356
++ '[' 356 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=357
++ '[' 357 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=358
++ '[' 358 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=359
++ '[' 359 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=360
++ '[' 360 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=361
++ '[' 361 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=362
++ '[' 362 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=363
++ '[' 363 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=364
++ '[' 364 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=365
++ '[' 365 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=366
++ '[' 366 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=367
++ '[' 367 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=368
++ '[' 368 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=369
++ '[' 369 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=370
++ '[' 370 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=371
++ '[' 371 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=372
++ '[' 372 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=373
++ '[' 373 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ c=374
++ '[' 374 -lt 1000 ']'
++ cat /boot/home/chunk1m
++ echo '1 MiB chunks: 374'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 4000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 4000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 4000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 4000 ']'
++ printf x
++ i=4
++ '[' 4 -lt 4000 ']'
++ printf x
++ i=5
++ '[' 5 -lt 4000 ']'
++ printf x
++ i=6
++ '[' 6 -lt 4000 ']'
++ printf x
++ i=7
++ '[' 7 -lt 4000 ']'
++ printf x
++ i=8
++ '[' 8 -lt 4000 ']'
++ printf x
++ i=9
++ '[' 9 -lt 4000 ']'
++ printf x
++ i=10
++ '[' 10 -lt 4000 ']'
++ printf x
++ i=11
++ '[' 11 -lt 4000 ']'
++ printf x
++ echo 'one-block files: 11'
++ df -k .
++ tail -1
++ sync
+++ md5sum
++ m1='1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ echo 'fill md5 before remount 1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ cd /
++ unmount /vm4k
++ echo 'unmount m4k rc=0'
++ mount -t ext2 /dev/disk/nvme/1/3 /vm4k
++ echo 'remount m4k rc=0'
++ cd /vm4k
+++ md5sum
++ m2='1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ echo 'fill md5 after remount 1d7086d3c5df74c7f26c7ae7cebb438c  -'
++ '[' '1d7086d3c5df74c7f26c7ae7cebb438c  -' = '1d7086d3c5df74c7f26c7ae7cebb438c  -' ']'
++ echo 'fill md5 m4k: same'
++ rm -f fill s0 s1 s10 s11 s2 s3 s4 s5 s6 s7 s8 s9
+rm: cannot remove 'fill': Read-only file system
+rm: cannot remove 's0': Read-only file system
+rm: cannot remove 's1': Read-only file system
+rm: cannot remove 's10': Read-only file system
+rm: cannot remove 's11': Read-only file system
+rm: cannot remove 's2': Read-only file system
+rm: cannot remove 's3': Read-only file system
+rm: cannot remove 's4': Read-only file system
+rm: cannot remove 's5': Read-only file system
+rm: cannot remove 's6': Read-only file system
+rm: cannot remove 's7': Read-only file system
+rm: cannot remove 's8': Read-only file system
+rm: cannot remove 's9': Read-only file system
++ echo 'rm rc=1'
++ mkdir d
+mkdir: cannot create directory 'd': Read-only file system
++ echo 'mkdir after rm rc=1'
++ rmdir d
+rmdir: failed to remove 'd': Read-only file system
++ echo 'rmdir rc=1'
++ ls -la
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /vm4k
++ echo 'unmount m4k rc=0'
++ n=4
++ sync
++ n=0
++ for l in u4k u1k n1k m4k
++ mount -t ext2 /dev/disk/nvme/1/0 /vu4k
++ echo 'final mount u4k rc=0'
++ n=1
++ touch /vu4k/probe
+touch: cannot touch '/vu4k/probe': Read-only file system
++ echo 'final mount u4k write rc=1'
++ rm /vu4k/probe
+rm: cannot remove '/vu4k/probe': No such file or directory
++ unmount /vu4k
++ echo 'unmount u4k rc=0'
++ for l in u4k u1k n1k m4k
++ mount -t ext2 /dev/disk/nvme/1/1 /vu1k
++ echo 'final mount u1k rc=0'
++ n=2
++ touch /vu1k/probe
+touch: cannot touch '/vu1k/probe': Read-only file system
++ echo 'final mount u1k write rc=1'
++ rm /vu1k/probe
+rm: cannot remove '/vu1k/probe': No such file or directory
++ unmount /vu1k
++ echo 'unmount u1k rc=0'
++ for l in u4k u1k n1k m4k
++ mount -t ext2 /dev/disk/nvme/1/2 /vn1k
++ echo 'final mount n1k rc=0'
++ n=3
++ touch /vn1k/probe
+touch: cannot touch '/vn1k/probe': Read-only file system
++ echo 'final mount n1k write rc=1'
++ rm /vn1k/probe
+rm: cannot remove '/vn1k/probe': No such file or directory
++ unmount /vn1k
++ echo 'unmount n1k rc=0'
++ for l in u4k u1k n1k m4k
++ mount -t ext2 /dev/disk/nvme/1/3 /vm4k
++ echo 'final mount m4k rc=0'
++ n=4
++ touch /vm4k/probe
+touch: cannot touch '/vm4k/probe': Read-only file system
++ echo 'final mount m4k write rc=1'
++ rm /vm4k/probe
+rm: cannot remove '/vm4k/probe': No such file or directory
++ unmount /vm4k
++ echo 'unmount m4k rc=0'
++ sync
++ grep -E 'ext2|Mismatch|uninitialized group' /var/log/syslog
++ grep -v 'disk system'
++ tail -40

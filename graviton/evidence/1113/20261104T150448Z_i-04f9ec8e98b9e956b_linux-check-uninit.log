@@ -1,0 +1,2224 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-check-uninit
+# instance: i-04f9ec8e98b9e956b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck -fn (primary and every backup) of the seed1113 volumes after ext2uninit1113.sh, both arms
+# start: 20261104T150448Z   end: 20261104T150505Z   rc: 0
+# script sha256: f3e69d1fd1a56ac6e193074fa625710685628af57f194e3d1d308ae32d5ccbdd
+# ---- script ----
+# | # Linux check of the seed1113 volumes after the Haiku runs: e2fsck -fn on every file system, on the
+# | # primary superblock and on each backup (a backup Haiku wrote file data over fails here), dumpe2fs of
+# | # the group flags and free counts.
+# | #  arm before: vol-0c996ba1587777183   arm after: vol-087d689cd532b46e4
+# | set -x
+# | sleep 8
+# | dev() { D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) '$9 == v { print $11 }' | sed 's|.*/||'); echo /dev/$D; }
+# | for arm in before:vol-0c996ba1587777183 after:vol-087d689cd532b46e4; do
+# | 	a=${arm%%:*}; D=$(dev ${arm##*:}); echo "##### arm $a volume ${arm##*:} $D"; lsblk $D || exit 1
+# | 	for n in 1 2 3 4; do
+# | 		P=${D}p$n; echo "== $a p$n $(blkid -o value -s LABEL $P)"
+# | 		e2fsck -fn $P 2>&1; echo "e2fsck $a p$n primary rc=$?"
+# | 		bs=$(dumpe2fs -h $P 2>/dev/null | awk '/^Block size/ { print $3 }')
+# | 		for b in $(dumpe2fs $P 2>/dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'); do
+# | 			e2fsck -fn -b $b -B $bs $P > /tmp/b.out 2>&1; r=$?
+# | 			echo "e2fsck $a p$n backup $b rc=$r: $(grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out | head -1)"
+# | 		done
+# | 		dumpe2fs $P 2>/dev/null | grep -E '^Group |free blocks,'
+# | 	done
+# | done
+# ---- raw output ----
+##### arm before volume vol-0c996ba1587777183 /dev/nvme1n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme1n1     259:4    0    1G  0 disk 
+├─nvme1n1p1 259:5    0  400M  0 part 
+├─nvme1n1p2 259:6    0   64M  0 part 
+├─nvme1n1p3 259:7    0   64M  0 part 
+└─nvme1n1p4 259:8    0  400M  0 part 
+== before p1 u4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+
+Running additional passes to resolve blocks claimed by more than one inode...
+Pass 1B: Rescanning for multiply-claimed blocks
+Multiply-claimed block(s) in inode 7: 32770--32818
+Multiply-claimed block(s) in inode 12: 32768--32818
+Pass 1C: Scanning directories for inodes with multiply-claimed blocks
+Pass 1D: Reconciling multiply-claimed blocks
+(There are 1 inodes containing multiply-claimed blocks.)
+
+File /fill (inode #12, mod time Wed Nov  4 15:01:21 2026) 
+  has 51 multiply-claimed block(s), shared with 2 file(s):
+	<filesystem metadata>
+	<The group descriptor inode> (inode #7, mod time Wed Nov  4 14:52:25 2026)
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Free blocks count wrong (18446744073709551565, counted=0).
+Fix? no
+
+
+u4k: ********** WARNING: Filesystem still has errors **********
+
+u4k: 24/102400 files (0.0% non-contiguous), 102451/102400 blocks
+e2fsck before p1 primary rc=4
+e2fsck before p1 backup 32768 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p1
+e2fsck before p1 backup 98304 rc=12: Inode 32 has corrupt extent header.  Clear inode? no
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0xcc47
+  0 free blocks, 25576 free inodes, 2 directories, 25576 unused inodes
+Group 1: (Blocks 32768-65535) csum 0x7434 [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 2: (Blocks 65536-98303) csum 0x8593 [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 3: (Blocks 98304-102399) csum 0xe3a0 [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+== before p2 u1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+
+Running additional passes to resolve blocks claimed by more than one inode...
+Pass 1B: Rescanning for multiply-claimed blocks
+Multiply-claimed block(s) in inode 7: 8450 24834 41218 8195 24579 40963 8196 24580 40964 8197 24581 40965 8198 24582 40966 8199 24583 40967 8200 24584 40968 8201 24585 40969 8202 24586 40970 8203 24587 40971 8204 24588 40972 8205 24589 40973 8206 24590 40974 8207 24591 40975 8208 24592 40976 8209 24593 40977 8210 24594 40978 8211 24595 40979 8212 24596 40980 8213 24597 40981 8214 24598 40982 8215 24599 40983 8216 24600 40984 8217 24601 40985 8218 24602 40986 8219 24603 40987 8220 24604 40988 8221 24605 40989 8222 24606 40990 8223 24607 40991 8224 24608 40992 8225 24609 40993 8226 24610 40994 8227 24611 40995 8228 24612 40996 8229 24613 40997 8230 24614 40998 8231 24615 40999 8232 24616 41000 8233 24617 41001 8234 24618 41002 8235 24619 41003 8236 24620 41004 8237 24621 41005 8238 24622 41006 8239 24623 41007 8240 24624 41008 8241 24625 41009 8242 24626 41010 8243 24627 41011 8244 24628 41012 8245 24629 41013 8246 24630 41014 8247 24631 41015 8248 24632 41016 8249 24633 41017 8250 24634 41018 8251 24635 41019 8252 24636 41020 8253 24637 41021 8254 24638 41022 8255 24639 41023 8256 24640 41024 8257 24641 41025 8258 24642 41026 8259 24643 41027 8260 24644 41028 8261 24645 41029 8262 24646 41030 8263 24647 41031 8264 24648 41032 8265 24649 41033 8266 24650 41034 8267 24651 41035 8268 24652 41036 8269 24653 41037 8270 24654 41038 8271 24655 41039 8272 24656 41040 8273 24657 41041 8274 24658 41042 8275 24659 41043 8276 24660 41044 8277 24661 41045 8278 24662 41046 8279 24663 41047 8280 24664 41048 8281 24665 41049 8282 24666 41050 8283 24667 41051 8284 24668 41052 8285 24669 41053 8286 24670 41054 8287 24671 41055 8288 24672 41056 8289 24673 41057 8290 24674 41058 8291 24675 41059 8292 24676 41060 8293 24677 41061 8294 24678 41062 8295 24679 41063 8296 24680 41064 8297 24681 41065 8298 24682 41066 8299 24683 41067 8300 24684 41068 8301 24685 41069 8302 24686 41070 8303 24687 41071 8304 24688 41072 8305 24689 41073 8306 24690 41074 8307 24691 41075 8308 24692 41076 8309 24693 41077 8310 24694 41078 8311 24695 41079 8312 24696 41080 8313 24697 41081 8314 24698 41082 8315 24699 41083 8316 24700 41084 8317 24701 41085 8318 24702 41086 8319 24703 41087 8320 24704 41088 8321 24705 41089 8322 24706 41090 8323 24707 41091 8324 24708 41092 8325 24709 41093 8326 24710 41094 8327 24711 41095 8328 24712 41096 8329 24713 41097 8330 24714 41098 8331 24715 41099 8332 24716 41100 8333 24717 41101 8334 24718 41102 8335 24719 41103 8336 24720 41104 8337 24721 41105 8338 24722 41106 8339 24723 41107 8340 24724 41108 8341 24725 41109 8342 24726 41110 8343 24727 41111 8344 24728 41112 8345 24729 41113 8346 24730 41114 8347 24731 41115 8348 24732 41116 8349 24733 41117 8350 24734 41118 8351 24735 41119 8352 24736 41120 8353 24737 41121 8354 24738 41122 8355 24739 41123 8356 24740 41124 8357 24741 41125 8358 24742 41126 8359 24743 41127 8360 24744 41128 8361 24745 41129 8362 24746 41130 8363 24747 41131 8364 24748 41132 8365 24749 41133 8366 24750 41134 8367 24751 41135 8368 24752 41136 8369 24753 41137 8370 24754 41138 8371 24755 41139 8372 24756 41140 8373 24757 41141 8374 24758 41142 8375 24759 41143 8376 24760 41144 8377 24761 41145 8378 24762 41146 8379 24763 41147 8380 24764 41148 8381 24765 41149 8382 24766 41150 8383 24767 41151 8384 24768 41152 8385 24769 41153 8386 24770 41154 8387 24771 41155 8388 24772 41156 8389 24773 41157 8390 24774 41158 8391 24775 41159 8392 24776 41160 8393 24777 41161 8394 24778 41162 8395 24779 41163 8396 24780 41164 8397 24781 41165 8398 24782 41166 8399 24783 41167 8400 24784 41168 8401 24785 41169 8402 24786 41170 8403 24787 41171 8404 24788 41172 8405 24789 41173 8406 24790 41174 8407 24791 41175 8408 24792 41176 8409 24793 41177 8410 24794 41178 8411 24795 41179 8412 24796 41180 8413 24797 41181 8414 24798 41182 8415 24799 41183 8416 24800 41184 8417 24801 41185 8418 24802 41186 8419 24803 41187 8420 24804 41188 8421 24805 41189 8422 24806 41190 8423 24807 41191 8424 24808 41192 8425 24809 41193 8426 24810 41194 8427 24811 41195 8428 24812 41196 8429 24813 41197 8430 24814 41198 8431 24815 41199 8432 24816 41200 8433 24817 41201 8434 24818 41202 8435 24819 41203 8436 24820 41204 8437 24821 41205 8438 24822 41206 8439 24823 41207 8440 24824 41208 8441 24825 41209 8442 24826 41210 8443 24827 41211 8444 24828 41212 8445 24829 41213 8446 24830 41214 8447 24831 41215 8448 24832 41216 8449 24833 41217
+Multiply-claimed block(s) in inode 12: 8193--8450 24577--24834 40961--41218
+Pass 1C: Scanning directories for inodes with multiply-claimed blocks
+Pass 1D: Reconciling multiply-claimed blocks
+(There are 1 inodes containing multiply-claimed blocks.)
+
+File /fill (inode #12, mod time Wed Nov  4 15:01:33 2026) 
+  has 774 multiply-claimed block(s), shared with 2 file(s):
+	<filesystem metadata>
+	<The group descriptor inode> (inode #7, mod time Wed Nov  4 14:52:25 2026)
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Free blocks count wrong (18446744073709550842, counted=0).
+Fix? no
+
+
+u1k: ********** WARNING: Filesystem still has errors **********
+
+u1k: 229/16384 files (0.4% non-contiguous), 66310/65536 blocks
+e2fsck before p2 primary rc=4
+e2fsck before p2 backup 8193 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p2
+e2fsck before p2 backup 24577 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p2
+e2fsck before p2 backup 40961 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p2
+e2fsck before p2 backup 57345 rc=12: 
+Group descriptor size:    64
+Group 0: (Blocks 1-8192) csum 0xe865
+  0 free blocks, 1819 free inodes, 2 directories, 1819 unused inodes
+Group 1: (Blocks 8193-16384) csum 0x69ff [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 2: (Blocks 16385-24576) csum 0xd958 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 3: (Blocks 24577-32768) csum 0xf53f [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 4: (Blocks 32769-40960) csum 0xf815 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 5: (Blocks 40961-49152) csum 0x9850 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 6: (Blocks 49153-57344) csum 0x28f7 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 7: (Blocks 57345-65535) csum 0x0490 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+== before p3 n1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Inode 12 block 16385 conflicts with critical metadata, skipping block checks.
+
+Running additional passes to resolve blocks claimed by more than one inode...
+Pass 1B: Rescanning for multiply-claimed blocks
+Multiply-claimed block(s) in inode 2: 49294--49295 49378 49392
+Multiply-claimed block(s) in inode 7: 8450 24834 41218 8195 24579 40963 8196 24580 40964 8197 24581 40965 8198 24582 40966 8199 24583 40967 8200 24584 40968 8201 24585 40969 8202 24586 40970 8203 24587 40971 8204 24588 40972 8205 24589 40973 8206 24590 40974 8207 24591 40975 8208 24592 40976 8209 24593 40977 8210 24594 40978 8211 24595 40979 8212 24596 40980 8213 24597 40981 8214 24598 40982 8215 24599 40983 8216 24600 40984 8217 24601 40985 8218 24602 40986 8219 24603 40987 8220 24604 40988 8221 24605 40989 8222 24606 40990 8223 24607 40991 8224 24608 40992 8225 24609 40993 8226 24610 40994 8227 24611 40995 8228 24612 40996 8229 24613 40997 8230 24614 40998 8231 24615 40999 8232 24616 41000 8233 24617 41001 8234 24618 41002 8235 24619 41003 8236 24620 41004 8237 24621 41005 8238 24622 41006 8239 24623 41007 8240 24624 41008 8241 24625 41009 8242 24626 41010 8243 24627 41011 8244 24628 41012 8245 24629 41013 8246 24630 41014 8247 24631 41015 8248 24632 41016 8249 24633 41017 8250 24634 41018 8251 24635 41019 8252 24636 41020 8253 24637 41021 8254 24638 41022 8255 24639 41023 8256 24640 41024 8257 24641 41025 8258 24642 41026 8259 24643 41027 8260 24644 41028 8261 24645 41029 8262 24646 41030 8263 24647 41031 8264 24648 41032 8265 24649 41033 8266 24650 41034 8267 24651 41035 8268 24652 41036 8269 24653 41037 8270 24654 41038 8271 24655 41039 8272 24656 41040 8273 24657 41041 8274 24658 41042 8275 24659 41043 8276 24660 41044 8277 24661 41045 8278 24662 41046 8279 24663 41047 8280 24664 41048 8281 24665 41049 8282 24666 41050 8283 24667 41051 8284 24668 41052 8285 24669 41053 8286 24670 41054 8287 24671 41055 8288 24672 41056 8289 24673 41057 8290 24674 41058 8291 24675 41059 8292 24676 41060 8293 24677 41061 8294 24678 41062 8295 24679 41063 8296 24680 41064 8297 24681 41065 8298 24682 41066 8299 24683 41067 8300 24684 41068 8301 24685 41069 8302 24686 41070 8303 24687 41071 8304 24688 41072 8305 24689 41073 8306 24690 41074 8307 24691 41075 8308 24692 41076 8309 24693 41077 8310 24694 41078 8311 24695 41079 8312 24696 41080 8313 24697 41081 8314 24698 41082 8315 24699 41083 8316 24700 41084 8317 24701 41085 8318 24702 41086 8319 24703 41087 8320 24704 41088 8321 24705 41089 8322 24706 41090 8323 24707 41091 8324 24708 41092 8325 24709 41093 8326 24710 41094 8327 24711 41095 8328 24712 41096 8329 24713 41097 8330 24714 41098 8331 24715 41099 8332 24716 41100 8333 24717 41101 8334 24718 41102 8335 24719 41103 8336 24720 41104 8337 24721 41105 8338 24722 41106 8339 24723 41107 8340 24724 41108 8341 24725 41109 8342 24726 41110 8343 24727 41111 8344 24728 41112 8345 24729 41113 8346 24730 41114 8347 24731 41115 8348 24732 41116 8349 24733 41117 8350 24734 41118 8351 24735 41119 8352 24736 41120 8353 24737 41121 8354 24738 41122 8355 24739 41123 8356 24740 41124 8357 24741 41125 8358 24742 41126 8359 24743 41127 8360 24744 41128 8361 24745 41129 8362 24746 41130 8363 24747 41131 8364 24748 41132 8365 24749 41133 8366 24750 41134 8367 24751 41135 8368 24752 41136 8369 24753 41137 8370 24754 41138 8371 24755 41139 8372 24756 41140 8373 24757 41141 8374 24758 41142 8375 24759 41143 8376 24760 41144 8377 24761 41145 8378 24762 41146 8379 24763 41147 8380 24764 41148 8381 24765 41149 8382 24766 41150 8383 24767 41151 8384 24768 41152 8385 24769 41153 8386 24770 41154 8387 24771 41155 8388 24772 41156 8389 24773 41157 8390 24774 41158 8391 24775 41159 8392 24776 41160 8393 24777 41161 8394 24778 41162 8395 24779 41163 8396 24780 41164 8397 24781 41165 8398 24782 41166 8399 24783 41167 8400 24784 41168 8401 24785 41169 8402 24786 41170 8403 24787 41171 8404 24788 41172 8405 24789 41173 8406 24790 41174 8407 24791 41175 8408 24792 41176 8409 24793 41177 8410 24794 41178 8411 24795 41179 8412 24796 41180 8413 24797 41181 8414 24798 41182 8415 24799 41183 8416 24800 41184 8417 24801 41185 8418 24802 41186 8419 24803 41187 8420 24804 41188 8421 24805 41189 8422 24806 41190 8423 24807 41191 8424 24808 41192 8425 24809 41193 8426 24810 41194 8427 24811 41195 8428 24812 41196 8429 24813 41197 8430 24814 41198 8431 24815 41199 8432 24816 41200 8433 24817 41201 8434 24818 41202 8435 24819 41203 8436 24820 41204 8437 24821 41205 8438 24822 41206 8439 24823 41207 8440 24824 41208 8441 24825 41209 8442 24826 41210 8443 24827 41211 8444 24828 41212 8445 24829 41213 8446 24830 41214 8447 24831 41215 8448 24832 41216 8449 24833 41217
+Multiply-claimed block(s) in inode 12: 16385 8193--8962 8967--8968 16650--16896 16905--16906 24842--25346 25359--25360 33034--33280 33297--33298 41226--41730 41751--41752 49418--49664 49689--49690 16386--16649 24577--24841 32769--33033 40961--41225 49153--49213
+Multiply-claimed block(s) in inode 13: 49214
+Multiply-claimed block(s) in inode 14: 49215
+Multiply-claimed block(s) in inode 15: 49216
+Multiply-claimed block(s) in inode 16: 49217
+Multiply-claimed block(s) in inode 17: 49218
+Multiply-claimed block(s) in inode 18: 49219
+Multiply-claimed block(s) in inode 19: 49220
+Multiply-claimed block(s) in inode 20: 49221
+Multiply-claimed block(s) in inode 21: 49222
+Multiply-claimed block(s) in inode 22: 49223
+Multiply-claimed block(s) in inode 23: 49224
+Multiply-claimed block(s) in inode 24: 49225
+Multiply-claimed block(s) in inode 25: 49226
+Multiply-claimed block(s) in inode 26: 49227
+Multiply-claimed block(s) in inode 27: 49228
+Multiply-claimed block(s) in inode 28: 49229
+Multiply-claimed block(s) in inode 29: 49230
+Multiply-claimed block(s) in inode 30: 49231
+Multiply-claimed block(s) in inode 31: 49232
+Multiply-claimed block(s) in inode 32: 49233
+Multiply-claimed block(s) in inode 33: 49234
+Multiply-claimed block(s) in inode 34: 49235
+Multiply-claimed block(s) in inode 35: 49236
+Multiply-claimed block(s) in inode 36: 49237
+Multiply-claimed block(s) in inode 37: 49238
+Multiply-claimed block(s) in inode 38: 49239
+Multiply-claimed block(s) in inode 39: 49240
+Multiply-claimed block(s) in inode 40: 49241
+Multiply-claimed block(s) in inode 41: 49242
+Multiply-claimed block(s) in inode 42: 49243
+Multiply-claimed block(s) in inode 43: 49244
+Multiply-claimed block(s) in inode 44: 49245
+Multiply-claimed block(s) in inode 45: 49246
+Multiply-claimed block(s) in inode 46: 49247
+Multiply-claimed block(s) in inode 47: 49248
+Multiply-claimed block(s) in inode 48: 49249
+Multiply-claimed block(s) in inode 49: 49250
+Multiply-claimed block(s) in inode 50: 49251
+Multiply-claimed block(s) in inode 51: 49252
+Multiply-claimed block(s) in inode 52: 49253
+Multiply-claimed block(s) in inode 53: 49254
+Multiply-claimed block(s) in inode 54: 49255
+Multiply-claimed block(s) in inode 55: 49256
+Multiply-claimed block(s) in inode 56: 49257
+Multiply-claimed block(s) in inode 57: 49258
+Multiply-claimed block(s) in inode 58: 49259
+Multiply-claimed block(s) in inode 59: 49260
+Multiply-claimed block(s) in inode 60: 49261
+Multiply-claimed block(s) in inode 61: 49262
+Multiply-claimed block(s) in inode 62: 49263
+Multiply-claimed block(s) in inode 63: 49264
+Multiply-claimed block(s) in inode 64: 49265
+Multiply-claimed block(s) in inode 65: 49266
+Multiply-claimed block(s) in inode 66: 49267
+Multiply-claimed block(s) in inode 67: 49268
+Multiply-claimed block(s) in inode 68: 49269
+Multiply-claimed block(s) in inode 69: 49270
+Multiply-claimed block(s) in inode 70: 49271
+Multiply-claimed block(s) in inode 71: 49272
+Multiply-claimed block(s) in inode 72: 49273
+Multiply-claimed block(s) in inode 73: 49274
+Multiply-claimed block(s) in inode 74: 49275
+Multiply-claimed block(s) in inode 75: 49276
+Multiply-claimed block(s) in inode 76: 49277
+Multiply-claimed block(s) in inode 77: 49278
+Multiply-claimed block(s) in inode 78: 49279
+Multiply-claimed block(s) in inode 79: 49280
+Multiply-claimed block(s) in inode 80: 49281
+Multiply-claimed block(s) in inode 81: 49282
+Multiply-claimed block(s) in inode 82: 49283
+Multiply-claimed block(s) in inode 83: 49284
+Multiply-claimed block(s) in inode 84: 49285
+Multiply-claimed block(s) in inode 85: 49286
+Multiply-claimed block(s) in inode 86: 49287
+Multiply-claimed block(s) in inode 87: 49288
+Multiply-claimed block(s) in inode 88: 49289
+Multiply-claimed block(s) in inode 89: 49290
+Multiply-claimed block(s) in inode 90: 49291
+Multiply-claimed block(s) in inode 91: 49292
+Multiply-claimed block(s) in inode 92: 49293
+Multiply-claimed block(s) in inode 93: 49296
+Multiply-claimed block(s) in inode 94: 49297
+Multiply-claimed block(s) in inode 95: 49298
+Multiply-claimed block(s) in inode 96: 49299
+Multiply-claimed block(s) in inode 97: 49300
+Multiply-claimed block(s) in inode 98: 49301
+Multiply-claimed block(s) in inode 99: 49302
+Multiply-claimed block(s) in inode 100: 49303
+Multiply-claimed block(s) in inode 101: 49304
+Multiply-claimed block(s) in inode 102: 49305
+Multiply-claimed block(s) in inode 103: 49306
+Multiply-claimed block(s) in inode 104: 49307
+Multiply-claimed block(s) in inode 105: 49308
+Multiply-claimed block(s) in inode 106: 49309
+Multiply-claimed block(s) in inode 107: 49310
+Multiply-claimed block(s) in inode 108: 49311
+Multiply-claimed block(s) in inode 109: 49312
+Multiply-claimed block(s) in inode 110: 49313
+Multiply-claimed block(s) in inode 111: 49314
+Multiply-claimed block(s) in inode 112: 49315
+Multiply-claimed block(s) in inode 113: 49316
+Multiply-claimed block(s) in inode 114: 49317
+Multiply-claimed block(s) in inode 115: 49318
+Multiply-claimed block(s) in inode 116: 49319
+Multiply-claimed block(s) in inode 117: 49320
+Multiply-claimed block(s) in inode 118: 49321
+Multiply-claimed block(s) in inode 119: 49322
+Multiply-claimed block(s) in inode 120: 49323
+Multiply-claimed block(s) in inode 121: 49324
+Multiply-claimed block(s) in inode 122: 49325
+Multiply-claimed block(s) in inode 123: 49326
+Multiply-claimed block(s) in inode 124: 49327
+Multiply-claimed block(s) in inode 125: 49328
+Multiply-claimed block(s) in inode 126: 49329
+Multiply-claimed block(s) in inode 127: 49330
+Multiply-claimed block(s) in inode 128: 49331
+Multiply-claimed block(s) in inode 129: 49332
+Multiply-claimed block(s) in inode 130: 49333
+Multiply-claimed block(s) in inode 131: 49334
+Multiply-claimed block(s) in inode 132: 49335
+Multiply-claimed block(s) in inode 133: 49336
+Multiply-claimed block(s) in inode 134: 49337
+Multiply-claimed block(s) in inode 135: 49338
+Multiply-claimed block(s) in inode 136: 49339
+Multiply-claimed block(s) in inode 137: 49340
+Multiply-claimed block(s) in inode 138: 49341
+Multiply-claimed block(s) in inode 139: 49342
+Multiply-claimed block(s) in inode 140: 49343
+Multiply-claimed block(s) in inode 141: 49344
+Multiply-claimed block(s) in inode 142: 49345
+Multiply-claimed block(s) in inode 143: 49346
+Multiply-claimed block(s) in inode 144: 49347
+Multiply-claimed block(s) in inode 145: 49348
+Multiply-claimed block(s) in inode 146: 49349
+Multiply-claimed block(s) in inode 147: 49350
+Multiply-claimed block(s) in inode 148: 49351
+Multiply-claimed block(s) in inode 149: 49352
+Multiply-claimed block(s) in inode 150: 49353
+Multiply-claimed block(s) in inode 151: 49354
+Multiply-claimed block(s) in inode 152: 49355
+Multiply-claimed block(s) in inode 153: 49356
+Multiply-claimed block(s) in inode 154: 49357
+Multiply-claimed block(s) in inode 155: 49358
+Multiply-claimed block(s) in inode 156: 49359
+Multiply-claimed block(s) in inode 157: 49360
+Multiply-claimed block(s) in inode 158: 49361
+Multiply-claimed block(s) in inode 159: 49362
+Multiply-claimed block(s) in inode 160: 49363
+Multiply-claimed block(s) in inode 161: 49364
+Multiply-claimed block(s) in inode 162: 49365
+Multiply-claimed block(s) in inode 163: 49366
+Multiply-claimed block(s) in inode 164: 49367
+Multiply-claimed block(s) in inode 165: 49368
+Multiply-claimed block(s) in inode 166: 49369
+Multiply-claimed block(s) in inode 167: 49370
+Multiply-claimed block(s) in inode 168: 49371
+Multiply-claimed block(s) in inode 169: 49372
+Multiply-claimed block(s) in inode 170: 49373
+Multiply-claimed block(s) in inode 171: 49374
+Multiply-claimed block(s) in inode 172: 49375
+Multiply-claimed block(s) in inode 173: 49376
+Multiply-claimed block(s) in inode 174: 49377
+Multiply-claimed block(s) in inode 175: 49379
+Multiply-claimed block(s) in inode 176: 49380
+Multiply-claimed block(s) in inode 177: 49381
+Multiply-claimed block(s) in inode 178: 49382
+Multiply-claimed block(s) in inode 179: 49383
+Multiply-claimed block(s) in inode 180: 49384
+Multiply-claimed block(s) in inode 181: 49385
+Multiply-claimed block(s) in inode 182: 49386
+Multiply-claimed block(s) in inode 183: 49387
+Multiply-claimed block(s) in inode 184: 49388
+Multiply-claimed block(s) in inode 185: 49389
+Multiply-claimed block(s) in inode 186: 49390
+Multiply-claimed block(s) in inode 187: 49391
+Multiply-claimed block(s) in inode 188: 49393
+Multiply-claimed block(s) in inode 189: 49394
+Multiply-claimed block(s) in inode 190: 49395
+Multiply-claimed block(s) in inode 191: 49396
+Multiply-claimed block(s) in inode 192: 49397
+Multiply-claimed block(s) in inode 193: 49398
+Multiply-claimed block(s) in inode 194: 49399
+Multiply-claimed block(s) in inode 195: 49400
+Multiply-claimed block(s) in inode 196: 49401
+Multiply-claimed block(s) in inode 197: 49402
+Multiply-claimed block(s) in inode 198: 49403
+Multiply-claimed block(s) in inode 199: 49404
+Multiply-claimed block(s) in inode 200: 49405
+Multiply-claimed block(s) in inode 201: 49406
+Multiply-claimed block(s) in inode 202: 49407
+Multiply-claimed block(s) in inode 203: 49408
+Multiply-claimed block(s) in inode 204: 49409
+Multiply-claimed block(s) in inode 205: 49410
+Multiply-claimed block(s) in inode 206: 49411
+Multiply-claimed block(s) in inode 207: 49412
+Multiply-claimed block(s) in inode 208: 49413
+Multiply-claimed block(s) in inode 209: 49414
+Multiply-claimed block(s) in inode 210: 49415
+Multiply-claimed block(s) in inode 211: 49416
+Multiply-claimed block(s) in inode 212: 49417
+Pass 1C: Scanning directories for inodes with multiply-claimed blocks
+Pass 1D: Reconciling multiply-claimed blocks
+(There are 202 inodes containing multiply-claimed blocks.)
+
+File / (inode #2, mod time Wed Nov  4 14:52:25 2026) 
+  has 4 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /fill (inode #12, mod time Wed Nov  4 15:01:38 2026) 
+  has 3654 multiply-claimed block(s), shared with 2 file(s):
+	<filesystem metadata>
+	<The group descriptor inode> (inode #7, mod time Wed Nov  4 14:52:25 2026)
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s0 (inode #13, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s1 (inode #14, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s2 (inode #15, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s3 (inode #16, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s4 (inode #17, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s5 (inode #18, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s6 (inode #19, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s7 (inode #20, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s8 (inode #21, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s9 (inode #22, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s10 (inode #23, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s11 (inode #24, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s12 (inode #25, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s13 (inode #26, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s14 (inode #27, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s15 (inode #28, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s16 (inode #29, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s17 (inode #30, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s18 (inode #31, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s19 (inode #32, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s20 (inode #33, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s21 (inode #34, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s22 (inode #35, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s23 (inode #36, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s24 (inode #37, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s25 (inode #38, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s26 (inode #39, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s27 (inode #40, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s28 (inode #41, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s29 (inode #42, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s30 (inode #43, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s31 (inode #44, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s32 (inode #45, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s33 (inode #46, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s34 (inode #47, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s35 (inode #48, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s36 (inode #49, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s37 (inode #50, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s38 (inode #51, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s39 (inode #52, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s40 (inode #53, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s41 (inode #54, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s42 (inode #55, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s43 (inode #56, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s44 (inode #57, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s45 (inode #58, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s46 (inode #59, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s47 (inode #60, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s48 (inode #61, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s49 (inode #62, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s50 (inode #63, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s51 (inode #64, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s52 (inode #65, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s53 (inode #66, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s54 (inode #67, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s55 (inode #68, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s56 (inode #69, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s57 (inode #70, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s58 (inode #71, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s59 (inode #72, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s60 (inode #73, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s61 (inode #74, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s62 (inode #75, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s63 (inode #76, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s64 (inode #77, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s65 (inode #78, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s66 (inode #79, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s67 (inode #80, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s68 (inode #81, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s69 (inode #82, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s70 (inode #83, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s71 (inode #84, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s72 (inode #85, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s73 (inode #86, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s74 (inode #87, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s75 (inode #88, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s76 (inode #89, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s77 (inode #90, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s78 (inode #91, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s79 (inode #92, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s80 (inode #93, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s81 (inode #94, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s82 (inode #95, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s83 (inode #96, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s84 (inode #97, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s85 (inode #98, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s86 (inode #99, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s87 (inode #100, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s88 (inode #101, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s89 (inode #102, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s90 (inode #103, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s91 (inode #104, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s92 (inode #105, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s93 (inode #106, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s94 (inode #107, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s95 (inode #108, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s96 (inode #109, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s97 (inode #110, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s98 (inode #111, mod time Wed Nov  4 15:01:38 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s99 (inode #112, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s100 (inode #113, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s101 (inode #114, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s102 (inode #115, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s103 (inode #116, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s104 (inode #117, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s105 (inode #118, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s106 (inode #119, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s107 (inode #120, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s108 (inode #121, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s109 (inode #122, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s110 (inode #123, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s111 (inode #124, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s112 (inode #125, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s113 (inode #126, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s114 (inode #127, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s115 (inode #128, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s116 (inode #129, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s117 (inode #130, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s118 (inode #131, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s119 (inode #132, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s120 (inode #133, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s121 (inode #134, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s122 (inode #135, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s123 (inode #136, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s124 (inode #137, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s125 (inode #138, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s126 (inode #139, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s127 (inode #140, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s128 (inode #141, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s129 (inode #142, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s130 (inode #143, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s131 (inode #144, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s132 (inode #145, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s133 (inode #146, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s134 (inode #147, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s135 (inode #148, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s136 (inode #149, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s137 (inode #150, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s138 (inode #151, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s139 (inode #152, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s140 (inode #153, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s141 (inode #154, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s142 (inode #155, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s143 (inode #156, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s144 (inode #157, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s145 (inode #158, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s146 (inode #159, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s147 (inode #160, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s148 (inode #161, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s149 (inode #162, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s150 (inode #163, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s151 (inode #164, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s152 (inode #165, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s153 (inode #166, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s154 (inode #167, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s155 (inode #168, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s156 (inode #169, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s157 (inode #170, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s158 (inode #171, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s159 (inode #172, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s160 (inode #173, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s161 (inode #174, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s162 (inode #175, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s163 (inode #176, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s164 (inode #177, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s165 (inode #178, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s166 (inode #179, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s167 (inode #180, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s168 (inode #181, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s169 (inode #182, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s170 (inode #183, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s171 (inode #184, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s172 (inode #185, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s173 (inode #186, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s174 (inode #187, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s175 (inode #188, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s176 (inode #189, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s177 (inode #190, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s178 (inode #191, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s179 (inode #192, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s180 (inode #193, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s181 (inode #194, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s182 (inode #195, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s183 (inode #196, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s184 (inode #197, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s185 (inode #198, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s186 (inode #199, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s187 (inode #200, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s188 (inode #201, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s189 (inode #202, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s190 (inode #203, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s191 (inode #204, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s192 (inode #205, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s193 (inode #206, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s194 (inode #207, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s195 (inode #208, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s196 (inode #209, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s197 (inode #210, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s198 (inode #211, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+File /s199 (inode #212, mod time Wed Nov  4 15:01:39 2026) 
+  has 1 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  +(8196--8197) +(8199--8200) +(8203--8204) +(8209--8214) +(8218--8220) +8222 +8226 +8228 +8232 +8235 +(8238--8239) +(8241--8243) +(8246--8248) +(8251--8252) +(8256--8258) +8260 +(8263--8270) +8273 +8277 +(8279--8281) +(8285--8286) +8292 +8295 +(8298--8300) +(8302--8303) +8305 +(8307--8308) +(8310--8314) +8316 +8320 +(8323--8326) +(8329--8335) +(8337--8341) +8344 +(8346--8348) +(8352--8353) +(8355--8358) +(8362--8366) +8369 +8371 +(8374--8377) +8380 +8382 +(8384--8385) +8388 +(8390--8391) +8393 +8397 +8402 +(8406--8407) +8410 +(8412--8414) +(8416--8417) +8419 +8421 +8423 +8425 +(8427--8429) +8431 +(8435--8437) +8441 +8443 +(8447--8449) +8452 +(8456--8461) +(8463--8465) +(8472--8474) +(8476--8477) +(8479--8483) +(8487--8488) +(8491--8492) +8495 +8502 +(8505--8507) +(8512--8514) +8517 +(8520--8523) +8525 +(8529--8536) +8539 +8542 +8544 +(8547--8548) +8552 +(8554--8558) +8561 +8566 +(8572--8574) +(8577--8578) +(8582--8583) +8587 +(8589--8590) +8594 +(8601--8603) +(8605--8606) +8610 +8612 +(8614--8616) +8618 +(8622--8623) +8627 +(8631--8632) +8634 +8636 +(8638--8639) +(8643--8644) +(8646--8650) +(8656--8657) +8659 +8662 +8664 +(8666--8667) +8669 +8672 +8677 +8679 +8681 +8683 +8686 +(8688--8689) +8692 +(8694--8695) +8698 +8700 +(8702--8703) +8705 +8707 +8710 +8712 +8714 +8716 +(8720--8721) +8723 +8725 +(8729--8730) +8732 +(8734--8735) +(8739--8740) +8743 +8747 +(8749--8752) +8755 +(8757--8758) +8760 +(8763--8764) +8767 +8769 +8771 +8775 +8777 +(8782--8783) +8785 +8787 +(8791--8793) +8795 +8798 +8801 +8803 +(8805--8806) +(8808--8809) +8811 +(8815--8817) +(8819--8823) +(8826--8829) +(8831--8836) +8839 +(8841--8843) +(8847--8848) +(8850--8854) +(8857--8858) +(8861--8862) +(8864--8868) +(8870--8876) +8878 +8880 +(8882--8883) +8886 +(8888--8891) +(8894--8896) +8898 +(8902--8905) +(8909--8910) +(8914--8918) +(8922--8923) +8930 +8933 +(8935--8936) +(8940--8942) +8945 +(8951--8953) +(8957--8959) +(8961--8963) +8965 +(8967--8968) +8970 +(8972--8973) +(8976--8978) +8980 +(8983--8985) +(8988--8990) +8993 +8996 +(9006--9007) +(9011--9012) +(9014--9015) +(9017--9018) +(9020--9022) +9024 +(9029--9031) +9035 +9038 +9040 +9042 +9045 +(9049--9050) +9053 +(9055--9056) +9058 +(9060--9062) +(9064--9068) +9070 +(9072--9073) +(9075--9076) +(9078--9079) +9082 +9085 +9090 +9092 +(9102--9103) +(9107--9110) +9112 +9116 +9120 +9123 +9126 +9128 +(9134--9135) +(9137--9139) +9141 +(9143--9148) +9152 +(9155--9157) +(9161--9162) +(9167--9170) +(9172--9178) +(9180--9181) +9184 +9187 +(9189--9190) +9192 +(9195--9199) +(9201--9202) +(9205--9208) +9212 +(9214--9215) +9218 +9220 +(9223--9225) +(9228--9230) +9233 +9240 +(9242--9243) +9249 +(9252--9253) +9256 +9258 +(9260--9261) +(9263--9264) +(9266--9269) +9271 +9274 +9277 +(9279--9281) +9283 +9286 +(9290--9291) +(9294--9295) +(9297--9299) +(9301--9302) +(9306--9311) +9313 +9316 +(9318--9319) +9325 +(9327--9329) +(9334--9336) +(9338--9342) +9344 +(9353--9355) +9358 +9360 +(9364--9367) +(9370--9372) +9375 +(9377--9379) +(9381--9382) +9385 +9387 +(9390--9391) +9394 +9398 +(9401--9403) +9405 +9408 +9416 +9418 +9420 +9422 +9425 +(9430--9431) +(9436--9437) +9439 +9442 +9444 +(9446--9450) +(9452--9453) +9456 +(9458--9459) +(9461--9462) +9464 +9466 +(9474--9476) +(9479--9480) +9483 +(9485--9486) +(9489--9490) +(9492--9495) +(9497--9498) +(9500--9502) +9507 +(9510--9511) +9513 +9516 +9518 +(9523--9524) +9529 +9532 +(9534--9535) +(9537--9539) +9541 +(9544--9546) +9551 +(9563--9564) +9566 +9568 +9570 +9572 +(9574--9576) +(9578--9579) +9581 +9584 +(9588--9589) +9591 +9595 +(9597--9598) +9602 +9606 +9609 +(9612--9613) +9615 +9618 +9621 +(9623--9625) +(9634--9635) +(9637--9640) +9643 +(9645--9646) +(9651--9652) +9655 +(9657--9658) +9660 +(9665--9667) +(9669--9670) +9674 +9677 +(9681--9682) +9686 +9689 +9691 +9695 +9703 +(9705--9709) +(9711--9712) +9717 +9720 +(9722--9723) +9725 +(9727--9730) +(9732--9737) +(9739--9740) +(9744--9745) +(9749--9751) +(9753--9760) +(9763--9764) +9767 +9771 +9773 +9775 +(9777--9779) +9781 +(9783--9787) +9789 +9791 +(9794--9798) +(9801--9803) +9806 +(9812--9813) +(9817--9819) +(9824--9827) +(9830--9833) +9837 +(9839--9840) +(9842--9843) +(9846--9847) +9851 +9854 +9856 +9859 +(9868--9873) +(9875--9876) +9879 +(9882--9884) +(9887--9888) +(9892--9893) +(9896--9897) +9899 +(9902--9903) +9906 +(9908--9909) +9911 +9914 +(9917--9922) +9925 +9928 +9933 +(9939--9942) +9944 +9946 +(9950--9951) +(9953--9956) +(9958--9960) +9963 +9965 +(9967--9969) +(9971--9972) +(9976--9977) +9979 +9982 +9984 +9989 +(9992--9993) +9997 +9999 +10001 +10006 +10009 +(10011--10018) +(10021--10022) +(10024--10027) +(10029--10032) +(10034--10036) +10039 +(10042--10044) +(10046--10048) +10052 +10054 +10056 +(10059--10060) +(10062--10063) +(10067--10068) +10072 +10074 +10076 +10080 +(10082--10084) +(10086--10087) +(10092--10093) +10095 +10099 +10101 +(10104--10108) +(10110--10111) +(10115--10117) +10119 +(10121--10133) +(10135--10136) +(10140--10142) +(10144--10148) +10155 +10157 +(10161--10162) +10164 +(10166--10169) +10172 +(10178--10179) +10182 +(10185--10186) +(10188--10193) +(10199--10202) +(10204--10205) +(10208--10210) +10213 +10218 +(10220--10229) +(10232--10233) +10235 +(10240--10242) +10245 +(10249--10251) +10253 +(10256--10257) +(10260--10262) +10264 +10266 +(10268--10269) +10272 +(10274--10275) +10277 +10284 +10286 +10289 +(10291--10292) +10298 +10301 +10304 +(10307--10317) +(10320--10321) +(10324--10325) +(10328--10329) +(10334--10336) +(10339--10343) +(10345--10350) +10352 +(10354--10356) +10358 +(10360--10363) +10366 +(10369--10370) +10375 +(10377--10378) +(10382--10384) +10386 +10388 +(10390--10392) +(10394--10395) +10399 +10401 +(10403--10404) +(10406--10410) +(10412--10413) +10415 +(10418--10419) +10421 +(10423--10425) +10427 +10429 +(10431--10440) +10445 +10447 +(10449--10451) +(10455--10456) +(10458--10463) +(10465--10466) +(10468--10473) +(10475--10476) +10482 +10485 +10494 +(10496--10497) +10500 +10503 +10505 +(10507--10510) +(10513--10516) +10522 +10526 +10528 +(10530--10531) +10533 +10535 +10537 +(10539--10540) +10544 +(10546--10547) +(10552--10553) +10555 +10557 +(10560--10564) +(10567--10568) +10570 +10572 +10574 +(10578--10582) +(10584--10587) +(10590--10592) +10594 +10598 +10600 +(10603--10604) +10606 +(10608--10609) +10611 +(10613--10614) +(10616--10617) +(10619--10622) +10628 +10630 +10632 +(10635--10636) +10639 +10641 +(10644--10646) +10649 +10651 +(10653--10655) +(10659--10662) +10664 +(10666--10667) +10670 +(10672--10676) +10679 +10681 +10683 +10685 +10687 +(10690--10691) +10694 +10698 +10701 +(10703--10705) +(10707--10708) +(10711--10713) +10716 +(10718--10719) +(10721--10722) +10724 +(10728--10729) +(10732--10733) +(10739--10740) +10744 +10746 +10749 +10751 +10754 +10757 +10759 +(10761--10762) +(10765--10766) +(10768--10769) +(10772--10773) +(10775--10776) +10778 +(10783--10784) +(10788--10791) +(10793--10795) +10797 +(10800--10801) +(10804--10806) +(10808--10811) +10822 +10826 +(10830--10832) +10834 +(10838--10841) +(10843--10847) +10849 +(10851--10854) +(10857--10858) +10860 +(10863--10865) +10869 +10873 +(10875--10876) +10882 +(10884--10891) +(10893--10894) +(10897--10898) +10900 +(10903--10905) +10907 +10910 +10912 +10915 +10917 +10920 +10923 +(10925--10927) +10929 +10933 +(10936--10938) +(10940--10941) +(10946--10947) +10949 +(10952--10953) +10955 +(10957--10958) +10961 +(10963--10968) +10973 +10977 +10979 +(10981--10982) +10984 +10987 +(10989--10990) +10999 +11001 +11005 +(11009--11010) +(11012--11014) +(11017--11019) +(11021--11022) +(11025--11026) +11028 +11033 +11035 +11038 +(11040--11041) +(11046--11047) +(11053--11054) +11058 +(11060--11061) +(11063--11068) +11078 +11081 +11084 +(11086--11087) +11089 +11093 +(11095--11096) +11101 +11104 +(11107--11108) +(11110--11111) +(11113--11116) +11119 +11121 +(11123--11125) +(11128--11130) +(11132--11133) +(11135--11136) +(11138--11140) +(11142--11148) +(11150--11151) +(11154--11156) +11159 +(11161--11163) +11165 +11167 +(11170--11173) +(11175--11176) +11178 +11180 +(11182--11185) +(11187--11195) +11200 +11202 +(11204--11206) +11212 +11214 +(11218--11220) +11222 +(11225--11231) +(11233--11235) +(11240--11242) +(11245--11246) +(11248--11249) +11251 +11254 +(11256--11257) +11259 +(11263--11267) +11270 +(11275--11277) +11280 +11282 +11284 +11286 +11290 +(11292--11293) +(11295--11298) +(11300--11303) +11305 +(11308--11312) +11315 +11317 +(11322--11324) +(11327--11328) +11331 +(11333--11336) +(11340--11341) +(11345--11346) +11349 +(11354--11359) +(11361--11363) +11365 +11367 +11370 +11377 +11382 +11385 +11389 +(11392--11394) +11396 +(11399--11400) +11402 +11404 +11406 +(11409--11410) +11413 +(11419--11421) +(11426--11427) +(11429--11433) +(11436--11438) +(11440--11441) +(11444--11446) +11448 +(11451--11452) +(11455--11456) +11458 +11463 +(11467--11469) +11471 +11474 +11476 +11479 +11483 +11486 +(11488--11489) +11491 +(11493--11494) +(11496--11497) +(11500--11503) +(11506--11507) +11510 +11512 +(11515--11517) +11519 +(11522--11523) +11525 +11527 +11530 +(11532--11533) +11535 +(11537--11538) +11542 +(11544--11547) +(11554--11556) +11558 +11560 +11562 +11564 +11566 +(11568--11570) +(11575--11578) +(11582--11584) +11586 +11589 +(11592--11596) +(11598--11599) +(11604--11605) +11607 +(11610--11614) +11616 +(11618--11620) +11622 +11626 +(11629--11630) +(11632--11634) +(11636--11640) +(11642--11643) +(11645--11648) +11650 +11652 +11655 +(11658--11664) +11668 +11671 +(11675--11680) +11682 +11685 +11689 +(11691--11692) +(11694--11695) +11701 +11704 +11706 +(11709--11710) +11712 +(11715--11716) +11718 +(11720--11723) +11731 +(11736--11737) +(11741--11744) +11751 +11754 +(11757--11758) +(11760--11761) +(11765--11768) +11772 +(11774--11782) +(11785--11788) +(11790--11791) +11794 +(11796--11797) +11801 +11803 +11805 +11807 +11810 +11812 +11815 +11817 +(11820--11821) +(11823--11824) +(11826--11827) +(11832--11835) +11837 +(11840--11841) +11844 +(11847--11850) +(11853--11855) +11857 +11861 +11863 +(11866--11868) +(11870--11871) +(11873--11880) +(11882--11884) +(11888--11890) +11893 +11895 +11899 +(11902--11903) +(11906--11908) +(11910--11912) +11914 +11917 +(11920--11921) +(11926--11927) +(11932--11935) +11945 +(11947--11948) +11950 +11952 +(11955--11959) +(11961--11962) +11969 +(11972--11973) +(11976--11977) +11979 +(11981--11984) +(11986--11987) +(11990--11993) +(11995--11996) +11998 +(12001--12002) +12008 +12012 +12014 +(12017--12018) +12020 +(12024--12025) +12028 +(12033--12036) +(12039--12041) +(12044--12046) +(12050--12051) +(12057--12058) +(12060--12062) +(12065--12067) +(12069--12070) +12072 +12075 +(12077--12078) +12080 +12084 +12087 +12089 +12091 +12094 +(12098--12102) +12104 +12106 +(12108--12110) +(12113--12114) +(12119--12121) +12128 +(12130--12136) +(12142--12143) +(12146--12150) +12154 +(12157--12160) +(12164--12165) +(12169--12171) +12174 +12178 +12182 +(12185--12186) +12189 +12191 +(12195--12198) +12200 +12202 +12205 +12210 +12213 +12216 +12219 +(12221--12222) +12224 +(12228--12230) +(12238--12240) +12242 +(12245--12248) +(12250--12251) +12254 +12256 +(12261--12263) +12265 +12272 +12275 +(12286--12289) +12291 +(12293--12295) +(12299--12300) +12302 +(12306--12309) +12312 +12316 +(12318--12321) +12326 +12328 +(12330--12332) +(12334--12335) +12337 +(12340--12341) +12347 +(12349--12351) +12353 +12356 +(12358--12360) +12362 +12364 +12368 +(12370--12371) +(12373--12374) +12376 +12380 +12389 +12391 +(12393--12397) +(12399--12400) +(12403--12404) +(12408--12410) +(12412--12419) +(12422--12423) +(12427--12428) +(12432--12434) +12440 +12442 +12444 +12449 +(12452--12453) +12455 +12457 +12465 +12467 +12469 +12474 +12476 +12478 +(12481--12482) +(12484--12486) +12490 +(12493--12498) +(12500--12501) +(12505--12506) +(12508--12510) +12513 +(12515--12519) +12522 +(12525--12530) +12533 +12538 +12540 +(12544--12546) +(12548--12550) +12552 +(12555--12558) +(12560--12561) +(12566--12568) +(12571--12573) +12576 +12578 +(12582--12583) +(12585--12586) +12588 +12591 +12593 +12596 +12598 +12605 +12608 +(12610--12614) +(12618--12619) +12622 +(12625--12628) +(12634--12635) +12639 +12641 +(12644--12648) +(12650--12651) +12654 +12659 +12661 +12666 +12669 +12672 +12675 +(12677--12678) +(12681--12682) +(12684--12687) +12690 +12692 +(12695--12696) +12701 +(12703--12709) +12712 +12716 +(12719--12720) +(12722--12729) +(12732--12736) +12738 +12741 +12747 +(12751--12752) +12754 +(12756--12757) +12761 +12765 +(12769--12772) +12778 +12781 +(12789--12792) +(12794--12796) +(12799--12801) +(12803--12804) +12806 +(12809--12810) +12813 +(12816--12817) +(12820--12822) +12825 +12827 +12829 +(12832--12835) +12838 +(12840--12843) +12845 +12847 +(12850--12851) +(12857--12859) +12861 +12863 +12865 +(12867--12869) +(12875--12878) +(12882--12886) +(12888--12889) +12892 +(12896--12897) +12899 +12904 +(12906--12907) +12914 +(12916--12919) +(12921--12923) +12925 +12928 +(12930--12932) +(12934--12936) +(12938--12944) +12948 +(12951--12957) +12959 +12964 +(12968--12972) +12974 +12976 +(12979--12980) +(12982--12984) +(12986--12989) +12993 +12995 +12998 +13001 +(13003--13005) +(13009--13010) +(13015--13018) +(13020--13021) +(13023--13025) +(13027--13028) +13030 +(13032--13033) +(13035--13037) +(13040--13041) +(13044--13046) +(13050--13051) +13058 +(13062--13064) +(13068--13069) +13075 +13077 +(13081--13085) +(13087--13089) +(13091--13092) +13094 +13096 +(13099--13100) +13103 +13105 +(13110--13111) +13114 +(13116--13117) +(13119--13124) +(13126--13127) +13130 +(13132--13133) +(13137--13138) +13143 +13145 +13148 +(13151--13154) +13157 +13159 +13162 +(13165--13168) +13170 +13173 +13175 +(13177--13180) +(13182--13185) +(13187--13189) +(13191--13192) +(13195--13196) +(13198--13200) +(13203--13204) +13210 +13213 +13215 +(13217--13219) +13223 +(13226--13227) +(13231--13232) +13234 +13236 +13238 +13240 +13246 +13248 +(13250--13251) +13253 +13257 +13260 +13262 +(13266--13269) +(13271--13272) +13275 +(13277--13278) +(13280--13282) +(13285--13286) +(13288--13290) +13294 +(13297--13302) +(13304--13305) +(13309--13310) +13313 +13316 +13324 +13326 +13328 +13333 +(13335--13337) +13340 +13342 +(13345--13346) +(13348--13350) +(13355--13356) +(13358--13360) +13362 +13364 +13366 +13369 +13371 +13374 +13377 +(13379--13380) +(13383--13386) +(13392--13393) +(13396--13398) +13406 +(13408--13409) +13411 +13413 +13416 +(13419--13420) +13422 +(13425--13426) +(13428--13429) +13431 +13434 +13439 +13442 +(13445--13446) +13448 +(13451--13455) +13458 +13461 +(13463--13464) +13467 +13470 +13472 +13476 +(13478--13481) +13483 +13485 +(13487--13489) +(13491--13492) +(13494--13500) +(13502--13503) +13505 +(13512--13513) +13516 +(13520--13521) +(13525--13530) +13532 +13534 +(13536--13538) +13542 +13544 +(13547--13548) +13550 +13553 +(13555--13556) +(13558--13559) +13564 +(13568--13569) +(13572--13573) +(13575--13576) +13578 +(13580--13581) +(13583--13587) +(13590--13596) +13598 +13600 +(13603--13604) +(13607--13610) +13613 +(13615--13618) +13620 +13625 +13628 +(13631--13632) +13635 +(13638--13640) +(13642--13646) +13650 +(13654--13655) +13657 +13660 +13662 +(13666--13667) +(13669--13671) +13673 +13676 +(13680--13681) +(13686--13689) +13693 +(13697--13698) +13704 +(13708--13709) +13711 +13716 +(13718--13719) +(13721--13722) +(13724--13727) +(13731--13733) +(13735--13736) +13738 +13741 +(13743--13744) +(13746--13748) +(13750--13751) +13754 +13756 +13759 +13762 +13764 +13766 +13770 +(13776--13778) +13781 +(13786--13787) +13791 +13793 +(13795--13796) +(13798--13800) +(13802--13803) +13805 +13810 +(13813--13814) +(13816--13819) +13824 +13828 +(13830--13831) +(13833--13834) +(13837--13839) +13843 +(13845--13846) +13849 +(13854--13855) +13857 +(13859--13860) +(13862--13864) +13866 +13870 +(13874--13877) +(13879--13886) +13890 +13892 +13897 +13899 +13904 +13906 +(13908--13915) +(13918--13919) +13922 +(13924--13929) +13931 +13934 +(13936--13937) +13942 +13944 +13947 +(13949--13951) +13954 +(13956--13959) +13963 +13977 +(13980--13981) +(13986--13987) +(13989--13990) +(13999--14001) +(14006--14011) +(14014--14016) +14022 +(14026--14027) +(14029--14034) +14036 +14040 +(14042--14047) +14049 +14053 +14055 +14057 +(14059--14061) +(14065--14066) +14069 +(14072--14074) +(14078--14080) +(14084--14085) +(14087--14088) +(14090--14091) +(14093--14099) +(14104--14105) +14107 +14109 +14112 +14115 +14117 +(14119--14120) +(14123--14128) +14133 +(14136--14137) +14139 +(14141--14147) +14149 +14151 +14153 +14158 +14161 +14163 +14165 +(14167--14168) +(14170--14171) +14174 +(14177--14180) +(14183--14185) +14187 +(14192--14193) +14195 +14197 +(14200--14202) +14206 +14208 +14210 +(14212--14213) +14221 +(14223--14224) +14226 +14228 +14233 +14236 +(14238--14239) +14244 +(14246--14247) +(14249--14251) +(14253--14254) +14257 +14262 +(14265--14269) +14271 +(14274--14275) +(14279--14280) +14284 +14286 +14288 +(14293--14295) +(14298--14299) +14301 +14306 +14309 +(14311--14313) +(14316--14318) +(14321--14322) +(14324--14327) +14329 +(14333--14334) +14336 +14338 +14340 +(14342--14343) +(14346--14350) +14352 +(14355--14356) +14358 +(14362--14363) +14365 +(14368--14370) +14374 +(14376--14378) +(14382--14384) +(14388--14389) +14393 +14398 +(14400--14402) +14404 +14409 +14411 +(14413--14414) +(14416--14417) +14419 +14421 +(14423--14425) +14427 +(14430--14435) +(14437--14438) +(14440--14442) +(14444--14445) +(14449--14451) +14455 +14457 +14459 +(14461--14466) +14468 +(14476--14482) +14486 +14493 +14498 +14500 +(14504--14505) +14507 +14509 +(14513--14518) +14520 +14522 +14526 +14529 +(14531--14532) +(14534--14537) +(14541--14542) +14544 +(14546--14549) +14553 +14555 +14557 +14562 +(14564--14567) +14569 +14571 +14573 +14575 +14577 +(14579--14580) +(14583--14586) +(14592--14593) +(14597--14601) +14603 +14605 +(14607--14608) +14611 +(14615--14616) +(14619--14621) +(14623--14625) +14627 +14632 +(14634--14635) +14638 +14640 +14642 +14644 +(14648--14651) +(14660--14661) +(14663--14666) +(14668--14670) +14672 +(14674--14679) +14683 +(14686--14688) +14690 +14693 +14695 +14697 +14702 +14708 +14710 +14712 +14714 +(14716--14718) +(14721--14726) +(14728--14729) +(14731--14732) +(14734--14737) +14740 +(14745--14746) +14748 +14750 +14752 +(14757--14760) +14763 +(14767--14770) +(14773--14778) +(14783--14786) +14791 +14795 +14797 +14799 +(14804--14805) +14810 +14813 +(14815--14818) +(14822--14825) +14829 +(14831--14832) +14835 +(14837--14838) +(14842--14843) +(14847--14850) +14852 +14854 +14857 +14861 +(14867--14868) +14870 +(14873--14875) +14877 +(14880--14882) +14884 +(14887--14888) +(14890--14894) +14896 +14898 +14901 +14904 +14907 +14913 +(14915--14916) +14918 +(14923--14924) +(14927--14928) +14930 +14933 +(14937--14938) +14941 +14945 +14947 +(14949--14950) +14952 +(14954--14955) +(14959--14960) +14962 +14966 +14969 +(14971--14972) +14975 +(14977--14978) +14981 +(14984--14985) +14987 +14990 +(14997--14999) +15001 +(15004--15006) +15013 +15016 +(15018--15019) +15021 +(15025--15026) +(15029--15032) +15035 +15041 +15045 +(15050--15054) +15056 +(15060--15061) +15066 +15068 +(15070--15071) +15073 +(15075--15076) +15078 +(15081--15086) +(15088--15089) +15091 +15093 +(15096--15100) +(15102--15103) +(15105--15107) +(15110--15112) +15114 +15118 +15121 +15123 +(15126--15127) +(15129--15133) +15136 +(15141--15146) +(15150--15152) +(15155--15156) +(15159--15161) +15163 +(15168--15169) +(15171--15172) +15175 +15177 +15180 +15184 +(15186--15187) +15189 +15191 +15194 +15196 +(15198--15199) +(15204--15205) +15208 +15211 +15215 +(15217--15218) +15220 +(15222--15224) +(15229--15231) +15235 +15237 +15239 +15241 +(15246--15247) +15249 +15253 +15255 +(15257--15258) +15261 +15264 +(15267--15270) +15272 +15274 +15276 +15279 +15281 +15284 +(15286--15287) +(15289--15290) +15295 +(15298--15300) +15306 +(15308--15309) +(15311--15312) +15318 +(15320--15321) +15328 +(15331--15332) +15335 +(15338--15340) +(15342--15343) +(15349--15351) +(15353--15354) +15360 +15364 +15366 +15368 +15370 +15374 +15377 +15381 +(15383--15385) +15387 +(15389--15391) +(15396--15398) +15407 +15410 +15412 +(15414--15415) +(15422--15423) +(15425--15426) +15429 +15431 +(15433--15439) +15441 +(15443--15447) +15451 +15453 +15459 +(15461--15462) +15464 +(15467--15468) +15471 +(15474--15479) +(15481--15483) +(15485--15487) +(15492--15493) +(15499--15500) +(15502--15503) +(15505--15509) +15511 +15517 +(15519--15520) +15522 +15524 +15527 +15529 +(15531--15533) +15535 +15538 +15540 +(15545--15547) +(15550--15553) +15556 +(15558--15562) +15564 +15568 +15570 +(15572--15575) +15577 +(15580--15582) +(15585--15586) +(15590--15592) +(15594--15596) +(15598--15603) +(15605--15606) +(15611--15613) +(15615--15616) +(15619--15620) +15622 +15626 +15633 +(15635--15637) +(15639--15641) +(15643--15644) +(15646--15647) +15649 +15651 +(15653--15654) +(15657--15659) +15661 +(15663--15665) +15667 +(15669--15672) +(15675--15676) +15679 +(15685--15688) +15692 +15696 +(15700--15701) +(15703--15707) +15709 +(15712--15715) +(15717--15719) +15723 +15726 +15728 +15730 +(15732--15738) +15741 +(15743--15744) +(15749--15750) +(15752--15753) +15757 +(15759--15760) +(15762--15767) +15770 +(15772--15774) +(15776--15778) +15780 +15782 +(15785--15787) +15791 +(15794--15795) +15797 +(15800--15801) +(15803--15804) +(15806--15808) +15810 +15812 +15814 +15817 +15820 +(15822--15823) +15828 +(15834--15836) +15838 +(15840--15841) +(15843--15846) +15851 +15853 +(15857--15858) +(15860--15862) +(15864--15868) +(15870--15872) +(15874--15875) +(15881--15882) +(15884--15888) +15891 +(15894--15895) +(15900--15901) +(15903--15904) +(15906--15907) +(15914--15918) +(15921--15926) +15928 +15930 +15933 +15938 +(15941--15942) +15950 +(15952--15953) +(15957--15961) +(15963--15964) +(15971--15972) +(15974--15975) +(15979--15981) +15983 +15986 +(15990--15991) +(15993--15994) +15998 +(16001--16004) +(16006--16008) +16010 +(16012--16013) +(16018--16023) +16026 +16029 +(16031--16032) +16037 +16039 +16041 +(16043--16048) +(16052--16053) +16055 +(16057--16058) +16062 +16064 +16067 +16069 +(16072--16073) +(16075--16079) +16085 +16087 +(16090--16091) +(16096--16101) +16103 +16109 +16111 +(16113--16116) +(16119--16120) +16123 +(16128--16130) +16132 +16134 +(16136--16138) +(16141--16142) +16145 +16149 +16151 +16153 +16156 +(16159--16163) +(16168--16169) +16173 +16181 +16183 +16186 +(16189--16192) +16194 +16196 +16198 +(16200--16202) +(16204--16206) +16210 +(16212--16214) +(16220--16221) +16223 +(16227--16229) +16231 +16233 +16235 +16239 +16243 +(16245--16246) +16250 +(16253--16254) +16256 +(16258--16259) +(16261--16262) +16264 +16266 +(16268--16272) +(16275--16276) +16278 +(16281--16282) +(16284--16288) +16290 +(16292--16293) +16299 +(16301--16302) +16306 +(16309--16310) +(16312--16313) +16315 +16317 +16319 +16321 +(16323--16324) +(16328--16332) +(16336--16337) +16339 +16342 +16346 +16348 +(16351--16352) +(16356--16357) +16361 +(16363--16364) +16366 +(16369--16370) +16373 +16375 +16377 +16379 +16381 +16383
+Fix? no
+
+Free blocks count wrong for group #1 (0, counted=4090).
+Fix? no
+
+Free blocks count wrong (18446744073709547758, counted=4090).
+Fix? no
+
+
+n1k: ********** WARNING: Filesystem still has errors **********
+
+n1k: 241/16384 files (0.4% non-contiguous), 69394/65536 blocks
+e2fsck before p3 primary rc=4
+e2fsck before p3 backup 8193 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p3
+e2fsck before p3 backup 24577 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p3
+e2fsck before p3 backup 40961 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p3
+e2fsck before p3 backup 57345 rc=12: Inode 244 has corrupt extent header.  Clear inode? no
+Group descriptor size:    64
+Group 0: (Blocks 1-8192) csum 0x3d49
+  0 free blocks, 1807 free inodes, 2 directories, 1807 unused inodes
+Group 1: (Blocks 8193-16384) csum 0x48c2 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 2: (Blocks 16385-24576) csum 0x34f3 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 3: (Blocks 24577-32768) csum 0x7ed2 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 4: (Blocks 32769-40960) csum 0xae96 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 5: (Blocks 40961-49152) csum 0xa484 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 6: (Blocks 49153-57344) csum 0xd8b5 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 7: (Blocks 57345-65535) csum 0x12f2 [INODE_UNINIT]
+  0 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+== before p4 m4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+
+Running additional passes to resolve blocks claimed by more than one inode...
+Pass 1B: Rescanning for multiply-claimed blocks
+Multiply-claimed block(s) in inode 7: 32770--32818
+Multiply-claimed block(s) in inode 12: 32768--32818
+Pass 1C: Scanning directories for inodes with multiply-claimed blocks
+Pass 1D: Reconciling multiply-claimed blocks
+(There are 1 inodes containing multiply-claimed blocks.)
+
+File /fill (inode #12, mod time Wed Nov  4 15:01:47 2026) 
+  has 51 multiply-claimed block(s), shared with 2 file(s):
+	<filesystem metadata>
+	<The group descriptor inode> (inode #7, mod time Wed Nov  4 14:53:26 2026)
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Free blocks count wrong (18446744073709551565, counted=0).
+Fix? no
+
+
+m4k: ********** WARNING: Filesystem still has errors **********
+
+m4k: 24/102400 files (0.0% non-contiguous), 102451/102400 blocks
+e2fsck before p4 primary rc=4
+e2fsck before p4 backup 32768 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p4
+e2fsck before p4 backup 98304 rc=12: Inode 30 has corrupt extent header.  Clear inode? no
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0x21e1
+  0 free blocks, 25576 free inodes, 2 directories, 25576 unused inodes
+Group 1: (Blocks 32768-65535) csum 0x4108 [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 2: (Blocks 65536-98303) csum 0x1e8a [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 3: (Blocks 98304-102399) csum 0xed3c [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+##### arm after volume vol-087d689cd532b46e4 /dev/nvme2n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme2n1     259:9    0    1G  0 disk 
+├─nvme2n1p1 259:10   0  400M  0 part 
+├─nvme2n1p2 259:11   0   64M  0 part 
+├─nvme2n1p3 259:12   0   64M  0 part 
+└─nvme2n1p4 259:13   0  400M  0 part 
+== after p1 u4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+u4k: 11/102400 files (0.0% non-contiguous), 6567/102400 blocks
+e2fsck after p1 primary rc=0
+e2fsck after p1 backup 32768 rc=12: Inode 54 has corrupt extent header.  Clear inode? no
+e2fsck after p1 backup 98304 rc=12: Inode 54 has corrupt extent header.  Clear inode? no
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0x2827
+  26303 free blocks, 25589 free inodes, 2 directories, 25562 unused inodes
+Group 1: (Blocks 32768-65535) csum 0xaa51 [INODE_UNINIT]
+  32717 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 2: (Blocks 65536-98303) csum 0x5324 [INODE_UNINIT]
+  32768 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 3: (Blocks 98304-102399) csum 0x01e5 [INODE_UNINIT]
+  4045 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+== after p2 u1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+u1k: 11/16384 files (9.1% non-contiguous), 5423/65536 blocks
+e2fsck after p2 primary rc=0
+e2fsck after p2 backup 8193 rc=12: 
+e2fsck after p2 backup 24577 rc=12: 
+e2fsck after p2 backup 40961 rc=12: 
+e2fsck after p2 backup 57345 rc=12: 
+Group descriptor size:    64
+Group 0: (Blocks 1-8192) csum 0xd93b
+  3808 free blocks, 2037 free inodes, 2 directories, 1825 unused inodes
+Group 1: (Blocks 8193-16384) csum 0x3100 [INODE_UNINIT]
+  7934 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 2: (Blocks 16385-24576) csum 0xbcf5 [INODE_UNINIT]
+  8192 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 3: (Blocks 24577-32768) csum 0xadc0 [INODE_UNINIT]
+  7934 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 4: (Blocks 32769-40960) csum 0x9db8 [INODE_UNINIT]
+  8192 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 5: (Blocks 40961-49152) csum 0xc0af [INODE_UNINIT]
+  7934 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 6: (Blocks 49153-57344) csum 0x4d5a [INODE_UNINIT]
+  8192 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 7: (Blocks 57345-65535) csum 0xaeea [INODE_UNINIT]
+  7927 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+== after p3 n1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+n1k: 11/16384 files (9.1% non-contiguous), 5423/65536 blocks
+e2fsck after p3 primary rc=0
+e2fsck after p3 backup 8193 rc=12: Inode 228 has corrupt extent header.  Clear inode? no
+e2fsck after p3 backup 24577 rc=12: Inode 228 has corrupt extent header.  Clear inode? no
+e2fsck after p3 backup 40961 rc=12: Inode 228 has corrupt extent header.  Clear inode? no
+e2fsck after p3 backup 57345 rc=12: Inode 228 has corrupt extent header.  Clear inode? no
+Group descriptor size:    64
+Group 0: (Blocks 1-8192) csum 0x60ec
+  7406 free blocks, 2037 free inodes, 2 directories, 1825 unused inodes
+Group 1: (Blocks 8193-16384) csum 0x71bd [INODE_UNINIT]
+  7420 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 2: (Blocks 16385-24576) csum 0x1b7b [INODE_UNINIT]
+  7678 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 3: (Blocks 24577-32768) csum 0x47ad [INODE_UNINIT]
+  7420 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 4: (Blocks 32769-40960) csum 0x811e [INODE_UNINIT]
+  7678 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 5: (Blocks 40961-49152) csum 0x9dfb [INODE_UNINIT]
+  7420 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 6: (Blocks 49153-57344) csum 0x0ce6 [INODE_UNINIT]
+  7676 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+Group 7: (Blocks 57345-65535) csum 0x22d3 [INODE_UNINIT]
+  7415 free blocks, 2048 free inodes, 0 directories, 2048 unused inodes
+== after p4 m4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+m4k: 11/102400 files (0.0% non-contiguous), 6567/102400 blocks
+e2fsck after p4 primary rc=0
+e2fsck after p4 backup 32768 rc=12: Inode 71 has corrupt extent header.  Clear inode? no
+e2fsck after p4 backup 98304 rc=12: Inode 71 has corrupt extent header.  Clear inode? no
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0x6849
+  26303 free blocks, 25589 free inodes, 2 directories, 25562 unused inodes
+Group 1: (Blocks 32768-65535) csum 0x10f2 [INODE_UNINIT]
+  32717 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 2: (Blocks 65536-98303) csum 0x7b82 [INODE_UNINIT]
+  32768 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 3: (Blocks 98304-102399) csum 0xf101 [INODE_UNINIT]
+  4045 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
++ sleep 8
++ for arm in before:vol-0c996ba1587777183 after:vol-087d689cd532b46e4
++ a=before
+++ dev vol-0c996ba1587777183
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-0c996ba1587777183
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0c996ba1587777183 '$9 == v { print $11 }'
+++ D=nvme1n1
+++ echo /dev/nvme1n1
++ D=/dev/nvme1n1
++ echo '##### arm before volume vol-0c996ba1587777183 /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ for n in 1 2 3 4
++ P=/dev/nvme1n1p1
+++ blkid -o value -s LABEL /dev/nvme1n1p1
++ echo '== before p1 u4k'
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck before p1 primary rc=4'
+++ dumpe2fs -h /dev/nvme1n1p1
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs /dev/nvme1n1p1
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 32768 -B 4096 /dev/nvme1n1p1
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p1 backup 32768 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p1'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 98304 -B 4096 /dev/nvme1n1p1
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p1 backup 98304 rc=12: Inode 32 has corrupt extent header.  Clear inode? no'
++ dumpe2fs /dev/nvme1n1p1
++ grep -E '^Group |free blocks,'
++ for n in 1 2 3 4
++ P=/dev/nvme1n1p2
+++ blkid -o value -s LABEL /dev/nvme1n1p2
++ echo '== before p2 u1k'
++ e2fsck -fn /dev/nvme1n1p2
++ echo 'e2fsck before p2 primary rc=4'
+++ dumpe2fs -h /dev/nvme1n1p2
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs /dev/nvme1n1p2
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 8193 -B 1024 /dev/nvme1n1p2
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p2 backup 8193 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p2'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 24577 -B 1024 /dev/nvme1n1p2
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p2 backup 24577 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p2'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 40961 -B 1024 /dev/nvme1n1p2
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p2 backup 40961 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p2'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 57345 -B 1024 /dev/nvme1n1p2
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p2 backup 57345 rc=12: '
++ dumpe2fs /dev/nvme1n1p2
++ grep -E '^Group |free blocks,'
++ for n in 1 2 3 4
++ P=/dev/nvme1n1p3
+++ blkid -o value -s LABEL /dev/nvme1n1p3
++ echo '== before p3 n1k'
++ e2fsck -fn /dev/nvme1n1p3
++ echo 'e2fsck before p3 primary rc=4'
+++ dumpe2fs -h /dev/nvme1n1p3
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs /dev/nvme1n1p3
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 8193 -B 1024 /dev/nvme1n1p3
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p3 backup 8193 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p3'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 24577 -B 1024 /dev/nvme1n1p3
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p3 backup 24577 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p3'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 40961 -B 1024 /dev/nvme1n1p3
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p3 backup 40961 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p3'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 57345 -B 1024 /dev/nvme1n1p3
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p3 backup 57345 rc=12: Inode 244 has corrupt extent header.  Clear inode? no'
++ dumpe2fs /dev/nvme1n1p3
++ grep -E '^Group |free blocks,'
++ for n in 1 2 3 4
++ P=/dev/nvme1n1p4
+++ blkid -o value -s LABEL /dev/nvme1n1p4
++ echo '== before p4 m4k'
++ e2fsck -fn /dev/nvme1n1p4
++ echo 'e2fsck before p4 primary rc=4'
+++ dumpe2fs -h /dev/nvme1n1p4
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs /dev/nvme1n1p4
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 32768 -B 4096 /dev/nvme1n1p4
++ r=8
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p4 backup 32768 rc=8: e2fsck: Bad magic number in super-block while trying to open /dev/nvme1n1p4'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 98304 -B 4096 /dev/nvme1n1p4
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck before p4 backup 98304 rc=12: Inode 30 has corrupt extent header.  Clear inode? no'
++ dumpe2fs /dev/nvme1n1p4
++ grep -E '^Group |free blocks,'
++ for arm in before:vol-0c996ba1587777183 after:vol-087d689cd532b46e4
++ a=after
+++ dev vol-087d689cd532b46e4
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-087d689cd532b46e4
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol087d689cd532b46e4 '$9 == v { print $11 }'
+++ D=nvme2n1
+++ echo /dev/nvme2n1
++ D=/dev/nvme2n1
++ echo '##### arm after volume vol-087d689cd532b46e4 /dev/nvme2n1'
++ lsblk /dev/nvme2n1
++ for n in 1 2 3 4
++ P=/dev/nvme2n1p1
+++ blkid -o value -s LABEL /dev/nvme2n1p1
++ echo '== after p1 u4k'
++ e2fsck -fn /dev/nvme2n1p1
++ echo 'e2fsck after p1 primary rc=0'
+++ dumpe2fs -h /dev/nvme2n1p1
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs /dev/nvme2n1p1
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 32768 -B 4096 /dev/nvme2n1p1
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p1 backup 32768 rc=12: Inode 54 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 98304 -B 4096 /dev/nvme2n1p1
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p1 backup 98304 rc=12: Inode 54 has corrupt extent header.  Clear inode? no'
++ dumpe2fs /dev/nvme2n1p1
++ grep -E '^Group |free blocks,'
++ for n in 1 2 3 4
++ P=/dev/nvme2n1p2
+++ blkid -o value -s LABEL /dev/nvme2n1p2
++ echo '== after p2 u1k'
++ e2fsck -fn /dev/nvme2n1p2
++ echo 'e2fsck after p2 primary rc=0'
+++ dumpe2fs -h /dev/nvme2n1p2
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs /dev/nvme2n1p2
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 8193 -B 1024 /dev/nvme2n1p2
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p2 backup 8193 rc=12: '
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 24577 -B 1024 /dev/nvme2n1p2
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p2 backup 24577 rc=12: '
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 40961 -B 1024 /dev/nvme2n1p2
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p2 backup 40961 rc=12: '
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 57345 -B 1024 /dev/nvme2n1p2
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p2 backup 57345 rc=12: '
++ dumpe2fs /dev/nvme2n1p2
++ grep -E '^Group |free blocks,'
++ for n in 1 2 3 4
++ P=/dev/nvme2n1p3
+++ blkid -o value -s LABEL /dev/nvme2n1p3
++ echo '== after p3 n1k'
++ e2fsck -fn /dev/nvme2n1p3
++ echo 'e2fsck after p3 primary rc=0'
+++ dumpe2fs -h /dev/nvme2n1p3
+++ awk '/^Block size/ { print $3 }'
++ bs=1024
+++ dumpe2fs /dev/nvme2n1p3
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 8193 -B 1024 /dev/nvme2n1p3
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p3 backup 8193 rc=12: Inode 228 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 24577 -B 1024 /dev/nvme2n1p3
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p3 backup 24577 rc=12: Inode 228 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 40961 -B 1024 /dev/nvme2n1p3
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p3 backup 40961 rc=12: Inode 228 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 57345 -B 1024 /dev/nvme2n1p3
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p3 backup 57345 rc=12: Inode 228 has corrupt extent header.  Clear inode? no'
++ dumpe2fs /dev/nvme2n1p3
++ grep -E '^Group |free blocks,'
++ for n in 1 2 3 4
++ P=/dev/nvme2n1p4
+++ blkid -o value -s LABEL /dev/nvme2n1p4
++ echo '== after p4 m4k'
++ e2fsck -fn /dev/nvme2n1p4
++ echo 'e2fsck after p4 primary rc=0'
+++ dumpe2fs -h /dev/nvme2n1p4
+++ awk '/^Block size/ { print $3 }'
++ bs=4096
+++ dumpe2fs /dev/nvme2n1p4
+++ sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 32768 -B 4096 /dev/nvme2n1p4
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p4 backup 32768 rc=12: Inode 71 has corrupt extent header.  Clear inode? no'
++ for b in $(dumpe2fs $P 2> /dev/null | sed -n 's/.*Backup superblock at \([0-9]*\).*/\1/p')
++ e2fsck -fn -b 98304 -B 4096 /dev/nvme2n1p4
++ r=12
+++ grep -E 'Bad magic|Superblock invalid|bad magic|corrupt' /tmp/b.out
+++ head -1
++ echo 'e2fsck after p4 backup 98304 rc=12: Inode 71 has corrupt extent header.  Clear inode? no'
++ dumpe2fs /dev/nvme2n1p4
++ grep -E '^Group |free blocks,'

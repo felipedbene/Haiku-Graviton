@@ -1,0 +1,187 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild
+# instance: i-04f9ec8e98b9e956b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-build kernel_arm64 (#1086) and ext2 before/after for #1113, hrev59996
+# start: 20261104T145157Z   end: 20261104T145421Z   rc: 0
+# script sha256: f128a6786fd03e3d84d6ffec1f9e62f434543cd52f3a1fe0649a045be6e59f80
+# ---- script ----
+# | # Cross-build for #1113/#1114 (method of #1110's xbuild): Ubuntu 24.04 arm64, jam from buildtools,
+# | # the oven's cross-tools cache cross-tools-arm64-d2e0a41eb, revision hrev59996.
+# | #  kernel_arm64.k1069 = #1086 (fix/1069-arm64-physmap-area e2ca7e9c68), so single-page disk I/O works
+# | #  ext2.before = #1112 tip 9f9bbeb518 + #1107 tip f93d80b9a5 + #1111 tip 0119de0da5 (merged in that order)
+# | #  ext2.after  = ext2.before + the #1113 fix commit (fix1113.patch, git am)
+# | # Each tree is checked against the one made locally.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | X=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/X
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file e2fsprogs gdisk > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q -o a.zip && ./aws/install > /dev/null) ; }
+# | uname -r; mke2fs -V 2>&1 | head -1
+# | mkdir -p /opt/t/out && cd /opt/t
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg fetch -q origin fix/1108-ext2-extent-split fix/1095-ext2-free-group-boundary fix/1110-ext2-abort-group-descriptors fix/1069-arm64-physmap-area
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | echo "buildtools=$(git -C buildtools rev-parse --short HEAD)"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam || exit 1
+# | aws s3 cp --quiet $X/in/fix1113.patch /opt/t/fix1113.patch || exit 1
+# | sha256sum /opt/t/fix1113.patch
+# | G="git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid"
+# | $G checkout -q -f e2ca7e9c68 || exit 1
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 1
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -2
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | O=/opt/t/out
+# | jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 kernel_arm64 > $O/jam-kernel.log 2>&1 || { tail -40 $O/jam-kernel.log; exit 1; }
+# | echo "JAM kernel ok"; tail -2 $O/jam-kernel.log
+# | cp objects/haiku/arm64/release/system/kernel/kernel_arm64 $O/kernel_arm64.k1069 || exit 1
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | mbuild() {
+# | 	l=$1 tree=$2
+# | 	t=$($G rev-parse HEAD^{tree}); echo "arm $l: HEAD $($G rev-parse HEAD) tree $t (expected $tree)"
+# | 	[ "$t" = "$tree" ] || { echo "TREE MISMATCH $l"; return 1; }
+# | 	rm -rf $A/ext2
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok"; tail -2 $O/jam-$l.log
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/" | grep -v "address-of-packed-member"
+# | 	grep -cE "C\+\+ .*ext2/" $O/jam-$l.log | sed "s/^/ext2 objects compiled [$l]: /"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | $G checkout -q -f --detach 9f9bbeb518 || exit 1
+# | $G merge -q --no-edit origin/fix/1095-ext2-free-group-boundary || exit 1
+# | $G merge -q --no-edit origin/fix/1110-ext2-abort-group-descriptors || exit 1
+# | mbuild before f9610542e2d327c3c6ed1f55dec2d87fc36404f1 || exit 1
+# | $G am -q /opt/t/fix1113.patch || exit 1
+# | mbuild after 4f238838270851d4b32641db244e96fc7ea28d5e || exit 1
+# | cd $O
+# | sha256sum kernel_arm64.k1069 ext2.before ext2.after | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include 'kernel_arm64.*' --include SHA256SUMS --include 'jam-*.log' . $X/out/ && echo uploaded
+# ---- raw output ----
+apt rc=0
+7.0.0-1014-aws
+mke2fs 1.47.0 (5-Feb-2023)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+625ccb247a4f0bddfcc7a5139ce06bfee0ae081bc797a394ea397471f079b646  /opt/t/fix1113.patch
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+Configured successfully!
+JAM kernel ok
+SetVersion1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+...updated 849 target(s)...
+Auto-merging src/add-ons/kernel/file_systems/ext2/BlockAllocator.cpp
+Auto-merging src/add-ons/kernel/file_systems/ext2/BlockAllocator.cpp
+Auto-merging src/add-ons/kernel/file_systems/ext2/kernel_interface.cpp
+arm before: HEAD b52cf50d1861512005489bca621ffa75a204eb0b tree f9610542e2d327c3c6ed1f55dec2d87fc36404f1 (expected f9610542e2d327c3c6ed1f55dec2d87fc36404f1)
+JAM ext2 before ok
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 
+...updated 189 target(s)...
+ext2 objects compiled [before]: 21
+arm after: HEAD d8e2157eb624ed2db7c93ac58a3ffe7219da0327 tree 4f238838270851d4b32641db244e96fc7ea28d5e (expected 4f238838270851d4b32641db244e96fc7ea28d5e)
+JAM ext2 after ok
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 
+...updated 23 target(s)...
+ext2 objects compiled [after]: 21
+c74348868114a1aa15e543641cc08c808b9385a0ea372422abb51ab03ae04542  kernel_arm64.k1069
+c848da31623d11d3f1848397df3203bf10b2452af039876eaf182f20e893c44a  ext2.before
+d54c96ee8c98ae64d00f7b743e18f612b0a7158c330c45a9df789507fd0634f9  ext2.after
+uploaded
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ X=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/X
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file e2fsprogs gdisk
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q -o a.zip
++ ./aws/install
++ uname -r
++ mke2fs -V
++ head -1
++ mkdir -p /opt/t/out
++ cd /opt/t
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg fetch -q origin fix/1108-ext2-extent-split fix/1095-ext2-free-group-boundary fix/1110-ext2-abort-group-descriptors fix/1069-arm64-physmap-area
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/X/in/fix1113.patch /opt/t/fix1113.patch
++ sha256sum /opt/t/fix1113.patch
++ G='git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid'
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid checkout -q -f e2ca7e9c68
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -2
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ O=/opt/t/out
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 kernel_arm64
++ echo 'JAM kernel ok'
++ tail -2 /opt/t/out/jam-kernel.log
++ cp objects/haiku/arm64/release/system/kernel/kernel_arm64 /opt/t/out/kernel_arm64.k1069
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid checkout -q -f --detach 9f9bbeb518
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid merge -q --no-edit origin/fix/1095-ext2-free-group-boundary
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid merge -q --no-edit origin/fix/1110-ext2-abort-group-descriptors
++ mbuild before f9610542e2d327c3c6ed1f55dec2d87fc36404f1
++ l=before
++ tree=f9610542e2d327c3c6ed1f55dec2d87fc36404f1
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse 'HEAD^{tree}'
++ t=f9610542e2d327c3c6ed1f55dec2d87fc36404f1
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse HEAD
++ echo 'arm before: HEAD b52cf50d1861512005489bca621ffa75a204eb0b tree f9610542e2d327c3c6ed1f55dec2d87fc36404f1 (expected f9610542e2d327c3c6ed1f55dec2d87fc36404f1)'
++ '[' f9610542e2d327c3c6ed1f55dec2d87fc36404f1 = f9610542e2d327c3c6ed1f55dec2d87fc36404f1 ']'
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 before ok'
++ tail -2 /opt/t/out/jam-before.log
++ grep -E 'warning:|error:' /opt/t/out/jam-before.log
++ grep ext2/
++ grep -v address-of-packed-member
++ grep -cE 'C\+\+ .*ext2/' /opt/t/out/jam-before.log
++ sed 's/^/ext2 objects compiled [before]: /'
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.before
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid am -q /opt/t/fix1113.patch
++ mbuild after 4f238838270851d4b32641db244e96fc7ea28d5e
++ l=after
++ tree=4f238838270851d4b32641db244e96fc7ea28d5e
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse 'HEAD^{tree}'
++ t=4f238838270851d4b32641db244e96fc7ea28d5e
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse HEAD
++ echo 'arm after: HEAD d8e2157eb624ed2db7c93ac58a3ffe7219da0327 tree 4f238838270851d4b32641db244e96fc7ea28d5e (expected 4f238838270851d4b32641db244e96fc7ea28d5e)'
++ '[' 4f238838270851d4b32641db244e96fc7ea28d5e = 4f238838270851d4b32641db244e96fc7ea28d5e ']'
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 after ok'
++ tail -2 /opt/t/out/jam-after.log
++ grep -E 'warning:|error:' /opt/t/out/jam-after.log
++ grep ext2/
++ grep -v address-of-packed-member
++ grep -cE 'C\+\+ .*ext2/' /opt/t/out/jam-after.log
++ sed 's/^/ext2 objects compiled [after]: /'
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.after
++ cd /opt/t/out
++ sha256sum kernel_arm64.k1069 ext2.before ext2.after
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include 'kernel_arm64.*' --include SHA256SUMS --include 'jam-*.log' . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/X/out/
++ echo uploaded
