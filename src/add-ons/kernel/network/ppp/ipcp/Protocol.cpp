@@ -135,7 +135,7 @@ IPCP::Uninit()
 status_t
 IPCP::StackControl(uint32 op, void *data)
 {
-	TRACE("IPCP: StackControl(op=%ld)\n", op);
+	TRACE("IPCP: StackControl(op=%" B_PRIu32 ")\n", op);
 
 	// TODO:
 	// check values
