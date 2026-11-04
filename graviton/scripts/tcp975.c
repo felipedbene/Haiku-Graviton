@@ -52,6 +52,12 @@
  *             three forged ACKs of SND.UNA: unchanged (duplicates) or each
  *             with a new window (window updates). The capture shows whether
  *             they make the client send.
+ *   stalereopen (review of 1072) the window is closed and the peer silenced;
+ *             a forged old ACK (1000 bytes below SND.UNA) advertises an open
+ *             window; the peer then reads everything while still silenced, so
+ *             its own window update is lost, and is heard again 5 s later.
+ *             Only a probe can find the window open: time how long until
+ *             everything sent has arrived.
  *   stale     (issue 1075) an idle connection gets a forged old ACK (1000
  *             bytes below SND.UNA) advertising a zero window. Time how long
  *             1 KiB sends take to arrive before and after it.
@@ -668,6 +674,40 @@ mode_dupwin(int s, int c, const char* kind)
 	return 0;
 }
 
+static int
+mode_stalereopen(int s, int c)
+{
+	char command[64], reply[128];
+	int port = local_port(s);
+	snprintf(command, sizeof(command), "STOPREAD %d 100000", port);
+	control(c, command, reply, sizeof(reply));
+	long sent = fill(s, 10);
+	snprintf(command, sizeof(command), "MUTE %d", port);
+	control(c, command, reply, sizeof(reply));
+	snprintf(command, sizeof(command), "INJECT %d staleopen", port);
+	control(c, command, reply, sizeof(reply));
+	printf("  inject: %s\n", reply);
+	sleep(3);
+	snprintf(command, sizeof(command), "STOPREAD %d 0", port);
+	control(c, command, reply, sizeof(reply));
+	sleep(5);
+	snprintf(command, sizeof(command), "UNMUTE %d", port);
+	control(c, command, reply, sizeof(reply));
+	double start = now();
+	while (peer_count(c, port) < sent) {
+		if (now() - start > sCap) {
+			printf("RESULT %s FAIL %ld of %ld bytes arrived, nothing more for "
+				"%.0f s after the peer could be heard again\n", sMode,
+				peer_count(c, port), sent, sCap);
+			return 1;
+		}
+		usleep(100000);
+	}
+	printf("RESULT %s PASS all %ld bytes arrived %.1f s after the peer could "
+		"be heard again\n", sMode, sent, now() - start);
+	return 0;
+}
+
 static double
 delivery(int s, int c, int port)
 {
@@ -723,7 +763,8 @@ main(int argc, char** argv)
 	if (argc < 5) {
 		fprintf(stderr, "usage: %s <peer-ip> <data-port> <control-port> "
 			"<write|read|poll|close|recover|zerowin|reopen|zerodead|shutfin|"
-			"longreopen|submss|dupack3|winupd3|stale> [cap-seconds]\n",
+			"longreopen|submss|dupack3|winupd3|stale|stalereopen> "
+			"[cap-seconds]\n",
 			argv[0]);
 		return 100;
 	}
@@ -767,6 +808,8 @@ main(int argc, char** argv)
 		return mode_dupwin(s, c, "win3");
 	if (strcmp(sMode, "stale") == 0)
 		return mode_stale(s, c);
+	if (strcmp(sMode, "stalereopen") == 0)
+		return mode_stalereopen(s, c);
 	fprintf(stderr, "unknown mode %s\n", sMode);
 	return 100;
 }

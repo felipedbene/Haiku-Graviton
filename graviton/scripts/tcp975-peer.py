@@ -41,6 +41,9 @@ The control port takes one command per line from a client and answers one line:
                                        a zero window -- an old segment
                              submss    one with window field 1 -- a window
                                        less than a segment wide
+                             staleopen one acknowledging 1000 bytes less, with
+                                       an open window (field 255) -- an old
+                                       segment that looks like a reopening
 
 Rules match one connection's 4-tuple, so the control connection and every
 other test connection carry on untouched. Every rule added is removed again on
@@ -158,6 +161,11 @@ def inject(ip, port, kind):
         copy = base.copy()
         copy[TCP].ack = (base[TCP].ack - 1000) & 0xffffffff
         copy[TCP].window = 0
+        copies.append(copy)
+    elif kind == "staleopen":
+        copy = base.copy()
+        copy[TCP].ack = (base[TCP].ack - 1000) & 0xffffffff
+        copy[TCP].window = 255
         copies.append(copy)
     elif kind == "submss":
         copy = base.copy()
