@@ -137,8 +137,12 @@ find_route(struct net_domain* _domain, const net_route* description)
 }
 
 
+/*!	Returns the route \a address takes, or, with a non-zero \a interfaceIndex,
+	the one it takes among the routes through that interface.
+*/
 static net_route_private*
-find_route(net_domain* _domain, const sockaddr* address)
+find_route(net_domain* _domain, const sockaddr* address,
+	uint32 interfaceIndex = 0)
 {
 	net_domain_private* domain = (net_domain_private*)_domain;
 
@@ -154,6 +158,10 @@ find_route(net_domain* _domain, const sockaddr* address)
 
 	while (iterator.HasNext()) {
 		net_route_private* route = iterator.Next();
+
+		if (interfaceIndex != 0
+			&& route->interface_address->interface->index != interfaceIndex)
+			continue;
 
 		if (route->mask) {
 			sockaddr maskedAddress;
@@ -626,6 +634,47 @@ get_route(struct net_domain* _domain, const struct sockaddr* address)
 	RecursiveLocker locker(domain->lock);
 
 	return get_route_internal(domain, address);
+}
+
+
+/*!	Returns a reference to the route for \a address through the interface
+	with index \a interfaceIndex -- what a datagram that asks for that
+	interface (IP_PKTINFO, IPV6_PKTINFO) takes, as on Linux: the best of the
+	routes through it, gateway routes included, or, when none matches, its
+	direct route, on which the destination is taken to be on-link (as for
+	SO_BINDTODEVICE, see get_device_route()). The direct route has no local
+	address; the caller picks one of the interface's.
+	Returns \c NULL if there is no such interface.
+*/
+struct net_route*
+get_route_through_interface(struct net_domain* _domain,
+	const struct sockaddr* address, uint32 interfaceIndex)
+{
+	net_domain_private* domain = (net_domain_private*)_domain;
+
+	{
+		RecursiveLocker locker(domain->lock);
+
+		net_route_private* route = find_route(domain, address,
+			interfaceIndex);
+		if (route != NULL && atomic_add(&route->ref_count, 1) != 0)
+			return route;
+		if (route != NULL) {
+			// it has been deleted already
+			atomic_add(&route->ref_count, -1);
+		}
+	}
+
+	Interface* interface = get_interface(domain, interfaceIndex);
+	if (interface == NULL)
+		return NULL;
+
+	net_route_private* route
+		= &interface->DomainDatalink(domain->family)->direct_route;
+	atomic_add(&route->ref_count, 1);
+
+	interface->ReleaseReference();
+	return route;
 }
 
 

@@ -52,6 +52,8 @@ status_t get_device_route(struct net_domain* domain, uint32 index,
 status_t get_buffer_route(struct net_domain* domain,
 				struct net_buffer* buffer, struct net_route** _route);
 void put_route(struct net_domain* domain, struct net_route* route);
+struct net_route* get_route_through_interface(struct net_domain* domain,
+				const struct sockaddr* address, uint32 interfaceIndex);
 
 status_t register_route_info(struct net_domain* domain,
 				struct net_route_info* info);

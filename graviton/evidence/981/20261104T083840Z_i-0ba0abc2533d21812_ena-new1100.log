@@ -1,0 +1,63 @@
+# evidence: ena-new1100
+# instance: i-0ba0abc2533d21812   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T083840Z   end: 20261104T083902Z   rc: 0
+# script sha256: 9d84f40f246ce44009b6894adc484e96d4e9944fb293963d67b7d51444783c7c
+# ---- script ----
+# | # ENA rows of the #1100 rework (two ENAs, one subnet). Each send is bracketed
+# | # by both interfaces' transmit counters; the peer's tcpdump shows the wire.
+# | cd /boot/home/wS || exit 1
+# | P=10.128.7.125
+# | tx() { ifconfig $1 | grep Transmit | sed 's/.*Transmit: *\([0-9]*\) packets.*/\1/'; }
+# | IP0=$(ifconfig /dev/net/ena/0 | grep "inet addr:" | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | IP1=$(ifconfig /dev/net/ena/1 | grep "inet addr:" | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | BC=$(ifconfig /dev/net/ena/0 | grep "inet addr:" | sed 's/.*Bcast: *\([0-9.]*\).*/\1/')
+# | echo "ena/0 $IP0  ena/1 $IP1  broadcast $BC  peer $P"
+# | listimage 1 | grep -E "network/(stack|protocols/(ipv4|udp))" | awk '{print $NF}' | sort -u
+# | sleep 5
+# | row() {
+# | 	local label=$1; shift
+# | 	local a=$(tx /dev/net/ena/0) b=$(tx /dev/net/ena/1)
+# | 	./pktinfo981.new send "$@"
+# | 	sleep 1
+# | 	echo "  [$label] tx ena/0 +$(( $(tx /dev/net/ena/0) - a )), ena/1 +$(( $(tx /dev/net/ena/1) - b ))"
+# | }
+# | row plain $P 9981 -
+# | row src-ena0 $P 9981 $IP0
+# | row ifindex-ena1-peer $P 9981 0.0.0.0 /dev/net/ena/1
+# | row ifindex-ena1-offlink 8.8.8.8 9981 0.0.0.0 /dev/net/ena/1
+# | row src-ena1-ifindex-ena1 $P 9981 $IP1 /dev/net/ena/1
+# | row ifindex-ena0-peer $P 9981 0.0.0.0 /dev/net/ena/0
+# | row ifindex-loop-peer $P 9981 0.0.0.0 loop
+# | row lo-src-to-broadcast $BC 9981 127.0.0.1
+# | row lo-src-to-peer $P 9981 127.0.0.1
+# | row foreign-src $P 9981 192.0.2.1
+# | row plain-again $P 9981 -
+# | echo ENA-DONE
+# ---- raw output ----
+ena/0 10.128.6.51  ena/1 10.128.6.105  broadcast 10.128.7.255  peer 10.128.7.125
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+send - -> 10.128.7.125.9981 ifindex=0: sendto=17 0
+  [plain] tx ena/0 +2, ena/1 +0
+send 10.128.6.51 -> 10.128.7.125.9981 ifindex=0: sendmsg=27 0
+  [src-ena0] tx ena/0 +1, ena/1 +0
+send 0.0.0.0 -> 10.128.7.125.9981 ifindex=3: sendmsg=23 0
+  [ifindex-ena1-peer] tx ena/0 +0, ena/1 +1
+send 0.0.0.0 -> 8.8.8.8.9981 ifindex=3: sendmsg=23 0
+  [ifindex-ena1-offlink] tx ena/0 +0, ena/1 +1
+send 10.128.6.105 -> 10.128.7.125.9981 ifindex=3: sendmsg=28 0
+  [src-ena1-ifindex-ena1] tx ena/0 +0, ena/1 +1
+send 0.0.0.0 -> 10.128.7.125.9981 ifindex=2: sendmsg=23 0
+  [ifindex-ena0-peer] tx ena/0 +1, ena/1 +0
+send 0.0.0.0 -> 10.128.7.125.9981 ifindex=1: sendmsg=-1 ENETUNREACH
+  [ifindex-loop-peer] tx ena/0 +0, ena/1 +0
+send 127.0.0.1 -> 10.128.7.255.9981 ifindex=0: sendmsg=-1 EINVAL
+  [lo-src-to-broadcast] tx ena/0 +0, ena/1 +0
+send 127.0.0.1 -> 10.128.7.125.9981 ifindex=0: sendmsg=-1 EINVAL
+  [lo-src-to-peer] tx ena/0 +0, ena/1 +0
+send 192.0.2.1 -> 10.128.7.125.9981 ifindex=0: sendmsg=-1 EADDRNOTAVAIL
+  [foreign-src] tx ena/0 +0, ena/1 +0
+send - -> 10.128.7.125.9981 ifindex=0: sendto=17 0
+  [plain-again] tx ena/0 +32, ena/1 +0
+ENA-DONE

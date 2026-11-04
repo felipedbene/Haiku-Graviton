@@ -195,6 +195,7 @@ struct ipv4_protocol : net_protocol {
 #define IP_FLAG_HEADER_INCLUDED		0x01
 #define IP_FLAG_RECEIVE_DEST_ADDR	0x02
 #define IP_FLAG_DONT_FRAGMENT		0x04
+#define IP_FLAG_RECEIVE_PKTINFO		0x08
 
 
 static const int kDefaultTTL = 254;
@@ -1321,6 +1322,10 @@ ipv4_getsockopt(net_protocol* _protocol, int level, int option, void* value,
 			return get_int_option(value, *_length,
 				(protocol->flags & IP_FLAG_RECEIVE_DEST_ADDR) != 0);
 		}
+		if (option == IP_PKTINFO) {
+			return get_int_option(value, *_length,
+				(protocol->flags & IP_FLAG_RECEIVE_PKTINFO) != 0);
+		}
 		if (option == IP_DONTFRAG) {
 			return get_int_option(value, *_length,
 				(protocol->flags & IP_FLAG_DONT_FRAGMENT) != 0);
@@ -1421,6 +1426,21 @@ ipv4_setsockopt(net_protocol* _protocol, int level, int option,
 				protocol->flags |= IP_FLAG_RECEIVE_DEST_ADDR;
 			else
 				protocol->flags &= ~IP_FLAG_RECEIVE_DEST_ADDR;
+
+			return B_OK;
+		}
+		if (option == IP_PKTINFO) {
+			int getInfo;
+			if (length != sizeof(int))
+				return B_BAD_VALUE;
+			if (user_memcpy(&getInfo, value, sizeof(int)) != B_OK)
+				return B_BAD_ADDRESS;
+
+			if (getInfo && (protocol->socket->type == SOCK_DGRAM
+					|| protocol->socket->type == SOCK_RAW))
+				protocol->flags |= IP_FLAG_RECEIVE_PKTINFO;
+			else
+				protocol->flags &= ~IP_FLAG_RECEIVE_PKTINFO;
 
 			return B_OK;
 		}
@@ -2174,6 +2194,39 @@ ipv4_process_ancillary_data_no_container(net_protocol* protocol,
 		 	sizeof(struct in_addr));
 
 		bytesWritten += CMSG_SPACE(sizeof(struct in_addr));
+	}
+
+	if ((((ipv4_protocol*)protocol)->flags & IP_FLAG_RECEIVE_PKTINFO) != 0) {
+		if (msgControlLen
+				< (size_t)bytesWritten + CMSG_SPACE(sizeof(in_pktinfo))) {
+			*_messageFlags |= MSG_CTRUNC;
+			return bytesWritten;
+		}
+
+		// As on Linux, the local address is the destination of a unicast,
+		// and the receiving interface's address for anything else.
+		in_pktinfo info;
+		memset(&info, 0, sizeof(info));
+		info.ipi_addr = ((sockaddr_in*)buffer->destination)->sin_addr;
+		info.ipi_spec_dst = info.ipi_addr;
+		net_interface_address* interfaceAddress = buffer->interface_address;
+		if (interfaceAddress != NULL && interfaceAddress->interface != NULL) {
+			info.ipi_ifindex = interfaceAddress->interface->index;
+			if ((buffer->msg_flags & (MSG_BCAST | MSG_MCAST)) != 0
+				&& interfaceAddress->local != NULL
+				&& interfaceAddress->local->sa_family == AF_INET) {
+				info.ipi_spec_dst
+					= ((sockaddr_in*)interfaceAddress->local)->sin_addr;
+			}
+		}
+
+		cmsghdr* messageHeader = (cmsghdr*)((uint8*)msgControl + bytesWritten);
+		messageHeader->cmsg_len = CMSG_LEN(sizeof(in_pktinfo));
+		messageHeader->cmsg_level = IPPROTO_IP;
+		messageHeader->cmsg_type = IP_PKTINFO;
+		memcpy(CMSG_DATA(messageHeader), &info, sizeof(in_pktinfo));
+
+		bytesWritten += CMSG_SPACE(sizeof(in_pktinfo));
 	}
 
 	return bytesWritten;

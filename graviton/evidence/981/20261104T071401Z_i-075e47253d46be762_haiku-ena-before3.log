@@ -1,0 +1,39 @@
+# evidence: haiku-ena-before3
+# instance: i-075e47253d46be762   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T071401Z   end: 20261104T071418Z   rc: 0
+# script sha256: ec46fdf03438a4988918069d2905d2024b0f8de1e8d7db0a4e8aedae01d5096c
+# ---- script ----
+# | # ENA rows for issue 981: datagrams to the Linux peer, with the source in an
+# | # IP_PKTINFO control message. The peer's tcpdump shows what went on the wire.
+# | W=/boot/home/wS
+# | cd $W || exit 1
+# | P=10.128.6.237
+# | IP=$(ifconfig | grep "inet addr:" | grep -v "127.0.0.1" | head -1 | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | echo "local $IP peer $P"
+# | listimage 1 | grep -E "network/(stack|protocols/(ipv4|udp))" | awk '{print $NF}' | sort -u
+# | sha256sum pktinfo981.new
+# | sleep 6
+# | ./pktinfo981.new send $P 9981 -
+# | ./pktinfo981.new send $P 9981 $IP
+# | ./pktinfo981.new send $P 9981 0.0.0.0 /dev/net/ena/0
+# | ./pktinfo981.new send $P 9981 $IP /dev/net/ena/0
+# | ./pktinfo981.new send $P 9981 192.0.2.1
+# | ./pktinfo981.new send $P 9981 10.128.7.255
+# | ./pktinfo981.new send $P 9981 127.0.0.1
+# | ./pktinfo981.new send $P 9981 - 
+# | echo ENA-DONE
+# ---- raw output ----
+local 10.128.4.36 peer 10.128.6.237
+/boot/system/add-ons/kernel/network/protocols/ipv4
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/stack
+10859c0b6c33152c2450be20fbc5e0b42581f6c30347e56f66cbff6b55c0a4b0  pktinfo981.new
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+send 10.128.4.36 -> 10.128.6.237.9981 ifindex=0: sendmsg=-1 EOPNOTSUPP
+send 0.0.0.0 -> 10.128.6.237.9981 ifindex=2: sendmsg=-1 EOPNOTSUPP
+send 10.128.4.36 -> 10.128.6.237.9981 ifindex=2: sendmsg=-1 EOPNOTSUPP
+send 192.0.2.1 -> 10.128.6.237.9981 ifindex=0: sendmsg=-1 EOPNOTSUPP
+send 10.128.7.255 -> 10.128.6.237.9981 ifindex=0: sendmsg=-1 EOPNOTSUPP
+send 127.0.0.1 -> 10.128.6.237.9981 ifindex=0: sendmsg=-1 EOPNOTSUPP
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+ENA-DONE

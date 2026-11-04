@@ -1,0 +1,40 @@
+# evidence: haiku-ena-after
+# instance: i-0f78deeefa40e71c5   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T072317Z   end: 20261104T072334Z   rc: 0
+# script sha256: 97d6437d97e7e8e6031c2c0ca321dee65bd8014a7e6ba6246b141b1b915e118d
+# ---- script ----
+# | # ENA rows for issue 981: datagrams to the Linux peer, with the source in an
+# | # IP_PKTINFO control message. The peer's tcpdump shows what went on the wire.
+# | W=/boot/home/wS
+# | cd $W || exit 1
+# | P=10.128.6.237
+# | IP=$(ifconfig | grep "inet addr:" | grep -v "127.0.0.1" | head -1 | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | BC=$(ifconfig | grep "inet addr: $IP," | sed 's/.*Bcast: *\([0-9.]*\).*/\1/')
+# | echo "local $IP broadcast $BC peer $P"
+# | listimage 1 | grep -E "network/(stack|protocols/(ipv4|udp))" | awk '{print $NF}' | sort -u
+# | sha256sum pktinfo981.new
+# | sleep 6
+# | ./pktinfo981.new send $P 9981 -
+# | ./pktinfo981.new send $P 9981 $IP
+# | ./pktinfo981.new send $P 9981 0.0.0.0 /dev/net/ena/0
+# | ./pktinfo981.new send $P 9981 $IP /dev/net/ena/0
+# | ./pktinfo981.new send $P 9981 192.0.2.1
+# | ./pktinfo981.new send $P 9981 $BC
+# | ./pktinfo981.new send $P 9981 127.0.0.1
+# | ./pktinfo981.new send $P 9981 - 
+# | echo ENA-DONE
+# ---- raw output ----
+local 10.128.10.194 broadcast 10.128.11.255 peer 10.128.6.237
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+/boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+/boot/home/config/non-packaged/add-ons/kernel/network/stack
+10859c0b6c33152c2450be20fbc5e0b42581f6c30347e56f66cbff6b55c0a4b0  pktinfo981.new
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+send 10.128.10.194 -> 10.128.6.237.9981 ifindex=0: sendmsg=29 0
+send 0.0.0.0 -> 10.128.6.237.9981 ifindex=2: sendmsg=23 0
+send 10.128.10.194 -> 10.128.6.237.9981 ifindex=2: sendmsg=29 0
+send 192.0.2.1 -> 10.128.6.237.9981 ifindex=0: sendmsg=-1 EADDRNOTAVAIL
+send 10.128.11.255 -> 10.128.6.237.9981 ifindex=0: sendmsg=-1 EINVAL
+send 127.0.0.1 -> 10.128.6.237.9981 ifindex=0: sendmsg=25 0
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+ENA-DONE

@@ -328,6 +328,10 @@ add_ancillary_data(net_socket* socket, ancillary_data_container* container,
 		return B_NOT_SUPPORTED;
 
 	while (true) {
+		// Trailing bytes too short for a header end the list, as they do for
+		// CMSG_NXTHDR(); reading cmsg_len from them would overrun the copy.
+		if (dataLen < sizeof(cmsghdr))
+			break;
 		if (header->cmsg_len < CMSG_LEN(0) || header->cmsg_len > dataLen)
 			return B_BAD_VALUE;
 

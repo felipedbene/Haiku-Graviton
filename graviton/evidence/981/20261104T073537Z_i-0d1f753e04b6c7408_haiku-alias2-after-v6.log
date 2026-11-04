@@ -1,0 +1,28 @@
+# evidence: haiku-alias2-after-v6
+# instance: i-0d1f753e04b6c7408   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T073537Z   end: 20261104T073549Z   rc: 0
+# script sha256: f7434b68500481c0c057f0b2192fab2d500c0a8677a36c71e7eab181f46e26cf
+# ---- script ----
+# | # Sends only (the second address 10.128.13.123 was added by haiku-alias-after-v6; the
+# | # peer's capture window had closed before its sends).
+# | cd /boot/home/wS || exit 1
+# | ifconfig /dev/net/ena/0 | grep "inet addr"
+# | sleep 4
+# | P=10.128.6.237
+# | ./pktinfo981.new send $P 9981 -
+# | ./pktinfo981.new send $P 9981 10.128.13.123
+# | ./pktinfo981.new send $P 9981 10.128.13.123 /dev/net/ena/0
+# | ./pktinfo981.new send ::ffff:$P 9981 ::ffff:10.128.13.123
+# | ./pktinfo981.new send $P 9981 10.128.14.102
+# | ./pktinfo981.new send $P 9981 -
+# | echo ALIAS-DONE
+# ---- raw output ----
+	inet addr: 10.128.14.102, Bcast: 10.128.15.255, Mask: 255.255.252.0
+	inet addr: 10.128.13.123, Bcast: --, Mask: 255.255.252.0
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+send 10.128.13.123 -> 10.128.6.237.9981 ifindex=0: sendmsg=29 0
+send 10.128.13.123 -> 10.128.6.237.9981 ifindex=2: sendmsg=29 0
+send ::ffff:10.128.13.123 -> ::ffff:10.128.6.237.9981 ifindex=0: sendmsg=36 0
+send 10.128.14.102 -> 10.128.6.237.9981 ifindex=0: sendmsg=29 0
+send - -> 10.128.6.237.9981 ifindex=0: sendto=17 0
+ALIAS-DONE

@@ -1,0 +1,84 @@
+# evidence: xbuild-1100
+# instance: i-0e8f5dbc1d66d1e5f   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T081030Z   end: 20261104T081118Z   rc: 1
+# script sha256: 086e672cbb144f9066ec2e80b6d48d1c22655f7a9f6124092d1a534af4826adf
+# ---- script ----
+# | # Network modules for the #1100 review rework: #1021 alone (the base it now
+# | # depends on), #1100 as first pushed (on trunk), and #1100 reworked on #1021.
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S/1100
+# | cd /opt/wS/hg/generated || exit 1
+# | git -C .. fetch -q --depth 80 origin fix/959-udp-msg-ctrunc fix/981-udp-send-pktinfo || exit 2
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	echo "== $label: $(git -C .. rev-parse --short HEAD) $(git -C .. log -1 --format=%s)"
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/S/patch/$patch /opt/wS/$patch || return 1
+# | 		sha256sum /opt/wS/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wS/$patch || { echo "apply failed"; return 1; }
+# | 		git -C .. diff --stat -- src headers
+# | 	fi
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label rc=$rc failed=$(grep -cE '\.\.\.failed' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error' jam-$label.log | head -30; }
+# | 	echo "--- warnings in the changed files"
+# | 	grep 'warning:' jam-$label.log | grep -E 'protocols/(ipv4/ipv4|udp/udp)\.cpp:|stack/(routes|datalink|net_socket)\.cpp:' | sort -u | head
+# | 	mkdir -p /opt/wS/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/wS/out/$label/$t && sha256sum /opt/wS/out/$label/$t | sed "s|/opt/wS/out/||"
+# | 		aws s3 cp --quiet /opt/wS/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | git -C .. fetch -q --depth 80 origin fix/959-udp-msg-ctrunc:refs/remotes/origin/fix/959-udp-msg-ctrunc fix/981-udp-send-pktinfo:refs/remotes/origin/fix/981-udp-send-pktinfo
+# | build f1021 origin/fix/959-udp-msg-ctrunc none stack ipv4 ipv6 udp
+# | build old1100 origin/fix/981-udp-send-pktinfo none stack ipv4 udp
+# | build new1100 origin/fix/959-udp-msg-ctrunc 1100-r1.patch stack ipv4 ipv6 udp
+# ---- raw output ----
+== f1021: 2234f92a evidence: recvmsg MSG_CTRUNC A/B on Graviton for #959
+JAM f1021 rc=0 failed=0
+--- warnings in the changed files
+735090ae58b93ad315ab83ed38de15b24d0ba41bc4779fb55906946bd7dd62ef  f1021/stack
+7b9be4b952bdc275f0c6ad86bcd57ed8d0871355b252876343d2158b8d97166e  f1021/ipv4
+001505a31a6c74881f3f8fdeaea17afed691c624074b411ff47538241225ac3f  f1021/ipv6
+00fcc2e7d92ba4472297a3c8945273ef22eb3b142885980ea63f725efd209c22  f1021/udp
+== old1100: a9479615 evidence: #981 UDP source-address control messages, before and after on Graviton, with Linux 7.0
+JAM old1100 rc=0 failed=0
+--- warnings in the changed files
+67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  old1100/stack
+eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  old1100/ipv4
+8c703d2546da52584f69f32fc407219af34b67513134192cb0bf38990bdde3ec  old1100/udp
+== new1100: 2234f92a evidence: recvmsg MSG_CTRUNC A/B on Graviton for #959
+c9f021c52ea46795548dc787827253d2114f39bb28d86d3e07abff923e872fb9  /opt/wS/1100-r1.patch
+ headers/posix/netinet/in.h                         |  12 +
+ headers/private/net/net_datalink.h                 |   3 +
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp |  53 ++++
+ src/add-ons/kernel/network/protocols/udp/udp.cpp   | 267 ++++++++++++++++++++-
+ src/add-ons/kernel/network/stack/datalink.cpp      |   4 +-
+ src/add-ons/kernel/network/stack/net_socket.cpp    |   4 +
+ src/add-ons/kernel/network/stack/routes.cpp        |  51 +++-
+ src/add-ons/kernel/network/stack/routes.h          |   2 +
+ 8 files changed, 392 insertions(+), 4 deletions(-)
+JAM new1100 rc=1 failed=2
+../src/add-ons/kernel/network/protocols/udp/udp.cpp:1396:39: error: invalid use of incomplete type 'struct net_device'
+/opt/wS/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/add-ons/kernel/network/protocols/udp/udp.cpp" -O2 -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -fno-omit-frame-pointer -D_KERNEL_MODE -DARCH_arm64 -D__HAIKU_PRIMARY_PACKAGING_ARCH=\"arm64\" -DHAIKU_DISTRO_COMPATIBILITY_DEFAULT -DHAIKU_TARGET_PLATFORM_HAIKU -DHAIKU_REGULAR_BUILD -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/add-ons/kernel/network/protocols/udp -iquote objects/common/add-ons/kernel/network/protocols/udp -iquote objects/linux/arm64/common/add-ons/kernel/network/protocols/udp -iquote objects/haiku/arm64/common/add-ons/kernel/network/protocols/udp -I ../headers/private/. -I ../headers/private/kernel -I ../headers/private/libroot -I ../headers/private/shared -I ../headers/private/kernel/boot/platform/efi -I ../headers/private/kernel/arch/arm64 -I objects/haiku/arm64/common/system/kernel -I ../headers/private/. -I ../headers/private/system -I ../headers/private/system/arch/arm64 -I ../headers/private/net -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++ -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/aarch64-unknown-haiku -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/backward -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/ext -I ../headers/glibc -I ../headers/posix -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include-fixed -I ../headers -I ../headers/os -I ../headers/os/add-ons -I ../headers/os/add-ons/file_system -I ../headers/os/add-ons/graphics -I ../headers/os/add-ons/input_server -I ../headers/os/add-ons/registrar -I ../headers/os/add-ons/screen_saver -I ../headers/os/add-ons/tracker -I ../headers/os/app -I ../headers/os/device -I ../headers/os/drivers -I ../headers/os/game -I ../headers/os/interface -I ../headers/os/kernel -I ../headers/os/locale -I ../headers/os/media -I ../headers/os/mail -I ../headers/os/midi -I ../headers/os/midi2 -I ../headers/os/net -I ../headers/os/storage -I ../headers/os/support -I ../headers/os/translation -I ../headers/private/. -o "objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp.o"
+--- warnings in the changed files
+6154343e2794071d5bc7cab18ac5212145c62b9557e39f3c97240eed3f33d28a  new1100/stack
+f1bb4eba61d60b437a6fb85e999854d0099be1b586d81ef9929b983ce3f5e64c  new1100/ipv4
+001505a31a6c74881f3f8fdeaea17afed691c624074b411ff47538241225ac3f  new1100/ipv6
+cp: cannot stat 'objects/haiku/arm64/release/add-ons/kernel/network/protocols/udp/udp': No such file or directory
+
+aws: [ERROR]: The user-provided path /opt/wS/out/new1100/udp does not exist.
+failed to run commands: exit status 1

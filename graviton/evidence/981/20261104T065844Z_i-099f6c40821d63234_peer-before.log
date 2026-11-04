@@ -1,0 +1,22 @@
+# evidence: peer-before
+# instance: i-099f6c40821d63234   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T065844Z   end: 20261104T070350Z   rc: 137
+# script sha256: 67a706f72af362e696dd6e9b56ebca62d974d6260f4ed807c842eacb7f9d104b
+# ---- script ----
+# | # ENA peer for issue 981: tcpdump and a receiver on UDP 9981 for ~45 s, while
+# | # the Haiku instance sends to it (see the matching haiku-ena log).
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | B=s3://haiku-graviton-$ACCT-us-west-2/bugfix/S
+# | cd /opt/wS/t && aws s3 cp --quiet $B/src/pktinfo981.c . && sha256sum pktinfo981.c && cc -Wall -o pktinfo981 pktinfo981.c || exit 3
+# | IF=$(ip route show default | awk '{print $5}')
+# | ip -4 -o addr show dev $IF | awk '{print "peer", $2, $4}'
+# | timeout 45 tcpdump -n -l -i $IF 'udp port 9981' > /tmp/td.txt 2>/tmp/td.err &
+# | sleep 1
+# | timeout 44 ./pktinfo981 recv 9981 20 > /tmp/rv.txt 2>&1
+# | wait
+# | echo "--- tcpdump"; cat /tmp/td.txt; tail -2 /tmp/td.err
+# | echo "--- receiver"; cat /tmp/rv.txt
+# ---- raw output ----
+a83582054c4a62c8d65662ee006af6950394b28ee8d1b304ffe40fa3c8d5df5f  pktinfo981.c
+peer ens5 10.128.6.237/22

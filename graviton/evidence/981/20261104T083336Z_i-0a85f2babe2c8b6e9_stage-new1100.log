@@ -1,0 +1,34 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-new1100
+# instance: i-0a85f2babe2c8b6e9   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T083336Z   end: 20261104T083346Z   rc: 0
+# script sha256: 6562a153e308e507e53f6d6dcb9b8f7ab5eae5c6b1f18cf503c5f0995a32cf66
+# ---- script ----
+# | # Stage new1100 (stack ipv4 ipv6 udp) as the only non-packaged network overrides (method of #959).
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | rm -rf $D; mkdir -p $D/protocols /boot/home/wS/mod && cd /boot/home/wS/mod
+# | curl -sSf -o stack.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1100/mod/new1100/stack?<PRESIGNED>' || exit 4
+# | echo '6154343e2794071d5bc7cab18ac5212145c62b9557e39f3c97240eed3f33d28a  stack.mod' | sha256sum -c || exit 5
+# | cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | curl -sSf -o ipv4.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1100/mod/new1100/ipv4?<PRESIGNED>' || exit 4
+# | echo 'f1bb4eba61d60b437a6fb85e999854d0099be1b586d81ef9929b983ce3f5e64c  ipv4.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | curl -sSf -o ipv6.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1100/mod/new1100/ipv6?<PRESIGNED>' || exit 4
+# | echo '001505a31a6c74881f3f8fdeaea17afed691c624074b411ff47538241225ac3f  ipv6.mod' | sha256sum -c || exit 5
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6
+# | curl -sSf -o udp.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1100/mod/new1100/udp?<PRESIGNED>' || exit 4
+# | echo 'bbff0672fc9d14de9e1549d04487e8c741063d6b09e252bd604bd37c11f98939  udp.mod' | sha256sum -c || exit 5
+# | cp udp.mod $D/protocols/udp.new && mv $D/protocols/udp.new $D/protocols/udp
+# | echo "--- overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sync; echo STAGE-DONE
+# ---- raw output ----
+stack.mod: OK
+ipv4.mod: OK
+ipv6.mod: OK
+udp.mod: OK
+--- overrides
+f1bb4eba61d60b437a6fb85e999854d0099be1b586d81ef9929b983ce3f5e64c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+001505a31a6c74881f3f8fdeaea17afed691c624074b411ff47538241225ac3f  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+bbff0672fc9d14de9e1549d04487e8c741063d6b09e252bd604bd37c11f98939  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+6154343e2794071d5bc7cab18ac5212145c62b9557e39f3c97240eed3f33d28a  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+STAGE-DONE

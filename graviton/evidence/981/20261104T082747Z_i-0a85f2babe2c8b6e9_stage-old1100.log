@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-old1100
+# instance: i-0a85f2babe2c8b6e9   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T082747Z   end: 20261104T082757Z   rc: 0
+# script sha256: e9ca50ae2822c7e22bbf6c096444848bd075b9ba65c468f0b232a30ef2fd418b
+# ---- script ----
+# | # Stage old1100 (stack ipv4 udp) as the only non-packaged network overrides (method of #959).
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | rm -rf $D; mkdir -p $D/protocols /boot/home/wS/mod && cd /boot/home/wS/mod
+# | curl -sSf -o stack.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1100/mod/old1100/stack?<PRESIGNED>' || exit 4
+# | echo '67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  stack.mod' | sha256sum -c || exit 5
+# | cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | curl -sSf -o ipv4.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1100/mod/old1100/ipv4?<PRESIGNED>' || exit 4
+# | echo 'eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  ipv4.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | curl -sSf -o udp.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1100/mod/old1100/udp?<PRESIGNED>' || exit 4
+# | echo '8c703d2546da52584f69f32fc407219af34b67513134192cb0bf38990bdde3ec  udp.mod' | sha256sum -c || exit 5
+# | cp udp.mod $D/protocols/udp.new && mv $D/protocols/udp.new $D/protocols/udp
+# | echo "--- overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sync; echo STAGE-DONE
+# ---- raw output ----
+stack.mod: OK
+ipv4.mod: OK
+udp.mod: OK
+--- overrides
+eeeb1e8485917455a47d1d6e24487c7a4910307c1c58b886fe93ae2fa0c33b98  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+8c703d2546da52584f69f32fc407219af34b67513134192cb0bf38990bdde3ec  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+67bc89b80adab1c3fb7966ff830a5f62d64af23f485119d7b0d98a6d274e9f17  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+STAGE-DONE

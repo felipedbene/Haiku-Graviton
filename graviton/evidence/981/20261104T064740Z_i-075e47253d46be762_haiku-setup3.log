@@ -1,0 +1,69 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: haiku-setup3
+# instance: i-075e47253d46be762   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T064740Z   end: 20261104T065517Z   rc: 0
+# script sha256: 4c90c82b2bb689e9426aca78697e2f2966abeea503a91ba3c8d3d7fc044988ae
+# ---- script ----
+# | # Before arm for issue 981 (canonical, unmodified network stack): toolchain, the
+# | # repros against the stock headers and against this change's netinet/in.h (an
+# | # include overlay, so only the header differs), and openssl 3.5.9 + the
+# | # in-tree openssl3-3.5.9.patchset built both ways. The builds stay on disk, so
+# | # the after arm (this disk, imaged) runs the very same binaries.
+# | W=/boot/home/wS
+# | mkdir -p $W/inc/netinet && cd $W
+# | uname -a
+# | pkgman install -y gcc binutils haiku_devel make perl curl tar patch gzip 2>&1 | tail -1
+# | fetch() { curl -sSf -o "$1" "$2" || { echo "fetch $1 failed"; exit 4; }; }
+# | fetch inc/netinet/in.h 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/in.h?<PRESIGNED>'
+# | fetch pktinfo981.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/pktinfo981.c?<PRESIGNED>'
+# | fetch dgram981.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/dgram981.c?<PRESIGNED>'
+# | fetch openssl3-3.5.9.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/openssl3-3.5.9.patchset?<PRESIGNED>'
+# | sha256sum inc/netinet/in.h pktinfo981.c dgram981.c openssl3-3.5.9.patchset /boot/system/develop/headers/posix/netinet/in.h
+# | gcc -Wall -o pktinfo981.stock pktinfo981.c -lnetwork && gcc -Wall -I$W/inc -o pktinfo981.new pktinfo981.c -lnetwork || exit 5
+# | gcc -o dgram981.stock dgram981.c -lnetwork && gcc -I$W/inc -o dgram981.new dgram981.c -lnetwork || exit 5
+# | sha256sum pktinfo981.* dgram981.*
+# | curl -sSfL -o openssl-3.5.9.tar.gz https://www.openssl.org/source/openssl-3.5.9.tar.gz || curl -sSfL -o openssl-3.5.9.tar.gz https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz || exit 6
+# | echo "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a  openssl-3.5.9.tar.gz" | sha256sum -c || exit 6
+# | for v in stock new; do
+# | 	rm -rf ossl-$v && mkdir ossl-$v && tar -xzf openssl-3.5.9.tar.gz -C ossl-$v --strip-components=1
+# | 	(cd ossl-$v && patch -p1 -s < ../openssl3-3.5.9.patchset) || { echo "patch $v failed"; exit 7; }
+# | 	inc=""; [ $v = new ] && inc="-I$W/inc"
+# | 	s=$(date +%s)
+# | 	(cd ossl-$v && ./Configure haiku-aarch64 shared -g $inc > ../configure-$v.log 2>&1 && make -j8 > ../make-$v.log 2>&1)
+# | 	echo "openssl $v build rc=$? wall=$(( $(date +%s) - s ))s"
+# | 	tail -3 make-$v.log
+# | 	grep -c "IP_PKTINFO\|in_pktinfo" ossl-$v/crypto/bio/bss_dgram.c
+# | 	sha256sum ossl-$v/test/bio_dgram_test ossl-$v/libcrypto.so.3 2>/dev/null
+# | done
+# | sync
+# | echo SETUP-DONE
+# ---- raw output ----
+Haiku ip-10-128-4-36.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+[system] Done.
+e083612709da1a46d4a5136ce27514aa2e3c18602c3997c594279707a1e2f6a8  inc/netinet/in.h
+c5babed5e0a0110a5c692f0b25bb2a58fb06f7f260dc72b4d1cb98614b3ef0ec  pktinfo981.c
+7e14477dde30bfdc962f35895c641e6bd1892d2999419b30e60e599ee75637b3  dgram981.c
+cbd056d16991ad97b8069786219171884eba506db652b4599340d86d37b13717  openssl3-3.5.9.patchset
+19be7395e6ba3d041de5386e7f7a0d4f72415e6db0d09ba9f5ec70f71f207d47  /boot/system/develop/headers/posix/netinet/in.h
+c5babed5e0a0110a5c692f0b25bb2a58fb06f7f260dc72b4d1cb98614b3ef0ec  pktinfo981.c
+76729a94bfaacd1e4ce71e4195f1d2059c486528878d101473b8246f3ca215c3  pktinfo981.new
+7358a2716d6378c8894828de7d33be5ee34847f633193d0c2e620fe26269b464  pktinfo981.stock
+7e14477dde30bfdc962f35895c641e6bd1892d2999419b30e60e599ee75637b3  dgram981.c
+c8b094b82b5b03a2113d93ee5c033ac144358c238be9309b02d6e05e2493e796  dgram981.new
+f86bf9e7c91055a28ecb0a23c708d4b94c2f2850ba5620a2dc03ec58b7d5b95d  dgram981.stock
+openssl-3.5.9.tar.gz: OK
+openssl stock build rc=0 wall=215s
+	apps/lib/uitest-bin-apps_ui.o test/uitest-bin-uitest.o \
+	-lssl test/libtestutil.a -lcrypto -lnetwork 
+make[1]: Leaving directory '/boot/home/wS/ossl-stock'
+29
+013761d9f93d63380c13225c5ee4599ba6c9e716d414616ea4f1f585d2b0d29d  ossl-stock/test/bio_dgram_test
+cc1bd789d09e0ad9f462f6c00e7a1b209366822ae0bf124a09e185144670219a  ossl-stock/libcrypto.so.3
+openssl new build rc=0 wall=213s
+	apps/lib/uitest-bin-apps_ui.o test/uitest-bin-uitest.o \
+	-lssl test/libtestutil.a -lcrypto -lnetwork 
+make[1]: Leaving directory '/boot/home/wS/ossl-new'
+29
+bf7ca3c484311031294010ba13b9644e6962a20a66ada5e9a7f7fa65fd2497b1  ossl-new/test/bio_dgram_test
+ade17e7a4fbd65a43e3792e4a46343a05c8a69e7795a936a5d5964495f0155f3  ossl-new/libcrypto.so.3
+SETUP-DONE

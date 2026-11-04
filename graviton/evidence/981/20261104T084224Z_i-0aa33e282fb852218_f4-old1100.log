@@ -1,0 +1,43 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: f4-old1100
+# instance: i-0aa33e282fb852218   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T084224Z   end: 20261104T084235Z   rc: 0
+# script sha256: 5f31151e588eef7cadad74d0c7a1c1bb8fcdfc74b86a007b1f4eb1b61ac860ea
+# ---- script ----
+# | # F4 rows: pktinfo981 with the MSG_CTRUNC rows, rebuilt here from the same
+# | # source on each arm, then the full matrix.
+# | cd /boot/home/wS || exit 1
+# | curl -sSf -o pktinfo981.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/src/pktinfo981.c?<PRESIGNED>' && sha256sum pktinfo981.c && gcc -Wall -I/boot/home/wS/inc -o pktinfo981.f4 pktinfo981.c -lnetwork || exit 2
+# | IP=$(ifconfig /dev/net/ena/0 | grep "inet addr:" | sed 's/.*inet addr: *\([0-9.]*\).*/\1/')
+# | ./pktinfo981.f4 -l $IP; echo "rc=$?"
+# ---- raw output ----
+870b5127df9be56c6ac65b133c856c5164b8535f1f58e2f1a95ecbd40d84b6b9  pktinfo981.c
+ipv4 IP_PKTINFO src=127.0.0.1                        PASS  sendmsg=10 recv=10 from 127.0.0.1.53431 (want 127.0.0.1)
+ipv4 IP_PKTINFO src=127.0.0.2 (bind() refuses it)    PASS  sendmsg=-1 EADDRNOTAVAIL (want EADDRNOTAVAIL)
+ipv4 IP_PKTINFO src=192.0.2.1 (foreign)              PASS  sendmsg=-1 EADDRNOTAVAIL (want EADDRNOTAVAIL)
+ipv4 IP_PKTINFO src=255.255.255.255 (broadcast)      PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv4 IP_PKTINFO src=224.0.0.1 (multicast)            PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv4 IP_PKTINFO src=0.0.0.0 ifindex=lo               PASS  sendmsg=10 recv=10 from 127.0.0.1.53431 (want 127.0.0.1)
+ipv4 IP_PKTINFO src=127.0.0.1 ifindex=lo             PASS  sendmsg=10 recv=10 from 127.0.0.1.53431 (want 127.0.0.1)
+ipv4 IP_PKTINFO ifindex=9999 (none)                  PASS  sendmsg=-1 ENODEV (want ENODEV)
+ipv4 IP_PKTINFO short cmsg_len                       PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv4 IP_SENDSRCADDR src=127.0.0.1 (BSD)              PASS  sendmsg=10 recv=10 from 127.0.0.1.53431 (want 127.0.0.1)
+ipv4 IP_SENDSRCADDR src=192.0.2.1 (BSD)              PASS  sendmsg=-1 EADDRNOTAVAIL (want EADDRNOTAVAIL)
+ipv4 IP_TTL cmsg (info only)                         INFO  sendmsg=-1 EOPNOTSUPP (want 0)
+ipv4 IP_PKTINFO src=10.128.7.252 to loopback         PASS  sendmsg=10 recv=10 from 10.128.7.252.53431 (want 10.128.7.252)
+ipv4 IP_PKTINFO on a connected socket                PASS  sendmsg=10 recv=10 from 10.128.7.252.53434
+ipv4 IP_PKTINFO setsockopt/getsockopt                PASS  setsockopt=0 getsockopt=1
+ipv4 recv IP_PKTINFO cmsg                            PASS  recv=10 [IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1] (want [IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1])
+ipv4 recv IP_RECVDSTADDR + IP_PKTINFO cmsgs          PASS  recv=10 [cmsg 0/7][IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1] (want [cmsg 0/7][IP_PKTINFO addr=127.0.0.1 spec_dst=127.0.0.1 ifindex=1])
+ipv4 recv both options, no room: MSG_CTRUNC          FAIL  recvmsg=-1 controllen=23 flags=0x0 first cmsg type 1914712113
+ipv4 recv both options, room for one: MSG_CTRUNC     FAIL  recvmsg=-1 controllen=24 flags=0x0 first cmsg type 1914712113
+ipv6 IPV6_PKTINFO src=::1                            PASS  sendmsg=10 recv=10 from ::1.58101 (want ::1)
+ipv6 IPV6_PKTINFO src=2001:db8::1 (foreign)          PASS  sendmsg=-1 EADDRNOTAVAIL (want EADDRNOTAVAIL)
+ipv6 IPV6_PKTINFO src=ff02::1 (multicast)            PASS  sendmsg=-1 EINVAL (want EINVAL)
+ipv6 IPV6_PKTINFO src=:: ifindex=lo                  PASS  sendmsg=10 recv=10 from ::1.58101 (want ::1)
+ipv6 IPV6_PKTINFO src=::1 ifindex=lo                 PASS  sendmsg=10 recv=10 from ::1.58101 (want ::1)
+ipv6 IPV6_PKTINFO ifindex=9999 (none)                PASS  sendmsg=-1 ENODEV (want ENODEV)
+ipv6 IPV6_PKTINFO mapped src to mapped dst           PASS  sendmsg=10 recv=10 from 127.0.0.1.58101 (want 127.0.0.1)
+ipv6 IPV6_PKTINFO src=::1 to mapped dst              PASS  sendmsg=-1 EINVAL (want EINVAL)
+FAIL: 2 of 26 row(s) failed
+rc=1
