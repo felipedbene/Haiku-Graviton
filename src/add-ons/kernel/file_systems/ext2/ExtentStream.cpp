@@ -818,10 +818,11 @@ ExtentStream::_FillHoles(Transaction& transaction, fileblock_t first,
 		if (!merge && count >= stream->extent_header.MaxEntries()) {
 			// The leaf has no room for a new extent: split it (and what is
 			// full above it), then look the hole up again, as it may now
-			// belong to the new leaf.
-			fVolume->FreeBlocks(transaction, start, allocated);
+			// belong to the new leaf. The run goes back only afterwards, so
+			// that the new tree blocks don't take it.
 			cached.Unset();
 			status = _MakeRoom(transaction, first, added);
+			fVolume->FreeBlocks(transaction, start, allocated);
 			if (status != B_OK)
 				return status;
 			continue;
