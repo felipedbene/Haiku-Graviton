@@ -1751,8 +1751,14 @@ TCPEndpoint::_Persist()
 		// Not a closed window: the timer also stands in for the ACK that
 		// sender SWS avoidance waits for when nothing is in flight (see
 		// _SendQueued()), and after a window that reopened by less than a
-		// segment, nothing else would send into it. Send what fits.
-		_SendQueued(true);
+		// segment, nothing else would send into it. Send what fits -- but
+		// only if something does: with nothing unsent, or the window full,
+		// a forced _SendQueued() puts out a bare ACK and arms the retransmit
+		// timer for it, which then backs off the RTO and resets slow start
+		// on a connection that lost nothing.
+		if (fSendQueue.Available(fSendNext) != 0
+			&& (fSendNext - fSendUnacknowledged).Number() < fSendWindow)
+			_SendQueued(true);
 		return false;
 	}
 
@@ -3249,6 +3255,20 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 		action |= SEND_QUEUED;
 	}
 
+	if (fSendWindow == 0 && advertisedWindow != 0) {
+		// The window has reopened: the probing is over, so stop its timer
+		// (Linux clears ICSK_TIME_PROBE0 the same way). Left running at a
+		// backed-off delay of up to a minute, it fired long after into a
+		// connection that no longer needed it, and a window that closed
+		// again had its first probe that late. Send now instead -- by less
+		// than a segment, too, which the SEND_QUEUED test above leaves out:
+		// _SendQueued() starts the timer again, from the start, if sender
+		// SWS avoidance holds what fits.
+		gStackModule->cancel_timer(&fPersistTimer);
+		T(TimerSet(this, "persist", -1));
+		action |= SEND_QUEUED;
+	}
+
 	fSendWindow = advertisedWindow;
 	// Whatever the window, the peer is there: any window probe out has been
 	// answered. Only an open window ends the probing, and with it the
@@ -3270,7 +3290,13 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			return DROP | IMMEDIATE_ACKNOWLEDGE;
 
 		if (segment.acknowledge == fSendUnacknowledged) {
+			// Not with the window closed: these are the answers to our window
+			// probes, which say nothing about loss. Counted, they could use
+			// up fast retransmit without sending anything, after which
+			// recovery sends new data from SND.MAX and the lost segment is
+			// never sent again.
 			if (buffer->size == 0 && advertisedWindow == fSendWindow
+				&& advertisedWindow != 0
 				&& (segment.flags & TCP_FLAG_FINISH) == 0 && fSendUnacknowledged != fSendMax) {
 				TRACE("Receive(): duplicate ack!");
 				_DuplicateAcknowledge(segment);
@@ -4317,6 +4343,18 @@ TCPEndpoint::_SendQueued(bool force)
 
 	} while (length > 0);
 
+	// Whatever was sent, data in flight needs a retransmit timer. The test
+	// above arms it only for a send that starts at SND.UNA, so a send from
+	// SND.MAX while the timer was not running -- fast recovery's new data,
+	// after the timer was cancelled or never set -- left nothing to resend
+	// what is lost, and nothing for R2 to count.
+	if (fSendMax != fSendUnacknowledged
+		&& !gStackModule->is_timer_active(&fRetransmitTimer)) {
+		const bigtime_t delay = _RetransmitTimerDelay();
+		gStackModule->set_timer(&fRetransmitTimer, delay);
+		T(TimerSet(this, "retransmit", delay));
+	}
+
 	return B_OK;
 }
 
@@ -4578,6 +4616,15 @@ TCPEndpoint::_Retransmit()
 			//
 			// With nothing owed, this firing timed nothing out.
 			fRetransmitStartTime = 0;
+
+			// That leaves the closed window to the persist timer, which
+			// must then be running: when only a FIN is owed, _SendQueued()
+			// sends it without the early return that starts the timer, so
+			// after a shutdown(SHUT_WR) into a closed window nothing would
+			// ever give up on a peer that went away.
+			if (fSendWindow == 0
+				&& !gStackModule->is_timer_active(&fPersistTimer))
+				_StartPersistTimer();
 		} else if (fRetransmitStartTime == 0)
 			fRetransmitStartTime = now;
 		else if (now - fRetransmitStartTime >= TCP_RETRANSMIT_GIVE_UP_TIMEOUT) {
