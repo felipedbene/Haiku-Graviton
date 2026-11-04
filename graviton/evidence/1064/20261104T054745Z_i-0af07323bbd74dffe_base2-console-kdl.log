@@ -1,0 +1,53 @@
+# evidence: base2-console-kdl (second launches)
+# instance: i-0af07323bbd74dffe   region: us-west-2   transport: ec2 get-console-output --latest
+# what: serial console of arm base2 at its KDL
+# ---- raw output ----
+load addon /boot/system/add-ons/input_server/filters/screen_saver failed
+slab memory manager: created area 0xffff00002a801000 (9978)
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+Last message repeated 5 times.
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 2 times.
+[33mnvme_disk:[0m failed to lock memory: Bad address
+Last message repeated 3 times.
+slab memory manager: created area 0xffff00002b001000 (35421)
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PANIC: Trying to free superblock!
+
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 1507 "truncate" running on CPU 7
+iframe 0xffff000002118cc7 (end = 0xffff000002118fff)
+stack trace for thread 0x5e3 "truncate"
+    kernel stack: 0xffff000002114000 to 0xffff000002119000
+      user stack: 0x000002228a53c000 to 0x000002228e53c000
+frame            caller     <image>:function + offset
+ 0 ffff000002118480 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000021184d0 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff000002118540[0m [36m""[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff000002118540 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff000002118600[0m [36m" �"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�@C���"[0m, std::__va_list: [34m0x23f7798[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff000002118600 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff000002118720 (+ 288) ffff0000023e6e0c   <ext2> BlockAllocator<[32m0x2118780[0m>::Free(Transaction&: [34m0x23f6918ffff0000[0m, uint64: [34m0x292f4b40ffff0000[0m, uint32: [34m0xffff0000[0m) + 0x1dc
+ 5 ffff000002118780 (+  96) ffff0000023f6918   <ext2> Volume<[32m0x21187b0[0m>::FreeBlocks(Transaction&: [34m0x23e8350ffff0000[0m, uint64: [34m0x2a48e7d4ffff0000[0m, uint32: [34m0xffff0000[0m) + 0x2c
+ 6 ffff0000021187b0 (+  48) ffff0000023e8350   <ext2> DataStream<[32m0x21187f0[0m>::_FreeBlocks[clone .localalias] (Transaction&: [34m0x23e84a8ffff0000[0m, unsigned int*: [34m0x2118978ffff0000[0m, uint32: [34m0xffff0000[0m) + 0xac
+ 7 ffff0000021187f0 (+  64) ffff0000023e84a8   <ext2> DataStream<[32m0x2118870[0m>::_FreeBlocks[clone .localalias] (Transaction&: [34m0x23e85c0ffff0000[0m, unsigned int*: [34m0x2118978ffff0000[0m, int64: [34m9199819882496[0m, int64: [34m17179869184[0m, [34mfalse[0m, int32: [34m34704000[0m) + 0x140
+ 8 ffff000002118870 (+ 128) ffff0000023e85c0   <ext2> DataStream<[32m0x21188f0[0m>::_FreeBlocks[clone .localalias] (Transaction&: [34m0x23e875cffff0000[0m, unsigned int*: [34m0x2118978ffff0000[0m, int64: [34m149052549335285760[0m, int64: [34m149051381104181248[0m, [34mfalse[0m, int32: [34m34704000[0m) + 0x258
+ 9 ffff0000021188f0 (+ 128) ffff0000023e875c   <ext2> DataStream<[32m0x2118930[0m>::Shrink(Transaction&: [34m0x23ee048ffff0000[0m, long&: [34m0x2917b940ffff0000[0m) + 0x9c
+10 ffff000002118930 (+  64) ffff0000023ee048   <ext2> Inode<[32m0x21189e0[0m>::_ShrinkDataStream[clone .localalias] (Transaction&: [34m0x23ee898ffff0000[0m, int64: [34m2961038968843337728[0m) + 0x144
+11 ffff0000021189e0 (+ 176) ffff0000023ee898   <ext2> Inode<[32m0x2118a20[0m>::Resize[clone .localalias] (Transaction&: [34m0x23f4408ffff0000[0m, int64: [34m2961038968843337728[0m) + 0x54
+12 ffff000002118a20 (+  64) ffff0000023f4408   <ext2> ext2_write_stat(fs_volume*: [34m0xffff000002118aa0[0m, fs_vnode*: [34m0xffff00000013fb84[0m, stat const*: [34m0x80[0m, uint32: [34m0x291436c0[0m) + 0x268
+13 ffff000002118aa0 (+ 128) ffff00000013fb84   <kernel_arm64> _user_write_stat + 0xf8
+14 ffff000002118ba0 (+ 256) ffff0000000a6c60   <kernel_arm64> syscall_dispatcher + 0xd90
+15 ffff000002118bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+16 ffff000002118cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff000002118cc7
+ELR=000000eafeca76c8 SPSR=0000000020000000
+LR =000000eafed2810c SP  =000002228e53be10 FP =000002228e53be10
+ESR=000000005600009d FAR =0000004bd4b77008
+17 000002228e53be10 (+   0) 000000eafeca76c8   </boot/system/lib/libroot.so> _kern_write_stat (nearest) + 0x04
+18 000002228e53beb0 (+ 160) 0000010c79be4f04   </boot/system/bin/truncate> main + 0x324
+19 000002228e53bfa0 (+ 240) 0000010c79be5530   </boot/system/bin/truncate> _start + 0x50
+20 000002228e53bfd0 (+  48) 00000052d3edc348   </boot/system/runtime_loader> runtime_loader + 0x128
+21 0000000000000000 (+   0) 0000073bca468208   <commpage> commpage_thread_exit + 0x00
+	2026-11-04T05:47:30+00:00

@@ -1,0 +1,42 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-base
+# instance: i-01ad2b2ae1578237e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical haiku.hpkg with ext2.trunk
+# start: 20261104T045848Z   end: 20261104T045953Z   rc: 0
+# script sha256: 3beb8dfa7a5176829a27adad241ad74ff1340d5c378a6fda6454e78b4d099f2e
+# ---- script ----
+# | # Repack arm "base": canonical haiku.hpkg with ext2.trunk (trunk a9954f424a, revision hrev59996:
+# | # canonical's own ext2 has a different sha256, so the base arm carries a trunk build made the
+# | # same way as the candidates); everything else stays canonical's. Method of #898/#933/#1011.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O ext2.trunk 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/Q/out/ext2.trunk?<PRESIGNED>'
+# | echo '7d96abad815846768f453d3a637f02442c3ab41e345c426b03b348cc786d1140  ext2.trunk' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 $A/ext2
+# | cat ext2.trunk > $A/ext2
+# | sha256sum x/kernel_arm64 $A/ext2
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+ext2.trunk: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  x/add-ons/kernel/file_systems/ext2
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+7d96abad815846768f453d3a637f02442c3ab41e345c426b03b348cc786d1140  x/add-ons/kernel/file_systems/ext2
+----- Package Info ----------------
+header size:                     80
+heap size:                 20519866
+TOC size:                    324054
+package attributes size:       1100
+total size:                20519946
+-----------------------------------
+-rw-r--r-- 1 baron root 20519946 Nov  4 04:59 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+705756782b947893d7cf2f008195f9d8024079adf5b2d55f2d18474e18e7d2f7  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

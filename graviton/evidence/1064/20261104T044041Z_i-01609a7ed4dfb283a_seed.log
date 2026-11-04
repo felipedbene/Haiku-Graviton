@@ -1,0 +1,327 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed
+# instance: i-01609a7ed4dfb283a   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: partition the seed EBS volume and make six ext2/ext4 file systems with Linux-written files
+# start: 20261104T044041Z   end: 20261104T044053Z   rc: 0
+# script sha256: cdd4690be072a9b18f696e8dc230a605128bfd204572b0a8741b7a23071b7fa4
+# ---- script ----
+# | # Seed volume for #1064: one 3 GiB EBS volume, GPT, six file systems made by Ubuntu mke2fs,
+# | # each holding two Linux-written files (lin-1m random, lin-small 3 bytes):
+# | #  p1 e4k   ext2, 4 KiB blocks (indirect-mapped)        -- write patterns
+# | #  p2 ext   ext4 without journal/orphan_file/metadata_csum (extents, huge_file) -- patterns
+# | #  p3 e1k   ext2, 1 KiB blocks (triple indirect from 64.3 MiB)                  -- patterns
+# | #  p4 lsp   ext2, 4 KiB: + Linux-made sparse files lsparse-a/-b (holes in direct, indirect
+# | #           and double indirect ranges), for Haiku truncate/remove
+# | #  p5 full  ext2, 4 KiB, 32 MiB -- write until ENOSPC (observation)
+# | #  p6 lspx  ext4 as p2: + Linux-made sparse extent files lsparse-a/-b
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=$(echo "nvme-Amazon_Elastic_Block_Store_vol087aaace576c795a2") '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "seed device $D"; lsblk $D || exit 1
+# | sgdisk -Z $D > /dev/null; sgdisk -n1:0:+600M -n2:0:+600M -n3:0:+600M -n4:0:+300M -n5:0:+32M -n6:0:+200M $D || exit 1
+# | partprobe $D; sleep 2; lsblk $D
+# | P=${D}p
+# | mkfs.ext2 -q -F -b 4096 -L e4k ${P}1 && mkfs.ext4 -q -F -O ^has_journal,^orphan_file,^metadata_csum -L ext ${P}2 && mkfs.ext2 -q -F -b 1024 -L e1k ${P}3 && mkfs.ext2 -q -F -b 4096 -L lsp ${P}4 && mkfs.ext2 -q -F -b 4096 -L full ${P}5 && mkfs.ext4 -q -F -O ^has_journal,^orphan_file,^metadata_csum -L lspx ${P}6 || exit 1
+# | mkdir -p /opt/seed && cd /opt/seed && head -c 1048576 /dev/urandom > lin-1m && printf 'abc' > lin-small && md5sum lin-1m lin-small
+# | mkdir -p m
+# | for n in 1 2 3 4 5 6; do
+# | 	mount ${P}$n m || exit 1
+# | 	cp lin-1m lin-small m/ && chmod 777 m
+# | 	if [ $n = 4 ] || [ $n = 6 ]; then
+# | 		for f in lsparse-a lsparse-b; do
+# | 			truncate -s 40M m/$f
+# | 			for o in 0 5 20 39; do dd if=/dev/urandom of=m/$f bs=4096 count=1 seek=$((o * 256)) conv=notrunc status=none; done
+# | 		done
+# | 		chmod 666 m/lsparse-*
+# | 	fi
+# | 	chmod 666 m/lin-*
+# | 	sync; ls -ls m; umount m
+# | done
+# | for n in 1 2 3 4 5 6; do echo "== p$n"; dumpe2fs -h ${P}$n 2>/dev/null | grep -E "volume name|features|Block size|Inode size"; e2fsck -fn ${P}$n; echo "e2fsck p$n rc=$?"; done
+# | sync
+# ---- raw output ----
+seed device /dev/nvme1n1
+NAME    MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+nvme1n1 259:4    0   3G  0 disk 
+Creating new GPT entries in memory.
+The operation has completed successfully.
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme1n1     259:4    0    3G  0 disk 
+├─nvme1n1p1 259:11   0  600M  0 part 
+├─nvme1n1p2 259:12   0  600M  0 part 
+├─nvme1n1p3 259:13   0  600M  0 part 
+├─nvme1n1p4 259:14   0  300M  0 part 
+├─nvme1n1p5 259:15   0   32M  0 part 
+└─nvme1n1p6 259:16   0  200M  0 part 
+fa5aaf3de84965b2a03a10005e6ac4c7  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+total 1048
+1028 -rw-rw-rw- 1 root root 1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 root root       3 Nov  4 04:40 lin-small
+  16 drwx------ 2 root root   16384 Nov  4 04:40 lost+found
+total 1044
+1024 -rw-rw-rw- 1 root root 1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 root root       3 Nov  4 04:40 lin-small
+  16 drwx------ 2 root root   16384 Nov  4 04:40 lost+found
+total 1042
+1029 -rw-rw-rw- 1 root root 1048576 Nov  4 04:40 lin-1m
+   1 -rw-rw-rw- 1 root root       3 Nov  4 04:40 lin-small
+  12 drwx------ 2 root root   12288 Nov  4 04:40 lost+found
+total 1112
+1028 -rw-rw-rw- 1 root root  1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 root root        3 Nov  4 04:40 lin-small
+  16 drwx------ 2 root root    16384 Nov  4 04:40 lost+found
+  32 -rw-rw-rw- 1 root root 41943040 Nov  4 04:40 lsparse-a
+  32 -rw-rw-rw- 1 root root 41943040 Nov  4 04:40 lsparse-b
+total 1048
+1028 -rw-rw-rw- 1 root root 1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 root root       3 Nov  4 04:40 lin-small
+  16 drwx------ 2 root root   16384 Nov  4 04:40 lost+found
+total 1076
+1024 -rw-rw-rw- 1 root root  1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 root root        3 Nov  4 04:40 lin-small
+  16 drwx------ 2 root root    16384 Nov  4 04:40 lost+found
+  16 -rw-rw-rw- 1 root root 41943040 Nov  4 04:40 lsparse-a
+  16 -rw-rw-rw- 1 root root 41943040 Nov  4 04:40 lsparse-b
+== p1
+Filesystem volume name:   e4k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               4096
+Inode size:	          256
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e4k: 13/38400 files (7.7% non-contiguous), 2791/153600 blocks
+e2fsck p1 rc=0
+== p2
+Filesystem volume name:   ext
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               4096
+Inode size:	          256
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+ext: 13/38400 files (0.0% non-contiguous), 2901/153600 blocks
+e2fsck p2 rc=0
+== p3
+Filesystem volume name:   e1k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               1024
+Inode size:	          256
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e1k: 13/38400 files (7.7% non-contiguous), 13135/614400 blocks
+e2fsck p3 rc=0
+== p4
+Filesystem volume name:   lsp
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               4096
+Inode size:	          256
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+lsp: 15/76800 files (20.0% non-contiguous), 5126/76800 blocks
+e2fsck p4 rc=0
+== p5
+Filesystem volume name:   full
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               4096
+Inode size:	          256
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+full: 13/8192 files (7.7% non-contiguous), 781/8192 blocks
+e2fsck p5 rc=0
+== p6
+Filesystem volume name:   lspx
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               4096
+Inode size:	          256
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+lspx: 15/51200 files (13.3% non-contiguous), 3527/51200 blocks
+e2fsck p6 rc=0
+++ ls -l /dev/disk/by-id/
+++ sed 's|.*/||'
++++ echo nvme-Amazon_Elastic_Block_Store_vol087aaace576c795a2
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol087aaace576c795a2 '$9 == v { print $11 }'
++ D=nvme1n1
++ D=/dev/nvme1n1
++ echo 'seed device /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ sgdisk -Z /dev/nvme1n1
++ sgdisk -n1:0:+600M -n2:0:+600M -n3:0:+600M -n4:0:+300M -n5:0:+32M -n6:0:+200M /dev/nvme1n1
++ partprobe /dev/nvme1n1
++ sleep 2
++ lsblk /dev/nvme1n1
++ P=/dev/nvme1n1p
++ mkfs.ext2 -q -F -b 4096 -L e4k /dev/nvme1n1p1
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L ext /dev/nvme1n1p2
++ mkfs.ext2 -q -F -b 1024 -L e1k /dev/nvme1n1p3
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkfs.ext2 -q -F -b 4096 -L lsp /dev/nvme1n1p4
++ mkfs.ext2 -q -F -b 4096 -L full /dev/nvme1n1p5
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L lspx /dev/nvme1n1p6
++ mkdir -p /opt/seed
++ cd /opt/seed
++ head -c 1048576 /dev/urandom
++ printf abc
++ md5sum lin-1m lin-small
++ mkdir -p m
++ for n in 1 2 3 4 5 6
++ mount /dev/nvme1n1p1 m
++ cp lin-1m lin-small m/
++ chmod 777 m
++ '[' 1 = 4 ']'
++ '[' 1 = 6 ']'
++ chmod 666 m/lin-1m m/lin-small
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5 6
++ mount /dev/nvme1n1p2 m
++ cp lin-1m lin-small m/
++ chmod 777 m
++ '[' 2 = 4 ']'
++ '[' 2 = 6 ']'
++ chmod 666 m/lin-1m m/lin-small
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5 6
++ mount /dev/nvme1n1p3 m
++ cp lin-1m lin-small m/
++ chmod 777 m
++ '[' 3 = 4 ']'
++ '[' 3 = 6 ']'
++ chmod 666 m/lin-1m m/lin-small
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5 6
++ mount /dev/nvme1n1p4 m
++ cp lin-1m lin-small m/
++ chmod 777 m
++ '[' 4 = 4 ']'
++ for f in lsparse-a lsparse-b
++ truncate -s 40M m/lsparse-a
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=9984 conv=notrunc status=none
++ for f in lsparse-a lsparse-b
++ truncate -s 40M m/lsparse-b
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=9984 conv=notrunc status=none
++ chmod 666 m/lsparse-a m/lsparse-b
++ chmod 666 m/lin-1m m/lin-small
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5 6
++ mount /dev/nvme1n1p5 m
++ cp lin-1m lin-small m/
++ chmod 777 m
++ '[' 5 = 4 ']'
++ '[' 5 = 6 ']'
++ chmod 666 m/lin-1m m/lin-small
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5 6
++ mount /dev/nvme1n1p6 m
++ cp lin-1m lin-small m/
++ chmod 777 m
++ '[' 6 = 4 ']'
++ '[' 6 = 6 ']'
++ for f in lsparse-a lsparse-b
++ truncate -s 40M m/lsparse-a
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-a bs=4096 count=1 seek=9984 conv=notrunc status=none
++ for f in lsparse-a lsparse-b
++ truncate -s 40M m/lsparse-b
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=m/lsparse-b bs=4096 count=1 seek=9984 conv=notrunc status=none
++ chmod 666 m/lsparse-a m/lsparse-b
++ chmod 666 m/lin-1m m/lin-small
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5 6
++ echo '== p1'
++ dumpe2fs -h /dev/nvme1n1p1
++ grep -E 'volume name|features|Block size|Inode size'
++ e2fsck -fn /dev/nvme1n1p1
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p1 rc=0'
++ for n in 1 2 3 4 5 6
++ echo '== p2'
++ dumpe2fs -h /dev/nvme1n1p2
++ grep -E 'volume name|features|Block size|Inode size'
++ e2fsck -fn /dev/nvme1n1p2
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p2 rc=0'
++ for n in 1 2 3 4 5 6
++ echo '== p3'
++ dumpe2fs -h /dev/nvme1n1p3
++ grep -E 'volume name|features|Block size|Inode size'
++ e2fsck -fn /dev/nvme1n1p3
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p3 rc=0'
++ for n in 1 2 3 4 5 6
++ echo '== p4'
++ dumpe2fs -h /dev/nvme1n1p4
++ grep -E 'volume name|features|Block size|Inode size'
++ e2fsck -fn /dev/nvme1n1p4
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p4 rc=0'
++ for n in 1 2 3 4 5 6
++ echo '== p5'
++ dumpe2fs -h /dev/nvme1n1p5
++ grep -E 'volume name|features|Block size|Inode size'
++ e2fsck -fn /dev/nvme1n1p5
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p5 rc=0'
++ for n in 1 2 3 4 5 6
++ echo '== p6'
++ dumpe2fs -h /dev/nvme1n1p6
++ grep -E 'volume name|features|Block size|Inode size'
++ e2fsck -fn /dev/nvme1n1p6
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p6 rc=0'
++ sync

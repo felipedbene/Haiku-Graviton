@@ -1,0 +1,227 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c12-run
+# instance: i-0843f358f8dc09ebb   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c12: ib1064.sh write patterns on the Linux-made EBS data volume, Linux sparse indirect truncate/remove, unmount
+# start: 20261104T053006Z   end: 20261104T053046Z   rc: 0
+# script sha256: 1f9f2322e04d20500ad0591672015298a829eb4472f3a95f650b727d829d4869
+# ---- script ----
+# | # Issue 1064, arm c12: on the Linux-made data volume (EBS, not diskimage-backed), mount each
+# | # ext2/ext4 file system and run ib1064.sh's write patterns, then unmount, so e2fsck -fn can run
+# | # on Linux. p1 e4k / p2 ext (extents) / p3 e1k: patterns. p4 lsp: truncate and remove
+# | # Linux-made sparse files. p5 full (write until ENOSPC) and p6 lspx (Linux-made sparse extent
+# | # files) each run in a separate, later command (hrun-full / hrun-lspx): on the first launches
+# | # the ENOSPC fill put the kernel in KDL before anything was unmounted.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | ls /boot/system/non-packaged/add-ons/kernel/file_systems 2>&1
+# | for d in /dev/disk/nvme/*; do echo "$d: $(ls $d | tr '\n' ' ')"; done
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/5 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no 6-partition data disk"; exit 1; }
+# | echo "data disk $DD"
+# | mkdir -p /boot/home/t1064 && cd /boot/home/t1064 || exit 1
+# | echo 'IyEvYmluL3NoCiMKIyBpYjEwNjQuc2ggLS0gaXNzdWUgMTA2NDogaV9ibG9ja3Mgd3JpdHRlbiBieSB0aGUgZXh0MiBkcml2ZXIsIG92ZXIgc2V2ZXJhbAojIHdyaXRlIHBhdHRlcm5zLiBSdW4gb24gSGFpa3UgYWdhaW5zdCBleHQyIHZvbHVtZXMgbWFkZSBieSBMaW51eCBta2ZzOyB0aGVuCiMgY2hlY2sgdGhlbSB3aXRoIGUyZnNjayAtZm4gb24gTGludXggKGUyZnNjayByZWNvdW50cyBlYWNoIGlub2RlJ3MgYmxvY2tzKS4KIwojIFVzYWdlOiBpYjEwNjQuc2ggPG1vdW50cG9pbnQ+IDxwYXR0ZXJuPi4uLgojIFBhdHRlcm5zIChlYWNoIG9uZSBhIGZpbGUsIG5hbWVkIGFmdGVyIGl0LCBpbiA8bW91bnRwb2ludD4pOgojICAgc2VxMW0gICAgIDE2IHggNjQgS2lCICh0aGUgaXNzdWUncyBkZCk6IHBhc3QgdGhlIGRpcmVjdCBibG9ja3MsIG9uZSBpbmRpcmVjdAojICAgc2VxOG0gICAgIDEyOCB4IDY0IEtpQjogaW50byB0aGUgZG91YmxlIGluZGlyZWN0IHJhbmdlIG9uIDQgS2lCIGJsb2NrcwojICAgc2VxODBtICAgIDgwIHggMSBNaUI6IGludG8gdGhlIHRyaXBsZSBpbmRpcmVjdCByYW5nZSBvbiAxIEtpQiBibG9ja3MKIyAgIHNwYXJzZSAgICA0IEtpQiBhdCBibG9jayAxMDAwLCB0aGVuIGF0IDMwMDAgKG5vIHRydW5jYXRpb24pOiB0aGUgZ2FwcyBhcmUKIyAgICAgICAgICAgICBmaWxsZWQgd2l0aCB6ZXJvcyBieSB0aGUgZHJpdmVyCiMgICBhcHBlbmQgICAgMzAwIHggMTAwMC1ieXRlIE9fQVBQRU5EIHdyaXRlcyAodW5hbGlnbmVkKQojICAgc21hbGwgICAgIDIgYnl0ZXMsIGFuZCA0IEtpQgojICAgdHJ1bmMgICAgIDggTWlCLCB0cnVuY2F0ZSB0byAxMDAwMDAgYnl0ZXMsIHVwIHRvIDMgTWlCLCB0aGVuIGRvd24gdG8gMCwKIyAgICAgICAgICAgICB0aGVuIDIwIEtpQiBtb3JlCiMgICB0cmktdHJ1bmMgODAgTWlCLCB0cnVuY2F0ZSB0byA3MCBNaUIgYW5kIHRoZW4gdG8gMTAgTWlCICgxIEtpQiBibG9ja3MpCiMgICBybSAgICAgICAgOCBNaUIgd3JpdHRlbiwgdGhlbiByZW1vdmVkIChmcmVlIGNvdW50IG9ubHkpCiMgRm9yIGVhY2ggZmlsZSBpdCBwcmludHMgdGhlIHNpemUsIHN0X2Jsb2NrcyBhbmQgdGhlIG1kNSwgZm9yIGNvbXBhcmlzb24KIyB3aXRoIHdoYXQgTGludXggc2Vlcy4KCm09JDE7IHNoaWZ0CmNkICIkbSIgfHwgZXhpdCAxCmZvciBwIGluICIkQCI7IGRvCgljYXNlICRwIGluCgkJc2VxMW0pCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj1zZXExbSBicz02NTUzNiBjb3VudD0xNiAyPi9kZXYvbnVsbCA7OwoJCXNlcThtKQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c2VxOG0gYnM9NjU1MzYgY291bnQ9MTI4IDI+L2Rldi9udWxsIDs7CgkJc2VxODBtKQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c2VxODBtIGJzPTEwNDg1NzYgY291bnQ9ODAgMj4vZGV2L251bGwgOzsKCQlzcGFyc2UpCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj1zcGFyc2UgYnM9NDA5NiBzZWVrPTEwMDAgY291bnQ9MSAyPi9kZXYvbnVsbAoJCQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c3BhcnNlIGJzPTQwOTYgc2Vlaz0zMDAwIGNvdW50PTEgY29udj1ub3RydW5jIDI+L2Rldi9udWxsIDs7CgkJYXBwZW5kKQlpPTA7IDogPiBhcHBlbmQKCQkJd2hpbGUgWyAkaSAtbHQgMzAwIF07IGRvCgkJCQlkZCBpZj0vZGV2L3VyYW5kb20gYnM9MTAwMCBjb3VudD0xIDI+L2Rldi9udWxsID4+IGFwcGVuZAoJCQkJaT0kKChpICsgMSkpCgkJCWRvbmUgOzsKCQlzbWFsbCkJcHJpbnRmICd4XG4nID4gc21hbGwyOyBkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c21hbGw0ayBicz00MDk2IGNvdW50PTEgMj4vZGV2L251bGwgOzsKCQl0cnVuYykJZGQgaWY9L2Rldi91cmFuZG9tIG9mPXRydW5jIGJzPTY1NTM2IGNvdW50PTEyOCAyPi9kZXYvbnVsbAoJCQl0cnVuY2F0ZSAtcyAxMDAwMDAgdHJ1bmM7IHRydW5jYXRlIC1zIDNNIHRydW5jOyB0cnVuY2F0ZSAtcyAwIHRydW5jCgkJCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj10cnVuYyBicz0xMDI0IGNvdW50PTIwIGNvbnY9bm90cnVuYyAyPi9kZXYvbnVsbCA7OwoJCXRyaS10cnVuYykgZGQgaWY9L2Rldi91cmFuZG9tIG9mPXRyaS10cnVuYyBicz0xMDQ4NTc2IGNvdW50PTgwIDI+L2Rldi9udWxsCgkJCXRydW5jYXRlIC1zIDcwTSB0cmktdHJ1bmM7IHRydW5jYXRlIC1zIDEwTSB0cmktdHJ1bmMgOzsKCQlybSkJZGQgaWY9L2Rldi91cmFuZG9tIG9mPXJtbWUgYnM9NjU1MzYgY291bnQ9MTI4IDI+L2Rldi9udWxsOyBzeW5jOyBybSBybW1lIDs7CgkJKikJZWNobyAidW5rbm93biBwYXR0ZXJuICRwIjsgZXhpdCAyIDs7Cgllc2FjCgllY2hvICJwYXR0ZXJuICRwIHJjPSQ/Igpkb25lCnN5bmMKZm9yIGYgaW4gKjsgZG8KCVsgLWYgIiRmIiBdIHx8IGNvbnRpbnVlCglwcmludGYgJyUtMTBzIHNpemU9JS05cyBzdF9ibG9ja3M9JS03cyAlc1xuJyAiJGYiICIkKHN0YXQgLWMgJXMgIiRmIikiIFwKCQkiJChzdGF0IC1jICViICIkZiIpIiAiJChtZDVzdW0gPCAiJGYiIHwgY3V0IC1kJyAnIC1mMSkiCmRvbmUKZGYgLWsgLiB8IHRhaWwgLTEK' | base64 -d > ib1064.sh; sha256sum ib1064.sh
+# | n=1
+# | for l in e4k ext e1k lsp full lspx; do
+# | 	mkdir -p /e$l
+# | 	mount -t ext2 $DD/$((n - 1)) /e$l || { echo "mount $l failed"; exit 1; }
+# | 	n=$((n + 1))
+# | done
+# | df | grep -E "/e(e4k|ext|e1k|lsp|full|lspx)"
+# | echo "--- loaded ext2 image"; listimage 1 | grep ext2
+# | echo "=== e4k"; sh ib1064.sh /ee4k seq1m seq8m sparse append small trunc rm
+# | echo "=== ext"; sh ib1064.sh /eext seq1m seq8m sparse append small trunc rm
+# | echo "=== e1k"; sh ib1064.sh /ee1k seq1m seq8m seq80m sparse append small trunc tri-trunc rm
+# | sync
+# | # the pattern volumes are unmounted first, so that a failure on the sparse ones can't cost them
+# | for l in e4k ext e1k full; do unmount /e$l; echo "unmount $l rc=$?"; done
+# | sync
+# | echo "=== lsp (Linux sparse, indirect)"; (cd /elsp && ls -ls && truncate -s 22M lsparse-a && truncate -s 3000 lsparse-a && rm lsparse-b; echo "lsp ops rc=$?"; sync; ls -ls)
+# | for l in lsp lspx; do unmount /e$l; echo "unmount $l rc=$?"; done
+# | sync
+# | # lspx (Linux-made sparse extent files) runs in a separate, last command: see hrun-lspx
+# ---- raw output ----
+Haiku ip-10-128-6-242.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+cddf0caab37d389e7a3f8f6e0de0df2965a6693c3e7b8c461c71c4f6222a9e90  /boot/system/add-ons/kernel/file_systems/ext2
+ls: cannot access '/boot/system/non-packaged/add-ons/kernel/file_systems': No such file or directory
+/dev/disk/nvme/0: 0 1 raw 
+/dev/disk/nvme/1: 0 1 2 3 4 5 raw 
+data disk /dev/disk/nvme/1
+9bccff52713d703c57309768cf19c0bd352aa099340482d436a9de53a634f99e  ib1064.sh
+[1m/ee4k             [0m
+[1m/eext             [0m
+[1m/ee1k             [0m
+[1m/elsp             [0m
+[1m/efull            [0m
+[1m/elspx            [0m
+--- loaded ext2 image
+   11 0xffff0000023d9000 0xffff0000023fc000     0          0 ext2
+=== e4k
+pattern seq1m rc=0
+pattern seq8m rc=0
+pattern sparse rc=0
+pattern append rc=0
+pattern small rc=0
+pattern trunc rc=0
+pattern rm rc=0
+append     size=300000    st_blocks=600     0089525af7e54dc1c39af744fcc56b3b
+lin-1m     size=1048576   st_blocks=2056    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=8       ac2b31bbb85efe6ab3df3efc2f3d97e3
+seq1m      size=1048576   st_blocks=2056    e8accf415af1d12e62bd3c2c791b1acb
+seq8m      size=8388608   st_blocks=16408   453f37840c59fa299d63e1715bd7a8ee
+small2     size=2         st_blocks=8       401b30e3b8b5d629635a5c613cdb7919
+small4k    size=4096      st_blocks=8       8b46edd2f9ee5d9f7d9fb81762307443
+sparse     size=12292096  st_blocks=24040   2fc7ae3a931d9104c17dc4e163304329
+trunc      size=20480     st_blocks=40      ac8bc33906cedfdb12076e3c86456dba
+   Root Inode: 2
+=== ext
+pattern seq1m rc=0
+pattern seq8m rc=0
+pattern sparse rc=0
+pattern append rc=0
+pattern small rc=0
+pattern trunc rc=0
+pattern rm rc=0
+append     size=300000    st_blocks=592     53611e6951b6b90a827d172b7d9016ab
+lin-1m     size=1048576   st_blocks=2048    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=8       cc71f6518ddf99bdcdcdada6379263b8
+seq1m      size=1048576   st_blocks=2048    b72cb3da628f776c038b14c3666ca837
+seq8m      size=8388608   st_blocks=16384   e70de75d452752c5fc1b1a99dd3b7907
+small2     size=2         st_blocks=8       401b30e3b8b5d629635a5c613cdb7919
+small4k    size=4096      st_blocks=8       152ebbbb502c55a95338bd679b9b6bbf
+sparse     size=12292096  st_blocks=24008   56f25ce6f387d9efe4acce2148e5d4a4
+trunc      size=20480     st_blocks=40      50b0e14889ac32e951f787b821deaf52
+   Root Inode: 2
+=== e1k
+pattern seq1m rc=0
+pattern seq8m rc=0
+pattern seq80m rc=0
+pattern sparse rc=0
+pattern append rc=0
+pattern small rc=0
+pattern trunc rc=0
+pattern tri-trunc rc=0
+pattern rm rc=0
+append     size=300000    st_blocks=592     83c0d66ec7ee91be3823d1d3f43b1c5b
+lin-1m     size=1048576   st_blocks=2058    fa5aaf3de84965b2a03a10005e6ac4c7
+lin-small  size=3         st_blocks=2       d150b2c87dc16aa2899f2a66f0917931
+seq1m      size=1048576   st_blocks=2058    50181705d9a7357bd0ae1b1ea3dc8f27
+seq80m     size=83886080  st_blocks=164486  845a75ee237ad8aa0a66ebd6c7d66cbd
+seq8m      size=8388608   st_blocks=16450   6d71099bbe8caca67d996d89031f49ef
+small2     size=2         st_blocks=2       401b30e3b8b5d629635a5c613cdb7919
+small4k    size=4096      st_blocks=8       dd58ba698739b6ac4a9155d1d50c3836
+sparse     size=12292096  st_blocks=24104   45de922ff6a4e906af202de1c4fbf252
+tri-trunc  size=10485760  st_blocks=20562   5aaaa9e8ba6b98f10879b6412b0380e1
+trunc      size=20480     st_blocks=42      ba7c3019a276e36a1c06b1d4e356ab36
+   Root Inode: 2
+unmount e4k rc=0
+unmount ext rc=0
+unmount e1k rc=0
+unmount full rc=0
+=== lsp (Linux sparse, indirect)
+total 1112
+1028 -rw-rw-rw- 1 baron root  1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 baron root        3 Nov  4 04:40 lin-small
+  16 drwx------ 2 baron root    16384 Nov  4 04:40 lost+found
+  32 -rw-rw-rw- 1 baron root 41943040 Nov  4 04:40 lsparse-a
+  32 -rw-rw-rw- 1 baron root 41943040 Nov  4 04:40 lsparse-b
+lsp ops rc=0
+total 1052
+1028 -rw-rw-rw- 1 baron root 1048576 Nov  4 04:40 lin-1m
+   4 -rw-rw-rw- 1 baron root       3 Nov  4 04:40 lin-small
+  16 drwx------ 2 baron root   16384 Nov  4 04:40 lost+found
+   4 -rw-rw-rw- 1 baron root    3000 Nov  4 05:30 lsparse-a
+unmount lsp rc=0
+unmount lspx rc=0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
++ ls /boot/system/non-packaged/add-ons/kernel/file_systems
++ for d in /dev/disk/nvme/*
+++ ls /dev/disk/nvme/0
+++ tr '\n' ' '
++ echo '/dev/disk/nvme/0: 0 1 raw '
++ for d in /dev/disk/nvme/*
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo '/dev/disk/nvme/1: 0 1 2 3 4 5 raw '
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/5 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/5 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
++ echo 'data disk /dev/disk/nvme/1'
++ mkdir -p /boot/home/t1064
++ cd /boot/home/t1064
++ echo IyEvYmluL3NoCiMKIyBpYjEwNjQuc2ggLS0gaXNzdWUgMTA2NDogaV9ibG9ja3Mgd3JpdHRlbiBieSB0aGUgZXh0MiBkcml2ZXIsIG92ZXIgc2V2ZXJhbAojIHdyaXRlIHBhdHRlcm5zLiBSdW4gb24gSGFpa3UgYWdhaW5zdCBleHQyIHZvbHVtZXMgbWFkZSBieSBMaW51eCBta2ZzOyB0aGVuCiMgY2hlY2sgdGhlbSB3aXRoIGUyZnNjayAtZm4gb24gTGludXggKGUyZnNjayByZWNvdW50cyBlYWNoIGlub2RlJ3MgYmxvY2tzKS4KIwojIFVzYWdlOiBpYjEwNjQuc2ggPG1vdW50cG9pbnQ+IDxwYXR0ZXJuPi4uLgojIFBhdHRlcm5zIChlYWNoIG9uZSBhIGZpbGUsIG5hbWVkIGFmdGVyIGl0LCBpbiA8bW91bnRwb2ludD4pOgojICAgc2VxMW0gICAgIDE2IHggNjQgS2lCICh0aGUgaXNzdWUncyBkZCk6IHBhc3QgdGhlIGRpcmVjdCBibG9ja3MsIG9uZSBpbmRpcmVjdAojICAgc2VxOG0gICAgIDEyOCB4IDY0IEtpQjogaW50byB0aGUgZG91YmxlIGluZGlyZWN0IHJhbmdlIG9uIDQgS2lCIGJsb2NrcwojICAgc2VxODBtICAgIDgwIHggMSBNaUI6IGludG8gdGhlIHRyaXBsZSBpbmRpcmVjdCByYW5nZSBvbiAxIEtpQiBibG9ja3MKIyAgIHNwYXJzZSAgICA0IEtpQiBhdCBibG9jayAxMDAwLCB0aGVuIGF0IDMwMDAgKG5vIHRydW5jYXRpb24pOiB0aGUgZ2FwcyBhcmUKIyAgICAgICAgICAgICBmaWxsZWQgd2l0aCB6ZXJvcyBieSB0aGUgZHJpdmVyCiMgICBhcHBlbmQgICAgMzAwIHggMTAwMC1ieXRlIE9fQVBQRU5EIHdyaXRlcyAodW5hbGlnbmVkKQojICAgc21hbGwgICAgIDIgYnl0ZXMsIGFuZCA0IEtpQgojICAgdHJ1bmMgICAgIDggTWlCLCB0cnVuY2F0ZSB0byAxMDAwMDAgYnl0ZXMsIHVwIHRvIDMgTWlCLCB0aGVuIGRvd24gdG8gMCwKIyAgICAgICAgICAgICB0aGVuIDIwIEtpQiBtb3JlCiMgICB0cmktdHJ1bmMgODAgTWlCLCB0cnVuY2F0ZSB0byA3MCBNaUIgYW5kIHRoZW4gdG8gMTAgTWlCICgxIEtpQiBibG9ja3MpCiMgICBybSAgICAgICAgOCBNaUIgd3JpdHRlbiwgdGhlbiByZW1vdmVkIChmcmVlIGNvdW50IG9ubHkpCiMgRm9yIGVhY2ggZmlsZSBpdCBwcmludHMgdGhlIHNpemUsIHN0X2Jsb2NrcyBhbmQgdGhlIG1kNSwgZm9yIGNvbXBhcmlzb24KIyB3aXRoIHdoYXQgTGludXggc2Vlcy4KCm09JDE7IHNoaWZ0CmNkICIkbSIgfHwgZXhpdCAxCmZvciBwIGluICIkQCI7IGRvCgljYXNlICRwIGluCgkJc2VxMW0pCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj1zZXExbSBicz02NTUzNiBjb3VudD0xNiAyPi9kZXYvbnVsbCA7OwoJCXNlcThtKQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c2VxOG0gYnM9NjU1MzYgY291bnQ9MTI4IDI+L2Rldi9udWxsIDs7CgkJc2VxODBtKQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c2VxODBtIGJzPTEwNDg1NzYgY291bnQ9ODAgMj4vZGV2L251bGwgOzsKCQlzcGFyc2UpCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj1zcGFyc2UgYnM9NDA5NiBzZWVrPTEwMDAgY291bnQ9MSAyPi9kZXYvbnVsbAoJCQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c3BhcnNlIGJzPTQwOTYgc2Vlaz0zMDAwIGNvdW50PTEgY29udj1ub3RydW5jIDI+L2Rldi9udWxsIDs7CgkJYXBwZW5kKQlpPTA7IDogPiBhcHBlbmQKCQkJd2hpbGUgWyAkaSAtbHQgMzAwIF07IGRvCgkJCQlkZCBpZj0vZGV2L3VyYW5kb20gYnM9MTAwMCBjb3VudD0xIDI+L2Rldi9udWxsID4+IGFwcGVuZAoJCQkJaT0kKChpICsgMSkpCgkJCWRvbmUgOzsKCQlzbWFsbCkJcHJpbnRmICd4XG4nID4gc21hbGwyOyBkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c21hbGw0ayBicz00MDk2IGNvdW50PTEgMj4vZGV2L251bGwgOzsKCQl0cnVuYykJZGQgaWY9L2Rldi91cmFuZG9tIG9mPXRydW5jIGJzPTY1NTM2IGNvdW50PTEyOCAyPi9kZXYvbnVsbAoJCQl0cnVuY2F0ZSAtcyAxMDAwMDAgdHJ1bmM7IHRydW5jYXRlIC1zIDNNIHRydW5jOyB0cnVuY2F0ZSAtcyAwIHRydW5jCgkJCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj10cnVuYyBicz0xMDI0IGNvdW50PTIwIGNvbnY9bm90cnVuYyAyPi9kZXYvbnVsbCA7OwoJCXRyaS10cnVuYykgZGQgaWY9L2Rldi91cmFuZG9tIG9mPXRyaS10cnVuYyBicz0xMDQ4NTc2IGNvdW50PTgwIDI+L2Rldi9udWxsCgkJCXRydW5jYXRlIC1zIDcwTSB0cmktdHJ1bmM7IHRydW5jYXRlIC1zIDEwTSB0cmktdHJ1bmMgOzsKCQlybSkJZGQgaWY9L2Rldi91cmFuZG9tIG9mPXJtbWUgYnM9NjU1MzYgY291bnQ9MTI4IDI+L2Rldi9udWxsOyBzeW5jOyBybSBybW1lIDs7CgkJKikJZWNobyAidW5rbm93biBwYXR0ZXJuICRwIjsgZXhpdCAyIDs7Cgllc2FjCgllY2hvICJwYXR0ZXJuICRwIHJjPSQ/Igpkb25lCnN5bmMKZm9yIGYgaW4gKjsgZG8KCVsgLWYgIiRmIiBdIHx8IGNvbnRpbnVlCglwcmludGYgJyUtMTBzIHNpemU9JS05cyBzdF9ibG9ja3M9JS03cyAlc1xuJyAiJGYiICIkKHN0YXQgLWMgJXMgIiRmIikiIFwKCQkiJChzdGF0IC1jICViICIkZiIpIiAiJChtZDVzdW0gPCAiJGYiIHwgY3V0IC1kJyAnIC1mMSkiCmRvbmUKZGYgLWsgLiB8IHRhaWwgLTEK
++ base64 -d
++ sha256sum ib1064.sh
++ n=1
++ for l in e4k ext e1k lsp full lspx
++ mkdir -p /ee4k
++ mount -t ext2 /dev/disk/nvme/1/0 /ee4k
++ n=2
++ for l in e4k ext e1k lsp full lspx
++ mkdir -p /eext
++ mount -t ext2 /dev/disk/nvme/1/1 /eext
++ n=3
++ for l in e4k ext e1k lsp full lspx
++ mkdir -p /ee1k
++ mount -t ext2 /dev/disk/nvme/1/2 /ee1k
++ n=4
++ for l in e4k ext e1k lsp full lspx
++ mkdir -p /elsp
++ mount -t ext2 /dev/disk/nvme/1/3 /elsp
++ n=5
++ for l in e4k ext e1k lsp full lspx
++ mkdir -p /efull
++ mount -t ext2 /dev/disk/nvme/1/4 /efull
++ n=6
++ for l in e4k ext e1k lsp full lspx
++ mkdir -p /elspx
++ mount -t ext2 /dev/disk/nvme/1/5 /elspx
++ n=7
++ df
++ grep -E '/e(e4k|ext|e1k|lsp|full|lspx)'
++ echo '--- loaded ext2 image'
++ listimage 1
++ grep ext2
++ echo '=== e4k'
++ sh ib1064.sh /ee4k seq1m seq8m sparse append small trunc rm
++ echo '=== ext'
++ sh ib1064.sh /eext seq1m seq8m sparse append small trunc rm
++ echo '=== e1k'
++ sh ib1064.sh /ee1k seq1m seq8m seq80m sparse append small trunc tri-trunc rm
++ sync
++ for l in e4k ext e1k full
++ unmount /ee4k
++ echo 'unmount e4k rc=0'
++ for l in e4k ext e1k full
++ unmount /eext
++ echo 'unmount ext rc=0'
++ for l in e4k ext e1k full
++ unmount /ee1k
++ echo 'unmount e1k rc=0'
++ for l in e4k ext e1k full
++ unmount /efull
++ echo 'unmount full rc=0'
++ sync
++ echo '=== lsp (Linux sparse, indirect)'
++ cd /elsp
++ ls -ls
++ truncate -s 22M lsparse-a
++ truncate -s 3000 lsparse-a
++ rm lsparse-b
++ echo 'lsp ops rc=0'
++ sync
++ ls -ls
++ for l in lsp lspx
++ unmount /elsp
++ echo 'unmount lsp rc=0'
++ for l in lsp lspx
++ unmount /elspx
++ echo 'unmount lspx rc=0'
++ sync

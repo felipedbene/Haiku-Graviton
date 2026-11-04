@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c12-full
+# instance: i-0843f358f8dc09ebb   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c12: write 64 MiB to the 32 MiB p5 until ENOSPC
+# start: 20261104T054203Z   end: 20261104T054715Z   rc: 1
+# script sha256: e0126542c6de04b6004c495a533c35546ce44fbd2098156c06c7feb12728e1a5
+# ---- script ----
+# | # Issue 1064, arm c12, last command: on p5 (full, 32 MiB ext2), write 64 MiB until the
+# | # volume is full. On the first launches this put every arm in KDL (ASSERT block != 0 in
+# | # DataStream::FindBlock from the page writer); the other file systems are unmounted already.
+# | set -x
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/5 ] && DD=$d; done
+# | mkdir -p /efull && mount -t ext2 $DD/4 /efull || exit 1
+# | cd /efull && df -k . | tail -1
+# | dd if=/dev/urandom of=fill bs=65536 count=1000 2>&1 | tail -2; echo "fill rc=$?"
+# | ls -ls; df -k . | tail -1
+# | sync; echo synced
+# | cd /; unmount /efull; echo "unmount full rc=$?"
+# ---- raw output ----

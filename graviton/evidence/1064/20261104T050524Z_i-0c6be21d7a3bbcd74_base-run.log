@@ -1,0 +1,44 @@
+# NOTE: this run's SSM output was lost: the instance entered KDL during the 'full' (write until ENOSPC) phase, see the base-console-kdl log. Not used as a result; the run was repeated on fresh launches without that phase in the same command.
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-run
+# instance: i-0c6be21d7a3bbcd74   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm base: ib1064.sh write patterns on the Linux-made EBS data volume, ENOSPC fill, Linux sparse indirect truncate/remove, unmount
+# start: 20261104T050524Z   end: 20261104T052537Z   rc: 1
+# script sha256: 812fb6ae9eac340bab8a3c896e90e43405e00d37ac57a4923c19a93531ca5d80
+# ---- script ----
+# | # Issue 1064, arm base: on the Linux-made data volume (EBS, not diskimage-backed), mount each
+# | # ext2/ext4 file system and run ib1064.sh's write patterns, then unmount, so e2fsck -fn can run
+# | # on Linux. p1 e4k / p2 ext (extents) / p3 e1k: patterns. p4 lsp / p6 lspx: truncate and remove
+# | # Linux-made sparse files. p5 full: write until ENOSPC.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | ls /boot/system/non-packaged/add-ons/kernel/file_systems 2>&1
+# | for d in /dev/disk/nvme/*; do echo "$d: $(ls $d | tr '\n' ' ')"; done
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/5 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no 6-partition data disk"; exit 1; }
+# | echo "data disk $DD"
+# | mkdir -p /boot/home/t1064 && cd /boot/home/t1064 || exit 1
+# | echo 'IyEvYmluL3NoCiMKIyBpYjEwNjQuc2ggLS0gaXNzdWUgMTA2NDogaV9ibG9ja3Mgd3JpdHRlbiBieSB0aGUgZXh0MiBkcml2ZXIsIG92ZXIgc2V2ZXJhbAojIHdyaXRlIHBhdHRlcm5zLiBSdW4gb24gSGFpa3UgYWdhaW5zdCBleHQyIHZvbHVtZXMgbWFkZSBieSBMaW51eCBta2ZzOyB0aGVuCiMgY2hlY2sgdGhlbSB3aXRoIGUyZnNjayAtZm4gb24gTGludXggKGUyZnNjayByZWNvdW50cyBlYWNoIGlub2RlJ3MgYmxvY2tzKS4KIwojIFVzYWdlOiBpYjEwNjQuc2ggPG1vdW50cG9pbnQ+IDxwYXR0ZXJuPi4uLgojIFBhdHRlcm5zIChlYWNoIG9uZSBhIGZpbGUsIG5hbWVkIGFmdGVyIGl0LCBpbiA8bW91bnRwb2ludD4pOgojICAgc2VxMW0gICAgIDE2IHggNjQgS2lCICh0aGUgaXNzdWUncyBkZCk6IHBhc3QgdGhlIGRpcmVjdCBibG9ja3MsIG9uZSBpbmRpcmVjdAojICAgc2VxOG0gICAgIDEyOCB4IDY0IEtpQjogaW50byB0aGUgZG91YmxlIGluZGlyZWN0IHJhbmdlIG9uIDQgS2lCIGJsb2NrcwojICAgc2VxODBtICAgIDgwIHggMSBNaUI6IGludG8gdGhlIHRyaXBsZSBpbmRpcmVjdCByYW5nZSBvbiAxIEtpQiBibG9ja3MKIyAgIHNwYXJzZSAgICA0IEtpQiBhdCBibG9jayAxMDAwLCB0aGVuIGF0IDMwMDAgKG5vIHRydW5jYXRpb24pOiB0aGUgZ2FwcyBhcmUKIyAgICAgICAgICAgICBmaWxsZWQgd2l0aCB6ZXJvcyBieSB0aGUgZHJpdmVyCiMgICBhcHBlbmQgICAgMzAwIHggMTAwMC1ieXRlIE9fQVBQRU5EIHdyaXRlcyAodW5hbGlnbmVkKQojICAgc21hbGwgICAgIDIgYnl0ZXMsIGFuZCA0IEtpQgojICAgdHJ1bmMgICAgIDggTWlCLCB0cnVuY2F0ZSB0byAxMDAwMDAgYnl0ZXMsIHVwIHRvIDMgTWlCLCB0aGVuIGRvd24gdG8gMCwKIyAgICAgICAgICAgICB0aGVuIDIwIEtpQiBtb3JlCiMgICB0cmktdHJ1bmMgODAgTWlCLCB0cnVuY2F0ZSB0byA3MCBNaUIgYW5kIHRoZW4gdG8gMTAgTWlCICgxIEtpQiBibG9ja3MpCiMgICBybSAgICAgICAgOCBNaUIgd3JpdHRlbiwgdGhlbiByZW1vdmVkIChmcmVlIGNvdW50IG9ubHkpCiMgRm9yIGVhY2ggZmlsZSBpdCBwcmludHMgdGhlIHNpemUsIHN0X2Jsb2NrcyBhbmQgdGhlIG1kNSwgZm9yIGNvbXBhcmlzb24KIyB3aXRoIHdoYXQgTGludXggc2Vlcy4KCm09JDE7IHNoaWZ0CmNkICIkbSIgfHwgZXhpdCAxCmZvciBwIGluICIkQCI7IGRvCgljYXNlICRwIGluCgkJc2VxMW0pCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj1zZXExbSBicz02NTUzNiBjb3VudD0xNiAyPi9kZXYvbnVsbCA7OwoJCXNlcThtKQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c2VxOG0gYnM9NjU1MzYgY291bnQ9MTI4IDI+L2Rldi9udWxsIDs7CgkJc2VxODBtKQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c2VxODBtIGJzPTEwNDg1NzYgY291bnQ9ODAgMj4vZGV2L251bGwgOzsKCQlzcGFyc2UpCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj1zcGFyc2UgYnM9NDA5NiBzZWVrPTEwMDAgY291bnQ9MSAyPi9kZXYvbnVsbAoJCQlkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c3BhcnNlIGJzPTQwOTYgc2Vlaz0zMDAwIGNvdW50PTEgY29udj1ub3RydW5jIDI+L2Rldi9udWxsIDs7CgkJYXBwZW5kKQlpPTA7IDogPiBhcHBlbmQKCQkJd2hpbGUgWyAkaSAtbHQgMzAwIF07IGRvCgkJCQlkZCBpZj0vZGV2L3VyYW5kb20gYnM9MTAwMCBjb3VudD0xIDI+L2Rldi9udWxsID4+IGFwcGVuZAoJCQkJaT0kKChpICsgMSkpCgkJCWRvbmUgOzsKCQlzbWFsbCkJcHJpbnRmICd4XG4nID4gc21hbGwyOyBkZCBpZj0vZGV2L3VyYW5kb20gb2Y9c21hbGw0ayBicz00MDk2IGNvdW50PTEgMj4vZGV2L251bGwgOzsKCQl0cnVuYykJZGQgaWY9L2Rldi91cmFuZG9tIG9mPXRydW5jIGJzPTY1NTM2IGNvdW50PTEyOCAyPi9kZXYvbnVsbAoJCQl0cnVuY2F0ZSAtcyAxMDAwMDAgdHJ1bmM7IHRydW5jYXRlIC1zIDNNIHRydW5jOyB0cnVuY2F0ZSAtcyAwIHRydW5jCgkJCWRkIGlmPS9kZXYvdXJhbmRvbSBvZj10cnVuYyBicz0xMDI0IGNvdW50PTIwIGNvbnY9bm90cnVuYyAyPi9kZXYvbnVsbCA7OwoJCXRyaS10cnVuYykgZGQgaWY9L2Rldi91cmFuZG9tIG9mPXRyaS10cnVuYyBicz0xMDQ4NTc2IGNvdW50PTgwIDI+L2Rldi9udWxsCgkJCXRydW5jYXRlIC1zIDcwTSB0cmktdHJ1bmM7IHRydW5jYXRlIC1zIDEwTSB0cmktdHJ1bmMgOzsKCQlybSkJZGQgaWY9L2Rldi91cmFuZG9tIG9mPXJtbWUgYnM9NjU1MzYgY291bnQ9MTI4IDI+L2Rldi9udWxsOyBzeW5jOyBybSBybW1lIDs7CgkJKikJZWNobyAidW5rbm93biBwYXR0ZXJuICRwIjsgZXhpdCAyIDs7Cgllc2FjCgllY2hvICJwYXR0ZXJuICRwIHJjPSQ/Igpkb25lCnN5bmMKZm9yIGYgaW4gKjsgZG8KCVsgLWYgIiRmIiBdIHx8IGNvbnRpbnVlCglwcmludGYgJyUtMTBzIHNpemU9JS05cyBzdF9ibG9ja3M9JS03cyAlc1xuJyAiJGYiICIkKHN0YXQgLWMgJXMgIiRmIikiIFwKCQkiJChzdGF0IC1jICViICIkZiIpIiAiJChtZDVzdW0gPCAiJGYiIHwgY3V0IC1kJyAnIC1mMSkiCmRvbmUKZGYgLWsgLiB8IHRhaWwgLTEK' | base64 -d > ib1064.sh; sha256sum ib1064.sh
+# | n=1
+# | for l in e4k ext e1k lsp full lspx; do
+# | 	mkdir -p /e$l
+# | 	mount -t ext2 $DD/$((n - 1)) /e$l || { echo "mount $l failed"; exit 1; }
+# | 	n=$((n + 1))
+# | done
+# | df | grep -E "/e(e4k|ext|e1k|lsp|full|lspx)"
+# | echo "--- loaded ext2 image"; listimage 1 | grep ext2
+# | echo "=== e4k"; sh ib1064.sh /ee4k seq1m seq8m sparse append small trunc rm
+# | echo "=== ext"; sh ib1064.sh /eext seq1m seq8m sparse append small trunc rm
+# | echo "=== e1k"; sh ib1064.sh /ee1k seq1m seq8m seq80m sparse append small trunc tri-trunc rm
+# | echo "=== full"; (cd /efull && dd if=/dev/urandom of=fill bs=65536 count=1000 2>&1 | tail -2; echo "fill rc=$?"; sync; ls -ls; df -k . | tail -1)
+# | sync
+# | # the pattern volumes are unmounted first, so that a failure on the sparse ones can't cost them
+# | for l in e4k ext e1k full; do unmount /e$l; echo "unmount $l rc=$?"; done
+# | sync
+# | echo "=== lsp (Linux sparse, indirect)"; (cd /elsp && ls -ls && truncate -s 22M lsparse-a && truncate -s 3000 lsparse-a && rm lsparse-b; echo "lsp ops rc=$?"; sync; ls -ls)
+# | for l in lsp lspx; do unmount /e$l; echo "unmount $l rc=$?"; done
+# | sync
+# | # lspx (Linux-made sparse extent files) runs in a separate, last command: see hrun-lspx
+# ---- raw output ----

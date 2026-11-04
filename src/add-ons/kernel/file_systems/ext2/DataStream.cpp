@@ -41,6 +41,8 @@ DataStream::DataStream(Volume* volume, ext2_data_stream* stream,
 	fFreeStart(0),
 	fFreeCount(0),
 	fRemovedBlocks(0),
+	fAddedBlocks(0),
+	fFreedBlocks(0),
 	fSize(size)
 {
 	fNumBlocks = size == 0 ? 0 : ((size - 1) >> fVolume->BlockShift()) + 1;
@@ -181,11 +183,24 @@ DataStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 {
 	TRACE("DataStream::Enlarge(): current size: %" B_PRIdOFF ", target size: %"
 		B_PRIdOFF "\n", fNumBlocks, numBlocks);
-	
+
 	off_t targetBlocks = numBlocks;
 	fWaiting = _BlocksNeeded(numBlocks);
-	numBlocks = fWaiting;
+	fAddedBlocks = 0;
 
+	status_t status = _Enlarge(transaction, targetBlocks);
+
+	// The caller charges the inode's i_blocks with what was really mapped,
+	// indirect blocks included, also when only part of the range could be
+	// allocated.
+	numBlocks = fAddedBlocks;
+	return status;
+}
+
+
+status_t
+DataStream::_Enlarge(Transaction& transaction, off_t targetBlocks)
+{
 	status_t status;
 
 	if (fNumBlocks <= kMaxDirect) {
@@ -258,8 +273,20 @@ DataStream::Shrink(Transaction& transaction, off_t& numBlocks)
 	fFreeStart = 0;
 	fFreeCount = 0;
 	fRemovedBlocks = 0;
+	fFreedBlocks = 0;
 
-	off_t oldNumBlocks = fNumBlocks;
+	status_t status = _Shrink(transaction, numBlocks);
+
+	// As in Enlarge(): report the blocks really released, indirect blocks
+	// included, so that the caller can take them off i_blocks.
+	numBlocks = fFreedBlocks;
+	return status;
+}
+
+
+status_t
+DataStream::_Shrink(Transaction& transaction, off_t numBlocks)
+{
 	off_t blocksToRemove = fNumBlocks - numBlocks;
 
 	status_t status;
@@ -274,7 +301,6 @@ DataStream::Shrink(Transaction& transaction, off_t& numBlocks)
 
 		if (fRemovedBlocks == blocksToRemove) {
 			fNumBlocks -= fRemovedBlocks;
-			numBlocks = _BlocksNeeded(oldNumBlocks);
 
 			return _PerformFree(transaction);
 		}
@@ -290,7 +316,6 @@ DataStream::Shrink(Transaction& transaction, off_t& numBlocks)
 
 		if (fRemovedBlocks == blocksToRemove) {
 			fNumBlocks -= fRemovedBlocks;
-			numBlocks = _BlocksNeeded(oldNumBlocks);
 
 			return _PerformFree(transaction);
 		}
@@ -306,7 +331,6 @@ DataStream::Shrink(Transaction& transaction, off_t& numBlocks)
 
 		if (fRemovedBlocks == blocksToRemove) {
 			fNumBlocks -= fRemovedBlocks;
-			numBlocks = _BlocksNeeded(oldNumBlocks);
 
 			return _PerformFree(transaction);
 		}
@@ -320,7 +344,6 @@ DataStream::Shrink(Transaction& transaction, off_t& numBlocks)
 	}
 
 	fNumBlocks -= fRemovedBlocks;
-	numBlocks = _BlocksNeeded(oldNumBlocks);
 
 	return _PerformFree(transaction);
 }
@@ -354,9 +377,11 @@ DataStream::_BlocksNeeded(off_t numBlocks)
 						blocksNeeded += 2 + (numBlocks - kMaxDoubleIndirect - 1)
 							/ kIndirectsPerBlock2;
 					} else {
+						// the leaf blocks were counted with the double
+						// indirect range above; add the new second level ones
 						blocksNeeded += (numBlocks - kMaxDoubleIndirect - 1)
-							/ kIndirectsPerBlock - (fNumBlocks 
-								- kMaxDoubleIndirect - 1) / kIndirectsPerBlock;
+							/ kIndirectsPerBlock2 - (fNumBlocks
+								- kMaxDoubleIndirect - 1) / kIndirectsPerBlock2;
 					}
 				}
 			}
@@ -396,6 +421,7 @@ DataStream::_GetBlock(Transaction& transaction, uint32& blockNum)
 
 	fAllocated--;
 	blockNum = (uint32)fAllocatedPos++;
+	fAddedBlocks++;
 
 	return B_OK;
 }
@@ -612,7 +638,13 @@ DataStream::_MarkBlockForRemoval(Transaction& transaction, uint32* block)
 		"): free start: %" B_PRIu32 ", free count: %" B_PRIu32 "\n", block,
 		B_LENDIAN_TO_HOST_INT32(*block), fFreeStart, fFreeCount);
 	uint32 blockNum = B_LENDIAN_TO_HOST_INT32(*block);
+	if (blockNum == 0) {
+		// A hole in a sparse file: there is nothing to free, and nothing to
+		// take off i_blocks.
+		return B_OK;
+	}
 	*block = 0;
+	fFreedBlocks++;
 
 	if (blockNum != fFreeStart + fFreeCount) {
 		if (fFreeCount != 0) {
@@ -662,6 +694,13 @@ DataStream::_FreeBlocks(Transaction& transaction, uint32* block, off_t start,
 		", %c, %d)\n", block, start, end, freeParent ? 't' : 'f', recursion);
 
 	uint32 blockNum = B_LENDIAN_TO_HOST_INT32(*block);
+	if (blockNum == 0) {
+		// The whole range is a hole (a sparse file written elsewhere); don't
+		// read block 0 as an indirect block. Shrink() still has to see the
+		// range as removed.
+		fRemovedBlocks += end - start;
+		return B_OK;
+	}
 
 	if (freeParent) {
 		status_t status = _MarkBlockForRemoval(transaction, block);

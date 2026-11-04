@@ -864,20 +864,27 @@ Inode::_EnlargeDataStream(Transaction& transaction, off_t size)
 	}
 
 	off_t end = size == 0 ? 0 : (size - 1) / fVolume->BlockSize() + 1;
+	off_t added = end;
+		// in: the file's new length in blocks; out: the blocks the stream
+		// really allocated, its indirect or extent tree blocks included
 	if (Flags() & EXT2_INODE_EXTENTS) {
 		ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
-		stream.Enlarge(transaction, end);
+		stream.Enlarge(transaction, added);
 		ASSERT(stream.Check());
 	} else {
 		DataStream stream(fVolume, &fNode.stream, oldSize);
-		stream.Enlarge(transaction, end);
+		stream.Enlarge(transaction, added);
 	}
 	TRACE("Inode::_EnlargeDataStream(): Setting size to %" B_PRIdOFF "\n",
 		size);
 	fNode.SetSize(size);
-	TRACE("Inode::_EnlargeDataStream(): Setting allocated block count to %"
-		B_PRIdOFF "\n", end);
-	return _SetNumBlocks(end * (fVolume->BlockSize() / 512));
+	TRACE("Inode::_EnlargeDataStream(): Adding %" B_PRIdOFF " blocks to the "
+		"allocated block count\n", added);
+
+	// i_blocks counts every block the inode owns, in 512-byte units: data,
+	// indirect or extent tree blocks, and an extended attribute block. It
+	// can't be derived from the size, so it is adjusted by what changed.
+	return _SetNumBlocks(NumBlocks() + added * (fVolume->BlockSize() / 512));
 }
 
 
@@ -905,19 +912,26 @@ Inode::_ShrinkDataStream(Transaction& transaction, off_t size)
 	}
 
 	off_t end = size == 0 ? 0 : (size - 1) / fVolume->BlockSize() + 1;
+	off_t freed = end;
+		// in: the file's new length in blocks; out: the blocks the stream
+		// really freed, its indirect or extent tree blocks included
 	if (Flags() & EXT2_INODE_EXTENTS) {
 		ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
-		stream.Shrink(transaction, end);
+		stream.Shrink(transaction, freed);
 		ASSERT(stream.Check());
 	} else {
 		DataStream stream(fVolume, &fNode.stream, oldSize);
-		stream.Shrink(transaction, end);
+		stream.Shrink(transaction, freed);
 	}
 
 	fNode.SetSize(size);
-	TRACE("Inode::_ShrinkDataStream(): Setting allocated block count to %"
-		B_PRIdOFF "\n", end);
-	return _SetNumBlocks(end * (fVolume->BlockSize() / 512));
+	TRACE("Inode::_ShrinkDataStream(): Removing %" B_PRIdOFF " blocks from "
+		"the allocated block count\n", freed);
+
+	uint64 numBlocks = NumBlocks();
+	uint64 freedSectors = freed * (fVolume->BlockSize() / 512);
+	return _SetNumBlocks(freedSectors < numBlocks
+		? numBlocks - freedSectors : 0);
 }
 
 
@@ -938,7 +952,11 @@ status_t
 Inode::_SetNumBlocks(uint64 numBlocks)
 {
 	if (numBlocks <= 0xffffffff) {
-		fNode.SetNumBlocks(numBlocks);
+		if (fVolume->HugeFiles()) {
+			// also clear the high 16 bits, which a larger count may have set
+			fNode.SetNumBlocks64(numBlocks);
+		} else
+			fNode.SetNumBlocks(numBlocks);
 		fNode.ClearFlag(EXT2_INODE_HUGE_FILE);
 		return B_OK;
 	}
