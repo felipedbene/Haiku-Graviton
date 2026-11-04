@@ -1,0 +1,82 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild5
+# instance: i-0fdd8b3004eb86c28   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ext2 c1087 (#1064 tip + the #1087 fix)
+# start: 20261104T070434Z   end: 20261104T070451Z   rc: 0
+# script sha256: c3e453dd70ece56bceb069974e2def79ea085f510b7a4e42d24a684421ad687b
+# ---- script ----
+# | # Build ext2 for #1087: c1087 = the #1064 tip 0da661af9b (PR #1081, so that i_blocks is right
+# | # and e2fsck shows only this change's effect) + fix1087.patch, revision hrev59996.
+# | set -e
+# | cd /opt/t/out
+# | echo 'RnJvbSBkODJmN2U3OGY5NzI4Y2UyOGNkYWY4MGRjMDRjNWIxMGRhZjc3MTA1IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogV2VkLCA0IE5vdiAyMDI2IDAxOjA0OjEyIC0wNjAwClN1YmplY3Q6IFtQQVRDSF0gZXh0MjogcGxhY2UgYSBzaG9ydCBsYXN0IGJsb2NrIGdyb3VwIHdoZXJlIGl0IHN0YXJ0cwoKQWxsb2NhdGlvbkJsb2NrR3JvdXA6OkluaXRpYWxpemUoKSBjb21wdXRlZCB0aGUgZ3JvdXAncyBmaXJzdCBibG9jawphcyBibG9ja0dyb3VwICogbnVtQml0cywgd2l0aCBudW1CaXRzIHRoZSBzaXplIG9mIHRoYXQgZ3JvdXAuIFRoZSBsYXN0Cmdyb3VwIG9mIGEgdm9sdW1lIHRoYXQgaXMgbm90IGEgd2hvbGUgbnVtYmVyIG9mIGdyb3VwcyBpcyBzaG9ydGVyLCBzbwppdHMgc3RhcnQgY2FtZSBvdXQgdG9vIGxvdyBieSBibG9ja0dyb3VwIHRpbWVzIHRoZSBkaWZmZXJlbmNlLiBUaGUKZ3JvdXAgdHJhbnNsYXRlcyB0aGUgYmxvY2sgbnVtYmVycyBpdCBnZXRzIGFuZCBoYW5kcyBvdXQgd2l0aCB0aGF0CnN0YXJ0LCBzbyB0aGUgYml0bWFwIGJpdCBpdCBtYXJrZWQgYW5kIHRoZSBibG9jayBhIGZpbGUgZ290IHdlcmUgdGhhdAptYW55IGJsb2NrcyBhcGFydDogZmlsZSBkYXRhIGxhbmRlZCBvbiB0aGUgZ3JvdXAncyBiaXRtYXBzIChhIDMyIE1pQgp2b2x1bWUgd2l0aCAxIEtpQiBibG9ja3M6IDMgYmxvY2tzIG9mZiBpbiBncm91cCAzKSwgYW5kIHRoZSBiaXRtYXBzCndlbnQgYmFkLgoKRml4ZXMgIzEwODcKLS0tCiBzcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2V4dDIvQmxvY2tBbGxvY2F0b3IuY3BwIHwgNSArKysrLQogMSBmaWxlIGNoYW5nZWQsIDQgaW5zZXJ0aW9ucygrKSwgMSBkZWxldGlvbigtKQoKZGlmZiAtLWdpdCBhL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZXh0Mi9CbG9ja0FsbG9jYXRvci5jcHAgYi9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2V4dDIvQmxvY2tBbGxvY2F0b3IuY3BwCmluZGV4IGEwMDE3NGM2NDYuLmM0YTUyYTQ0MzUgMTAwNjQ0Ci0tLSBhL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZXh0Mi9CbG9ja0FsbG9jYXRvci5jcHAKKysrIGIvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9leHQyL0Jsb2NrQWxsb2NhdG9yLmNwcApAQCAtMTI3LDcgKzEyNywxMCBAQCBBbGxvY2F0aW9uQmxvY2tHcm91cDo6SW5pdGlhbGl6ZShWb2x1bWUqIHZvbHVtZSwgdWludDMyIGJsb2NrR3JvdXAsCiAJZlZvbHVtZSA9IHZvbHVtZTsKIAlmQmxvY2tHcm91cCA9IGJsb2NrR3JvdXA7CiAJZk51bUJpdHMgPSBudW1CaXRzOwotCWZTdGFydCA9IGJsb2NrR3JvdXAgKiBudW1CaXRzICsgZlZvbHVtZS0+Rmlyc3REYXRhQmxvY2soKTsKKwkvLyBudW1CaXRzIGlzIHRoaXMgZ3JvdXAncyBzaXplLCB3aGljaCBpcyBzbWFsbGVyIGZvciBhIHNob3J0IGxhc3QgZ3JvdXA7CisJLy8gd2hlcmUgYSBncm91cCBzdGFydHMgZGVwZW5kcyBvbiB0aGUgdm9sdW1lJ3MgYmxvY2tzIHBlciBncm91cCBvbmx5LgorCWZTdGFydCA9IChmc2Jsb2NrX3QpYmxvY2tHcm91cCAqIGZWb2x1bWUtPkJsb2Nrc1Blckdyb3VwKCkKKwkJKyBmVm9sdW1lLT5GaXJzdERhdGFCbG9jaygpOwogCiAJc3RhdHVzX3Qgc3RhdHVzID0gZlZvbHVtZS0+R2V0QmxvY2tHcm91cChibG9ja0dyb3VwLCAmZkdyb3VwRGVzY3JpcHRvcik7CiAJaWYgKHN0YXR1cyAhPSBCX09LKQotLSAKMi41NC4wIChBcHBsZSBHaXQtMTU3KQoK' | base64 -d > fix1087.patch
+# | sha256sum fix1087.patch
+# | set +e
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | T=0da661af9b
+# | mbuild() {	# mbuild <label> [patch...]
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f $T || return 1
+# | 	for p in "$@"; do git -C .. apply --check $O/$p && git -C .. apply $O/$p || return 1; done
+# | 	git -C .. diff --stat
+# | 	rm -rf $A/ext2
+# | 	s=$(date +%s)
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok wall=$(( $(date +%s) - s ))s"
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/" | grep -v "address-of-packed-member"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | 
+# | mbuild c1087 fix1087.patch || exit 1
+# | 
+# | 
+# | git -C .. checkout -q -f $T
+# | cd $O
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | 
+# | sha256sum ext2.c1087 | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/Q/out5/ && echo uploaded
+# ---- raw output ----
+505b9c51810941936d74826b5e33e5deb1a4d54cc805e1cf82243c4308cec5b6  fix1087.patch
+ src/add-ons/kernel/file_systems/ext2/BlockAllocator.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+JAM ext2 c1087 ok wall=5s
+41cca6524c977dc9b61b9ce05cf3c207fadd241535586f7f59854a827e0760bb  ext2.c1087
+uploaded
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ T=0da661af9b
++ mbuild c1087 fix1087.patch
++ l=c1087
++ shift
++ git -C .. checkout -q -f 0da661af9b
++ for p in "$@"
++ git -C .. apply --check /opt/t/out/fix1087.patch
++ git -C .. apply /opt/t/out/fix1087.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ date +%s
++ s=1793775877
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
+++ date +%s
++ echo 'JAM ext2 c1087 ok wall=5s'
++ grep -E 'warning:|error:' /opt/t/out/jam-c1087.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.c1087
++ git -C .. checkout -q -f 0da661af9b
++ cd /opt/t/out
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ sha256sum ext2.c1087
++ tee SHA256SUMS
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/Q/out5/
++ echo uploaded
