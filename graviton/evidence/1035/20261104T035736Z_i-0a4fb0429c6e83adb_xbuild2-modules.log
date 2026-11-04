@@ -1,0 +1,83 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2-modules
+# instance: i-0a4fb0429c6e83adb   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T035736Z   end: 20261104T035849Z   rc: 0
+# script sha256: 4f4f70d62a8b2484879eee4519b00fb191f30bfdad12e46e64a7ec3cbe12f07f
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/L
+# | cd /opt/wL/hg/generated || exit 1
+# | BASE=$(git -C .. rev-parse HEAD)
+# | echo "base=$BASE"
+# | build() {
+# | 	local label=$1 patch=$2
+# | 	git -C .. checkout -q -f --detach "$BASE" || return 1
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/wL/$patch || return 1
+# | 		sha256sum /opt/wL/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wL/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	rm -rf objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv4 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 ipv4 ipv6 > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	echo "-- warnings in ipv4.cpp/ipv6.cpp:"
+# | 	grep -A3 'warning:' jam-$label.log | grep -E 'protocols/(ipv6/ipv6|ipv4/ipv4)\.cpp' | head -20
+# | 	mkdir -p /opt/wL/out/$label
+# | 	for t in ipv4 ipv6; do
+# | 		cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/$t/$t /opt/wL/out/$label/$t && sha256sum /opt/wL/out/$label/$t | sed "s|/opt/wL/out/||"
+# | 		aws s3 cp --quiet /opt/wL/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build base none || exit 1
+# | build a1034 a1034.patch || exit 1
+# | build a1035u a1035u.patch || exit 1
+# | build a1049 a1049.patch || exit 1
+# | build a1050 a1050.patch || exit 1
+# | echo XBUILD-DONE
+# ---- raw output ----
+base=88e18b77a3181e20f0cf11021a006745b092c3ca
+JAM base patch=none rc=0 wall=14s failed=0 warnings=122
+-- warnings in ipv4.cpp/ipv6.cpp:
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  base/ipv4
+32bb4e4d36dbd25fd342248008929ae3510c2ac836c0cb7d87c32d617e8176a3  base/ipv6
+d9cdc487f24a4f20b06f49a066e1675e97684914af25ad7308360d6e9bd513f0  /opt/wL/a1034.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 42 +++++++++++++++++++++-
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 42 +++++++++++++++++++++-
+ 2 files changed, 82 insertions(+), 2 deletions(-)
+JAM a1034 patch=a1034.patch rc=0 wall=6s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+3544136993fa0a810bd0377f912ea96d4c9c5584402fec35331975f085b7235c  a1034/ipv4
+c79885f03792721bf6fd7e561f9a2f1b6b76f97147fc014066f85126aefb2e8f  a1034/ipv6
+c19087ed26c9d4f29c8b1f563511ec087b34da9070e8e4a60748f3bb762c5c56  /opt/wL/a1035u.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 92 ++++++++++++----------
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 77 ++++++++++--------
+ 2 files changed, 94 insertions(+), 75 deletions(-)
+JAM a1035u patch=a1035u.patch rc=0 wall=7s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+8da2046de5f6372e65ba528fb63d154de9e347679f3bc230608a2e42ee96716c  a1035u/ipv4
+5be7c2db558a02f9d4b70ff3170046d3973b5839fe6354fefcac264884b927e1  a1035u/ipv6
+d582e5b37ef664d300afbdc57255994fd9444db8bf15349e0447f72b2f3f4a2a  /opt/wL/a1049.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 146 +++++++++++++++------
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 122 ++++++++++++-----
+ 2 files changed, 200 insertions(+), 68 deletions(-)
+JAM a1049 patch=a1049.patch rc=0 wall=7s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+24b94e3f5ee34f9ce1a4d32651fad3769a7776e31c58ce2e4aff273587c3c66c  a1049/ipv4
+2ddd841658d2053b4b489f9251ff19f56809f17d2e1a08c6f24550b694ebeda1  a1049/ipv6
+37068ccfe8ab2c46cd723c848b3315ae1a39dbc01aa317d3061df6d6e6655126  /opt/wL/a1050.patch
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 232 +++++++++++++++++----
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 216 ++++++++++++++++---
+ 2 files changed, 373 insertions(+), 75 deletions(-)
+JAM a1050 patch=a1050.patch rc=0 wall=6s failed=0 warnings=2
+-- warnings in ipv4.cpp/ipv6.cpp:
+2d3124198fb9d83cda23b95411b8e93253cb2f826afee51f26b08febb0eb9a2a  a1050/ipv4
+9a53824295402cfb8368b211fc5d8e62b507a689610a1e873fead1950084b1b7  a1050/ipv6
+XBUILD-DONE

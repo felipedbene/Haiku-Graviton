@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: unfixed-a1035u-crafted
+# instance: i-0167209d4fe3c79ee   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T040515Z   end: 20261104T040728Z   rc: 1
+# script sha256: 3f91d79218a1205ddc5ec4b47ad1dd1d6e15c464bdd6bda548dc380800ce4c3f
+# ---- script ----
+# | cd /boot/home/wL || exit 1
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols/ipv)'
+# | sha256sum ipfragconf.c
+# | ifconfig loop mtu 1280
+# | ifconfig loop | grep -i mtu
+# | ./ipfragconf -c
+# | echo "rc=$?"
+# | ifconfig loop mtu 65536
+# ---- raw output ----
