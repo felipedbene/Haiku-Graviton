@@ -18,7 +18,15 @@ LICENSE="BSD (2-clause)"
 # node; nodejs20 now installs bin/node20 and provides cmd:node20, and its man page
 # is node20.1, so the two majors can be installed side by side. No green package
 # requires nodejs20's cmd:node.
-REVISION="4"
+# 5, not 4 (issue 998): Intl aborted ("DateTimePatternGeneratorCache::CreateGenerator
+# Allocation failed") because rev 4 linked the image's icu74-74.1_bootstrap-1. That
+# package has its data (icudt74l.dat), but libicuuc bakes the data directory under the
+# bootstrap port's build-time package name, /packages/icu74_bootstrap-74.1-1/.self/...,
+# while it installs as /packages/icu74-74.1_bootstrap-1, so ICU never finds its data
+# (issue 1018, the issue 784 skew; ICU_DATA pointed at the real directory makes Intl
+# work). Build against icu75 instead: 75.1 is the ICU this Node release bundles in
+# deps/icu-small, and icu75-75.1-2 bakes the path it installs to.
+REVISION="5"
 SOURCE_URI="https://nodejs.org/dist/v$portVersion/node-v$portVersion.tar.gz"
 CHECKSUM_SHA256="da228a0c27922f02001d9a781793696432096ab2da658eb77d7fc21693f4c5cb"
 SOURCE_DIR="node-v$portVersion"
@@ -66,9 +74,9 @@ BUILD_REQUIRES="
 	devel:libbrotlienc$secondaryArchSuffix
 	devel:libcares$secondaryArchSuffix
 	devel:libexecinfo$secondaryArchSuffix
-	devel:libicudata$secondaryArchSuffix >= 74
-	devel:libicui18n$secondaryArchSuffix >= 74
-	devel:libicuuc$secondaryArchSuffix >= 74
+	devel:libicudata$secondaryArchSuffix == 75.1
+	devel:libicui18n$secondaryArchSuffix == 75.1
+	devel:libicuuc$secondaryArchSuffix == 75.1
 	devel:libnghttp2$secondaryArchSuffix
 	devel:libssl$secondaryArchSuffix >= 3
 	devel:libuv$secondaryArchSuffix
