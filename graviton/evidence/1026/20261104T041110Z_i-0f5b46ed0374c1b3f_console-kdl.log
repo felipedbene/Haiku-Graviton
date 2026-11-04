@@ -1,0 +1,1084 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>
+# evidence: console-kdl
+# instance: i-0f5b46ed0374c1b3f   region: us-west-2   transport: ec2 get-console-output --latest (last 64 KiB of the serial console)
+# what: arm c1026b: console after c1026b-regress2 hung (ramfs loop; canonical's ramfs predates #1016)
+# captured: 20261104T041110Z
+# ---- raw output ----
+ AMZNIORT 00000001 AMZN 00000001)
+ACPI: PPTT 0x0000000078650000 00017C (v02 AMAZON AMZNPPTT 00000001 AMZN 00000001)
+ACPI: Forced DSDT copy: length 0x01480 copied locally, original unmapped
+ACPI: 1 ACPI AML tables successfully acquired and loaded
+publish device: node 0xffff0000009303c0, path acpi/namespace, module bus_managers/acpi/namespace/device_v1
+publish device: node 0xffff0000009303c0, path acpi/call, module bus_managers/acpi/call/device_v1
++ECAMPCIController::InitDriver()
+initialize PCI controller from ACPI
+PCI: range from ACPI [0(1),0(1)] with length 1
+PCI: range from ACPI [80000000(1),ffffffff(1)] with length 80000000
+PCI: range from ACPI [0(1),ffff(1)] with length 10000
+PCI: range from ACPI [400000000000(1),407fffffffff(1)] with length 8000000000
+PCI: ecam region: addr 20000000, segment: 0, buses: 0-ff
+PCI: ECAM at 20000000 (bus 0 base 20000000), segment 0, buses 0-0 from _CRS, 1 decoded, 1 MiB; 0 of 1 MCFG entries are other windows
+-ECAMPCIController::InitDriver()
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+finalize PCI controller from ACPI
+IRQ routing table with 3 entries
+address 0x1ffff; pin 1; source 0xffff0000dd1824e0 0; pci 0:1 pin 2 func mask 1; bios irq: 255; gsi 37; config 0x0a
+address 0x4ffff; pin 0; source 0xffff0000dd1822a0 0; pci 0:4 pin 1 func mask 1; bios irq: 3; gsi 35; config 0x0a
+address 0x5ffff; pin 0; source 0xffff0000dd1823c0 0; pci 0:5 pin 1 func mask 1; bios irq: 4; gsi 36; config 0x0a
+PCI: find_pci_capability ERROR 0:0:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:0:0 capability 0x8 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x5 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x11 empty list
+PCI: find_pci_capability ERROR 0:1:0 capability 0x8 empty list
+PCI: 0:00:00.0 vendor 1d0f device 0200 class 06.00.00 rev 00
+PCI: 0:00:01.0 vendor 1d0f device 8250 class 07.00.03 rev 00
+PCI: 0:00:04.0 vendor 1d0f device 8061 class 01.08.02 rev 00
+PCI: 0:00:05.0 vendor 1d0f device ec20 class 02.00.00 rev 00
+PCI: 4 device(s)
+driver bus_managers/fdt/root/driver_v1 init failed: No such device
+get_boot_partitions(): boot volume message:
+KMessage: buffer: 0xffff0000024e34b0 (size/capacity: 360/360), flags: 0xa
+  field: "partition offset"  (LLNG): 37748736 (0x2400000)
+  field: "packaged"          (BOOL): true
+  field: "boot method"       (LONG): 0 (0x0)
+  field: "disk identifier"   (RAWT): data at 0xffff0000024e3560, 79 bytes
+  field: "_boot_efi smbiosv2root" (LLNG): 2079129600 (0x7bed0000)
+  field: "_boot_efi smbiosv3root" (LLNG): 2078998528 (0x7beb0000)
+get_boot_partitions(): boot method type: 0
+devfs: scanned "": mode 1 -> 1, latched 1, probe No error, legacy No error
+publish device: node 0xffff0000009332a0, path disk/nvme/0/raw, module drivers/disk/nvme_disk/device_v1
+devfs: scanned "disk": mode 1 -> 1, latched 1, probe No error, legacy No error
+devfs: scanned "disk/nvme": mode 1 -> 1, latched 1, probe No error, legacy No error
+devfs: scanned "disk/nvme/0": mode 1 -> 1, latched 1, probe No error, legacy No error
+nvme_disk: attached to NVMe device "Amazon Elastic Block Store (vol012046cdfaf411f3e)"
+nvme_disk: 	maximum transfer size: 262144
+nvme_disk: 	qpair count: 2
+nvme_disk: 	io batch size: 8
+nvme_disk: namespace 0
+nvme_disk: 	block size: 512, stripe size: 0
+msix configured for 1 vectors
+msi-x enabled: 0x8002
+nvme_disk: using MSI-X
+io-interrupt: vector 1020 assigned to CPU 1
+DMAResource@0xffff0000dd0300a8: low/high 0/ffffffffffffffff, max segment count 126, align 4096, boundary 0, max transfer 262144, max segment size 18446744073709551615
+intel: Found GPT signature, ignoring.
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 8ee17e9b
+absolute block: 1
+alternate block: 41943039
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 2
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+EFI header: EFI PART
+EFI revision: 10000
+header size: 92
+header CRC: 6060a215
+absolute block: 41943039
+alternate block: 1
+first usable block: 34
+last usable block: 41943006
+disk GUID: 6457f578-b8b0-43bd-9b4e-47c7bb067840
+entries block: 41943007
+entry size:  128
+entry count: 128
+entries CRC: 39e02a22
+[  0] partition type: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+      unique id: 4706d44c-3e8b-4911-b94e-fde03f9289b5
+      start block: 8192
+      end block: 73727
+      size: 31.999 MB
+      attributes: 0
+      name: EFI system partition
+[  1] partition type: 42465331-3ba3-10f1-802a-4861696b7521
+      unique id: 30f27487-a12a-4440-b6fc-8756a5b34972
+      start block: 73728
+      end block: 41943006
+      size: 20443.983 MB
+      attributes: 0
+      name: Haiku BFS
+identify(0, 0xffff0000dd193150)
+efi_gpt_scan_partition(cookie = 0xffff0000008b0460)
+identify(0, 0xffff0000dd193198)
+identify(0, 0xffff0000dd1931e0)
+device 0: /dev/disk/nvme/0/raw
+  media status:      No error
+  device flags:      2
+  offset:            0
+  size:              21474836480 (20480 MB)
+  content size:      21474836480
+  block size:        512
+  physical block size: 512
+  child count:       2
+  index:             -1
+  status:            0
+  flags:             5
+  volume:            -1
+  disk system:       partitioning_systems/efi_gpt/v1
+  name:              <NULL>
+  content name:      <NULL>
+  type:              <NULL>
+  content type:      GUID Partition Map
+  params:            <NULL>
+  content params:    <NULL>
+  partition 1: /dev/disk/nvme/0/0
+    offset:            4194304
+    size:              33554432 (32 MB)
+    content size:      33554432
+    block size:        512
+    physical block size: 512
+    child count:       0
+    index:             0
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/fat/v1
+    name:              EFI system partition
+    content name:      haiku boot
+    type:              EFI system data
+    content type:      FAT32 File System
+    params:            <NULL>
+    content params:    <NULL>
+  partition 2: /dev/disk/nvme/0/1
+    offset:            37748736
+    size:              21437070848 (20443.983 MB)
+    content size:      21437069312
+    block size:        2048
+    physical block size: 512
+    child count:       0
+    index:             1
+    status:            0
+    flags:             2
+    volume:            -1
+    disk system:       file_systems/bfs/v1
+    name:              Haiku BFS
+    content name:      Haiku
+    type:              Be File System
+    content type:      Be File System
+    params:            <NULL>
+    content params:    <NULL>
+Identified boot partition by partition offset.
+bfs: mounted "Haiku" (root node at 524288, device = /dev/disk/nvme/0/1)
+Mounted boot partition: /dev/disk/nvme/0/1
+unknown: [3151156:    23] Adding packages from "/boot/system/packages"
+slab memory manager: created area 0xffff0000de001000 (264)
+unknown: [5822986:    23] StringPool usage:
+unknown: [5823442:    23]   total unique strings:        6217,    66240 bytes, overhead: 99472 bytes + 65536 bytes
+unknown: [5824738:    23]   total strings with dups:    39295,   450450 bytes
+unknown: [5825667:    23]   unshared strings:             796
+unknown: [5826422:    23]   bytes saved:               219202
+unknown: [5830262:    23] Adding packages from "/boot/home/config/packages"
+unknown: [5831544:    23] Failed to open packages activation file: No such file or directory
+unknown: [5832477:    23] Loading packages from activation file failed. Loading all packages in packages directory.
+unknown: [5835620:    23] StringPool usage:
+unknown: [5836035:    23]   total unique strings:        6217,    66240 bytes, overhead: 99472 bytes + 65536 bytes
+unknown: [5837340:    23]   total strings with dups:    39306,   450515 bytes
+unknown: [5838275:    23]   unshared strings:             791
+unknown: [5839023:    23]   bytes saved:               219267
+module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ede0, "fat"
+module: Search for file_cache/launch_speedup/v1 failed.
+publish device: node 0xffff0000009358c0, path disk/virtual/ram/control, module drivers/disk/virtual/ram_disk/control/device_v1
+usb_modeswitch: init_hardware()
+usb_modeswitch: init_driver()
+usb_modeswitch: trying module bus_managers/usb/v3.1
+usb_modeswitch: publish_devices()
+usb_modeswitch: uninit_driver()
+loaded driver /boot/system/add-ons/kernel/drivers/dev/usb_modeswitch
+loaded driver /boot/system/add-ons/kernel/drivers/dev/pty
+loaded driver /boot/system/add-ons/kernel/drivers/dev/null
+loaded driver /boot/system/add-ons/kernel/drivers/dev/dprintf
+con_init: trying module console/frame_buffer/v1
+con_init: trying module console/vga_text/v1
+module: Search for bus_managers/isa/v1 failed.
+text module_init: no isa bus found..
+devfs: scanned "": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/nvme/0": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/virtual": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/virtual/ram": mode 2 -> 2, latched 2, probe No error, legacy No error
+identify(5, 0xffff0000dd9918a0)
+io-interrupt: vector 23 assigned to CPU 0
+arm64_pmu: sampling overflow interrupt on INTID 23 (madt gicc performance gsiv), counter [1] cpu-cycles, period 10000000 cycles
+no valid cpufreq module found
+no valid cpuidle module found
+kernel debugger extension "debugger/usb_keyboard/v1": loaded
+kernel debugger extension "debugger/run_on_exit/v1": loaded
+kernel debugger extension "debugger/invalidate_on_exit/v1": loaded
+kernel debugger extension "debugger/hangman/v1": loaded
+publish device: node 0xffff00000093b9a0, path random, module bus_managers/random/device_v1
+publish device: node 0xffff00000093b9a0, path urandom, module bus_managers/random/device_v1
+driver bus_managers/fdt/root/driver_v1 init failed: No such device
+pl061: pin 3 -> _E03 (edge triggered, active high)
+pl061: pin 4 -> _E04 (edge triggered, active high)
+io-interrupt: vector 39 assigned to CPU 3
+pl061: \_SB_.GPO0: 2 event pin(s) armed on irq 39
+publish device: node 0xffff00000093be00, path power/button/power, module drivers/power/acpi_button/device_v1
+publish device: node 0xffff00000093bfe0, path power/button/sleep, module drivers/power/acpi_button/device_v1
+slab memory manager: created area 0xffff000028801000 (3316)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+slab memory manager: created area 0xffff000029001000 (3546)
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000088f380, 9, unix)
+unregister_domain(0xffff00000088f480, 1, internet)
+unregister_domain(0xffff00000088f400, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff00000088f680, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000088f800, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000088fc00, 9, unix)
+unregister_domain(0xffff00000088fd00, 1, internet)
+unregister_domain(0xffff00000088fc80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de540080, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540200, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540400, 9, unix)
+unregister_domain(0xffff0000de540500, 1, internet)
+unregister_domain(0xffff0000de540480, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de540700, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540880, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540a80, 9, unix)
+unregister_domain(0xffff0000de540b80, 1, internet)
+unregister_domain(0xffff0000de540b00, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de540880, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540700, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540480, 9, unix)
+unregister_domain(0xffff0000de540400, 1, internet)
+unregister_domain(0xffff0000de540500, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de540200, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540080, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000088fc80, 9, unix)
+unregister_domain(0xffff00000088fc00, 1, internet)
+unregister_domain(0xffff00000088fd00, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff000000881180, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000088fa80, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff00000088fc00, 9, unix)
+unregister_domain(0xffff00000088fe80, 1, internet)
+unregister_domain(0xffff00000088fc80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de540100, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540280, 1, internet)
+slab memory manager: created area 0xffff000029801000 (3914)
+REG: Failed to open shadow passwd DB file "/etc/shadow": No such file or directory
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+Test: and [file_exists [/system/bin/FirstBootPrompt], or [not [file_exists [/boot/home/config/settings/Locale settings]], readonly ]] -> 0
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de541b80, 9, unix)
+unregister_domain(0xffff0000de541c80, 1, internet)
+unregister_domain(0xffff0000de541c00, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de541e80, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de542000, 1, internet)
+devfs: scanned "power": mode 2 -> 2, latched 2, probe No error, legacy No error
+package_daemon: [7455323:    48] root at "/boot" (device: 3, node: 524288) registered
+package_daemon: [7456823:    48] net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+volume at "/boot/system" registered
+network/stack: rxdiag-1 receive drop attribution active
+package_daemon: [7459067:    48] register_domain(9, unix)
+volume at "/boot/home/config" registered
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de543d80, 9, unix)
+unregister_domain(0xffff0000de543e80, 1, internet)
+unregister_domain(0xffff0000de543e00, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de544080, 5, internet6)
+register_domain(4, link)
+unregister_domain(0xffff0000de544100, 4, link)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de544380, 9, unix)
+unregister_domain(0xffff0000de544480, 1, internet)
+unregister_domain(0xffff0000de544400, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de544680, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de544800, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de544a00, 9, unix)
+unregister_domain(0xffff0000de544b00, 1, internet)
+unregister_domain(0xffff0000de544a80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de544700, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de544580, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de544280, 9, unix)
+unregister_domain(0xffff0000de544480, 1, internet)
+unregister_domain(0xffff0000de544400, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de544000, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de543f00, 5, internet6)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+Launching x-vnd.haiku-media_server failed: No such file or directory
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de543d80, 9, unix)
+unregister_domain(0xffff0000de540380, 1, internet)
+unregister_domain(0xffff0000de543c00, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de542d80, 5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de543000, 1, internet)
+net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+network/stack: rxdiag-1 receive drop attribution active
+register_domain(9, unix)
+register_domain(5, internet6)
+register_domain(1, internet)
+unregister_domain(0xffff0000de540380, 9, unix)
+unregister_domain(0xffff0000de543c80, 1, internet)
+unregister_domain(0xffff0000de543d80, 5, internet6)
+register_domain(5, internet6)
+unregister_domain(0xffff0000de544100, 5, internet6)
+register_domain(1, internet)
+devfs: scanned "power/button": mode 2 -> 2, latched 2, probe No error, legacy No error
+register_domain(5, internet6)
+register_domain(9, unix)
+ena: found an ENA device
+publish device: node 0xffff0000de52b368, path net/ena/0, module drivers/network/ena/device_v1
+loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_rndis
+[33musb_davicom:[0m00.07.515:init_driver::ver.0.9.5
+loaded driver /boot/system/add-ons/kernel/drivers/dev/net/usb_davicom
+etherpci: init_driver init_driver: etherpci not found
+devfs: scanned "net": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "net/ena": mode 2 -> 2, latched 2, probe No error, legacy No error
+ena: driver build rxbuf-1920, compiled Nov  4 2026 00:11:44 (hrev59996)
+ena: ena_com_validate_version(): ENA device version: 0.10
+ena: ena_com_validate_version(): ENA controller version: 0.0.1 implementation version 1
+ena: device drives 48 physical address bits
+ena: queue counts (ext v1): tx_sq 8 tx_cq 8 rx_sq 8 rx_cq 8, per-packet tx 17 rx 12, max_tx_header 96
+ena: supported_features 0x14205df6, capabilities 0x1f
+ena: device reports AENQ supported_groups 0xff
+ena: configuring AENQ groups 0x9f
+ena: MAC 06:ff:da:58:78:ff, device MTU limit 9216
+ena: offloads: tx 0x3, rx supported 0x7, rx enabled 0x0
+ena: LLQ negotiation: max_llq_num 8, max_llq_depth 1024, max_wide_llq_depth 512, entry_size_recommended 4, entry_size_supported 0x5, accel_mode supported 0x3
+ena: LLQ configured: 256 byte entries, 16 descriptors per entry, max 2 per burst, transmit header limit 224
+ena: offload: tx 0x3 (ipv4 l3 csum 1, ipv4 l4 csum part 1 full 0, ipv6 l4 csum part 0 full 0, tso v4 0 v6 0), rx supported 0x7, rx enabled 0x0
+ena: transmit checksum offload: advertising 0x1
+ena: wide LLQ caps the transmit depth at 512 (was 1024)
+ena: ring sizes: 512 tx, 1024 rx (device limits: 512 tx, 8192 rx, queue-ext feature yes)
+ena: MTU 9001 (device limit 9216, stack ceiling 9001, chain capacity 15090); a frame may span 8 receive and 8 transmit descriptors; receive refill batch 128
+msix configured for 2 vectors
+msi-x enabled: 0x800b
+ena: using MSI-X, management irq 1021, io irq 1022
+io-interrupt: vector 1021 assigned to CPU 4
+io-interrupt: vector 1022 assigned to CPU 5
+package_daemon: [7542826:    84] ena: interrupt moderation feature not advertised
+The latest volume state is also the currently active one
+ena: interrupt delay resolution 0; rx interval 20, tx interval 50
+package_daemon: [7545349:    84] ena: first management interrupt delivered
+ena: link is up
+Volume::InitialVerify((nil), (nil))
+ena: creating queue pair: tx depth 512, rx depth 1024, msix vector 1, tx placement device, tx max header 224
+ena: cdesc sizes: tx 8 bytes (2 words), rx 16 bytes (4 words)
+ena: set device MTU 9001 after queue creation (matching what we report to the stack): ok
+ena: watchdog running: 6000 ms keep-alive timeout, 1000 ms cadence
+ena: attached [build Nov  4 2026 00:11:44]; interrupts so far: 12 management, 0 io
+/dev/net/ena/0: transmit checksum offload 0x1
+register_domain(4, link)
+ena: first io interrupt delivered
+package_daemon: [7556209:    84] Volume::InitialVerify(): volume at "/boot/system" is consistent
+package_daemon: [7557488:    84] Failed to open packages activation file /boot/home/config/packages/administrative/activated-packages: No such file or directory
+package_daemon: [7559233:    84] interrupts: rebalanced vector 1021 from CPU 4 to CPU 1
+Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+package_daemon: [7561832:    84] The latest volume state is also the currently active one
+package_daemon: [7562935:    84] Volume::InitialVerify(0x56f782d200, (nil))
+package_daemon: [7564224:    84] Volume::InitialVerify(): volume at "/boot/home/config" is consistent
+interrupts: rebalanced vector 1021 from CPU 1 to CPU 4
+interrupts: rebalanced vector 1021 from CPU 4 to CPU 7
+interrupts: rebalanced vector 1021 from CPU 7 to CPU 6
+framebuffer: init_hardware()
+devfs: scanned "graphics": mode 2 -> 2, latched 2, probe No error, legacy No error
+RemoteHWInterface: session cookie for port 10900 published in /boot/system/settings/remote_desktop/session_cookie.10900
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/wacom
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+ps2_hid: init_hardware
+ps2_hid: init_driver
+module: Search for bus_managers/ps2/v1 failed.
+devfs: scanned "input": mode 2 -> 2, latched 2, probe No error, legacy No error
+AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+load addon /boot/system/add-ons/input_server/filters/screen_saver failed
+slab memory manager: created area 0xffff00002a001000 (7719)
+ena: rx offload observed after 1000 frames: l4_csum_checked 815, l4_csum_err 0, l3_proto==ipv4 999, l3_csum_err 0 (rx_supported 0x7, rx_enabled 0x0)
+slab memory manager: created area 0xffff00002a801000 (9459)
+slab memory manager: created area 0xffff00002b001000 (9460)
+slab memory manager: created area 0xffff00002b801000 (9461)
+ena: rx offload observed after 50000 frames: l4_csum_checked 49814, l4_csum_err 0, l3_proto==ipv4 49998, l3_csum_err 0 (rx_supported 0x7, rx_enabled 0x0)
+ena: tx: 100000 frames, 100000 doorbells (+0 forced per frame), burst left min 1, exhausted 0, csum offloaded 99968 rejected 0 (2 entries per burst, 2 descs before header, 16 descs per entry; this frame 54 bytes in 1 descriptors)
+devfs: scanned "disk/virtual/files": mode 2 -> 2, latched 2, probe No error, legacy No error
+devfs: scanned "disk/virtual/files/3": mode 2 -> 2, latched 2, probe No error, legacy No error
+identify(29, 0xffff00002997f5a0)
+devfs: scanned "disk/virtual/files/4": mode 2 -> 2, latched 2, probe No error, legacy No error
+identify(32, 0xffff000029471198)
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+page writer: no page written for 0 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+page writer: no page written for 10509 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+page writer: no page written for 21019 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+page writer: no page written for 31529 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+page writer: no page written for 0 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+page writer: no page written for 42038 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+page writer: no page written for 10509 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+page writer: no page written for 52548 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+page writer: no page written for 21019 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+page writer: no page written for 63058 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+page writer: no page written for 31528 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cd560: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033cf950: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+page writer: no page written for 42038 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+page writer: no page written for 52548 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+page writer: no page written for 63057 ms with 2 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032fc410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000033065a0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+fs_unmount(): inode 16777215 is still referenced
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+devfs: scanned "disk/virtual/files/5": mode 2 -> 2, latched 2, probe No error, legacy No error
+identify(35, 0xffff000029427cc0)
+identify(38, 0xffff00002997f7e0)
+bfs: mounted "BFS1027" (root node at 2051, device = /dev/disk/virtual/files/5/raw)
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003847370: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000385c0e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003847370: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000385c0e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003847370: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000385c0e0: Bad address
+bfs: mounted "BFS1027" (root node at 2051, device = /dev/disk/virtual/files/5/raw)
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003852180: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000384f250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003852180: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000384f250: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003852180: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000384f250: Bad address
+bfs: mounted "BFS1027" (root node at 2051, device = /dev/disk/virtual/files/5/raw)
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003868110: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003869740: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003868110: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003869740: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003868110: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003869740: Bad address
+bfs: mounted "BFS1027" (root node at 2051, device = /dev/disk/virtual/files/5/raw)
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+file_cache: read pages failed: Bad address
+fs_unmount(): inode 2051 is still referenced
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037e0210: Bad address
+page writer: no page written for 162562 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037e0210: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037e0210: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037e0210: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037e0210: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037e0210: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000367f600: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000367f600: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000367f600: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000367f600: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000367f600: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000367f600: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036bf3e0: Bad address
+page writer: no page written for 181567 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036bf3e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036bf3e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036bf3e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036bf3e0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036bf3e0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036fd2d0: Bad address
+page writer: no page written for 194070 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036fd2d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036fd2d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036fd2d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036fd2d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000036fd2d0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000372faa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000372faa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000372faa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000372faa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000372faa0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000372faa0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000376c810: Bad address
+page writer: no page written for 213075 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000376c810: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000376c810: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000376c810: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000376c810: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000376c810: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037c55f0: Bad address
+page writer: no page written for 225578 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037c55f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037c55f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037c55f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037c55f0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000037c55f0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000363f410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000363f410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000363f410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000363f410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000363f410: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000363f410: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003601e80: Bad address
+page writer: no page written for 244582 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003601e80: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003601e80: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003601e80: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003601e80: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003601e80: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035cbbf0: Bad address
+page writer: no page written for 257085 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035cbbf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035cbbf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035cbbf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035cbbf0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035cbbf0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003590c30: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003590c30: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003590c30: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003590c30: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003590c30: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003590c30: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035535b0: Bad address
+page writer: no page written for 276090 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035535b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035535b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035535b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035535b0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000035535b0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000351e590: Bad address
+page writer: no page written for 288593 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000351e590: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000351e590: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000351e590: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000351e590: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000351e590: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034e0470: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034e0470: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034e0470: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034e0470: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034e0470: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034e0470: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034a0a50: Bad address
+page writer: no page written for 307597 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034a0a50: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034a0a50: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034a0a50: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034a0a50: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000034a0a50: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000346cc00: Bad address
+page writer: no page written for 320100 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000346cc00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000346cc00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000346cc00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000346cc00: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff00000346cc00: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003432640: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003432640: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003432640: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003432640: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003432640: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000003432640: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000002eb6540: Bad address
+page writer: no page written for 339105 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000002eb6540: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000002eb6540: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000002eb6540: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000002eb6540: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff000002eb6540: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032b4930: Bad address
+page writer: no page written for 351608 ms with 1 page(s) modified; writeback is making no progress
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032b4930: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032b4930: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032b4930: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032b4930: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032b4930: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032757d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032757d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032757d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032757d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032757d0: Bad address
+[33mnvme_disk:[0m failed to lock memory: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000032757d0: Bad address
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+PANIC: ASSERT FAILED (../src/system/kernel/fs/vfs.cpp:148): vnodes.IsEmpty()
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 688 "unmount" running on CPU 4
+iframe 0xffff0000de822cc7 (end = 0xffff0000de822fff)
+stack trace for thread 0x2b0 "unmount"
+    kernel stack: 0xffff0000de81e000 to 0xffff0000de823000
+      user stack: 0x0000021e31659000 to 0x0000021e35659000
+frame            caller     <image>:function + offset
+ 0 ffff0000de822810 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000de822860 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000de8228d0[0m [36m"�)��"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000de8228d0 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff0000de822990[0m [36m"�*��"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�@C���"[0m, std::__va_list: [34m0x1a7920[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff0000de822990 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000de822ab0 (+ 288) ffff000000136dec   <kernel_arm64> fs_unmount(char*: [34m0xffff0000de822b40[0m, int32: [34m1301408[0m, uint32: [34m0xffff0000[0m, [34mfalse[0m) + 0x28c
+ 5 ffff0000de822b40 (+ 144) ffff00000013dba0   <kernel_arm64> _user_unmount + 0xa0
+ 6 ffff0000de822ba0 (+  96) ffff0000000a71e8   <kernel_arm64> syscall_dispatcher + 0x1318
+ 7 ffff0000de822bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+ 8 ffff0000de822cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff0000de822cc7
+ELR=0000009494094530 SPSR=0000000020000000
+LR =000000bf8683d198 SP  =0000021e35658ef0 FP =0000021e35658ef0
+ESR=000000005600006a FAR =00000093be591030
+ 9 0000021e35658ef0 (+   0) 0000009494094530   </boot/system/lib/libroot.so> _kern_unmount (nearest) + 0x04
+10 0000021e35658fa0 (+ 176) 000000bf8683d310   </boot/system/bin/unmount> _start + 0x50
+11 0000021e35658fd0 (+  48) 0000010e8786c348   </boot/system/runtime_loader> runtime_loader + 0x128
+12 0000000000000000 (+   0) 000007de29fe3208   <commpage> commpage_thread_exit + 0x00
+

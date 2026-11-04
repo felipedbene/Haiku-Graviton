@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1026b-regress1
+# instance: i-0f5b46ed0374c1b3f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1026b: regressions part 1 (BFS diskimage setup)
+# start: 20261104T035349Z   end: 20261104T035401Z   rc: 0
+# script sha256: b745687942e10c2e65e47dea137001e13ae3690b04506677bcec57dbf33d31ed
+# ---- script ----
+# | # Regressions: (1) BFS on a diskimage file (made here with mkfs -t bfs): mount, write
+# | # 2 B / 4 KiB / 1 MiB, sync, unmount, x3 -- exercises the free_vnode() flush through bfs_io(),
+# | # which takes the same vnode reference as FAT's; (2) 20 x FAT mount + write + unmount on the
+# | # Linux-made image; (3) 50 x ramfs mount + file + unmount (#1016's check, vfs unmount path).
+# | set -x
+# | cd /boot/home/t1027
+# | df | grep -E "f1027|e1027" ; unmount /f1027 2>/dev/null; echo "leftover FAT unmount rc=$?"
+# | rm -f bfs.img; dd if=/dev/zero of=bfs.img bs=1048576 count=64 2>/dev/null
+# | diskimage register /boot/home/t1027/bfs.img
+# | diskimage list | grep bfs.img
+# ---- raw output ----
+[1m/f1027            [0m
+leftover FAT unmount rc=0
+Registered file as disk device "/dev/disk/virtual/files/5/raw" with ID 5.
+     5  /boot/home/t1027/bfs.img           /dev/disk/virtual/files/5/raw
++ cd /boot/home/t1027
++ df
++ grep -E 'f1027|e1027'
++ unmount /f1027
++ echo 'leftover FAT unmount rc=0'
++ rm -f bfs.img
++ dd if=/dev/zero of=bfs.img bs=1048576 count=64
++ diskimage register /boot/home/t1027/bfs.img
++ diskimage list
++ grep bfs.img

@@ -1,0 +1,12 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: bothb-unmount-fat
+# instance: i-0f72d5de8e6e75520   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm bothb: unmount the FAT volume
+# start: 20261104T035235Z   end: 20261104T035247Z   rc: 0
+# script sha256: 79e67c17b132504ef98d930967b310791f69f6c9d9e6112feedb0414ec072877
+# ---- script ----
+# | # Phase "unmount" on FAT. On a KDL this never returns; the console has it.
+# | cd /boot/home/t1027
+# | sh diskimage1027.sh unmount /f1027
+# ---- raw output ----
+unmount /f1027 rc=0

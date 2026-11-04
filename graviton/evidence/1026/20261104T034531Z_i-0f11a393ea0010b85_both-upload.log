@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: both-upload
+# instance: i-0f11a393ea0010b85   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm both: upload the two images for the Linux check
+# start: 20261104T034531Z   end: 20261104T034551Z   rc: 0
+# script sha256: 0d93f702a40cd86f839fa63a428afc4f8377894bcd5e44cb82663f9e2ffa89bb
+# ---- script ----
+# | # Upload arm "both"'s two images (both volumes unmounted) for the Linux check.
+# | cd /boot/home/t1027
+# | sha256sum fat.img ext2.img
+# | wget -q --method=PUT --header='Content-Type:' --body-file=fat.img -O /dev/null 'https://s3.us-west-2.amazonaws.com/haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back/both-fat.img?<PRESIGNED>
+# | wget -q --method=PUT --header='Content-Type:' --body-file=ext2.img -O /dev/null 'https://s3.us-west-2.amazonaws.com/haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back/both-ext2.img?<PRESIGNED>
+# ---- raw output ----
+c8c369f2814727390c678439471ed8b448f54520bf2ec73f2fafa225c8f53b37  fat.img
+fe9c44827d14e80590536346c3cdc9de724d0f082f193e6721c9f4bf7728e3ce  ext2.img
+put fat rc=0
+put ext2 rc=0

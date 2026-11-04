@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1027-verify
+# instance: i-0aa850441d63dc5be   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1027: unmount ext2, then remount both volumes and md5 every file from disk
+# start: 20261104T034356Z   end: 20261104T034426Z   rc: 0
+# script sha256: 37bce6cae14964546e9fc27b340a4a1908c914bdc485c14a853a72eea004efbd
+# ---- script ----
+# | # Phase "unmount" on ext2, then "verify" on both volumes: remount and md5 every file from disk,
+# | # then unmount again. Then the image files are hashed for the record.
+# | cd /boot/home/t1027
+# | sh diskimage1027.sh unmount /e1027
+# | sh diskimage1027.sh verify /dev/disk/virtual/files/3/raw /f1027 fat
+# | sh diskimage1027.sh unmount /f1027
+# | sh diskimage1027.sh verify /dev/disk/virtual/files/4/raw /e1027 ext2
+# | sh diskimage1027.sh unmount /e1027
+# | sha256sum fat.img ext2.img
+# ---- raw output ----
+unmount /e1027 rc=0
+31e33b9a248d66df7f2b11c8e8d1677b  /f1027/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /f1027/lin-small
+h-2b: OK
+h-4k: OK
+h-1m: OK
+verify rc=0
+unmount /f1027 rc=1
+31e33b9a248d66df7f2b11c8e8d1677b  /e1027/lin-1m
+900150983cd24fb0d6963f7d28e17f72  /e1027/lin-small
+h-2b: OK
+h-4k: OK
+h-1m: OK
+verify rc=0
+unmount /e1027 rc=0
+bfea39a0b00558582eec29fbe15bf99504e891a04ee9e8fe9c9edf835c6d1a36  fat.img
+7fb38deb4a339de959ae86f344169234e128075a364c38ff3d423e6ba56dfe13  ext2.img
+unmount: unmounting failed: Device/File/Resource busy
