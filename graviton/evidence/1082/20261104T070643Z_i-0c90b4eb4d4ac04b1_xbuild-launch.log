@@ -1,0 +1,56 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-launch
+# instance: i-0c90b4eb4d4ac04b1   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: start the detached build of trunk icmp6/ipv6/udp and the fix1082 icmp6/ipv6
+# start: 20261104T070643Z   end: 20261104T070654Z   rc: 0
+# script sha256: ba3d9067f216939a64590c9df7ab14126ef2d177d7e45c719904fb10c60a7ebd
+# ---- script ----
+# | # Build for #1082, from origin/graviton (detached; log /opt/t/out/xb.log, rc /opt/t/out/xb.rc):
+# | #  trunk:   icmp6, ipv6, udp -- to show trunk rebuilds canonical's modules bit for bit
+# | #  fix1082: trunk + fix/1082 (patch inline, git format-patch of the fix commit) -> icmp6, ipv6
+# | set -x
+# | mkdir -p /opt/t/out && cd /opt/t/out && rm -f xb.rc
+# | echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>' | base64 -d > fix1082.patch
+# | sha256sum fix1082.patch
+# | cat > /opt/t/xb.sh <<'XB'
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | REV=hrev59996
+# | P=objects/haiku/arm64/release/add-ons/kernel/network/protocols
+# | git -C .. fetch -q origin graviton && git -C .. checkout -q -f origin/graviton && git -C .. log -1 --format='trunk %H %s' || exit 1
+# | T=$(git -C .. rev-parse HEAD)
+# | rm -rf $P
+# | s=$(date +%s)
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV icmp6 ipv6 udp > $O/jam-trunk.log 2>&1 || { tail -40 $O/jam-trunk.log; exit 1; }
+# | echo "JAM trunk ok wall=$(( $(date +%s) - s ))s"
+# | for m in icmp6 ipv6 udp; do cp $(find $P/$m -maxdepth 1 -type f -name $m) $O/$m.trunk || exit 1; done
+# | git -C .. apply --check $O/fix1082.patch && git -C .. apply $O/fix1082.patch || exit 1
+# | git -C .. diff --stat
+# | rm -rf $P/icmp6 $P/ipv6
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV icmp6 ipv6 > $O/jam-fix1082.log 2>&1 || { tail -60 $O/jam-fix1082.log; exit 1; }
+# | grep -E "warning:|error:" $O/jam-fix1082.log | grep -E "icmp6|ipv6"
+# | for m in icmp6 ipv6; do cp $(find $P/$m -maxdepth 1 -type f -name $m) $O/$m.fix1082 || exit 1; done
+# | git -C .. checkout -q -f $T
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | cd $O
+# | echo "icmp6 error_reply size (trunk / fix):"; ${X}nm -S icmp6.trunk | grep -i error_reply; ${X}nm -S icmp6.fix1082 | grep -iE "error_reply|error_rate|is_error_allowed"
+# | cmp -s icmp6.trunk icmp6.fix1082 && { echo "icmp6 fix identical to trunk?"; exit 1; }
+# | sha256sum icmp6.* ipv6.* udp.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude 'jam-*' --exclude 'xb.*' --exclude '*.patch' . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/T/1082/out/ && echo uploaded
+# | XB
+# | nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc' > /dev/null 2>&1 &
+# | sleep 3; echo launched
+# ---- raw output ----
+fd1f061cdaeec9ce33a1bf6034ef451bb191cb99e5e97b25e0a8307effe60c70  fix1082.patch
+launched
++ mkdir -p /opt/t/out
++ cd /opt/t/out
++ rm -f xb.rc
++ base64 -d
++ echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>'
++ sha256sum fix1082.patch
++ cat
++ sleep 3
++ nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc'
++ echo launched

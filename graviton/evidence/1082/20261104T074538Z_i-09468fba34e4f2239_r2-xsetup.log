@@ -1,0 +1,79 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 payloads elided
+# evidence: r2-xsetup
+# instance: i-09468fba34e4f2239   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-build host setup for #1082 r2 and #1098
+# start: 20261104T074538Z   end: 20261104T074715Z   rc: 0
+# script sha256: 5adfc72a992b86ad9f77008d1bceb4e11d4e3b7786cfbc2759a3be56e2cee225
+# ---- script ----
+# | # Cross-build host setup for issues 1082 (second revision) and 1098 (method of #933/#1011
+# | # xsetup): toolchain, jam, oven cross-tools cache, configure; tcpdump for the Linux reference.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file tcpdump > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -r
+# | mkdir -p /opt/t && cd /opt/t
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg fetch -q origin fix/1082-icmp6-port-unreachable fix/1098-ipv6-time-exceeded-quote
+# | git -C hg log -1 --format='%H %s' FETCH_HEAD
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | nproc; df -h /opt | tail -1
+# ---- raw output ----
+apt rc=0
+7.0.0-1014-aws
+df1f19a83e8f62759e87b938ec572684329df6ba evidence: issue 1082 before/after on c7g.2xlarge, and the Linux reference (first revision)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+32
+/dev/root        77G  5.9G   71G   8% /
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file tcpdump
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ uname -r
++ mkdir -p /opt/t
++ cd /opt/t
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg fetch -q origin fix/1082-icmp6-port-unreachable fix/1098-ipv6-time-exceeded-quote
++ git -C hg log -1 '--format=%H %s' FETCH_HEAD
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ nproc
++ df -h /opt
++ tail -1

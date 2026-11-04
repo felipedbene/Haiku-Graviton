@@ -1,0 +1,60 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-0c90b4eb4d4ac04b1   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #1082 Linux reference on the builder (Ubuntu 24.04 arm64): repro + udprefused993 + tcpdump on lo + resolver row
+# start: 20261104T070654Z   end: 20261104T070704Z   rc: 0
+# script sha256: a781ef9037f957747db1ad204f7a6768c4978bd1ba2a768f4dafa6e265993d1f
+# ---- script ----
+# | # Linux reference for #1082 on the builder (Ubuntu 24.04, c7g.8xlarge): the same repro and udprefused993,
+# | # with tcpdump on lo capturing the ICMPv6 errors; resolver row with no resolv.conf (glibc's fallback is 127.0.0.1 only).
+# | set -u
+# | mkdir -p /opt/t/l1082 && cd /opt/t/l1082
+# | echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>' | base64 -d > icmp6unreach1082.c
+# | echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>' | base64 -d > udprefused993.c
+# | echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>' | base64 -d > resolve1082.c
+# | sha256sum *.c; uname -r
+# | for p in icmp6unreach1082 udprefused993 resolve1082; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | sysctl net.ipv6.icmp.ratelimit net.ipv4.icmp_msgs_per_sec net.ipv4.icmp_msgs_burst
+# | timeout 30 tcpdump -n -i lo -c 400 'icmp6 and ip6[40] < 128' > tcpdump.txt 2> tcpdump.err &
+# | sleep 1
+# | echo "== icmp6unreach1082"; ./icmp6unreach1082; echo "rc=$?"
+# | echo "== udprefused993"; ./udprefused993; echo "rc=$?"
+# | sleep 1; kill %1 2>/dev/null; wait
+# | echo "== tcpdump -i lo (ICMPv6 errors only): first 6 lines, then counts"
+# | head -6 tcpdump.txt; grep -c "udp port" tcpdump.txt; grep -o "ICMP6, [a-z ]*, length [0-9]*" tcpdump.txt | sort | uniq -c; cat tcpdump.err | tail -2
+# | echo "== resolver, no resolv.conf"
+# | mv /etc/resolv.conf /etc/resolv.conf.1082
+# | ./resolve1082 debeos-1082.invalid example.com
+# | mv /etc/resolv.conf.1082 /etc/resolv.conf && echo restored
+# ---- raw output ----
+7459a956940759ed4ead508d2a0d66be7a6bb244b8658a3fad2e66a3af5d4e01  icmp6unreach1082.c
+a8f154568855c3f6b92b690761cd12cf80861da548a4cfae537438d72773a722  resolve1082.c
+efc1474d25d7446e552874bf95d56ecb01f61a43883da88dc5b3b519ce11f3ab  udprefused993.c
+7.0.0-1014-aws
+net.ipv6.icmp.ratelimit = 100
+net.ipv4.icmp_msgs_per_sec = 1000
+net.ipv4.icmp_msgs_burst = 50
+== icmp6unreach1082
+udp [::1]:<unused> recv                      PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> poll                      PASS  0.000s  poll=1 revents=0x8 SO_ERROR=Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> second send()             PASS  0.200s  send 2 = -1 Connection refused
+udp [::]:53 recv (resolver default)          PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> 4000 B, quote <= 1280     PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 1240
+rate limit: 200 back-to-back to <unused>     INFO  sent 200 in 0.001s, 200 errors back
+PASS: 0 failure(s)
+rc=0
+== udprefused993
+udp 127.0.0.1:<unused> recv        PASS  0.000s  recv=-1 Connection refused
+udp 127.0.0.1:<unused> poll        PASS  0.000s  poll=1 revents=0x8 SO_ERROR=Connection refused
+udp ::1:<unused> recv              PASS  0.000s  recv=-1 Connection refused
+udp ::1:<unused> poll              PASS  0.000s  poll=1 revents=0x8 SO_ERROR=Connection refused
+udp 0.0.0.0:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+udp [::]:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+PASS: 6/6 refused
+rc=0
+== tcpdump -i lo (ICMPv6 errors only): first 6 lines, then counts
+0
+== resolver, no resolv.conf
+getaddrinfo(debeos-1082.invalid) = -3 (Temporary failure in name resolution)  0.000s
+getaddrinfo(example.com) = -3 (Temporary failure in name resolution)  0.000s
+restored
