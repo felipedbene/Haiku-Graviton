@@ -1,0 +1,24 @@
++ uname -a
+Haiku ip-10-128-10-254.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 arm64 Haiku
+403b205378f4165a80b60396bc77f750292d4adb7d67dd4f8e526925c46187fa  /boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/src/eth-haiku.c
++ D=/boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped
++ sha256sum /boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/src/eth-haiku.c
++ cd /tmp
++ gcc -Wall -o eth1019 eth1019.c -I/boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/include /boot/home/haikuports/net-analyzer/nmap/work-7.94/sources/nmap-7.94/libdnet-stripped/src/.libs/libdnet.a -lnetwork
++ ./eth1019 /dev/net/ena/0
+eth_get /dev/net/ena/0: 02:ff:c2:90:a2:cd
+eth_set: -1 (Operation not supported)
+eth_send 0x88b5 own-src: 60
+  captured 0x88b5 own-src: dst ff:ff:ff:ff:ff:ff src 02:ff:c2:90:a2:cd type 0x88b5 len 60
+eth_send 0x88b5 other-src: -1 Can't assign requested address
+  captured 0x88b5 other-src: nothing
+eth_send 0x88b5 own-src again (cached sender): 60
+  captured 0x88b5 own-src again (cached sender): dst ff:ff:ff:ff:ff:ff src 02:ff:c2:90:a2:cd type 0x88b5 len 60
+eth_send ARP request: -1 General system error
+  captured ARP request: nothing
++ ./eth1019 loop
+eth_open loop: No such device
++ ifconfig /dev/net/ena/0
++ head -2
+/dev/net/ena/0
+	Hardware type: Ethernet, Address: 02:ff:c2:90:a2:cd
