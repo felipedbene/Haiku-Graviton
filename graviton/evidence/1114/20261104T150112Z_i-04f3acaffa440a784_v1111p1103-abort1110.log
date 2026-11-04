@@ -1,0 +1,625 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: v1111p1103-abort1110
+# instance: i-04f3acaffa440a784   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm v1111+#1103: ext2abort1110.sh on seed1110b
+# start: 20261104T150112Z   end: 20261104T150151Z   rc: 0
+# script sha256: 4bf476a460a4382b903f8e24b6f0540368e2d95133dee1a69a15ff1ff69bbbdd
+# ---- script ----
+# | #!/bin/sh
+# | #
+# | # ext2abort1110.sh -- issue 1110: an aborted ext2 transaction must not leave stale group
+# | # descriptors behind for a later transaction to write out.
+# | #
+# | # The data volume is a second EBS volume with four file systems made by Linux mke2fs
+# | # (graviton/evidence/1110/*_seed.log): p1 "e1k" (ext2, 1 KiB blocks, 4 groups), p2 "x1k"
+# | # (ext4, 1 KiB blocks, flex_bg, 8 groups), p3 "x4k" (ext4, 4 KiB blocks, flex_bg, 4 groups)
+# | # and p4 "e4k" (ext2, 4 KiB blocks, one group: the control). p3 is made without uninit_bg:
+# | # with it, the first allocation in a BLOCK_UNINIT group overwrites that group's backup
+# | # superblock and the page writer panics (issue 1113), on either side of this fix.
+# | # On each: write until ENOSPC (the failed write aborts), mkdir (InitDirectory runs out of
+# | # space after the inode was allocated: abort), rm the fillers (writes the descriptor
+# | # blocks), unmount. Then mount again, which re-checks every group's free block count against
+# | # its bitmap, and make and remove a directory to show the volume is writable.
+# | # Expected after the fix: ENOSPC for dd and mkdir, the remount writable, and Linux
+# | # e2fsck -fn clean on all four.
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/3 ] && [ ! -e $d/4 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no 4-partition data disk"; exit 1; }
+# | n=0
+# | for l in e1k x1k x4k e4k; do
+# | 	mkdir -p /v$l && mount -t ext2 $DD/$n /v$l || { echo "mount $l failed"; exit 1; }
+# | 	n=$((n + 1))
+# | 	cd /v$l
+# | 	echo "=== $l"; df -k . | tail -1
+# | 	dd if=/dev/zero of=fill bs=65536 count=8000 2>&1 | tail -3; echo "dd fill rc=$?"
+# | 	ls -ls fill
+# | 	# A write that does not fit fails whole, so blocks can be left over: use them up
+# | 	# with one-block files until one fails.
+# | 	i=0
+# | 	while [ $i -lt 2000 ] && printf x > s$i 2>/dev/null; do i=$((i + 1)); done
+# | 	echo "one-block files: $i"; df -k . | tail -1
+# | 	mkdir d; echo "mkdir on full rc=$?"
+# | 	ls -ld d 2>&1
+# | 	mkdir d2; echo "mkdir again rc=$?"
+# | 	rm -f fill s*; echo "rm rc=$?"
+# | 	ls -la; df -k . | tail -1
+# | 	sync; cd /
+# | 	unmount /v$l; echo "unmount $l rc=$?"
+# | done
+# | sync
+# | # Remount: AllocationBlockGroup::Initialize() compares each group's descriptor with its
+# | # bitmap; a mismatch fails the mount or leaves it read-only.
+# | n=0
+# | for l in e1k x1k x4k e4k; do
+# | 	mount -t ext2 $DD/$n /v$l; echo "remount $l rc=$?"
+# | 	n=$((n + 1))
+# | 	mkdir /v$l/probe; echo "remount $l mkdir rc=$?"
+# | 	rmdir /v$l/probe; echo "remount $l rmdir rc=$?"
+# | 	unmount /v$l; echo "unmount $l rc=$?"
+# | done
+# | sync
+# | grep -E "ext2|Mismatch" /var/log/syslog | tail -40
+# ---- raw output ----
+Haiku ip-10-128-14-134.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 14:53:54 arm64 other Haiku
+c74348868114a1aa15e543641cc08c808b9385a0ea372422abb51ab03ae04542  /boot/system/kernel_arm64
+d2ac70853d6fc5bfc460803f3d9302154884f8ca0c804f7d546f9447c17f5a73  /boot/system/add-ons/kernel/file_systems/ext2
+=== e1k
+   Root Inode: 2
+472+0 records in
+471+0 records out
+30867456 bytes (31 MB, 29 MiB) copied, 2.63734 s, 11.7 MB/s
+dd fill rc=1
+30263 -rw-r--r-- 1 baron root 30867456 Nov  4 15:01 fill
+one-block files: 47
+   Root Inode: 2
+mkdir on full rc=1
+ls: cannot access 'd': No such file or directory
+mkdir again rc=1
+rm rc=0
+total 13
+drwxr-xr-x 3 baron root  1024 Nov  4 14:52 .
+drwxr-xr-x 1 baron root     0 Nov  4 15:01 ..
+drwx------ 2 baron root 12288 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount e1k rc=0
+=== x1k
+   Root Inode: 2
+940+0 records in
+939+0 records out
+61538304 bytes (62 MB, 59 MiB) copied, 3.78596 s, 16.3 MB/s
+dd fill rc=1
+60097 -rw-r--r-- 1 baron root 61538304 Nov  4 15:01 fill
+one-block files: 22
+   Root Inode: 2
+mkdir on full rc=1
+ls: cannot access 'd': No such file or directory
+mkdir again rc=1
+rm rc=0
+total 13
+drwxr-xr-x 3 baron root  1024 Nov  4 14:52 .
+drwxr-xr-x 1 baron root     0 Nov  4 15:01 ..
+drwx------ 2 baron root 12288 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount x1k rc=0
+=== x4k
+   Root Inode: 2
+5990+0 records in
+5989+0 records out
+392495104 bytes (392 MB, 374 MiB) copied, 16.722 s, 23.5 MB/s
+dd fill rc=1
+383300 -rw-r--r-- 1 baron root 392495104 Nov  4 15:01 fill
+one-block files: 8
+   Root Inode: 2
+mkdir on full rc=1
+ls: cannot access 'd': No such file or directory
+mkdir again rc=1
+rm rc=0
+total 20
+drwxr-xr-x 3 baron root  4096 Nov  4 14:52 .
+drwxr-xr-x 1 baron root     0 Nov  4 15:01 ..
+drwx------ 2 baron root 16384 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount x4k rc=0
+=== e4k
+   Root Inode: 2
+959+0 records in
+958+0 records out
+62783488 bytes (63 MB, 60 MiB) copied, 4.45154 s, 14.1 MB/s
+dd fill rc=1
+61376 -rw-r--r-- 1 baron root 62783488 Nov  4 15:01 fill
+one-block files: 3
+   Root Inode: 2
+mkdir on full rc=1
+ls: cannot access 'd': No such file or directory
+mkdir again rc=1
+rm rc=0
+total 20
+drwxr-xr-x 3 baron root  4096 Nov  4 14:52 .
+drwxr-xr-x 1 baron root     0 Nov  4 15:01 ..
+drwx------ 2 baron root 16384 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount e4k rc=0
+remount e1k rc=0
+remount e1k mkdir rc=0
+remount e1k rmdir rc=0
+unmount e1k rc=0
+remount x1k rc=0
+remount x1k mkdir rc=0
+remount x1k rmdir rc=0
+unmount x1k rc=0
+remount x4k rc=0
+remount x4k mkdir rc=0
+remount x4k rmdir rc=0
+unmount x4k rc=0
+remount e4k rc=0
+remount e4k mkdir rc=0
+remount e4k rmdir rc=0
+unmount e4k rc=0
+KERN:     disk system:       file_systems/ext2/v1
+KERN:     disk system:       file_systems/ext2/v1
+KERN:     disk system:       file_systems/ext2/v1
+KERN:     disk system:       file_systems/ext2/v1
+KERN: module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ee10, "ext2"
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDirectBlocks() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDirectBlocks() failed
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDirectBlocks() failed
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDirectBlocks() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDirectBlocks() failed
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDirectBlocks() failed
+KERN: [34mext2:[0m Inode::Create(): InitDirectory() failed
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/3 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/3 ']'
++ '[' '!' -e /dev/disk/nvme/1/4 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
++ n=0
++ for l in e1k x1k x4k e4k
++ mkdir -p /ve1k
++ mount -t ext2 /dev/disk/nvme/1/0 /ve1k
++ n=1
++ cd /ve1k
++ echo '=== e1k'
++ df -k .
++ tail -1
++ dd if=/dev/zero of=fill bs=65536 count=8000
++ tail -3
++ echo 'dd fill rc=1'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 2000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 2000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 2000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 2000 ']'
++ printf x
++ i=4
++ '[' 4 -lt 2000 ']'
++ printf x
++ i=5
++ '[' 5 -lt 2000 ']'
++ printf x
++ i=6
++ '[' 6 -lt 2000 ']'
++ printf x
++ i=7
++ '[' 7 -lt 2000 ']'
++ printf x
++ i=8
++ '[' 8 -lt 2000 ']'
++ printf x
++ i=9
++ '[' 9 -lt 2000 ']'
++ printf x
++ i=10
++ '[' 10 -lt 2000 ']'
++ printf x
++ i=11
++ '[' 11 -lt 2000 ']'
++ printf x
++ i=12
++ '[' 12 -lt 2000 ']'
++ printf x
++ i=13
++ '[' 13 -lt 2000 ']'
++ printf x
++ i=14
++ '[' 14 -lt 2000 ']'
++ printf x
++ i=15
++ '[' 15 -lt 2000 ']'
++ printf x
++ i=16
++ '[' 16 -lt 2000 ']'
++ printf x
++ i=17
++ '[' 17 -lt 2000 ']'
++ printf x
++ i=18
++ '[' 18 -lt 2000 ']'
++ printf x
++ i=19
++ '[' 19 -lt 2000 ']'
++ printf x
++ i=20
++ '[' 20 -lt 2000 ']'
++ printf x
++ i=21
++ '[' 21 -lt 2000 ']'
++ printf x
++ i=22
++ '[' 22 -lt 2000 ']'
++ printf x
++ i=23
++ '[' 23 -lt 2000 ']'
++ printf x
++ i=24
++ '[' 24 -lt 2000 ']'
++ printf x
++ i=25
++ '[' 25 -lt 2000 ']'
++ printf x
++ i=26
++ '[' 26 -lt 2000 ']'
++ printf x
++ i=27
++ '[' 27 -lt 2000 ']'
++ printf x
++ i=28
++ '[' 28 -lt 2000 ']'
++ printf x
++ i=29
++ '[' 29 -lt 2000 ']'
++ printf x
++ i=30
++ '[' 30 -lt 2000 ']'
++ printf x
++ i=31
++ '[' 31 -lt 2000 ']'
++ printf x
++ i=32
++ '[' 32 -lt 2000 ']'
++ printf x
++ i=33
++ '[' 33 -lt 2000 ']'
++ printf x
++ i=34
++ '[' 34 -lt 2000 ']'
++ printf x
++ i=35
++ '[' 35 -lt 2000 ']'
++ printf x
++ i=36
++ '[' 36 -lt 2000 ']'
++ printf x
++ i=37
++ '[' 37 -lt 2000 ']'
++ printf x
++ i=38
++ '[' 38 -lt 2000 ']'
++ printf x
++ i=39
++ '[' 39 -lt 2000 ']'
++ printf x
++ i=40
++ '[' 40 -lt 2000 ']'
++ printf x
++ i=41
++ '[' 41 -lt 2000 ']'
++ printf x
++ i=42
++ '[' 42 -lt 2000 ']'
++ printf x
++ i=43
++ '[' 43 -lt 2000 ']'
++ printf x
++ i=44
++ '[' 44 -lt 2000 ']'
++ printf x
++ i=45
++ '[' 45 -lt 2000 ']'
++ printf x
++ i=46
++ '[' 46 -lt 2000 ']'
++ printf x
++ i=47
++ '[' 47 -lt 2000 ']'
++ printf x
++ echo 'one-block files: 47'
++ df -k .
++ tail -1
++ mkdir d
+mkdir: cannot create directory 'd': No space left on device
++ echo 'mkdir on full rc=1'
++ ls -ld d
++ mkdir d2
+mkdir: cannot create directory 'd2': No space left on device
++ echo 'mkdir again rc=1'
++ rm -f fill s0 s1 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s2 s20 s21 s22 s23 s24 s25 s26 s27 s28 s29 s3 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s4 s40 s41 s42 s43 s44 s45 s46 s47 s5 s6 s7 s8 s9
++ echo 'rm rc=0'
++ ls -la
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /ve1k
++ echo 'unmount e1k rc=0'
++ for l in e1k x1k x4k e4k
++ mkdir -p /vx1k
++ mount -t ext2 /dev/disk/nvme/1/1 /vx1k
++ n=2
++ cd /vx1k
++ echo '=== x1k'
++ df -k .
++ tail -1
++ dd if=/dev/zero of=fill bs=65536 count=8000
++ tail -3
++ echo 'dd fill rc=1'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 2000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 2000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 2000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 2000 ']'
++ printf x
++ i=4
++ '[' 4 -lt 2000 ']'
++ printf x
++ i=5
++ '[' 5 -lt 2000 ']'
++ printf x
++ i=6
++ '[' 6 -lt 2000 ']'
++ printf x
++ i=7
++ '[' 7 -lt 2000 ']'
++ printf x
++ i=8
++ '[' 8 -lt 2000 ']'
++ printf x
++ i=9
++ '[' 9 -lt 2000 ']'
++ printf x
++ i=10
++ '[' 10 -lt 2000 ']'
++ printf x
++ i=11
++ '[' 11 -lt 2000 ']'
++ printf x
++ i=12
++ '[' 12 -lt 2000 ']'
++ printf x
++ i=13
++ '[' 13 -lt 2000 ']'
++ printf x
++ i=14
++ '[' 14 -lt 2000 ']'
++ printf x
++ i=15
++ '[' 15 -lt 2000 ']'
++ printf x
++ i=16
++ '[' 16 -lt 2000 ']'
++ printf x
++ i=17
++ '[' 17 -lt 2000 ']'
++ printf x
++ i=18
++ '[' 18 -lt 2000 ']'
++ printf x
++ i=19
++ '[' 19 -lt 2000 ']'
++ printf x
++ i=20
++ '[' 20 -lt 2000 ']'
++ printf x
++ i=21
++ '[' 21 -lt 2000 ']'
++ printf x
++ i=22
++ '[' 22 -lt 2000 ']'
++ printf x
++ echo 'one-block files: 22'
++ df -k .
++ tail -1
++ mkdir d
+mkdir: cannot create directory 'd': No space left on device
++ echo 'mkdir on full rc=1'
++ ls -ld d
++ mkdir d2
+mkdir: cannot create directory 'd2': No space left on device
++ echo 'mkdir again rc=1'
++ rm -f fill s0 s1 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s2 s20 s21 s22 s3 s4 s5 s6 s7 s8 s9
++ echo 'rm rc=0'
++ ls -la
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /vx1k
++ echo 'unmount x1k rc=0'
++ for l in e1k x1k x4k e4k
++ mkdir -p /vx4k
++ mount -t ext2 /dev/disk/nvme/1/2 /vx4k
++ n=3
++ cd /vx4k
++ echo '=== x4k'
++ df -k .
++ tail -1
++ dd if=/dev/zero of=fill bs=65536 count=8000
++ tail -3
++ echo 'dd fill rc=1'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 2000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 2000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 2000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 2000 ']'
++ printf x
++ i=4
++ '[' 4 -lt 2000 ']'
++ printf x
++ i=5
++ '[' 5 -lt 2000 ']'
++ printf x
++ i=6
++ '[' 6 -lt 2000 ']'
++ printf x
++ i=7
++ '[' 7 -lt 2000 ']'
++ printf x
++ i=8
++ '[' 8 -lt 2000 ']'
++ printf x
++ echo 'one-block files: 8'
++ df -k .
++ tail -1
++ mkdir d
+mkdir: cannot create directory 'd': No space left on device
++ echo 'mkdir on full rc=1'
++ ls -ld d
++ mkdir d2
+mkdir: cannot create directory 'd2': No space left on device
++ echo 'mkdir again rc=1'
++ rm -f fill s0 s1 s2 s3 s4 s5 s6 s7 s8
++ echo 'rm rc=0'
++ ls -la
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /vx4k
++ echo 'unmount x4k rc=0'
++ for l in e1k x1k x4k e4k
++ mkdir -p /ve4k
++ mount -t ext2 /dev/disk/nvme/1/3 /ve4k
++ n=4
++ cd /ve4k
++ echo '=== e4k'
++ tail -1
++ df -k .
++ dd if=/dev/zero of=fill bs=65536 count=8000
++ tail -3
++ echo 'dd fill rc=1'
++ ls -ls fill
++ i=0
++ '[' 0 -lt 2000 ']'
++ printf x
++ i=1
++ '[' 1 -lt 2000 ']'
++ printf x
++ i=2
++ '[' 2 -lt 2000 ']'
++ printf x
++ i=3
++ '[' 3 -lt 2000 ']'
++ printf x
++ echo 'one-block files: 3'
++ df -k .
++ tail -1
++ mkdir d
+mkdir: cannot create directory 'd': No space left on device
++ echo 'mkdir on full rc=1'
++ ls -ld d
++ mkdir d2
+mkdir: cannot create directory 'd2': No space left on device
++ echo 'mkdir again rc=1'
++ rm -f fill s0 s1 s2 s3
++ echo 'rm rc=0'
++ ls -la
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /ve4k
++ echo 'unmount e4k rc=0'
++ sync
++ n=0
++ for l in e1k x1k x4k e4k
++ mount -t ext2 /dev/disk/nvme/1/0 /ve1k
++ echo 'remount e1k rc=0'
++ n=1
++ mkdir /ve1k/probe
++ echo 'remount e1k mkdir rc=0'
++ rmdir /ve1k/probe
++ echo 'remount e1k rmdir rc=0'
++ unmount /ve1k
++ echo 'unmount e1k rc=0'
++ for l in e1k x1k x4k e4k
++ mount -t ext2 /dev/disk/nvme/1/1 /vx1k
++ echo 'remount x1k rc=0'
++ n=2
++ mkdir /vx1k/probe
++ echo 'remount x1k mkdir rc=0'
++ rmdir /vx1k/probe
++ echo 'remount x1k rmdir rc=0'
++ unmount /vx1k
++ echo 'unmount x1k rc=0'
++ for l in e1k x1k x4k e4k
++ mount -t ext2 /dev/disk/nvme/1/2 /vx4k
++ echo 'remount x4k rc=0'
++ n=3
++ mkdir /vx4k/probe
++ echo 'remount x4k mkdir rc=0'
++ rmdir /vx4k/probe
++ echo 'remount x4k rmdir rc=0'
++ unmount /vx4k
++ echo 'unmount x4k rc=0'
++ for l in e1k x1k x4k e4k
++ mount -t ext2 /dev/disk/nvme/1/3 /ve4k
++ echo 'remount e4k rc=0'
++ n=4
++ mkdir /ve4k/probe
++ echo 'remount e4k mkdir rc=0'
++ rmdir /ve4k/probe
++ echo 'remount e4k rmdir rc=0'
++ unmount /ve4k
++ echo 'unmount e4k rc=0'
++ sync
++ grep -E 'ext2|Mismatch' /var/log/syslog
++ tail -40

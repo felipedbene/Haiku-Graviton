@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-v1111p1103
+# instance: i-0349ec938137a125c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical haiku.hpkg with the #1086 kernel and ext2.v1111p1103
+# start: 20261104T145648Z   end: 20261104T145750Z   rc: 0
+# script sha256: 082f45b2695d80c8fdca8dae830ea6a1094bcac0a7173561712b6cbad0b0b500
+# ---- script ----
+# | # Repack arm "v1111p1103": canonical's haiku.hpkg with kernel_arm64.k1069 (#1086, fix/1069-arm64-physmap-area
+# | # e2ca7e9c68, so single-page I/O works on plain NVMe) and ext2.v1111p1103 (revision hrev59996); everything else stays
+# | # canonical's. Method of #898/#933/#1011/#1110. A fresh launch of an image of this box boots it.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O kernel_arm64.k1069 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/X/out/kernel_arm64.k1069?<PRESIGNED>'
+# | wget -q -O ext2.v1111p1103 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/X/out/ext2.v1111p1103?<PRESIGNED>'
+# | printf '%s\n' 'c74348868114a1aa15e543641cc08c808b9385a0ea372422abb51ab03ae04542  kernel_arm64.k1069' 'd2ac70853d6fc5bfc460803f3d9302154884f8ca0c804f7d546f9447c17f5a73  ext2.v1111p1103' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 $A/ext2
+# | cat kernel_arm64.k1069 > x/kernel_arm64
+# | cat ext2.v1111p1103 > $A/ext2
+# | sha256sum x/kernel_arm64 $A/ext2
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+kernel_arm64.k1069: OK
+ext2.v1111p1103: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  x/add-ons/kernel/file_systems/ext2
+c74348868114a1aa15e543641cc08c808b9385a0ea372422abb51ab03ae04542  x/kernel_arm64
+d2ac70853d6fc5bfc460803f3d9302154884f8ca0c804f7d546f9447c17f5a73  x/add-ons/kernel/file_systems/ext2
+----- Package Info ----------------
+header size:                     80
+heap size:                 20514987
+TOC size:                    324054
+package attributes size:       1100
+total size:                20515067
+-----------------------------------
+-rw-r--r-- 1 baron root 20515067 Nov  4 14:57 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+1dbd613ed376dc4d2cbb276f92514cc0518d3d1fb44257a5f71d2e3e93ccf116  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
