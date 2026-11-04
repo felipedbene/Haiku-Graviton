@@ -12,6 +12,7 @@
 #include <commpage_defs.h>
 #include <debug.h>
 #include <kernel.h>
+#include <ksignal.h>
 #include <KernelExport.h>
 #include <thread.h>
 #include <tls.h>
@@ -274,11 +275,47 @@ arch_setup_signal_frame(Thread *thread, struct sigaction *sa,
 }
 
 
+// The PSTATE bits a user context may carry back into SPSR_EL1: the condition
+// flags, and the two flags EL0 can set itself with MSR (DIT, SSBS), which every
+// other exception return already preserves. Everything else -- the mode and
+// execution state, DAIF, IL, SS, PAN/UAO, BTYPE -- is the kernel's to decide.
+#define USER_SPSR_BITS	(PSR_FLAGS | PSR_DIT | PSR_SSBS)
+
+
 int64
 arch_restore_signal_frame(struct signal_frame_data* signalFrameData)
 {
 	iframe_stack* iframes = &thread_get_current_thread()->arch_info.iframes;
 	iframe *frame = iframes->frames[iframes->index - 1];
+
+	// The context comes from the user stack, so it is untrusted. The EL0
+	// return path loads frame->spsr and frame->elr straight into SPSR_EL1 and
+	// ELR_EL1 before eret, so an unchecked M field would return into EL1 at an
+	// address of the caller's choosing. As with Linux's valid_user_regs(),
+	// the SPSR keeps only user-settable flags and is forced to EL0t/AArch64
+	// (Linux refuses a bad mode outright; forcing it is equally safe and
+	// cannot break a context that merely carries stale bits). A return
+	// address outside userland is refused with SIGSEGV, before anything in
+	// the frame is changed.
+	const uint64 elr = signalFrameData->context.uc_mcontext.elr;
+	if (!IS_USER_ADDRESS(elr)) {
+		Thread* thread = thread_get_current_thread();
+		dprintf("arch_restore_signal_frame(): thread %" B_PRId32 ": refusing "
+			"a return to %#" B_PRIx64 "\n", thread->id, elr);
+
+		// The caller already adopted the rejected context's restart flag.
+		// Left set, the syscall exit path would step ELR back onto the
+		// sigreturn svc, and a SIGSEGV handler that returns would replay the
+		// same rejected frame forever.
+		atomic_and(&thread->flags, ~THREAD_FLAGS_RESTART_SYSCALL);
+
+		Signal signal(SIGSEGV, SEGV_MAPERR, B_BAD_ADDRESS, thread->team->id);
+		signal.SetAddress((void*)elr);
+		send_fault_signal(signal, B_SEGMENT_VIOLATION);
+
+		// The frame is untouched, so this leaves x0 as it was on entry.
+		return frame->x[0];
+	}
 
 	thread_get_current_thread()->arch_info.old_x0
 		= signalFrameData->syscall_restart_return_value;
@@ -286,8 +323,9 @@ arch_restore_signal_frame(struct signal_frame_data* signalFrameData)
 	memcpy(frame->x, signalFrameData->context.uc_mcontext.x, sizeof(frame->x));
 	frame->fp = signalFrameData->context.uc_mcontext.x[29];
 	frame->lr = signalFrameData->context.uc_mcontext.lr;
-	frame->elr = signalFrameData->context.uc_mcontext.elr;
-	frame->spsr = signalFrameData->context.uc_mcontext.spsr;
+	frame->elr = elr;
+	frame->spsr = (signalFrameData->context.uc_mcontext.spsr & USER_SPSR_BITS)
+		| PSR_M_EL0t;
 	frame->sp = signalFrameData->context.uc_mcontext.sp;
 	memcpy(frame->fpu.regs, signalFrameData->context.uc_mcontext.fp_q,
 		sizeof(signalFrameData->context.uc_mcontext.fp_q));
