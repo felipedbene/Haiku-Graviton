@@ -1,0 +1,60 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 -> elided
+# evidence: trunk-node-signal
+# instance: i-07f057102b9d4a1d6   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm "trunk": Node v24.22.2 signal tests with Node's own runner (first attempt stopped on a missing gzip; this is the rerun after installing it)
+# start: 20261104T034450Z   end: 20261104T034537Z   rc: 0
+# script sha256: 5389a70eb03467910c6176836137b504debbff91efd45418c37e1eb9142562e3
+# ---- script ----
+# | # bf-O #1040 A/B run, part 2: Node v24.22.2 (the installed nodejs24) signal tests with
+# | # Node's own runner, stdin a pipe per #870; same invocation as the #876 runs.
+# | set -u
+# | uname -a; sha256sum /boot/system/kernel_arm64
+# | command -v gzip || pkgman install -y gzip 2>&1 | tail -1
+# | cd /boot/home/t1040 || exit 1
+# | if [ ! -d node-v24.22.2 ]; then
+# | 	wget -q https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz || exit 1
+# | 	echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz' | sha256sum -c || exit 1
+# | 	tar -xzf node-v24.22.2.tar.gz --exclude='node-v24.22.2/deps/v8' --exclude='node-v24.22.2/deps/openssl' --exclude='node-v24.22.2/deps/icu-small' || exit 1
+# | fi
+# | cd node-v24.22.2 || exit 1
+# | echo "node $(node --version)"
+# | T=$(cd test && ls -d parallel/test-signal-*.js parallel/test-process-kill-*.js parallel/test-child-process-kill*.js parallel/test-process-*signal*.js parallel/test-child-process-*signal*.js sequential/test-*signal*.js abort/test-signal-handler.js 2>/dev/null | sed 's/\.js$//' | sort -u | tr '\n' ' ')
+# | echo "tests: $T"
+# | s=$(date +%s)
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 4 -t 120 -p tap $T > /boot/home/t1040/tap-node.txt 2>&1
+# | rc=$?
+# | f=/boot/home/t1040/tap-node.txt
+# | echo "##### node signal tests: test.py rc=$rc wall=$(( $(date +%s) - s ))s plan $(grep -am1 '^1\.\.' $f) pass=$(grep -ac '^ok ' $f) fail=$(grep -ac '^not ok ' $f)"
+# | grep -aE "^(ok|not ok) " $f | sed -E 's/^(not ok|ok) [0-9]+ /\1 /' | sort -k2 | uniq
+# | echo "--- failure detail (first 40 lines each)"
+# | awk '/^not ok /{p=1; print; next} /^(ok|not ok) /{p=0} p' $f | head -120
+# | echo "--- kernel log: sigreturn refusals (expected none)"
+# | grep -a "arch_restore_signal_frame" /var/log/syslog | tail -5; echo "refusals: $(grep -ac arch_restore_signal_frame /var/log/syslog)"
+# ---- raw output ----
+Haiku ip-10-128-6-174.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 03:36:16 arm64 other Haiku
+40f416eabf9480bb072ed54654fe41fb102161b2bba37d45dca4a046fbea1e6e  /boot/system/kernel_arm64
+[system] Done.
+node-v24.22.2.tar.gz: OK
+node v24.22.2
+tests: abort/test-signal-handler parallel/test-child-process-fork-abort-signal parallel/test-child-process-fork-timeout-kill-signal parallel/test-child-process-kill parallel/test-child-process-kill-sigwinch parallel/test-child-process-kill-spawn-error parallel/test-child-process-spawn-timeout-kill-signal parallel/test-child-process-spawnsync-kill-signal parallel/test-process-kill-null parallel/test-process-kill-pid parallel/test-process-remove-all-signal-listeners parallel/test-signal-args parallel/test-signal-handler parallel/test-signal-handler-remove-on-exit parallel/test-signal-safety parallel/test-signal-unregister 
+##### node signal tests: test.py rc=0 wall=4s plan 1..16 pass=16 fail=0
+ok abort/test-signal-handler
+ok parallel/test-child-process-fork-abort-signal
+ok parallel/test-child-process-fork-timeout-kill-signal
+ok parallel/test-child-process-kill
+ok parallel/test-child-process-kill-sigwinch
+ok parallel/test-child-process-kill-spawn-error
+ok parallel/test-child-process-spawn-timeout-kill-signal
+ok parallel/test-child-process-spawnsync-kill-signal
+ok parallel/test-process-kill-null
+ok parallel/test-process-kill-pid
+ok parallel/test-process-remove-all-signal-listeners
+ok parallel/test-signal-args
+ok parallel/test-signal-handler
+ok parallel/test-signal-handler-remove-on-exit
+ok parallel/test-signal-safety
+ok parallel/test-signal-unregister
+--- failure detail (first 40 lines each)
+--- kernel log: sigreturn refusals (expected none)
+refusals: 0
+rc=0

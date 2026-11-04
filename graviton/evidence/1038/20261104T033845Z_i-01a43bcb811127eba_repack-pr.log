@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 -> elided
+# evidence: repack-pr
+# instance: i-01a43bcb811127eba   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical ami-00632cb3ccefc53dc haiku.hpkg with the pr kernel_arm64 (image then made from this box after a stop)
+# start: ~20261104T0338Z (not recorded; between SSM online and end)   end: 20261104T033931Z   rc: 0
+# script sha256: 2cad7dae1e64b4a038ca650df4f3dd94dd0198404a0e514ecf2c085ef2ff173f
+# ---- script ----
+# | # Repack arm "pr": canonical haiku.hpkg with the cross-built <revisioned>kernel_arm64 of
+# | # the pr ref (trunk a9954f424a / PR #1040 f91e9d9617), method of #898/#933/#1011.
+# | # Canonical is source-commit 79292bc67f, whose kernel and libroot sources are identical
+# | # to trunk a9954f424a (the 3 commits between them touch only ext2/ramfs), so only the
+# | # kernel is swapped; everything else stays canonical.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O kernel_arm64.pr 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/O/out/kernel_arm64.pr?<PRESIGNED>'
+# | echo "8d882e24d445b45331a47690c6342212f24f6a0a7bae9331b49d1dd2700af401  kernel_arm64.pr" > sums
+# | sha256sum -c sums
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P" /boot/system/kernel_arm64; mkdir x && package extract -C x "$P"
+# | sha256sum x/kernel_arm64
+# | cat kernel_arm64.pr > x/kernel_arm64
+# | sha256sum x/kernel_arm64
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+ssm-run: command 19d29464-1b7c-451f-8c98-386b1ce16243 on i-01a43bcb811127eba (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/O/ssm-out/run-89774-5d9ea8)
+[system] Done.
+kernel_arm64.pr: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+8d882e24d445b45331a47690c6342212f24f6a0a7bae9331b49d1dd2700af401  x/kernel_arm64
+----- Package Info ----------------
+header size:                     80
+heap size:                 20508890
+TOC size:                    324054
+package attributes size:       1100
+total size:                20508970
+-----------------------------------
+-rw-r--r-- 1 baron root 20508970 Nov  4 03:39 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+ab5323f81f276154782412ce0b2221cf7b6027ad53b6297f9e88d12e018832df  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+ssm-run: Success
+rc=0
