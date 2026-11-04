@@ -1,0 +1,88 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 894-build-hpkg
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T190031Z   end: 20261101T190106Z   rc: 1
+# script sha256: 7f7f54f70f6159f8b976b84387f30cc0e9d5c3c2854411d8067d8bb3377c28bc
+# ---- script ----
+# | set -e
+# | for c in tar gzip; do printf '%s: ' $c; command -v $c || echo none; done
+# | W=/boot/home/w894; rm -rf $W; mkdir -p $W/tree; cd $W
+# | /boot/system/bin/curl -fsS "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-894-work/src-63c2b1c415.tar.gz?<PRESIGNED>" -o src.tgz
+# | /boot/system/bin/curl -fsS "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-894-work/bin-63c2b1c415.tar.gz?<PRESIGNED>" -o bin.tgz
+# | sha256sum src.tgz bin.tgz
+# | tar -C tree -xzf src.tgz
+# | tar -xzf bin.tgz
+# | ls -la bin
+# | cd tree/graviton/go-arm64/ssm-agent/package
+# | grep ^version amazon_ssm_agent.PackageInfo
+# | BINDIR=$W/bin OUTDIR=$W STAGING=$W/stage sh build-hpkg.sh 2>&1 | grep -v -E '^\s+(bin|data)/' 
+# | cd $W
+# | H=amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+# | package info $H 2>/dev/null | head -20 || true
+# | package extract -C $W/x $H data/amazon_ssm_agent/source-manifest 2>/dev/null; sha256sum $W/x/data/amazon_ssm_agent/source-manifest || true
+# | /boot/system/bin/curl -fsS -X PUT -T $H "https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/ssm-agent-staging/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg?<PRESIGNED>" && echo PUT-HPKG-OK
+# ---- raw output ----
+tar: /boot/system/bin/tar
+gzip: /boot/system/bin/gzip
+18cba35bb575db84c1e5f5bff08ba4ad4967e4bfef3021bc5a686b46561a23eb  src.tgz
+68bc65518d5ea1373da91808b91c0eb75f4094e1f3ad320c40be3fa5a2f8d3ec  bin.tgz
+total 124052
+drwxr-xr-x 1 baron root     2048 Nov  1 18:58 .
+drwxr-xr-x 1 baron root     2048 Nov  1 19:00 ..
+-rw-r--r-- 1 baron root      973 Nov  1 18:57 SOURCE-MANIFEST
+-rwxr-xr-x 1 baron root 13373264 Nov  1 18:58 amazon-ssm-agent
+-rwxr-xr-x 1 baron root 21899216 Nov  1 18:58 ssm-agent-worker
+-rwxr-xr-x 1 baron root 18295920 Nov  1 18:58 ssm-cli
+-rwxr-xr-x 1 baron root 20318768 Nov  1 18:58 ssm-document-worker
+-rwxr-xr-x 1 baron root  9480656 Nov  1 18:58 ssm-session-logger
+-rwxr-xr-x 1 baron root 16562928 Nov  1 18:58 ssm-session-worker
+-rwxr-xr-x 1 baron root 10669264 Nov  1 18:58 ssm-setup-cli
+-rwxr-xr-x 1 baron root 16388144 Nov  1 18:58 updater
+version			3.3.3270.0-4
+== assembling packagefs layout in /boot/home/w894/stage ==
+source digest: sha256:c2516c23c3bfe7948937642c3b4628619b7e7306ae9eb022ff70d6141eb514e2
+== package create (-z zlib) ==
+----- Package Info ----------------
+header size:                     80
+heap size:                 36856410
+TOC size:                       721
+package attributes size:       1026
+total size:                36856490
+-----------------------------------
+== result ==
+-rw-r--r-- 1 baron root 36856490 Nov  1 19:00 /boot/home/w894/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+package-attributes:
+	name: amazon_ssm_agent
+	summary: AWS Systems Manager Agent (amazon-ssm-agent) for DeBeOS on Graviton
+	description: The real upstream AWS Systems Manager agent (github.com/aws/amazon-ssm-agent, tag v3.3.3270.0, Apache-2.0), cross-compiled for DeBeOS (Haiku) arm64 with the korli/go gc-Go fork plus the DeBeOS haiku/arm64 toolchain patchset. Registers the instance as an EC2-native SSM managed node (i- node) using the instance role over IMDS -- no hybrid activation code -- and executes Run Command and Session Manager. The bundled launch_daemon job starts the agent EC2-native on every boot with a PATH that lets ssm-document-worker resolve the shell. Replaces the interim debeos-ssm-agent as the fleet SSM agent. DeBeOS-Source-Digest: sha256:c2516c23c3bfe7948937642c3b4628619b7e7306ae9eb022ff70d6141eb514e2
+	vendor: DeBeOS
+	packager: DeBeOS <debeos@debene.dev>
+	architecture: arm64
+	version: 3.3.3270.0-4
+	copyright: Amazon.com, Inc. or its affiliates
+	license: Apache-2.0
+	URL: https://github.com/aws/amazon-ssm-agent
+	provides: amazon_ssm_agent = 3.3.3270.0
+	provides: cmd:amazon_ssm_agent = 3.3.3270.0
+	provides: cmd:ssm_cli = 3.3.3270.0
+	requires: haiku
+bin                                      0  2026-11-01 19:00:41  drwxr-xr-x
+  amazon-ssm-agent                13373264  2026-11-01 19:00:41  -r-xr-xr-x
+  ssm-agent-worker                21899216  2026-11-01 19:00:41  -r-xr-xr-x
+  ssm-cli                         18295920  2026-11-01 19:00:41  -r-xr-xr-x
+  ssm-document-worker             20318768  2026-11-01 19:00:41  -r-xr-xr-x
+  ssm-session-logger               9480656  2026-11-01 19:00:41  -r-xr-xr-x
+  ssm-session-worker              16562928  2026-11-01 19:00:41  -r-xr-xr-x
+  ssm-setup-cli                   10669264  2026-11-01 19:00:41  -r-xr-xr-x
+  updater                         16388144  2026-11-01 19:00:41  -r-xr-xr-x
+data                                     0  2026-11-01 19:00:41  drwxr-xr-x
+  amazon_ssm_agent                       0  2026-11-01 19:00:41  drwxr-xr-x
+    source-manifest                    973  2026-11-01 19:00:41  -rw-r--r--
+  launch                                 0  2026-11-01 19:00:41  drwxr-xr-x
+    amazon_ssm_agent                  1923  2026-11-01 19:00:41  -rw-r--r--
+  licenses                               0  2026-11-01 19:00:41  drwxr-xr-x
+    Apache-2.0                       11358  2026-11-01 19:00:41  -rw-r--r--
+.PackageInfo                          1169  2026-11-01 19:00:41  -rw-r--r--
+sha256:
+4f4182753b817f311dfff89b085b3796ba59d288d6d4953d38abfb54d180246c  /boot/home/w894/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+name: amazon_ssm_agent  version: 3.3.3270.0-4

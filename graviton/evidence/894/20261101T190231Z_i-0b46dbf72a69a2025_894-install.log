@@ -1,0 +1,22 @@
+# evidence: 894-install
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T190231Z   end: 20261101T190306Z   rc: 0
+# script sha256: 6790c83d59e7b092ccb45e6f8c8b17fdfef9865e245af64b5bd2c0ab8827ea19
+# ---- script ----
+# | pkgman install -y /boot/home/w894/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg 2>&1 | tail -3
+# | ls /boot/system/packages | grep ssm
+# | launch_roster stop x-vnd.debeos-amazon-ssm-agent; sleep 3; launch_roster start x-vnd.debeos-amazon-ssm-agent; sleep 20
+# | launch_roster info x-vnd.debeos-amazon-ssm-agent 2>&1 | head -5
+# | ps | grep -E "ssm-agent|amazon-ssm" | grep -v grep
+# ---- raw output ----
+[system] Changes applied. Old activation state backed up in "state_2026-11-01_19:00:05"
+[system] Cleaning up ...
+[system] Done.
+amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+                         Name  Type     State    Enabled
+--------------------------------------------------------
+[;1mx-vnd.debeos-amazon-ssm-agent[0m  service  [32;1mrunning[0m  yes    
+
+Details: BMessage(0x0) {
+/boot/system/bin/amazon-ssm-agent                    933       12    0    0 
+/boot/system/bin/ssm-agent-worker                    946       15    0    0 

@@ -1,0 +1,59 @@
+# evidence: 894-probe2
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T185451Z   end: 20261101T185513Z   rc: 0
+# script sha256: 1f60a8264e1148a060123fee2d2a4be24d20e11e9d52082ff4634c0678ca77f3
+# ---- script ----
+# | for c in curl wget package sha256sum pkgman python3 git; do printf '%s: ' $c; command -v $c || echo none; done
+# | ls /boot/system/bin | grep -i -E "curl|wget|http" ; ls /boot/system/packages | head -50; df -k /boot
+# ---- raw output ----
+curl: none
+wget: none
+package: /boot/system/bin/package
+sha256sum: /boot/system/bin/sha256sum
+pkgman: /boot/system/bin/pkgman
+python3: none
+git: none
+administrative
+amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg
+bash-5.3_bootstrap-1-arm64.hpkg
+ca_root_certificates-2026_07_16-1-any.hpkg
+coreutils-9.9_bootstrap-1-arm64.hpkg
+debeos_cloudwatch-0.1.0-1-arm64.hpkg
+findutils-4.9.0_bootstrap-1-arm64.hpkg
+freetype-2.6.3_bootstrap-1-arm64.hpkg
+gawk-3.1.8_bootstrap-2-arm64.hpkg
+gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+grep-3.11_bootstrap-1-arm64.hpkg
+haiku-r1~beta6_hrev59996-1-arm64.hpkg
+haiku_datatranslators-r1~beta6_hrev59996-1-arm64.hpkg
+haiku_loader-r1~beta6_hrev59996-1-arm64.hpkg
+icu74-74.1_bootstrap-1-arm64.hpkg
+jasper-2.0.33-2-arm64.hpkg
+less-668_bootstrap-1-arm64.hpkg
+libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+libpng16-1.6.53-1-arm64.hpkg
+ncurses6-6.6-1-arm64.hpkg
+noto-20170202_bootstrap-7-any.hpkg
+openssh-10.4p1-1-arm64.hpkg
+openssl3-3.5.9-2-arm64.hpkg
+openssl3_man-3.5.9-2-any.hpkg
+sed-4.9_bootstrap-1-arm64.hpkg
+tiff-4.7.0-1-arm64.hpkg
+zlib-1.3.2-1-arm64.hpkg
+zstd-1.5.7-1-arm64.hpkg
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:   40.0 GiB (20953079 blocks)
+  Used Blocks:   10.1 GiB (5305846 blocks)
+  Free Blocks:   29.8 GiB (15647233 blocks)
+      Usage %:   25.3 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288

@@ -1,0 +1,14 @@
+# evidence: 894-tar
+# instance: i-0b46dbf72a69a2025   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T185956Z   end: 20261101T190018Z   rc: 0
+# script sha256: 6cee408e6185468284397de9b7da5bb24a49c90803cb0a31c8b5ca595faced0e
+# ---- script ----
+# | pkgman install -y tar gzip 2>&1 | tail -4
+# | command -v tar gzip
+# ---- raw output ----
+[system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-01_18:55:37-1"
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/tar
+/boot/system/bin/gzip
