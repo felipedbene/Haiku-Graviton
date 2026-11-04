@@ -1,0 +1,175 @@
+start build 20261104T035429Z
+=== release builds (DEBUG off) ===
+a9954f424a evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+[rel-trunk] jam dialup rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/devices/dialup/dialup.cpp:377:69: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'flags'
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup/dialup.o ...
+    ...failed updating 1 target(s)...
+[rel-trunk] jam ppp rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/ppp/ppp/ppp.cpp:205:16: error: unused variable 'net_buffer_size' [-Werror=unused-variable]
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp.o ...
+    ...failed updating 1 target(s)...
+[rel-trunk] jam ppp_manager rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/ppp_manager
+357a040045dcd54b57e4d292f610c194eba5334d9691c0d410d0ae9bdc941f3f  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/ppp_manager
+[rel-trunk] jam ppp_frame rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_frame/ppp_frame
+fa01d7622e61f5bc06177af0aa04ba6a7e600313eee72d349aada6044bd80a1b  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_frame/ppp_frame
+[rel-trunk] jam ipcp rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ipcp/ipcp
+b0dfd6cfa406c678f20340de4ea0064bbc316a43fdd98256916fa6a0a22175b1  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ipcp/ipcp
+[rel-trunk] jam pap rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/pap/pap
+95b91478318da9ed46cf7bade9bff657f16edc3189c4684b0f794f3e8bb28fb0  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/pap/pap
+[rel-trunk] jam pppoe rc=1 errors=5 out=none
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+    ...failed updating 2 target(s)...
+[rel-trunk] jam modem rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/modem/modem
+445bef3d9a35fb8a7746f42c6c4c106a3b135a98cd585d6e62e45acabae73496  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/modem/modem
+88bd67c0f1 ppp: drop the unused net_buffer_size in ppp_send_data()
+[rel-1053] jam dialup rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/devices/dialup/dialup.cpp:377:69: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'flags'
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup/dialup.o ...
+    ...failed updating 1 target(s)...
+[rel-1053] jam ppp rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp
+79ca427c05cca9f9f25728972b08b7c9d88967cf213a0f7f531568b40917e05c  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp
+[rel-1053] jam ppp_manager rc=0 errors=0 out=none
+[rel-1053] jam ppp_frame rc=0 errors=0 out=none
+[rel-1053] jam ipcp rc=0 errors=0 out=none
+[rel-1053] jam pap rc=0 errors=0 out=none
+[rel-1053] jam pppoe rc=1 errors=5 out=none
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+    ...failed updating 2 target(s)...
+[rel-1053] jam modem rc=0 errors=0 out=none
+4baaae5db6 pppoe: fix the build, include arpa/inet.h and drop a dead loop
+[rel-1054] jam dialup rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/devices/dialup/dialup.cpp:377:69: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'flags'
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup/dialup.o ...
+    ...failed updating 1 target(s)...
+[rel-1054] jam ppp rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/ppp/ppp/ppp.cpp:205:16: error: unused variable 'net_buffer_size' [-Werror=unused-variable]
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp.o ...
+    ...failed updating 1 target(s)...
+[rel-1054] jam ppp_manager rc=0 errors=0 out=none
+[rel-1054] jam ppp_frame rc=0 errors=0 out=none
+[rel-1054] jam ipcp rc=0 errors=0 out=none
+[rel-1054] jam pap rc=0 errors=0 out=none
+[rel-1054] jam pppoe rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/pppoe
+df9a118c23ea477740625f9bfda62eb1724a0dca88c1c1cdb06c54f361482261  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/pppoe
+[rel-1054] jam modem rc=0 errors=0 out=none
+2550c4a7dc ppp: port the DEBUG dump_packet helpers to the net_buffer API
+[rel-1055] jam dialup rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/devices/dialup/dialup.cpp:377:69: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'flags'
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup/dialup.o ...
+    ...failed updating 1 target(s)...
+[rel-1055] jam ppp rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/ppp/ppp/ppp.cpp:205:16: error: unused variable 'net_buffer_size' [-Werror=unused-variable]
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp.o ...
+    ...failed updating 1 target(s)...
+[rel-1055] jam ppp_manager rc=0 errors=0 out=none
+[rel-1055] jam ppp_frame rc=0 errors=0 out=none
+[rel-1055] jam ipcp rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ipcp/ipcp
+b0dfd6cfa406c678f20340de4ea0064bbc316a43fdd98256916fa6a0a22175b1  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/ipcp/ipcp
+[rel-1055] jam pap rc=0 errors=0 out=none
+[rel-1055] jam pppoe rc=1 errors=5 out=none
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+    ...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+    ...failed updating 2 target(s)...
+[rel-1055] jam modem rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/modem/modem
+445bef3d9a35fb8a7746f42c6c4c106a3b135a98cd585d6e62e45acabae73496  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/network/ppp/modem/modem
+=== DEBUG=1 builds of modem/ipcp/pppoe ===
+a9954f424a evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+[dbg-trunk] jam modem rc=1 errors=9 out=none
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:28:41: error: expected primary-expression before '*' token
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:28:42: error: expected primary-expression before ')' token
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:28:23: error: 'mtod' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:32:65: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:33:25: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_flags'; did you mean 'msg_flags'?
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:33:35: error: 'M_PKTHDR' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:33:54: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_pkthdr'
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:35:48: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/modem/ModemDevice.cpp:38:59: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/modem/ModemDevice.o ...
+    ...failed updating 1 target(s)...
+[dbg-trunk] jam ipcp rc=1 errors=10 out=none
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:52:41: error: expected primary-expression before '*' token
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:52:42: error: expected primary-expression before ')' token
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:52:23: error: 'mtod' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:57:25: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:57:40: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_flags'; did you mean 'msg_flags'?
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:57:50: error: 'M_PKTHDR' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:57:69: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_pkthdr'
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:60:48: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:63:59: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:137:15: error: format '%ld' expects argument of type 'long int', but argument 2 has type 'uint32' {aka 'unsigned int'} [-Werror=format=]
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/ipcp/Protocol.o ...
+    ...failed updating 1 target(s)...
+[dbg-trunk] jam pppoe rc=1 errors=19 out=none
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:35:9: error: 'BufferHeaderReader' was not declared in this scope; did you mean 'NetBufferHeaderReader'?
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:35:33: error: expected primary-expression before '>' token
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:35:35: error: 'bufferheader' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:40:15: error: conflicting declaration 'uint8 buffer [33]'
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:43:65: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:44:25: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_flags'; did you mean 'msg_flags'?
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:44:35: error: 'M_PKTHDR' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:44:54: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_pkthdr'
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:46:48: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:47:23: error: invalid types 'uint8 {aka unsigned char}[uint8 {aka unsigned char}]' for array subscript
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:48:23: error: invalid types 'uint8 {aka unsigned char}[uint8 {aka unsigned char}]' for array subscript
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:49:59: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'm_len'
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:50:31: error: invalid types 'uint8 {aka unsigned char}[uint8 {aka unsigned char}]' for array subscript
+    ../src/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.cpp:51:31: error: format '%s' expects argument of type 'char*', but argument 2 has type 'int' [-Werror=format=]
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/PPPoEDevice.o ...
+    ...failed updating 3 target(s)...
+2550c4a7dc ppp: port the DEBUG dump_packet helpers to the net_buffer API
+[dbg-1055] jam modem rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/modem/modem
+ab9a1645ac4c3721503497e17d602e11d1b18852456ffc403917cd082b283d87  /opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/modem/modem
+[dbg-1055] jam ipcp rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:138:15: error: format '%ld' expects argument of type 'long int', but argument 2 has type 'uint32' {aka 'unsigned int'} [-Werror=format=]
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/ipcp/Protocol.o ...
+    ...failed updating 1 target(s)...
+[dbg-1055] jam pppoe rc=1 errors=5 out=none
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:33:25: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:161:55: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.cpp:169:26: error: 'htons' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:201:33: error: 'ntohs' was not declared in this scope
+    ../src/add-ons/kernel/network/ppp/pppoe/pppoe.cpp:313:76: error: the address of 'net_device::name' will never be NULL [-Werror=address]
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/DiscoveryPacket.o ...
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe.o ...
+    ...failed updating 2 target(s)...
+574a9f60ed Merge commit '4baaae5db6fd6d5368bd9e2f4de5c455db146cda' into combo
+[dbg-combo1054+1055] jam modem rc=0 errors=0 out=none
+[dbg-combo1054+1055] jam ipcp rc=1 errors=1 out=none
+    ../src/add-ons/kernel/network/ppp/ipcp/Protocol.cpp:138:15: error: format '%ld' expects argument of type 'long int', but argument 2 has type 'uint32' {aka 'unsigned int'} [-Werror=format=]
+    ...failed C++ objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/ipcp/Protocol.o ...
+    ...failed updating 1 target(s)...
+[dbg-combo1054+1055] jam pppoe rc=0 errors=0 out=/opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe
+902046989651212b51e16d2992362e03b94dd2d2ba29c09a898213eff25b0728  /opt/src/haiku/generated.arm64/objects/haiku/arm64/debug_1/add-ons/kernel/network/ppp/pppoe/pppoe
+--- DEBUG objects: -DDEBUG=1 present on the compile lines ---
+jam-dbg-1055-ipcp.log
+jam-dbg-1055-pppoe.log
+jam-dbg-combo1054+1055-ipcp.log
+jam-dbg-trunk-ipcp.log
+jam-dbg-trunk-modem.log
+jam-dbg-trunk-pppoe.log
+end build 20261104T035757Z

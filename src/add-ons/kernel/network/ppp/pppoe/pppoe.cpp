@@ -14,6 +14,7 @@
 #include <net/if_dl.h>
 #include <net/if.h>
 #include <sys/sockio.h>
+#include <arpa/inet.h>
 
 #include <net_buffer.h>
 #include <net_datalink.h> // for get_interface and control
@@ -304,25 +305,10 @@ status_t
 control(uint32 op, void *data, size_t length)
 {
 	switch (op) {
-		case PPPoE_GET_INTERFACES: {
-			int32 position = 0, count = 0;
-			char *names = (char*) data;
-
-			net_device *current = NULL; // get_interfaces();
-			for (; current; current = NULL) {
-				if (current->type == IFT_ETHER && current->name) {
-					if (position + strlen(current->name) + 1 > length)
-						return B_NO_MEMORY;
-
-					strcpy(names + position, current->name);
-					position += strlen(current->name);
-					names[position++] = 0;
-					++count;
-				}
-			}
-
-			return count;
-		}
+		case PPPoE_GET_INTERFACES:
+			// XXX: Ethernet interface enumeration was never ported to the
+			// net stack (there is no get_interfaces()), so report none.
+			return 0;
 
 		case PPPoE_QUERY_SERVICES: {
 			// XXX: as all modules are loaded on-demand we must wait for the results

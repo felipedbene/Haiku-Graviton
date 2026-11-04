@@ -6,6 +6,7 @@
 #include <ByteOrder.h>
 #include <NetBufferUtilities.h>
 #include <net_buffer.h>
+#include <arpa/inet.h>
 
 #include "DiscoveryPacket.h"
 

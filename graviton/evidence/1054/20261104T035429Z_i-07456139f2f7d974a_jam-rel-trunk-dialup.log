@@ -1,0 +1,1351 @@
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type regular ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+AddHaikuImagePackages: package bzip2 not available! 
+AddHaikuImagePackages: package ffmpeg6 not available! 
+AddHaikuImagePackages: package glu not available! 
+AddHaikuImagePackages: package gutenprint9 not available! 
+AddHaikuImagePackages: package lame not available! 
+AddHaikuImagePackages: package mesa not available! 
+AddHaikuImagePackages: package mesa_devel not available! 
+AddHaikuImagePackages: package mesa_swpipe not available! 
+AddHaikuImagePackages: package netcat not available! 
+AddHaikuImagePackages: package sharutils not available! 
+AddHaikuImagePackages: package unzip not available! 
+AddHaikuImagePackages: package which not available! 
+AddHaikuImagePackages: package zip not available! 
+AddHaikuImagePackages: package diffutils not available! 
+AddHaikuImagePackages: package gzip not available! 
+AddHaikuImagePackages: package tar not available! 
+AddHaikuImagePackages: package tcpdump not available! 
+...patience...
+...found 6651 target(s)...
+...updating 861 target(s)...
+MkDir1 objects 
+MkDir1 build_packages 
+MkDir1 /opt/src/haiku/generated.arm64/objects 
+MkDir1 objects/haiku 
+MkDir1 objects/linux 
+MkDir1 objects/common 
+MkDir1 /opt/src/haiku/generated.arm64/objects/linux 
+MkDir1 objects/haiku/arm64 
+MkDir1 objects/linux/arm64 
+MkDir1 objects/common/data 
+MkDir1 /opt/src/haiku/generated.arm64/objects/linux/lib 
+MkDir1 objects/haiku/arm64/release 
+MkDir1 objects/haiku/arm64/packaging 
+MkDir1 objects/haiku/arm64/common 
+MkDir1 objects/linux/arm64/release 
+MkDir1 objects/linux/arm64/common 
+MkDir1 objects/common/data/mime_db 
+MkDir1 objects/haiku/arm64/release/system 
+MkDir1 objects/haiku/arm64/release/add-ons 
+MkDir1 objects/haiku/arm64/packaging/repositories 
+MkDir1 objects/haiku/arm64/common/data 
+MkDir1 objects/haiku/arm64/common/system 
+MkDir1 objects/haiku/arm64/common/tools 
+MkDir1 objects/linux/arm64/release/build 
+MkDir1 objects/linux/arm64/release/tools 
+MkDir1 objects/linux/arm64/common/tools 
+MkDir1 objects/common/data/mime_db/text 
+MkDir1 objects/common/data/mime_db/multipart 
+MkDir1 objects/common/data/mime_db/image 
+MkDir1 objects/common/data/mime_db/message 
+MkDir1 objects/common/data/mime_db/video 
+MkDir1 objects/common/data/mime_db/application 
+MkDir1 objects/common/data/mime_db/audio 
+MkDir1 objects/haiku/arm64/release/system/glue 
+MkDir1 objects/haiku/arm64/release/system/kernel 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel 
+ChecksumFileSHA256 objects/haiku/arm64/packaging/repositories/HaikuPorts-checksum 
+MkDir1 objects/haiku/arm64/common/data/mime_db 
+MkDir1 objects/haiku/arm64/common/system/kernel 
+MkDir1 objects/haiku/arm64/common/tools/gensyscalls 
+MkDir1 objects/linux/arm64/release/build/libroot 
+MkDir1 objects/linux/arm64/release/build/libpackage 
+MkDir1 objects/linux/arm64/release/build/libshared 
+MkDir1 objects/linux/arm64/release/build/libbe 
+MkDir1 objects/linux/arm64/release/tools/package 
+C++ objects/linux/arm64/release/tools/settype.o 
+C++ objects/linux/arm64/release/tools/mimeset.o 
+MkDir1 objects/linux/arm64/release/tools/resattr 
+MkDir1 objects/linux/arm64/release/tools/rc 
+C++ objects/linux/arm64/release/tools/setversion.o 
+C++ objects/linux/arm64/release/tools/rm_attrs.o 
+MkDir1 objects/linux/arm64/release/tools/gensyscalls 
+C++ objects/linux/arm64/release/tools/xres.o 
+MkDir1 objects/linux/arm64/common/tools/rc 
+MkDir1 objects/haiku/arm64/release/system/kernel/cache 
+MkDir1 objects/haiku/arm64/release/system/kernel/debug 
+MkDir1 objects/haiku/arm64/release/system/kernel/device_manager 
+MkDir1 objects/haiku/arm64/release/system/kernel/disk_device_manager 
+MkDir1 objects/haiku/arm64/release/system/kernel/fs 
+MkDir1 objects/haiku/arm64/release/system/kernel/messaging 
+MkDir1 objects/haiku/arm64/release/system/kernel/posix 
+MkDir1 objects/haiku/arm64/release/system/kernel/slab 
+MkDir1 objects/haiku/arm64/release/system/kernel/util 
+MkDir1 objects/haiku/arm64/release/system/kernel/vm 
+MkDir1 objects/haiku/arm64/release/system/kernel/arch 
+MkDir1 objects/haiku/arm64/release/system/kernel/platform 
+MkDir1 objects/haiku/arm64/release/system/kernel/lib 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network 
+DownloadLocatedFile1 download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg 
+C++ objects/linux/arm64/release/build/libroot/function_remapper.o 
+C++ objects/linux/arm64/release/build/libroot/atomic.o 
+C++ objects/linux/arm64/release/build/libroot/byteorder.o 
+C++ objects/linux/arm64/release/build/libroot/errors.o 
+C++ objects/linux/arm64/release/build/libpackage/ActivationTransaction.o 
+C++ objects/linux/arm64/release/build/libshared/Keymap.o 
+MkDir1 objects/linux/arm64/release/build/libbe/app 
+C++ objects/linux/arm64/release/tools/package/command_add.o 
+C++ objects/linux/arm64/release/tools/resattr/resattr.o 
+C++ objects/linux/arm64/release/tools/rc/rc.o 
+MkDir1 objects/linux/arm64/release/tools/gensyscalls/arm64 
+Yacc1 objects/linux/arm64/common/tools/rc/parser.cpp objects/linux/arm64/common/tools/rc/parser.hpp 
+C++ objects/linux/arm64/release/tools/rc/decompile.o 
+C++ objects/linux/arm64/release/tools/rc/rdef.o 
+C++ objects/linux/arm64/release/tools/package/command_checksum.o 
+C++ objects/linux/arm64/release/tools/package/command_create.o 
+C++ objects/linux/arm64/release/tools/package/command_dump.o 
+C++ objects/linux/arm64/release/tools/package/command_extract.o 
+C++ objects/linux/arm64/release/tools/package/command_info.o 
+C++ objects/linux/arm64/release/tools/package/command_list.o 
+--2026-11-04 03:54:34--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+C++ objects/linux/arm64/release/tools/package/command_recompress.o 
+C++ objects/linux/arm64/release/tools/package/package.o 
+MkDir1 objects/haiku/arm64/release/system/kernel/arch/arm64 
+MkDir1 objects/haiku/arm64/release/system/kernel/platform/efi 
+MkDir1 objects/haiku/arm64/release/system/kernel/lib/arch 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/devices 
+C++ objects/linux/arm64/release/build/libbe/app/Application.o 
+C++ objects/linux/arm64/release/tools/gensyscalls/arm64/gensyscalls.o 
+C++ objects/linux/arm64/release/tools/gensyscalls/arm64/gensyscallinfos.o 
+...on 100th target...
+C++ objects/linux/arm64/release/build/libbe/app/AppMisc.o 
+MkDir1 objects/haiku/arm64/release/system/kernel/lib/arch/arm64 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup 
+C++ objects/linux/arm64/release/build/libbe/app/Looper.o 
+C++ objects/linux/arm64/release/build/libbe/app/Message.o 
+Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/app/MessageAdapter.o 
+C++ objects/linux/arm64/release/build/libbe/app/Messenger.o 
+C++ objects/linux/arm64/release/build/libbe/app/MessageUtils.o 
+C++ objects/linux/arm64/release/build/libbe/app/TypeConstants.o 
+C++ objects/linux/arm64/release/tools/package/PackageWriterListener.o 
+Archive objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a 
+ar: creating objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a
+C++ objects/linux/arm64/release/tools/rc/compile.o 
+Ranlib objects/linux/arm64/release/build/libroot/libroot_build_function_remapper.a 
+C++ objects/linux/arm64/release/tools/rc/parser.o 
+Lex objects/linux/arm64/common/tools/rc/lexer.cpp 
+C++ objects/linux/arm64/release/tools/package/PackageWritingUtils.o 
+MkDir1 objects/linux/arm64/release/build/libbe/icon 
+C++ objects/linux/arm64/release/tools/rc/lexer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/FlatIconFormat.o 
+C++ objects/linux/arm64/release/build/libbe/icon/FlatIconImporter.o 
+C++ objects/linux/arm64/release/build/libbe/icon/LittleEndianBuffer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathCommandQueue.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Defines.o 
+C++ objects/linux/arm64/release/build/libbe/icon/MessageImporter.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathSourceShape.o 
+206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... C++ objects/linux/arm64/release/build/libbe/icon/ReferenceImage.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Shape.o 
+C++ objects/linux/arm64/release/build/libbe/icon/VectorPath.o 
+C++ objects/linux/arm64/release/build/libbe/icon/GradientTransformable.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Style.o 
+C++ objects/linux/arm64/release/build/libbe/icon/Transformable.o 
+C++ objects/linux/arm64/release/build/libbe/icon/AffineTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/CompoundStyleTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/ContourTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PathSource.o 
+C++ objects/linux/arm64/release/build/libbe/icon/PerspectiveTransformer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/StrokeTransformer.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::Rename(const char*, const char*)’:
+../src/build/libbe/app/Message.cpp:652:28: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  652 |         int32 *nextField = &fHeader->hash_table[hash];
+      |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:665:37: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  665 |                         nextField = &fHeader->hash_table[hash];
+      |                                     ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:667:45: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  667 |                                 nextField = &fFields[*nextField].next_field;
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:681:29: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  681 |                 nextField = &field->next_field;
+      |                             ^~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::_AddField(const char*, type_code, bool, field_header**)’:
+../src/build/libbe/app/Message.cpp:1292:28: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1292 |         int32 *nextField = &fHeader->hash_table[hash];
+      |                            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1294:29: warning: taking address of packed member of ‘BMessage::field_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1294 |                 nextField = &fFields[*nextField].next_field;
+      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::_RemoveField(field_header*)’:
+../src/build/libbe/app/Message.cpp:1333:33: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1333 |         int32 *value = fHeader->hash_table;
+      |                        ~~~~~~~~~^~~~~~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindPoint(const char*, BPoint*) const’:
+../src/build/libbe/app/Message.cpp:1644:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BPoint’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1644 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1683:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1683 | DEFINE_FUNCTIONS(BPoint, Point, B_POINT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+In file included from ../headers/build/os/interface/Point.h:1,
+                 from ../headers/build/../os/interface/Rect.h:11,
+                 from ../headers/build/os/interface/Rect.h:1,
+                 from ../headers/build/os/app/Message.h:16,
+                 from ../src/build/libbe/app/Message.cpp:10:
+../headers/build/../os/interface/Point.h:15:7: note: ‘class BPoint’ declared here
+   15 | class BPoint {
+      |       ^~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindPoint(const char*, int32, BPoint*) const’:
+../src/build/libbe/app/Message.cpp:1660:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BPoint’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1660 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1683:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1683 | DEFINE_FUNCTIONS(BPoint, Point, B_POINT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Point.h:15:7: note: ‘class BPoint’ declared here
+   15 | class BPoint {
+      |       ^~~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindRect(const char*, BRect*) const’:
+../src/build/libbe/app/Message.cpp:1644:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BRect’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1644 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1684:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1684 | DEFINE_FUNCTIONS(BRect, Rect, B_RECT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Rect.h:15:7: note: ‘class BRect’ declared here
+   15 | class BRect {
+      |       ^~~~~
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindRect(const char*, int32, BRect*) const’:
+../src/build/libbe/app/Message.cpp:1660:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BRect’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1660 |                 memcpy(p, ptr, sizeof(type));                                                                           \
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/build/libbe/app/Message.cpp:1684:1: note: in expansion of macro ‘DEFINE_FUNCTIONS’
+ 1684 | DEFINE_FUNCTIONS(BRect, Rect, B_RECT_TYPE);
+      | ^~~~~~~~~~~~~~~~
+../headers/build/../os/interface/Rect.h:15:7: note: ‘class BRect’ declared here
+   15 | class BRect {
+      |       ^~~~~
+C++ objects/linux/arm64/release/build/libbe/icon/StyleTransformer.o 
+../src/build/libbe/app/Message.cpp: In member function ‘status_t BMessage::FindMessenger(const char*, int32, BMessenger*) const’:
+../src/build/libbe/app/Message.cpp:1970:23: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘class BMessenger’ with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+ 1970 |                 memcpy(messenger, data, sizeof(BMessenger));
+      |                 ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../headers/build/private/app/MessagePrivate.h:13,
+                 from ../src/build/libbe/app/Message.cpp:12:
+../headers/build/os/app/Messenger.h:20:7: note: ‘class BMessenger’ declared here
+   20 | class BMessenger {
+      |       ^~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/icon/TransformerFactory.o 
+../src/kits/app/MessageAdapter.cpp: In static member function ‘static status_t BPrivate::MessageAdapter::_UnflattenR5Message(uint32, BMessage*, BDataIO*)’:
+../src/kits/app/MessageAdapter.cpp:567:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  567 |                 reader(&header->target, sizeof(header->target));
+      |                        ^~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:571:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  571 |                 reader(&header->reply_port, sizeof(header->reply_port));
+      |                        ^~~~~~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:572:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  572 |                 reader(&header->reply_target, sizeof(header->reply_target));
+      |                        ^~~~~~~~~~~~~~~~~~~~~
+../src/kits/app/MessageAdapter.cpp:573:24: warning: taking address of packed member of ‘BMessage::message_header’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+  573 |                 reader(&header->reply_team, sizeof(header->reply_team));
+      |                        ^~~~~~~~~~~~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/icon/Icon.o 
+connected.
+C++ objects/linux/arm64/release/build/libbe/icon/IconRenderer.o 
+C++ objects/linux/arm64/release/build/libbe/icon/IconUtils.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_arc.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_arrowhead.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_bezier_arc.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_bspline.o 
+HTTP request sent, awaiting response... C++ objects/linux/arm64/release/build/libbe/icon/agg_curves.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_embedded_raster_fonts.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_gsv_text.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_image_filters.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_line_aa_basics.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_line_profile_aa.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_rounded_rect.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_sqrt_tables.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_affine.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_double_path.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_single_path.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_trans_warp_magnifier.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_bspline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_contour.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_dash.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_markers_term.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_smooth_poly1.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vcgen_stroke.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_clip_polygon.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_clip_polyline.o 
+C++ objects/linux/arm64/release/build/libbe/icon/agg_vpgen_segmentator.o 
+../src/libs/agg/src/agg_gsv_text.cpp: In member function ‘void agg::gsv_text::load_font(const char*)’:
+../src/libs/agg/src/agg_gsv_text.cpp:559:22: warning: ignoring return value of ‘size_t fread(void*, size_t, size_t, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  559 |                 fread(&m_loaded_font[0], 1, len, fd);
+      |                 ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+MkDir1 objects/linux/arm64/release/build/libbe/interface 
+C++ objects/linux/arm64/release/build/libbe/interface/Bitmap.o 
+C++ objects/linux/arm64/release/build/libbe/interface/ColorConversion.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Gradient.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientLinear.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientRadial.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientRadialFocus.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientDiamond.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GradientConic.o 
+C++ objects/linux/arm64/release/build/libbe/interface/GraphicsDefs.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Point.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Rect.o 
+C++ objects/linux/arm64/release/build/libbe/interface/Region.o 
+C++ objects/linux/arm64/release/build/libbe/interface/RegionSupport.o 
+C++ objects/linux/arm64/release/build/libbe/interface/SystemPalette.o 
+MkDir1 objects/linux/arm64/release/build/libbe/storage 
+C++ objects/linux/arm64/release/build/libbe/storage/AppFileInfo.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Directory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DriverSettings.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Entry.o 
+C++ objects/linux/arm64/release/build/libbe/storage/EntryList.o 
+302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg [following]
+--2026-11-04 03:54:35--  https://haiku-buildpackages.cdn.haiku-os.org/packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... C++ objects/linux/arm64/release/build/libbe/storage/FdIO.o 
+C++ objects/linux/arm64/release/build/libbe/storage/File.o 
+C++ objects/linux/arm64/release/build/libbe/storage/FileIO.o 
+../src/build/libbe/interface/SystemPalette.cpp: In function ‘void FillColorMap(const rgb_color*, color_map*)’:
+../src/build/libbe/interface/SystemPalette.cpp:95:15: warning: ‘void* memcpy(void*, const void*, size_t)’ writing to an object of type ‘rgb_color’ {aka ‘struct rgb_color’} with no trivial copy-assignment; use copy-assignment or copy-initialization instead [-Wclass-memaccess]
+   95 |         memcpy(map->color_list, palette, sizeof(map->color_list));
+      |         ~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from ../headers/build/os/interface/GraphicsDefs.h:1,
+                 from ../src/build/libbe/interface/SystemPalette.cpp:13:
+../headers/build/../os/interface/GraphicsDefs.h:42:16: note: ‘rgb_color’ {aka ‘struct rgb_color’} declared here
+   42 | typedef struct rgb_color {
+      |                ^~~~~~~~~
+C++ objects/linux/arm64/release/build/libbe/storage/FindDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MergedDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Mime.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeType.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Node.o 
+C++ objects/linux/arm64/release/build/libbe/storage/NodeInfo.o 
+C++ objects/linux/arm64/release/build/libbe/storage/OffsetFile.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Path.o 
+95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... C++ objects/linux/arm64/release/build/libbe/storage/ResourceFile.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceItem.o 
+...on 200th target...
+C++ objects/linux/arm64/release/build/libbe/storage/Resources.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourcesContainer.o 
+C++ objects/linux/arm64/release/build/libbe/storage/ResourceStrings.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Statable.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SymLink.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Volume.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/app/app_kit.o 
+C++ objects/linux/arm64/release/build/libbe/storage/storage_support.o 
+C++ objects/linux/arm64/release/build/libbe/storage/AppMetaMimeCreator.o 
+C++ objects/linux/arm64/release/build/libbe/storage/AssociatedTypes.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Database.o 
+connected.
+C++ objects/linux/arm64/release/build/libbe/storage/DatabaseDirectory.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DatabaseLocation.o 
+C++ objects/linux/arm64/release/build/libbe/storage/database_support.o 
+C++ objects/linux/arm64/release/build/libbe/storage/InstalledTypes.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeEntryProcessor.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeInfoUpdater.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSniffer.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSnifferAddon.o 
+C++ objects/linux/arm64/release/build/libbe/storage/MimeSnifferAddonManager.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SnifferRules.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Supertype.o 
+C++ objects/linux/arm64/release/build/libbe/storage/SupportingApps.o 
+C++ objects/linux/arm64/release/build/libbe/storage/TextSnifferAddon.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Err.o 
+C++ objects/linux/arm64/release/build/libbe/storage/DisjList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Pattern.o 
+C++ objects/linux/arm64/release/build/libbe/storage/PatternList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Parser.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Range.o 
+HTTP request sent, awaiting response... C++ objects/linux/arm64/release/build/libbe/storage/RPattern.o 
+C++ objects/linux/arm64/release/build/libbe/storage/RPatternList.o 
+C++ objects/linux/arm64/release/build/libbe/storage/Rule.o 
+MkDir1 objects/linux/arm64/release/build/libbe/support 
+C++ objects/linux/arm64/release/build/libbe/support/Archivable.o 
+C++ objects/linux/arm64/release/build/libbe/support/BlockCache.o 
+C++ objects/linux/arm64/release/build/libbe/support/BufferIO.o 
+C++ objects/linux/arm64/release/build/libbe/support/ByteOrder.o 
+C++ objects/linux/arm64/release/build/libbe/support/CompressionAlgorithm.o 
+C++ objects/linux/arm64/release/build/libbe/support/DataIO.o 
+C++ objects/linux/arm64/release/build/libbe/support/DataPositionIOWrapper.o 
+C++ objects/linux/arm64/release/build/libbe/support/Flattenable.o 
+C++ objects/linux/arm64/release/build/libbe/support/Job.o 
+C++ objects/linux/arm64/release/build/libbe/support/JobQueue.o 
+C++ objects/linux/arm64/release/build/libbe/support/List.o 
+C++ objects/linux/arm64/release/build/libbe/support/Locker.o 
+C++ objects/linux/arm64/release/build/libbe/support/PointerList.o 
+C++ objects/linux/arm64/release/build/libbe/support/Referenceable.o 
+C++ objects/linux/arm64/release/build/libbe/support/String.o 
+C++ objects/linux/arm64/release/build/libbe/support/StringList.o 
+C++ objects/linux/arm64/release/build/libbe/support/Url.o 
+Archive objects/linux/arm64/release/tools/rc/librdef.a 
+ar: creating objects/linux/arm64/release/tools/rc/librdef.a
+Ranlib objects/linux/arm64/release/tools/rc/librdef.a 
+C++ objects/linux/arm64/release/build/libbe/support/ZlibCompressionAlgorithm.o 
+C++ objects/linux/arm64/release/build/libbe/support/ZstdCompressionAlgorithm.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/interface/interface_kit.o 
+C++ objects/linux/arm64/release/build/libshared/NaturalCompare.o 
+C++ objects/linux/arm64/release/build/libshared/RegExp.o 
+C++ objects/linux/arm64/release/build/libshared/StringForSize.o 
+C++ objects/linux/arm64/release/build/libpackage/Attributes.o 
+C++ objects/linux/arm64/release/build/libpackage/ChecksumAccessors.o 
+C++ objects/linux/arm64/release/build/libpackage/CommitTransactionResult.o 
+C++ objects/linux/arm64/release/build/libpackage/Context.o 
+C++ objects/linux/arm64/release/build/libpackage/DownloadFileRequest.o 
+C++ objects/linux/arm64/release/build/libpackage/FetchFileJob.o 
+C++ objects/linux/arm64/release/build/libpackage/Job.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoContentHandler.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoParser.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoSet.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageResolvable.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageResolvableExpression.o 
+Link objects/linux/arm64/release/tools/gensyscalls/gensyscallinfos_arm64 
+C++ objects/linux/arm64/release/build/libpackage/PackageRoster.o 
+MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/icon/icon_kit.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageVersion.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryCache.o 
+Archive objects/linux/arm64/release/build/libshared/libshared_build.a 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryConfig.o 
+ar: creating objects/linux/arm64/release/build/libshared/libshared_build.a
+C++ objects/linux/arm64/release/build/libpackage/RepositoryInfo.o 
+Ranlib objects/linux/arm64/release/build/libshared/libshared_build.a 
+C++ objects/linux/arm64/release/build/libpackage/Request.o 
+C++ objects/linux/arm64/release/build/libpackage/TempfileManager.o 
+Chmod1 objects/linux/arm64/release/tools/gensyscalls/gensyscallinfos_arm64 
+C++ objects/linux/arm64/release/build/libpackage/User.o 
+C++ objects/linux/arm64/release/build/libpackage/ValidateChecksumJob.o 
+C++ objects/linux/arm64/release/build/libpackage/AttributeDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPool.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPoolImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/BlockBufferPoolNoLock.o 
+C++ objects/linux/arm64/release/build/libpackage/BufferPool.o 
+C++ objects/linux/arm64/release/build/libpackage/PoolBuffer.o 
+C++ objects/linux/arm64/release/build/libpackage/DataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/ErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/FDDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/FetchUtils.o 
+C++ objects/linux/arm64/release/build/libpackage/GlobalWritableFileInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/HPKGDefs.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageContentHandler.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageData.o 
+200 OK
+Length: 8812771 (8.4M) [application/octet-stream]
+Saving to: ‘download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .C++ objects/linux/arm64/release/build/libpackage/PackageDataReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntry.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryAttribute.o 
+...on 300th target...
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapAccessorBase.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageFileHeapWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReader.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageWriterImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/ReaderImplBase.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryContentHandler.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryReader.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryReaderImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryWriter.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryWriterImpl.o 
+C++ objects/linux/arm64/release/build/libpackage/Strings.o 
+C++ objects/linux/arm64/release/build/libpackage/UserSettingsFileInfo.o 
+C++ objects/linux/arm64/release/build/libpackage/WriterImplBase.o 
+C++ objects/linux/arm64/release/build/libpackage/HPKGDefsV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageContentHandlerV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataReaderV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageDataV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryAttributeV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageEntryV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageInfoContentHandlerV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderImplV1.o 
+C++ objects/linux/arm64/release/build/libpackage/PackageReaderV1.o 
+C++ objects/linux/arm64/release/build/libpackage/ReaderImplBaseV1.o 
+C++ objects/linux/arm64/release/build/libpackage/NoErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/StandardErrorOutput.o 
+C++ objects/linux/arm64/release/build/libpackage/Exceptions.o 
+C++ objects/linux/arm64/release/build/libpackage/RepositoryBuilder.o 
+C++ objects/linux/arm64/release/build/libpackage/Solver.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackage.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackageSpecifier.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverPackageSpecifierList.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverProblem.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverProblemSolution.o 
+......... ..........  0%  282K 30s
+    50K .......... .......... .......... .......... .....C++ objects/linux/arm64/release/build/libpackage/SolverRepository.o 
+C++ objects/linux/arm64/release/build/libpackage/SolverResult.o 
+C++ objects/linux/arm64/release/build/libroot/find_directory.o 
+C++ objects/linux/arm64/release/build/libroot/fs.o 
+C++ objects/linux/arm64/release/build/libroot/fs_attr.o 
+C++ objects/linux/arm64/release/build/libroot/fs_descriptors.o 
+C++ objects/linux/arm64/release/build/libroot/misc.o 
+C++ objects/linux/arm64/release/build/libroot/sem.o 
+C++ objects/linux/arm64/release/build/libroot/thread.o 
+C++ objects/linux/arm64/release/build/libroot/SHA256.o 
+C++ objects/linux/arm64/release/build/libroot/driver_settings.o 
+Cc objects/linux/arm64/release/build/libroot/strlcpy.o 
+Cc objects/linux/arm64/release/build/libroot/strlcat.o 
+Cc objects/linux/arm64/release/build/libroot/strnlen.o 
+C++ objects/linux/arm64/release/build/libroot/KMessage.o 
+.....  1%  283K 30s
+   100K .......... .......... .......... .......... ..........  1% 48.9M 20s
+   150K .......... .......... .....MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/storage/storage_kit.o 
+..... .......... ..........  2%  284K 22s
+   200K .......... .......... .......... .......... ..........  2% 38.1M 18s
+   250K .......... .......... .......... .......... ..........  3% 44.2M 15s
+   300K .......... .........MergeObjectFromObjects1 objects/linux/arm64/release/build/libbe/support/support_kit.o 
+. .......... .......... ..........  4%  286K 17s
+   350K .......... .......... .......... .......... ..........  4% 35.1M 15s
+   400K .......... .......... .......... .......... ..........  5% 47.3M 13s
+   450K .......... .......... .......... .......... ..........  5% 75.8M 12s
+   500K .......... .......... .......... .......... ..........  6%  111M 10s
+   550K .......... .......... .......... .......... ..........  6% 1.67M 10s
+   600K .......... .......... .......... .......... ..........  7%  347K 11s
+   650K .......... .......... .......... .......... ..........  8% 43.2M 10s
+   700K .......... .......... .......... .......... ..........  8% 30.6M 9s
+   750K .......... .......... .......... .......... ..........  9% 25.3M 9s
+   800K .......... .......... .......... .......... ..........  9% 31.7M 8s
+   850K .......... .......... .......... .......... .......... 10% 37.8M 8s
+   900K .......... .......... .......... .......... .......... 11% 33.8M 7s
+   950K .......... .......... .......... .......... .......... 11% 38.1M 7s
+  1000K .......... .......... .......... .......... .......... 12% 32.7M 6s
+  1050K .......... .......... .......... .......... .......... 12% 38.8M 6s
+  1100K .......... .......... .......... .......... .......... 13% 33.6M 6s
+  1150K .......... .......... .......... ...Link objects/linux/arm64/release/build/libroot/libroot_build.so 
+....... .......... 13%  308K 7s
+  1200K .......... .......... .......... .......... .......... 14% 50.7M 6s
+  1250K .......... .......... .......... .......... .......... 15% 38.3M 6s
+  1300K .......... .......... .......... .......... .......... 15% 51.7M 6s
+  1350K .......... .......... .......... .......... .......... 16% 48.9M 5s
+  1400K .......... .......... .......... .......... .......... 16% 49.8M 5s
+  1450K .......... .......... .......... .......... .......... 17% 57.6M 5s
+  1500K .......... .......... .......... .......... .......... 18% 42.9M 5s
+  1550K .......... .......... .......... .......... .......... 18% 40.4M 5s
+  1600K .......... .......... .......... .......... .......... 19% 56.9M 5s
+  1650K .......... .......... .......... .......... .......... 19% 51.2M 4s
+  1700K .......... .......... .......... .......... .......... 20% 69.4M 4s
+  1750K .......... .......... .......... .......... .......... 20% 51.9M 4s
+  1800K .......... .......... .......... .......... .......... 21% 60.5M 4s
+  1850K .......... .......... .......... .......... .......... 22% 77.5M 4s
+  1900K .......... .......... .......... .......... .......... 22% 83.0M 4s
+  1950K .......... .......... .......... .......... .......... 23% 55.3M 4s
+  2000K .......... .......... .......... .......... .......... 23% 53.1M 3s
+  2050K .......... .......... .......... .......... .......... 24% 56.1M 3s
+  2100K .......... .......... .......... .......... .......... 24% 70.0M 3s
+  2150K .......... .......... .......... .......... .......... 25% 71.4M 3s
+  2200K .......... .......... .......... .......... .......... 26% 83.8M 3s
+  2250K .......... .......... .......... .......... .......... 26% 3.41M 3s
+  2300K .......... .......... .......... .....Chmod1 objects/linux/arm64/release/build/libroot/libroot_build.so 
+File /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libroot_build.so 
+Link /opt/src/haiku/generated.arm64/objects/linux/lib/libbe_build.so 
+Link objects/linux/arm64/release/tools/rm_attrs_tmp 
+Chmod1 objects/linux/arm64/release/tools/rm_attrs_tmp 
+File objects/linux/arm64/release/tools/rm_attrs 
+Chmod1 objects/linux/arm64/release/tools/rm_attrs 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libbe_build.so 
+Link /opt/src/haiku/generated.arm64/objects/linux/lib/libpackage_build.so 
+Link objects/linux/arm64/release/tools/settype 
+Link objects/linux/arm64/release/tools/mimeset 
+Link objects/linux/arm64/release/tools/resattr/resattr 
+Link objects/linux/arm64/release/tools/rc/rc 
+Link objects/linux/arm64/release/tools/setversion 
+Link objects/linux/arm64/release/tools/xres 
+..... .......... 27%  347K 3s
+  2350K .......... .......... .......... .......... .......... 27% 66.6M 3s
+  2400K .......... .......... .......... .......... .......... 28% 73.1M 3s
+  2450K .......... ...Chmod1 objects/linux/arm64/release/tools/resattr/resattr 
+....... .......... .......... .......... 29% 76.7M 3s
+  2500K .......... .......... .......... .......... .......... 29% 71.5M 3s
+  2550K .......... .......... .......... .......... .......... 30% 84.5M 3s
+  2600K .......... .......... .......... .......... .......... 30% 59.7M 3s
+  2650K .......... .......... .......... .......... .......... 31% 64.8M 3s
+  2700K .......... .......... .......... .......... .......... 31% 70.1M 3s
+  2750K .......... .......... .......... .......... .......... 32% 49.6M 3s
+  2800K .......... .......... .......... .......... .......... 33% 72.0M 3s
+  2850K .......... .......... .......... .......... .......... 33% 45.6M 2s
+  2900K .......... .......... .......... .......... .......... 34% 76.6M 2s
+  2950K .......... .......... .......... .......... .......... 34% 69.7M 2s
+  3000K .......... .......... .......... .........Chmod1 objects/linux/arm64/release/tools/settype 
+. .......... 35% 69.3M 2s
+  3050K .....Chmod1 objects/linux/arm64/release/tools/mimeset 
+..... .......... .Chmod1 objects/linux/arm64/release/tools/setversion 
+......... .......... .......... 36% 91.7M 2s
+  3100K .......... .......... .......... .......... .......... 36% 77.7M 2s
+  3150K .Chmod1 objects/linux/arm64/release/tools/xres 
+......... .......... .......... .......... .........Chmod1 objects/linux/arm64/release/tools/rc/rc 
+. 37% 53.9M 2s
+  3200K .......... .......... .......... .......... .......... 37% 75.8M 2s
+  3250K .......... .......... .........ResComp1 objects/haiku/arm64/common/data/mime_db/text.rsrc 
+. .......... .....ResComp1 objects/haiku/arm64/common/data/mime_db/multipart.rsrc 
+..... 38% 65.7M 2s
+  3300K .......... .ResComp1 objects/haiku/arm64/common/data/mime_db/image.rsrc 
+ResComp1 objects/haiku/arm64/common/data/mime_db/message.rsrc 
+......... .......ResComp1 objects/haiku/arm64/common/data/mime_db/video.rsrc 
+ResComp1 objects/haiku/arm64/common/data/mime_db/application.rsrc 
+... .......... ...ResComp1 objects/haiku/arm64/common/data/mime_db/audio.rsrc 
+....... 38% 73.7M 2s
+  3350K .........ResComp1 objects/common/data/mime_db/text/css.rsrc 
+. .......... .....ResComp1 objects/common/data/mime_db/text/calendar.rsrc 
+..... .......... .ResComp1 objects/common/data/mime_db/text/x-url.rsrc 
+......... 39% 76.4M 2s
+  3400K .......ResComp1 objects/common/data/mime_db/text/html.rsrc 
+... .......... ...ResComp1 objects/common/data/mime_db/text/x-patch.rsrc 
+....... .........ResComp1 objects/common/data/mime_db/text/vcard.rsrc 
+. .......... 40% 74.5M 2s
+  3450K .......... .......... .......... .......... .......... 40% 52.1M 2s
+  3500K .......... .......... .......... .....ResComp1 objects/common/data/mime_db/text/markdown.rsrc 
+ResComp1 objects/common/data/mime_db/text/x-webloc.rsrc 
+..... .......... 41%  119M 2s
+  3550K .ResComp1 objects/common/data/mime_db/text/plain.rsrc 
+......... .......ResComp1 objects/common/data/mime_db/text/x-source-code.rsrc 
+... .......... ...ResComp1 objects/common/data/mime_db/text/x-vnd.Be-MailDraft.rsrc 
+ResComp1 objects/common/data/mime_db/text/xml.rsrc 
+....... .........ResComp1 objects/common/data/mime_db/text/x-vnd.be.resourcedef.rsrc 
+. 41% 53.2M 2s
+  3600K .......... .....ResComp1 objects/common/data/mime_db/text/x-email.rsrc 
+..... .......... .......... .......... 42% 38.6M 2s
+  3650K .......... .......... .......... .......... .......... 42%  383M 2s
+  3700K .......... .......... .......... .......... .......... 43%  103M 2s
+  3750K .......... .......... .......... .......... .......... 44% 99.6M 2s
+  3800K .......... .......... ...ResComp1 objects/common/data/mime_db/text/x-jamfile.rsrc 
+ResComp1 objects/common/data/mime_db/text/csv.rsrc 
+ResComp1 objects/common/data/mime_db/text/x-makefile.rsrc 
+ResComp1 objects/common/data/mime_db/text/rtf.rsrc 
+ResComp1 objects/common/data/mime_db/text/x-partial-email.rsrc 
+....... .......... .......... 44% 16.8M 2s
+  3850K .......... .......... .......... .......... .......... 45%  315M 2s
+  3900K .......... .......... .......... .......... .......... 45%  400M 1s
+  3950K .......... .......... .......... .......... .......... 46%  288M 1s
+  4000K .......... .......... .......... .......... .......... 47%  403M 1s
+  4050K .......... .......... .......... .......... .......... 47%  335M 1s
+  4100K .......... .......... .......... .......... ...ResComp1 objects/common/data/mime_db/multipart/related.rsrc 
+....... 48%  121M 1s
+  4150K .......... .......... .......... .......... .......... 48% 99.0M 1s
+  4200K .......... .......... ...ResComp1 objects/common/data/mime_db/image/x-pcx.rsrc 
+....... .......... .......... 49%  110M 1s
+  4250K .......... .......... .......... .......... .......... 49% 82.9M 1s
+  4300K ...ResComp1 objects/common/data/mime_db/image/x-portable-pixmap.rsrc 
+....... .........ResComp1 objects/common/data/mime_db/image/vnd.microsoft.icon.rsrc 
+. .......... .....ResComp1 objects/common/data/mime_db/image/icns.rsrc 
+..... .......... 50% 87.0M 1s
+  4350K .......... .......ResComp1 objects/common/data/mime_db/image/x-portable-bitmap.rsrc 
+ResComp1 objects/common/data/mime_db/image/gif.rsrc 
+ResComp1 objects/common/data/mime_db/image/x-exr.rsrc 
+ResComp1 objects/common/data/mime_db/image/vnd.djvu.rsrc 
+...on 400th target...
+ResComp1 objects/common/data/mime_db/image/sgi.rsrc 
+... .......... .......... .......... 51% 15.2M 1s
+  4400K .......... .......... .......... .......... .......... 51%  397M 1s
+  4450K .......... .......... .......... .......... .......... 52%  465M 1s
+  4500K .......... .......... .......... .......... ...ResComp1 objects/common/data/mime_db/image/jpeg.rsrc 
+ResComp1 objects/common/data/mime_db/image/x-hvif.rsrc 
+ResComp1 objects/common/data/mime_db/image/x-targa.rsrc 
+ResComp1 objects/common/data/mime_db/image/x-portable-graymap.rsrc 
+ResComp1 objects/common/data/mime_db/image/vnd.haiku.picture.rsrc 
+ResComp1 objects/common/data/mime_db/image/vnd.adobe.photoshop.rsrc 
+ResComp1 objects/common/data/mime_db/image/webp.rsrc 
+....... 52% 15.9M 1s
+  4550K .........ResComp1 objects/common/data/mime_db/image/x-wonderbrush.rsrc 
+. .......... .....ResComp1 objects/common/data/mime_db/image/bmp.rsrc 
+ResComp1 objects/common/data/mime_db/image/avif.rsrc 
+..... .......... .......... 53% 41.1M 1s
+  4600K .......... .......... .......... .......... .......... 54%  261M 1s
+  4650K .......... .......... .ResComp1 objects/common/data/mime_db/image/tiff.rsrc 
+ResComp1 objects/common/data/mime_db/image/svg+xml.rsrc 
+ResComp1 objects/common/data/mime_db/image/png.rsrc 
+ResComp1 objects/common/data/mime_db/image/jp2.rsrc 
+ResComp1 objects/common/data/mime_db/image/x-wpg.rsrc 
+ResComp1 objects/common/data/mime_db/message/rfc822.rsrc 
+ResComp1 objects/common/data/mime_db/video/x-msvideo.rsrc 
+ResComp1 objects/common/data/mime_db/video/x-rmvb.rsrc 
+Chmod1 /opt/src/haiku/generated.arm64/objects/linux/lib/libpackage_build.so 
+ResComp1 objects/common/data/mime_db/video/quicktime.rsrc 
+ResComp1 objects/common/data/mime_db/video/hevc.rsrc 
+ResComp1 objects/common/data/mime_db/video/x-flv.rsrc 
+ResComp1 objects/common/data/mime_db/video/ogg.rsrc 
+ResComp1 objects/common/data/mime_db/video/dv.rsrc 
+ResComp1 objects/common/data/mime_db/video/mpeg.rsrc 
+ResComp1 objects/common/data/mime_db/video/x-ms-asf.rsrc 
+ResComp1 objects/common/data/mime_db/video/3gpp.rsrc 
+ResComp1 objects/common/data/mime_db/video/3gpp2.rsrc 
+ResComp1 objects/common/data/mime_db/video/x-matroska.rsrc 
+ResComp1 objects/common/data/mime_db/video/mp4.rsrc 
+ResComp1 objects/common/data/mime_db/video/mp2t.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.text-web.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.ms-powerpoint.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-ntfs-image.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.text.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.database.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.haiku-core-file.rsrc 
+ResComp1 objects/common/data/mime_db/application/font-woff.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.sftp.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.openxmlformats-officedocument.wordprocessingml.document.rsrc 
+ResComp1 objects/common/data/mime_db/application/pdf.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.nfs.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be-volume.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.ms-access.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-gzip.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.beshare.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.base.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be-bookmark.rsrc 
+Link objects/linux/arm64/release/tools/package/package 
+ResComp1 objects/common/data/mime_db/application/vnd.ms-xpsdocument.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.chart-template.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.formula-template.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.spreadsheet-template.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be-elfexecutable.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-scode-upkg.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.mms.rsrc 
+ResComp1 objects/common/data/mime_db/application/ogg.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-rar.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-person.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.ssh.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be-directory.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-7z-compressed.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-bittorrent.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.telnet.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.presentation-template.rsrc 
+ResComp1 objects/common/data/mime_db/application/msword.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-intel-image.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-cd-image.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.rtsp.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-font-ttf.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.openxmlformats-officedocument.presentationml.presentation.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.haiku-bmessage.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.https.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be-querytemplate.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.image-template.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-xar.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.rtp.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.ms-works.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.apple.mpegurl.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.haiku-package.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.haiku-icon.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-tar.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be-symlink.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.rsync.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.text-master.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.gobe.productive-document.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.chart.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-bfs-image.rsrc 
+ResComp1 objects/common/data/mime_db/application/java-archive.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.ms-excel.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be-query.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-bzip2.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-xz.rsrc 
+ResComp1 objects/common/data/mime_db/application/postscript.rsrc 
+ResComp1 objects/common/data/mime_db/application/zip.rsrc 
+ResComp1 objects/common/data/mime_db/application/xhtml+xml.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-lzip.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.file.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.news.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.ftp.rsrc 
+...on 500th target...
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.text-template.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-msaccess.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.http.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.haiku-virtual-directory.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.ms-visio.drawing.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.image.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.query.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.haiku-playlist.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-lharc.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.mailto.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.finger.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.graphics-template.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.spreadsheet.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.formula.rsrc 
+ResComp1 objects/common/data/mime_db/application/x-vnd.be.url.gopher.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.presentation.rsrc 
+ResComp1 objects/common/data/mime_db/application/vnd.oasis.opendocument.graphics.rsrc 
+ResComp1 objects/common/data/mime_db/audio/midi.rsrc 
+ResComp1 objects/common/data/mime_db/audio/basic.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-musepack.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-scpls.rsrc 
+ResComp1 objects/common/data/mime_db/audio/ogg.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-mod.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-wavpack.rsrc 
+ResComp1 objects/common/data/mime_db/audio/mpeg.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-mo3.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-flac.rsrc 
+ResComp1 objects/common/data/mime_db/audio/mid.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-mptm.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-wav.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-aiff.rsrc 
+ResComp1 objects/common/data/mime_db/audio/ac3.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-mdx.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-med.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-ape.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-soundfont.rsrc 
+ResComp1 objects/common/data/mime_db/audio/x-matroska.rsrc 
+ResComp1 objects/common/data/mime_db/audio/mp4.rsrc 
+ResComp1 objects/haiku/arm64/common/system/kernel/kernel.rsrc 
+BuildMimeDBSuperTypes objects/common/data/mime_db/mime_db 
+Chmod1 objects/linux/arm64/release/tools/package/package 
+BuildMimeDBSubTypes objects/common/data/mime_db/mime_db 
+......... .......... .......... 54%  350K 1s
+  4700K .......... .......... .......... .......... .......... 55%  108M 1s
+  4750K .......... .......... .......... .......... .......... 55% 56.9M 1s
+  4800K .......... .......... .......... .......... .......... 56% 98.6M 1s
+  4850K .......... .......... .......... .......... .......... 56% 58.7M 1s
+  4900K .......... .......... .......... .......... .......... 57% 72.8M 1s
+  4950K .......... .......... .......... .......... .......... 58%  113M 1s
+  5000K .......... .......... .......... .......... .......... 58% 99.6M 1s
+  5050K .......... .......... .......... .......... .......... 59% 90.2M 1s
+  5100K .......... .......... .......... .......... .......... 59% 99.5M 1s
+  5150K .......... .......... .......... .......... .......... 60% 70.7M 1s
+  5200K .......... .......... .......... .......... .......... 61%  111M 1s
+  5250K .......... .......... .......... .......... .......... 61% 73.9M 1s
+  5300K .......... .......... .......... .......... .......... 62% 99.4M 1s
+  5350K .......... .......... .......... .......... .......... 62%  110M 1s
+  5400K .......... .......... .......... .......... .......... 63% 93.0M 1s
+  5450K .......... .......... .......... .......... .......... 63%  118M 1s
+  5500K .......... .......... .......... .......... .......... 64%  112M 1s
+  5550K .......... .......... .......... .......... .......... 65% 76.4M 1s
+  5600K .......... .......... .......... .......... .......... 65%  124M 1s
+  5650K .......... .......... .......... .......... .......... 66%  111M 1s
+  5700K .......... .......... .......... .......... .......... 66% 90.5M 1s
+  5750K .......... .......... .......... .......... .......... 67%  110M 1s
+  5800K .......... .......... .......... .......... .......... 67%  110M 1s
+  5850K .......... .......... .......... .......... .......... 68% 99.4M 1s
+  5900K .......... .......... .......... .......... .......... 69% 99.2M 1s
+  5950K .......... .......... .......... .......... .......... 69% 76.6M 1s
+  6000K .......... .......... .......... .......... .......... 70% 99.2M 1s
+  6050K .......... .......... .......... .......... .......... 70%  110M 1s
+  6100K .......... .......... .......... ......BuildMimeDBSubTypes objects/common/data/mime_db/mime_db 
+.... .......... 71% 90.2M 1s
+  6150K .......... .......... .......... .......... .......... 72% 99.6M 1s
+  6200K .......... .......... .......... .......... .......... 72%  110M 1s
+  6250K .......... .......... .......... .......... .......... 73% 90.1M 1s
+  6300K .......... .......... .......... .......... .......... 73%  111M 1s
+  6350K .......... .......... .......... .......... .......... 74% 76.5M 0s
+  6400K .......... .......... .......... .......... .......... 74% 99.4M 0s
+  6450K .......... .......... .......... .......... .......... 75% 99.1M 0s
+  6500K .......... .......... .......... .......... ...BuildMimeDBSubTypes objects/common/data/mime_db/mime_db 
+....... 76% 98.8M 0s
+  6550K .......... .......... .......... .......... .......... 76% 99.6M 0s
+  6600K .......... .......... .......... .......... .......... 77% 99.8M 0s
+  6650K .......... .......... .......... .......... .......... 77% 82.3M 0s
+  6700K .......... .......... .......... .......... .......... 78%  111M 0s
+  6750K .......... .......... .......... .......... .......... 79% 70.8M 0s
+  6800K .......... .......... .......... .......... .......... 79% 99.3M 0s
+  6850K .......... .......... .......... .......... .......... 80%  111M 0s
+  6900K .......... .......... .......... .......... .......... 80% 90.2M 0s
+  6950K .......... .......... .......... .......... .......... 81% 90.3M 0s
+  7000K .......... .......... .......... .......... .......... 81% 99.3M 0s
+  7050K .......... .......... .......... .......... .......... 82% 9.59M 0s
+  7100K .......... .......... .......... .......... .......... 83%  110M 0s
+  7150K .......... .......... .......... .......... .......... 83% 76.4M 0s
+  7200K .......... .......... .......... .......... .......... 84% 99.1M 0s
+  7250K .......... .......... .......... .......... .......... 84%  110M 0s
+  7300K .......... .......... .......... .......... .......... 85% 89.9M 0s
+  7350K .......... .......... .......... .......... .......... 85% 99.7M 0s
+  7400K .......... .......... .......... .......... .......... 86% 90.6M 0s
+  7450K .......... .......... .......... .......... .......... 87% 99.3M 0s
+  7500K .......... .......... .......... .......... .......... 87%  110M 0s
+  7550K .......... .......... .......... .......... .......... 88% 61.9M 0s
+  7600K .......... .......... .......... .......... .......... 88%  123M 0s
+  7650K .......... .......... .......... .......... .......... 89% 89.7M 0s
+  7700K .......... .......... .......... .......... .......... 90%  111M 0s
+  7750K .......... .......... .......... .......... .......... 90% 99.3M 0s
+  7800K .......... .......... .......... .......... .......... 91% 99.7M 0s
+  7850K .......... .......... .......... .......... .......... 91% 99.6M 0s
+  7900K .......... .......... .......... .......... .......... 92% 90.1M 0s
+  7950K .......... .......... .......... .......... .......... 92% 76.1M 0s
+  8000K .......... .......... .......... .......... .......... 93% 99.8M 0s
+  8050K .......... .......... .......... .......... .......... 94%  110M 0s
+  8100K .......... .......... .......... .......... .......... 94% 99.8M 0s
+  8150K .......... .......... .......... .......... .......... 95% 99.0M 0s
+  8200K .......... .......... .......... .......... .......... 95% 90.8M 0s
+  8250K .......... .......... .......... .......... .......... 96% 99.3M 0s
+  8300K .......... .......... .......... .......... .......... 97%  110M 0s
+  8350K .......... .......... .......... .......... .......... 97% 76.4M 0s
+  8400K .......... .......... .......... .......... .......... 98% 99.8M 0s
+  8450K .......... .......... .......... .......... .....BuildMimeDBSubTypes objects/common/data/mime_db/mime_db 
+BuildMimeDBSubTypes objects/common/data/mime_db/mime_db 
+BuildMimeDBSubTypes objects/common/data/mime_db/mime_db 
+..... 98%  342K 0s
+  8500K .......... .......... .......... .......... .......... 99% 77.1M 0s
+  8550K .......... .......... .......... .......... .......... 99%  111M 0s
+  8600K ......                                                100% 11.6T=1.6s
+
+2026-11-04 03:54:37 (5.23 MB/s) - ‘download/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg’ saved [8812771/8812771]
+
+ExtractHPKGArchive1 build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64 
+BuildMimeDBSubTypes objects/common/data/mime_db/mime_db 
+Cc objects/haiku/arm64/release/system/glue/haiku_version_glue.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup/dialup.o 
+C++ objects/haiku/arm64/release/system/kernel/cache/block_cache.o 
+C++ objects/haiku/arm64/release/system/kernel/cache/file_cache.o 
+C++ objects/haiku/arm64/release/system/kernel/cache/file_map.o 
+C++ objects/haiku/arm64/release/system/kernel/cache/vnode_store.o 
+C++ objects/haiku/arm64/release/system/kernel/boot_item.o 
+C++ objects/haiku/arm64/release/system/kernel/boot_splash.o 
+C++ objects/haiku/arm64/release/system/kernel/commpage.o 
+C++ objects/haiku/arm64/release/system/kernel/condition_variable.o 
+C++ objects/haiku/arm64/release/system/kernel/cpu.o 
+C++ objects/haiku/arm64/release/system/kernel/device_watchdog.o 
+C++ objects/haiku/arm64/release/system/kernel/DPC.o 
+C++ objects/haiku/arm64/release/system/kernel/elf.o 
+C++ objects/haiku/arm64/release/system/kernel/heap.o 
+C++ objects/haiku/arm64/release/system/kernel/image.o 
+C++ objects/haiku/arm64/release/system/kernel/interrupts.o 
+C++ objects/haiku/arm64/release/system/kernel/kernel_daemon.o 
+Cc objects/haiku/arm64/release/system/kernel/linkhack.o 
+C++ objects/haiku/arm64/release/system/kernel/listeners.o 
+C++ objects/haiku/arm64/release/system/kernel/low_resource_manager.o 
+C++ objects/haiku/arm64/release/system/kernel/main.o 
+C++ objects/haiku/arm64/release/system/kernel/module.o 
+C++ objects/haiku/arm64/release/system/kernel/port.o 
+C++ objects/haiku/arm64/release/system/kernel/real_time_clock.o 
+C++ objects/haiku/arm64/release/system/kernel/sem.o 
+C++ objects/haiku/arm64/release/system/kernel/shutdown.o 
+C++ objects/haiku/arm64/release/system/kernel/signal.o 
+C++ objects/haiku/arm64/release/system/kernel/system_info.o 
+C++ objects/haiku/arm64/release/system/kernel/smp.o 
+PreprocessSyscalls objects/haiku/arm64/common/tools/gensyscalls/syscalls.h.pp.parsable 
+C++ objects/haiku/arm64/release/system/kernel/team.o 
+C++ objects/haiku/arm64/release/system/kernel/thread.o 
+C++ objects/haiku/arm64/release/system/kernel/timer.o 
+../src/add-ons/kernel/network/devices/dialup/dialup.cpp: In function 'status_t dialup_send_data(net_device*, net_buffer*)':
+../src/add-ons/kernel/network/devices/dialup/dialup.cpp:377:69: error: 'net_buffer' {aka 'struct net_buffer'} has no member named 'flags'
+  377 |                 "(flags 0x%" B_PRIx32 "):\n", buffer->size, buffer->flags);
+      |                                                                     ^~~~~
+
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/add-ons/kernel/network/devices/dialup/dialup.cpp" -O2 -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -fno-omit-frame-pointer -D_KERNEL_MODE -DARCH_arm64 -D__HAIKU_PRIMARY_PACKAGING_ARCH=\"arm64\" -DHAIKU_DISTRO_COMPATIBILITY_DEFAULT -DHAIKU_TARGET_PLATFORM_HAIKU -DHAIKU_REGULAR_BUILD -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/add-ons/kernel/network/devices/dialup -iquote objects/common/add-ons/kernel/network/devices/dialup -iquote objects/linux/arm64/common/add-ons/kernel/network/devices/dialup -iquote objects/haiku/arm64/common/add-ons/kernel/network/devices/dialup -I ../headers/private/. -I ../headers/private/kernel -I ../headers/private/libroot -I ../headers/private/shared -I ../headers/private/kernel/boot/platform/efi -I ../headers/private/kernel/arch/arm64 -I objects/haiku/arm64/common/system/kernel -I ../headers/private/. -I ../headers/private/system -I ../headers/private/system/arch/arm64 -I ../headers/private/net -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++ -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/aarch64-unknown-haiku -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/backward -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/ext -I ../headers/glibc -I ../headers/posix -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include-fixed -I ../headers -I ../headers/os -I ../headers/os/add-ons -I ../headers/os/add-ons/file_system -I ../headers/os/add-ons/graphics -I ../headers/os/add-ons/input_server -I ../headers/os/add-ons/registrar -I ../headers/os/add-ons/screen_saver -I ../headers/os/add-ons/tracker -I ../headers/os/app -I ../headers/os/device -I ../headers/os/drivers -I ../headers/os/game -I ../headers/os/interface -I ../headers/os/kernel -I ../headers/os/locale -I ../headers/os/media -I ../headers/os/mail -I ../headers/os/midi -I ../headers/os/midi2 -I ../headers/os/net -I ../headers/os/storage -I ../headers/os/support -I ../headers/os/translation -I ../headers/private/. -o "objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup/dialup.o"
+
+...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/devices/dialup/dialup.o ...
+C++ objects/haiku/arm64/release/system/kernel/UserEvent.o 
+GenSyscallInfos1 objects/haiku/arm64/common/tools/gensyscalls/gensyscalls_infos.cpp objects/haiku/arm64/common/tools/gensyscalls/syscall_types_sizes.h.cpp 
+CreateAsmStructOffsetsHeader1 objects/haiku/arm64/common/tools/gensyscalls/syscall_types_sizes.h 
+C++ objects/haiku/arm64/release/system/kernel/usergroup.o 
+C++ objects/haiku/arm64/release/system/kernel/UserTimer.o 
+C++ objects/haiku/arm64/release/system/kernel/wait_for_objects.o 
+C++ objects/haiku/arm64/release/system/kernel/Notifications.o 
+C++ objects/haiku/arm64/release/system/kernel/event_queue.o 
+C++ objects/haiku/arm64/release/system/kernel/lock.o 
+C++ objects/linux/arm64/release/tools/gensyscalls/arm64/gensyscalls_infos.o 
+C++ objects/haiku/arm64/release/system/kernel/user_mutex.o 
+C++ objects/haiku/arm64/release/system/kernel/low_latency.o 
+../src/system/kernel/elf.cpp: In function 'status_t insert_preloaded_image(preloaded_elf_image*, bool)':
+../src/system/kernel/elf.cpp:1267:33: warning: taking address of packed member of 'preloaded_elf64_image' may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 1267 |         status = verify_eheader(&preloadedImage->elf_header);
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+C++ objects/haiku/arm64/release/system/kernel/power_saving.o 
+C++ objects/haiku/arm64/release/system/kernel/scheduler.o 
+C++ objects/haiku/arm64/release/system/kernel/scheduler_cpu.o 
+C++ objects/haiku/arm64/release/system/kernel/scheduler_load.o 
+C++ objects/haiku/arm64/release/system/kernel/scheduler_placement_trace.o 
+C++ objects/haiku/arm64/release/system/kernel/scheduler_profiler.o 
+../src/system/kernel/interrupts.cpp: In function 'status_t remove_io_interrupt_handler(int32, interrupt_handler, void*)':
+../src/system/kernel/interrupts.cpp:601:51: warning: array subscript -1 is below array bounds of 'cpu_ent []' [-Warray-bounds=]
+  601 |                                 locker.SetTo(cpu->irqs_lock, false);
+      |                                              ~~~~~^~~~~~~~~
+C++ objects/haiku/arm64/release/system/kernel/scheduler_thread.o 
+C++ objects/haiku/arm64/release/system/kernel/scheduler_tracing.o 
+C++ objects/haiku/arm64/release/system/kernel/scheduling_analysis.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/blue_screen.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/BreakpointManager.o 
+...on 600th target...
+C++ objects/haiku/arm64/release/system/kernel/debug/core_dump.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug_builtin_commands.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug_commands.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug_heap.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug_hex_dump.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug_paranoia.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug_parser.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/debug_variables.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/font.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/font_big.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/frame_buffer_console.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/gdb.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/guarded_heap.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/heap.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/heaps.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/safemode_settings.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/system_profiler.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/tracing.o 
+C++ objects/haiku/arm64/release/system/kernel/debug/user_debugger.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/AbstractModuleDevice.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/BaseDevice.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/device_manager.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/devfs.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/FileDevice.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/id_generator.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/io_resources.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/legacy_drivers.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/dma_resources.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/io_requests.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/IOCache.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/IOCallback.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/IORequest.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/IOScheduler.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/IOSchedulerRoster.o 
+C++ objects/haiku/arm64/release/system/kernel/device_manager/IOSchedulerSimple.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/ddm_userland_interface.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/disk_device_manager.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KDiskDevice.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KDiskDeviceManager.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KFileDiskDevice.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KDiskSystem.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KFileSystem.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KPartition.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KPartitioningSystem.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KPartitionListener.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/KPartitionVisitor.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/UserDataWriter.o 
+C++ objects/haiku/arm64/release/system/kernel/disk_device_manager/DiskDeviceTypes.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/EntryCache.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/fd.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/fdescfs.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/fifo.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/KPath.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/node_monitor.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/rootfs.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/socket.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/Vnode.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/vfs.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/vfs_boot.o 
+C++ objects/haiku/arm64/release/system/kernel/fs/vfs_net_boot.o 
+C++ objects/haiku/arm64/release/system/kernel/messaging/KMessage.o 
+C++ objects/haiku/arm64/release/system/kernel/messaging/MessagingService.o 
+C++ objects/haiku/arm64/release/system/kernel/posix/realtime_sem.o 
+C++ objects/haiku/arm64/release/system/kernel/posix/xsi_message_queue.o 
+C++ objects/haiku/arm64/release/system/kernel/posix/xsi_semaphore.o 
+C++ objects/haiku/arm64/release/system/kernel/slab/allocator.o 
+Link objects/linux/arm64/release/tools/gensyscalls/gensyscalls_arm64 
+C++ objects/haiku/arm64/release/system/kernel/slab/HashedObjectCache.o 
+C++ objects/haiku/arm64/release/system/kernel/slab/MemoryManager.o 
+C++ objects/haiku/arm64/release/system/kernel/slab/ObjectCache.o 
+C++ objects/haiku/arm64/release/system/kernel/slab/ObjectDepot.o 
+C++ objects/haiku/arm64/release/system/kernel/slab/Slab.o 
+C++ objects/haiku/arm64/release/system/kernel/slab/SmallObjectCache.o 
+Chmod1 objects/linux/arm64/release/tools/gensyscalls/gensyscalls_arm64 
+GenSyscallsFile1 objects/haiku/arm64/common/system/kernel/syscall_dispatcher.h 
+GenSyscallsFile1 objects/haiku/arm64/common/system/kernel/syscall_table.h 
+GenSyscallsFile1 objects/haiku/arm64/common/system/kernel/syscall_numbers.h 
+C++ objects/haiku/arm64/release/system/kernel/util/AVLTreeBase.o 
+C++ objects/haiku/arm64/release/system/kernel/syscalls.o 
+C++ objects/haiku/arm64/release/system/kernel/util/Bitmap.o 
+C++ objects/haiku/arm64/release/system/kernel/util/convertutf.o 
+Cc objects/haiku/arm64/release/system/kernel/util/inet_addr.o 
+Cc objects/haiku/arm64/release/system/kernel/util/inet_ntop.o 
+C++ objects/haiku/arm64/release/system/kernel/util/kernel_cpp.o 
+C++ objects/haiku/arm64/release/system/kernel/util/KernelReferenceable.o 
+C++ objects/haiku/arm64/release/system/kernel/util/list.o 
+C++ objects/haiku/arm64/release/system/kernel/util/queue.o 
+C++ objects/haiku/arm64/release/system/kernel/util/ring_buffer.o 
+C++ objects/haiku/arm64/release/system/kernel/util/RadixBitmap.o 
+C++ objects/haiku/arm64/release/system/kernel/util/Random.o 
+C++ objects/haiku/arm64/release/system/kernel/util/StringHash.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/PageCacheLocker.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/vm.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/vm_debug.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/vm_init.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/vm_page.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/vm_page_writer.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMAddressSpace.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/messaging/kernel_messaging.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMAddressSpaceLocking.o 
+...on 700th target...
+C++ objects/haiku/arm64/release/system/kernel/vm/VMAnonymousCache.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMAnonymousNoSwapCache.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMArea.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMCache.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/device_manager/kernel_device_manager.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMDeviceCache.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMKernelAddressSpace.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMKernelArea.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMNullCache.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/util/kernel_util.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMPageQueue.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMTranslationMap.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMUserAddressSpace.o 
+C++ objects/haiku/arm64/release/system/kernel/vm/VMUserArea.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/debug/kernel_debug.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_elf.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_int.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_commpage.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_thread.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_cpu.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_pmu.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_debug_console.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_debug.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_user_debugger.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_vm_translation_map.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_vm.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_timer.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_system_info.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_smp.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_real_time_clock.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_platform.o 
+CreateAsmStructOffsetsHeader1 objects/haiku/arm64/common/system/kernel/asm_offsets.h 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_int_gicv2.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/disk_device_manager/kernel_disk_device_manager.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_int_gicv3.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/gicv3_its.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/soc.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/acpi_irq_routing_table.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/VMSAv8TranslationMap.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/posix/kernel_posix.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/PMAPPhysicalPageMapper.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/generic_msi.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/debug_uart.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/debug_uart_8250.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_uart_pl011.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_uart_linflex.o 
+C++ objects/haiku/arm64/release/system/kernel/arch/arm64/arch_uart_samsung.o 
+C++ objects/haiku/arm64/release/system/kernel/platform/efi/platform.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/driver_settings.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/find_directory.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/kernel_core.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/platform/efi/kernel_platform_efi.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/fs_info.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/system_revision.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/wait_for_objects.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/byteorder.o 
+As objects/haiku/arm64/release/system/kernel/arch/arm64/arch_asm.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/arch/arm64/system_time.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/arch/arm64/generic_atomic.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/arch/arm64/generic_system_time_nsecs.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/kernel_errno.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/kernel_vsprintf.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/stack_protector.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/dirent.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/fcntl.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/poll.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/utime.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/ctype_loc_global.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/ctype_l.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/ctype.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/localeconv.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/LocaleData.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/abs.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/atoi.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/bsearch.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/qsort.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/random.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strtod.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strtol.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strtoll.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strtoul.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strtoull.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/chmod.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/stat.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/mkdir.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_os_arch_arm64.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/select.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/gettimeofday.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/uio.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/time.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/access.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/chown.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/close.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/directory.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/dup.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/hostname.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/ioctl.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/link.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/lseek.o 
+...on 800th target...
+Cc objects/haiku/arm64/release/system/kernel/lib/mount.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/read.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/sync.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/truncate.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/usergroup.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/write.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/memmem.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/stpcpy.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strcasecmp.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strcasestr.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strcat.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strcspn.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/strdup.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strerror.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strlcat.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strlcpy.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strncat.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/strncpy.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/strndup.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strnlen.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strpbrk.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strrchr.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strspn.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strstr.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strtok.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strupr.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/ffs.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/ffsl.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/ffsll.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/rand.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/rand_r.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/strtok_r.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/siglongjmp.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/sigsetjmp.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_longjmp_return.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_setjmp_save_sigs.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/arch/arm64/memset.o 
+Cc objects/haiku/arm64/release/system/kernel/lib/arch/arm64/memcpy.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_memcmp.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_memchr.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_strlen.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_strchr.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_strchrnul.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_strcmp.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_strncmp.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_strcpy.o 
+As objects/haiku/arm64/release/system/kernel/lib/arch/arm64/arm_memmove.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/DataIO.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/Referenceable.o 
+C++ objects/haiku/arm64/release/system/kernel/lib/WeakReferenceable.o 
+KernelLd objects/haiku/arm64/release/system/kernel/linkhack.so 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o 
+SetType1 objects/haiku/arm64/release/system/kernel/linkhack.so 
+MimeSet1 objects/haiku/arm64/release/system/kernel/linkhack.so 
+SetVersion1 objects/haiku/arm64/release/system/kernel/linkhack.so 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_lib_posix_arch_arm64.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/slab/kernel_slab.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/lib/kernel_misc.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/lib/kernel_lib_posix.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/arch/arm64/kernel_arch_arm64.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/vm/kernel_vm.o 
+MergeObjectFromObjects1 objects/haiku/arm64/release/system/kernel/fs/kernel_fs.o 
+KernelLd objects/haiku/arm64/release/system/kernel/kernel_arm64 
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.ifunc' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.init_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.fini_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/kernel_core.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/debug/kernel_debug.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/device_manager/kernel_device_manager.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/disk_device_manager/kernel_disk_device_manager.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/fs/kernel_fs.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/messaging/kernel_messaging.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/posix/kernel_posix.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/slab/kernel_slab.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/util/kernel_util.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/vm/kernel_vm.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/arch/arm64/kernel_arch_arm64.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/platform/efi/kernel_platform_efi.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `_haiku_revision' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `_haiku_revision'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_os_arch_arm64.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_lib_posix.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_lib_posix_arch_arm64.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_misc.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(class_type_info.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(dyncast.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_handler.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opvant.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opvsa.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(si_class_type_info.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(tinfo.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(vmi_class_type_info.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_catch.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_globals.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_personality.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_terminate.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_throw.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_unex_handler.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opva.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opva.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_alloc.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_call.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_exception.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_term_handler.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opa.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opa.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(bad_alloc.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(lse-init.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(_divdi3.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(_udivdi3.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(extenddftf2.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(sfp-exceptions.o)' being placed in section `.comment'
+XRes1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+SetType1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+MimeSet1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+SetVersion1 objects/haiku/arm64/release/system/kernel/kernel_arm64 
+KernelLd objects/haiku/arm64/release/system/kernel/kernel.so 
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.ifunc' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.init_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.rela.fini_array' from `objects/haiku/arm64/release/system/kernel/cache/kernel_cache.o' being placed in section `.rela.dyn'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/kernel_core.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/debug/kernel_debug.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/device_manager/kernel_device_manager.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/disk_device_manager/kernel_disk_device_manager.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/fs/kernel_fs.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/messaging/kernel_messaging.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/posix/kernel_posix.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/slab/kernel_slab.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/util/kernel_util.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/vm/kernel_vm.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/arch/arm64/kernel_arch_arm64.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/platform/efi/kernel_platform_efi.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `_haiku_revision' from `objects/haiku/arm64/release/system/kernel/lib/kernel_os_main.o' being placed in section `_haiku_revision'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_os_arch_arm64.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_lib_posix.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/arch/arm64/kernel_lib_posix_arch_arm64.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `objects/haiku/arm64/release/system/kernel/lib/kernel_misc.o' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(class_type_info.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(dyncast.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_handler.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opvant.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opvsa.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(si_class_type_info.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(tinfo.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(vmi_class_type_info.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_catch.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_globals.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_personality.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_terminate.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_throw.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_unex_handler.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opva.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opva.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_alloc.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_call.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_exception.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(eh_term_handler.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(new_opa.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(del_opa.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libsupc++-kernel.a(bad_alloc.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(lse-init.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(_divdi3.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(_udivdi3.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(extenddftf2.o)' being placed in section `.comment'
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ld: warning: orphan section `.comment' from `build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/lib/libgcc-kernel.a(sfp-exceptions.o)' being placed in section `.comment'
+SetType1 objects/haiku/arm64/release/system/kernel/kernel.so 
+MimeSet1 objects/haiku/arm64/release/system/kernel/kernel.so 
+SetVersion1 objects/haiku/arm64/release/system/kernel/kernel.so 
+
+BUILD FAILURE:
+...failed updating 1 target(s)...
+...skipped 1 target(s)...
+...updated 859 target(s)...
