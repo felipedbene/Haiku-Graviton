@@ -589,6 +589,8 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fRetransmitTimeout(TCP_SYN_RETRANSMIT_TIMEOUT),
 	fRetransmitInitialCount(0),
 	fRetransmitStartTime(0),
+	fPersistStartTime(0),
+	fPersistBackoff(0),
 	fReceivedTimestamp(0),
 	fCongestionWindow(0),
 	fSlowStartThreshold(0),
@@ -897,6 +899,8 @@ TCPEndpoint::Connect(const sockaddr* address)
 
 	fRetransmitInitialCount = 0;
 	fRetransmitStartTime = 0;
+	fPersistStartTime = 0;
+	fPersistBackoff = 0;
 	gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
 
 	// wait until 3-way handshake is complete (if needed)
@@ -1732,6 +1736,111 @@ TCPEndpoint::_StartPersistTimer()
 {
 	gStackModule->set_timer(&fPersistTimer, TCP_PERSIST_TIMEOUT);
 	T(TimerSet(this, "persist", TCP_PERSIST_TIMEOUT));
+}
+
+
+/*!	What the persist timer does when it fires. Returns whether the caller has
+	inherited a socket reference to release once fLock is dropped, as
+	_Retransmit() does: a peer that stops answering the window probes is
+	given up on here.
+*/
+bool
+TCPEndpoint::_Persist()
+{
+	if (fSendWindow != 0) {
+		// Not a closed window: the timer also stands in for the ACK that
+		// sender SWS avoidance waits for when nothing is in flight (see
+		// _SendQueued()), and after a window that reopened by less than a
+		// segment, nothing else would send into it. Send what fits.
+		_SendQueued(true);
+		return false;
+	}
+
+	// The peer has closed its window. The probe used to be _SendQueued(true)
+	// sending a zero-length segment at SND.NXT, which a peer has no reason to
+	// answer, and Linux does not: the window could then only reopen through
+	// the peer's own window update, so losing that one segment stalled the
+	// connection for good, and a peer that went away was never noticed.
+	//
+	if (fSendQueue.Used() == 0 && !state_needs_finish(fState)) {
+		// Everything has been acknowledged: there is nothing to probe for
+		// until there is something to send, which starts the timer again.
+		fPersistStartTime = 0;
+		return false;
+	}
+
+	// The same give-up as R2 in _Retransmit(), from the first probe the peer
+	// has not answered; Linux bounds unanswered probes by tcp_retries2 too.
+	const bigtime_t now = system_time();
+	if (fPersistStartTime == 0)
+		fPersistStartTime = now;
+	else if (now - fPersistStartTime >= TCP_RETRANSMIT_GIVE_UP_TIMEOUT) {
+		T(Error(this, "window probes unanswered", __LINE__));
+
+		// See _Retransmit() for why the reference.
+		if (!gSocketModule->acquire_socket(socket))
+			return false;
+
+		_HandleReset(ETIMEDOUT);
+		return true;
+	}
+
+	// One that could not be sent counts as unanswered, as a lost one would.
+	_SendWindowProbe();
+
+	// Back off as RFC 9293 3.8.6.1 asks, doubling up to the retransmit
+	// timeout's ceiling, but fire on the deadline rather than after it.
+	bigtime_t delay = (bigtime_t)TCP_PERSIST_TIMEOUT << fPersistBackoff;
+	if (delay >= TCP_MAX_RETRANSMIT_TIMEOUT)
+		delay = TCP_MAX_RETRANSMIT_TIMEOUT;
+	else
+		fPersistBackoff++;
+
+	bigtime_t remaining = fPersistStartTime + TCP_RETRANSMIT_GIVE_UP_TIMEOUT
+		- now;
+	if (delay > remaining)
+		delay = remaining;
+
+	gStackModule->set_timer(&fPersistTimer, delay);
+	T(TimerSet(this, "persist", delay));
+	return false;
+}
+
+
+/*!	Sends a window probe the peer has to answer: an ACK at SND.UNA - 1, the
+	way Linux's tcp_xmit_probe_skb() does. A sequence number the peer has
+	already acknowledged is not acceptable to it, and RFC 9293 3.10.7.4 has
+	it answer an unacceptable segment with an ACK -- which carries its
+	current window. Nothing new goes into the sequence space, so there is
+	nothing to retransmit or to time, unlike the one byte past the window
+	that RFC 9293 3.8.6.1 suggests.
+*/
+status_t
+TCPEndpoint::_SendWindowProbe()
+{
+	if (fRoute == NULL)
+		return B_ERROR;
+
+	net_buffer* buffer = gBufferModule->create(256);
+	if (buffer == NULL)
+		return B_NO_MEMORY;
+
+	tcp_segment_header segment = _PrepareSendSegment();
+	// A bare ACK, as Linux's: an urgent pointer is relative to SND.NXT, not
+	// to the sequence number this goes out with.
+	segment.flags &= ~TCP_FLAG_URGENT;
+	segment.urgent_offset = 0;
+
+	// _PrepareAndSend() sends at fSendNext and advances it by the length of
+	// the segment -- none here -- so rewinding it for the call and putting
+	// it back afterwards is all it takes. _RetransmitSynchronizeAcknowledge()
+	// does the same.
+	const tcp_sequence sendNext = fSendNext;
+	fSendNext = fSendUnacknowledged - 1;
+	status_t status = _PrepareAndSend(segment, buffer, true);
+	fSendNext = sendNext;
+
+	return status;
 }
 
 
@@ -2713,6 +2822,8 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 	// silence took the connection with it.
 	fRetransmitInitialCount = 0;
 	fRetransmitStartTime = 0;
+	fPersistStartTime = 0;
+	fPersistBackoff = 0;
 	gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
 	T(TimerSet(this, "retransmit", fRetransmitTimeout));
 
@@ -3139,6 +3250,12 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 	}
 
 	fSendWindow = advertisedWindow;
+	// Whatever the window, the peer is there: any window probe out has been
+	// answered. Only an open window ends the probing, and with it the
+	// backoff.
+	fPersistStartTime = 0;
+	if (advertisedWindow != 0)
+		fPersistBackoff = 0;
 	if (advertisedWindow > fSendMaxWindow)
 		fSendMaxWindow = advertisedWindow;
 
@@ -4452,11 +4569,12 @@ TCPEndpoint::_Retransmit()
 			// next.
 			//
 			// With the window closed, the peer is holding our data back on
-			// purpose (its reader has stopped), and what this firing sends is
-			// a window probe: a zero-length segment at SND.NXT, which a peer
-			// has no reason to answer -- Linux does not. Counting that
-			// silence gave up on a live connection whose reader paused for
-			// longer than the R2 timeout.
+			// purpose (its reader has stopped): it answers our window probes,
+			// but nothing it sends moves SND.UNA until its reader is back, so
+			// counting here gave up on a live connection whose reader paused
+			// for longer than the R2 timeout. Whether a peer with its window
+			// closed is still there is _Persist()'s to decide, from whether
+			// it answers the probes.
 			//
 			// With nothing owed, this firing timed nothing out.
 			fRetransmitStartTime = 0;
@@ -4677,7 +4795,14 @@ TCPEndpoint::_PersistTimer(net_timer* timer, void* _endpoint)
 	if (endpoint->State() == CLOSED)
 		return;
 
-	endpoint->_SendQueued(true);
+	if (!endpoint->_Persist())
+		return;
+
+	locker.Unlock();
+		// The reference _Persist() took for us may be the last one; see
+		// _RetransmitTimer(), which this mirrors.
+
+	gSocketModule->release_socket(endpoint->socket);
 }
 
 

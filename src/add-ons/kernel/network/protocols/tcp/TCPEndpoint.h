@@ -104,6 +104,8 @@ private:
 			status_t	_BindToWildcard(uint16 port);
 
 			void		_StartPersistTimer();
+			bool		_Persist();
+			status_t	_SendWindowProbe();
 			void		_EnterTimeWait();
 			void		_UpdateTimeWait();
 			bool		_ClaimTimeWaitReference();
@@ -274,6 +276,12 @@ private:
 		// When the retransmit timer first fired on the data still outstanding,
 		// or 0 while nothing has timed out since SND.UNA last moved. What the
 		// R2 give-up is measured from -- see _Retransmit().
+	bigtime_t		fPersistStartTime;
+		// When the first window probe since the peer last answered went out,
+		// or 0. The same give-up for a closed window -- see _Persist().
+	uint8			fPersistBackoff;
+		// How many times the probe interval has doubled since the peer last
+		// advertised an open window.
 
 	uint32			fReceivedTimestamp;
 
