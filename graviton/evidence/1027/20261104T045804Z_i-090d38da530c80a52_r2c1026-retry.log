@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2c1026-retry
+# instance: i-090d38da530c80a52   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm r2c1026: retry the EBUSY BFS unmount
+# start: 20261104T045804Z   end: 20261104T045815Z   rc: 0
+# script sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+# ---- script ---- (listing re-added by hand: it was passed as a process substitution and read once)
+# | sleep 5
+# | unmount /b1027; echo "retry unmount bfs rc=$?"
+# ---- raw output ----
+retry unmount bfs rc=0

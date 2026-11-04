@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2both-ramfs
+# instance: i-03be178a2eae03516   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm r2both: 50 x ramfs mount + file + unmount (ramfs.trunk)
+# start: 20261104T045714Z   end: 20261104T045726Z   rc: 0
+# script sha256: 8de8c3d54ee3ce1db9813bd27521191cbc9438db266a6013da2c78e3a4f7b4da
+# ---- script ----
+# | # 50 x ramfs mount + file + unmount (ramfs.trunk, with #1016), the vfs unmount path.
+# | ok=0; mkdir -p /r1027; for i in $(seq 1 50); do
+# | 	mount -t ramfs /r1027 || break
+# | 	echo x > /r1027/f; unmount /r1027 && ok=$((ok+1))
+# | done; echo "ramfs mount+file+unmount: $ok/50"
+# ---- raw output ----
+ramfs mount+file+unmount: 50/50
