@@ -163,13 +163,30 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 		"\n", fNumBlocks, numBlocks);
 
 	off_t targetBlocks = numBlocks;
-	off_t oldNumBlocks = fNumBlocks;
 	fPending = 0;
 	numBlocks = 0;
 		// Counts the blocks mapped, data and tree blocks, for the caller's
 		// i_blocks.
 
-	status_t status = _Enlarge(transaction, targetBlocks, numBlocks);
+	// Linux can preallocate past the end of the file (fallocate with
+	// FALLOC_FL_KEEP_SIZE). Those extents lie beyond fNumBlocks, which
+	// comes from the size, where new extents are appended; give them back
+	// first, so the tree stays in order. They hold no visible data.
+	off_t mappedEnd;
+	status_t status = _MappedEnd(mappedEnd);
+	if (status != B_OK)
+		return status;
+	if (mappedEnd > fNumBlocks) {
+		off_t freed = fNumBlocks;
+		status = Shrink(transaction, freed);
+		numBlocks -= freed;
+		if (status != B_OK)
+			return status;
+	}
+
+	off_t oldNumBlocks = fNumBlocks;
+
+	status = _Enlarge(transaction, targetBlocks, numBlocks);
 	if (status != B_OK) {
 		// Undo what was done, so that the file keeps exactly the blocks it
 		// had and the caller can fail the resize (a full volume, mostly).
@@ -424,6 +441,14 @@ ExtentStream::Shrink(Transaction& transaction, off_t& numBlocks)
 	off_t targetBlocks = numBlocks;
 	numBlocks = 0;
 		// As in Enlarge(), counts the data and tree blocks really freed.
+
+	// Extents preallocated past the end of the file go too.
+	off_t mappedEnd;
+	status_t mappedStatus = _MappedEnd(mappedEnd);
+	if (mappedStatus != B_OK)
+		return mappedStatus;
+	if (mappedEnd > fNumBlocks)
+		fNumBlocks = mappedEnd;
 
 	while (targetBlocks < fNumBlocks) {
 		ext2_extent_stream *stream = fStream;
@@ -734,6 +759,36 @@ ExtentStream::_ZeroBlocks(fsblock_t start, uint32 count)
 
 	free(buffer);
 	return status;
+}
+
+
+status_t
+ExtentStream::_MappedEnd(off_t& end)
+{
+	// the logical end of the last extent, which can lie past fNumBlocks
+	ext2_extent_stream* stream = fStream;
+	if (!stream->extent_header.IsValid()
+		|| stream->extent_header.NumEntries()
+			> stream->extent_header.MaxEntries()) {
+		return B_BAD_DATA;
+	}
+	CachedBlock cached(fVolume);
+	while (stream->extent_header.Depth() != 0) {
+		int32 count = stream->extent_header.NumEntries();
+		if (count == 0)
+			return B_BAD_DATA;
+		stream = (ext2_extent_stream*)cached.SetTo(
+			stream->extent_index[count - 1].PhysicalBlock());
+		if (stream == NULL)
+			return B_IO_ERROR;
+		if (!stream->extent_header.IsValid())
+			return B_BAD_DATA;
+	}
+
+	int32 count = stream->extent_header.NumEntries();
+	end = count == 0 ? 0 : (off_t)stream->extent_entries[count - 1]
+		.LogicalBlock() + stream->extent_entries[count - 1].Length();
+	return B_OK;
 }
 
 
