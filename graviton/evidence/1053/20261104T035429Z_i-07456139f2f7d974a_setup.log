@@ -1,0 +1,627 @@
+start setup 20261104T035250Z
+a9954f424a evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+######## install[0]: export DEBIAN_FRONTEND=noninteractive
+######## install[1]: apt-get update -qq
+######## install[2]: apt-get install -y --no-install-recommends git build-essential g++ make bison flex gawk nasm wget cu
+Reading package lists...
+Building dependency tree...
+Reading state information...
+git is already the newest version (1:2.43.0-1ubuntu7.4).
+gawk is already the newest version (1:5.2.1-2ubuntu0.1).
+gawk set to manually installed.
+wget is already the newest version (1.21.4-1ubuntu4.5).
+wget set to manually installed.
+curl is already the newest version (8.5.0-2ubuntu10.16).
+curl set to manually installed.
+xz-utils is already the newest version (5.6.1+really5.4.5-1ubuntu0.4).
+xz-utils set to manually installed.
+zstd is already the newest version (1.5.5+dfsg2-2build1.1).
+zstd set to manually installed.
+python3 is already the newest version (3.12.3-0ubuntu2.1).
+python3 set to manually installed.
+gdisk is already the newest version (1.0.10-1build1).
+gdisk set to manually installed.
+rsync is already the newest version (3.2.7-1ubuntu1.5).
+rsync set to manually installed.
+sudo is already the newest version (1.9.15p5-3ubuntu5.24.04.4).
+sudo set to manually installed.
+ca-certificates is already the newest version (20260816ubuntu0.24.04.1).
+ca-certificates set to manually installed.
+file is already the newest version (1:5.45-3build1).
+file set to manually installed.
+The following additional packages will be installed:
+  autotools-dev binutils binutils-aarch64-linux-gnu binutils-common bzip2 cpp
+  cpp-13 cpp-13-aarch64-linux-gnu cpp-aarch64-linux-gnu dpkg-dev g++-13
+  g++-13-aarch64-linux-gnu g++-aarch64-linux-gnu gcc gcc-13
+  gcc-13-aarch64-linux-gnu gcc-13-base gcc-aarch64-linux-gnu libasan8
+  libatomic1 libbinutils libc-dev-bin libc6-dev libcc1-0 libcrypt-dev
+  libctf-nobfd0 libctf0 libdpkg-perl libgcc-13-dev libgomp1 libgprofng0
+  libhwasan0 libisl23 libitm1 liblsan0 libmpc3 libsframe1 libstdc++-13-dev
+  libtext-unidecode-perl libtsan2 libubsan1 libxml-libxml-perl
+  libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl
+  linux-libc-dev lto-disabled-list m4 rpcsvc-proto tex-common texinfo-lib
+Suggested packages:
+  autoconf-archive gnu-standards autoconf-doc binutils-doc gprofng-gui
+  bison-doc bzip2-doc cpp-doc gcc-13-locales cpp-13-doc debian-keyring
+  flex-doc gcc-13-doc gcc-multilib manpages-dev gdb gcc-doc
+  gdb-aarch64-linux-gnu autopoint gettext-doc libasprintf-dev libgettextpo-dev
+  glibc-doc bzr libstdc++-13-doc libtool-doc gfortran | fortran95-compiler
+  gcj-jdk m4-doc make-doc debhelper texlive-base texlive-latex-base
+  texlive-plain-generic texlive-fonts-recommended zip
+Recommended packages:
+  fakeroot libalgorithm-merge-perl libfl-dev manpages-dev libc-devtools
+  libfile-fcntllock-perl libltdl-dev libwww-perl libxml-sax-expat-perl
+The following NEW packages will be installed:
+  attr autoconf automake autotools-dev binutils binutils-aarch64-linux-gnu
+  binutils-common bison build-essential bzip2 cpp cpp-13
+  cpp-13-aarch64-linux-gnu cpp-aarch64-linux-gnu dpkg-dev flex g++ g++-13
+  g++-13-aarch64-linux-gnu g++-aarch64-linux-gnu gcc gcc-13
+  gcc-13-aarch64-linux-gnu gcc-13-base gcc-aarch64-linux-gnu gettext libasan8
+  libatomic1 libbinutils libc-dev-bin libc6-dev libcc1-0 libcrypt-dev
+  libctf-nobfd0 libctf0 libdpkg-perl libgcc-13-dev libgomp1 libgprofng0
+  libhwasan0 libisl23 libitm1 liblsan0 libmpc3 libsframe1 libstdc++-13-dev
+  libtext-unidecode-perl libtool libtsan2 libubsan1 libxml-libxml-perl
+  libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl
+  libzstd-dev linux-libc-dev lto-disabled-list m4 make nasm python-is-python3
+  rpcsvc-proto tex-common texinfo texinfo-lib unzip zlib1g-dev
+0 upgraded, 67 newly installed, 0 to remove and 6 not upgraded.
+Need to get 72.5 MB of archives.
+After this operation, 265 MB of additional disk space will be used.
+Get:1 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 m4 arm64 1.4.19-4build1 [240 kB]
+Get:2 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 flex arm64 2.6.4-8.2build1 [291 kB]
+Get:3 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 attr arm64 1:2.5.2-1ubuntu0.1 [24.8 kB]
+Get:4 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 autoconf all 2.71-3 [339 kB]
+Get:5 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 autotools-dev all 20220109.1 [44.9 kB]
+Get:6 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 automake all 1:1.16.5-1.3ubuntu1 [558 kB]
+Get:7 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 binutils-common arm64 2.42-4ubuntu2.10 [240 kB]
+Get:8 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libsframe1 arm64 2.42-4ubuntu2.10 [15.4 kB]
+Get:9 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libbinutils arm64 2.42-4ubuntu2.10 [766 kB]
+Get:10 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libctf-nobfd0 arm64 2.42-4ubuntu2.10 [101 kB]
+Get:11 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libctf0 arm64 2.42-4ubuntu2.10 [95.7 kB]
+Get:12 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libgprofng0 arm64 2.42-4ubuntu2.10 [776 kB]
+Get:13 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 binutils-aarch64-linux-gnu arm64 2.42-4ubuntu2.10 [3304 kB]
+Get:14 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 binutils arm64 2.42-4ubuntu2.10 [18.1 kB]
+Get:15 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 bison arm64 2:3.8.2+dfsg-1ubuntu0.24.04.1 [740 kB]
+Get:16 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libc-dev-bin arm64 2.39-0ubuntu8.9 [19.7 kB]
+Get:17 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 linux-libc-dev arm64 6.8.0-147.147 [1569 kB]
+Get:18 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libcrypt-dev arm64 1:4.4.36-4build1 [118 kB]
+Get:19 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 rpcsvc-proto arm64 1.4.2-0ubuntu7 [64.8 kB]
+Get:20 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libc6-dev arm64 2.39-0ubuntu8.9 [1596 kB]
+Get:21 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 gcc-13-base arm64 13.3.0-6ubuntu2~24.04.1 [51.6 kB]
+Get:22 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libisl23 arm64 0.26-3build1.1 [669 kB]
+Get:23 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libmpc3 arm64 1.3.1-1build1.1 [56.4 kB]
+Get:24 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 cpp-13-aarch64-linux-gnu arm64 13.3.0-6ubuntu2~24.04.1 [9560 kB]
+Get:25 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 cpp-13 arm64 13.3.0-6ubuntu2~24.04.1 [1038 B]
+Get:26 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 cpp-aarch64-linux-gnu arm64 4:13.2.0-7ubuntu1 [5316 B]
+Get:27 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 cpp arm64 4:13.2.0-7ubuntu1 [22.4 kB]
+Get:28 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libcc1-0 arm64 14.2.0-4ubuntu2~24.04.1 [49.7 kB]
+Get:29 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libgomp1 arm64 14.2.0-4ubuntu2~24.04.1 [145 kB]
+Get:30 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libitm1 arm64 14.2.0-4ubuntu2~24.04.1 [28.2 kB]
+Get:31 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libatomic1 arm64 14.2.0-4ubuntu2~24.04.1 [11.6 kB]
+Get:32 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libasan8 arm64 14.2.0-4ubuntu2~24.04.1 [2928 kB]
+Get:33 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 liblsan0 arm64 14.2.0-4ubuntu2~24.04.1 [1289 kB]
+Get:34 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libtsan2 arm64 14.2.0-4ubuntu2~24.04.1 [2697 kB]
+Get:35 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libubsan1 arm64 14.2.0-4ubuntu2~24.04.1 [1157 kB]
+Get:36 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libhwasan0 arm64 14.2.0-4ubuntu2~24.04.1 [1605 kB]
+Get:37 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libgcc-13-dev arm64 13.3.0-6ubuntu2~24.04.1 [2473 kB]
+Get:38 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 gcc-13-aarch64-linux-gnu arm64 13.3.0-6ubuntu2~24.04.1 [18.7 MB]
+Get:39 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 gcc-13 arm64 13.3.0-6ubuntu2~24.04.1 [484 kB]
+Get:40 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 gcc-aarch64-linux-gnu arm64 4:13.2.0-7ubuntu1 [1198 B]
+Get:41 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 gcc arm64 4:13.2.0-7ubuntu1 [5018 B]
+Get:42 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libstdc++-13-dev arm64 13.3.0-6ubuntu2~24.04.1 [2397 kB]
+Get:43 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 g++-13-aarch64-linux-gnu arm64 13.3.0-6ubuntu2~24.04.1 [10.9 MB]
+Get:44 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 g++-13 arm64 13.3.0-6ubuntu2~24.04.1 [16.0 kB]
+Get:45 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 g++-aarch64-linux-gnu arm64 4:13.2.0-7ubuntu1 [962 B]
+Get:46 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 g++ arm64 4:13.2.0-7ubuntu1 [1082 B]
+Get:47 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 make arm64 4.3-4.1build2 [178 kB]
+Get:48 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libdpkg-perl all 1.22.6ubuntu6.6 [268 kB]
+Get:49 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 bzip2 arm64 1.0.8-5.1ubuntu0.1 [34.0 kB]
+Get:50 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 lto-disabled-list all 47 [12.4 kB]
+Get:51 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 dpkg-dev all 1.22.6ubuntu6.6 [1074 kB]
+Get:52 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 build-essential arm64 12.10ubuntu1 [4932 B]
+Get:53 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 gettext arm64 0.21-14ubuntu2 [845 kB]
+Get:54 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 libtext-unidecode-perl all 1.30-3 [105 kB]
+Get:55 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libtool all 2.4.7-7build1 [166 kB]
+Get:56 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-namespacesupport-perl all 1.12-2 [13.5 kB]
+Get:57 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-sax-base-perl all 1.09-3 [18.9 kB]
+Get:58 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-sax-perl all 1.02+dfsg-3 [57.0 kB]
+Get:59 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 libxml-libxml-perl arm64 2.0207+dfsg+really+2.0134-1build4 [296 kB]
+Get:60 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 libzstd-dev arm64 1.5.5+dfsg2-2build1.1 [344 kB]
+Get:61 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 nasm arm64 2.16.01-1build1 [438 kB]
+Get:62 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/main arm64 python-is-python3 all 3.11.4-1 [2684 B]
+Get:63 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 tex-common all 6.18 [32.8 kB]
+Get:64 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 texinfo-lib arm64 7.1-3build2 [130 kB]
+Get:65 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble/universe arm64 texinfo all 7.1-3build2 [1273 kB]
+Get:66 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 unzip arm64 6.0-28ubuntu4.1 [171 kB]
+Get:67 http://us-west-2.ec2.ports.ubuntu.com/ubuntu-ports noble-updates/main arm64 zlib1g-dev arm64 1:1.3.dfsg-3.1ubuntu2.3 [894 kB]
+Fetched 72.5 MB in 1s (84.0 MB/s)
+Selecting previously unselected package m4.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 82663 files and directories currently installed.)
+Preparing to unpack .../00-m4_1.4.19-4build1_arm64.deb ...
+Unpacking m4 (1.4.19-4build1) ...
+Selecting previously unselected package flex.
+Preparing to unpack .../01-flex_2.6.4-8.2build1_arm64.deb ...
+Unpacking flex (2.6.4-8.2build1) ...
+Selecting previously unselected package attr.
+Preparing to unpack .../02-attr_1%3a2.5.2-1ubuntu0.1_arm64.deb ...
+Unpacking attr (1:2.5.2-1ubuntu0.1) ...
+Selecting previously unselected package autoconf.
+Preparing to unpack .../03-autoconf_2.71-3_all.deb ...
+Unpacking autoconf (2.71-3) ...
+Selecting previously unselected package autotools-dev.
+Preparing to unpack .../04-autotools-dev_20220109.1_all.deb ...
+Unpacking autotools-dev (20220109.1) ...
+Selecting previously unselected package automake.
+Preparing to unpack .../05-automake_1%3a1.16.5-1.3ubuntu1_all.deb ...
+Unpacking automake (1:1.16.5-1.3ubuntu1) ...
+Selecting previously unselected package binutils-common:arm64.
+Preparing to unpack .../06-binutils-common_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking binutils-common:arm64 (2.42-4ubuntu2.10) ...
+Selecting previously unselected package libsframe1:arm64.
+Preparing to unpack .../07-libsframe1_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking libsframe1:arm64 (2.42-4ubuntu2.10) ...
+Selecting previously unselected package libbinutils:arm64.
+Preparing to unpack .../08-libbinutils_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking libbinutils:arm64 (2.42-4ubuntu2.10) ...
+Selecting previously unselected package libctf-nobfd0:arm64.
+Preparing to unpack .../09-libctf-nobfd0_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking libctf-nobfd0:arm64 (2.42-4ubuntu2.10) ...
+Selecting previously unselected package libctf0:arm64.
+Preparing to unpack .../10-libctf0_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking libctf0:arm64 (2.42-4ubuntu2.10) ...
+Selecting previously unselected package libgprofng0:arm64.
+Preparing to unpack .../11-libgprofng0_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking libgprofng0:arm64 (2.42-4ubuntu2.10) ...
+Selecting previously unselected package binutils-aarch64-linux-gnu.
+Preparing to unpack .../12-binutils-aarch64-linux-gnu_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking binutils-aarch64-linux-gnu (2.42-4ubuntu2.10) ...
+Selecting previously unselected package binutils.
+Preparing to unpack .../13-binutils_2.42-4ubuntu2.10_arm64.deb ...
+Unpacking binutils (2.42-4ubuntu2.10) ...
+Selecting previously unselected package bison.
+Preparing to unpack .../14-bison_2%3a3.8.2+dfsg-1ubuntu0.24.04.1_arm64.deb ...
+Unpacking bison (2:3.8.2+dfsg-1ubuntu0.24.04.1) ...
+Selecting previously unselected package libc-dev-bin.
+Preparing to unpack .../15-libc-dev-bin_2.39-0ubuntu8.9_arm64.deb ...
+Unpacking libc-dev-bin (2.39-0ubuntu8.9) ...
+Selecting previously unselected package linux-libc-dev:arm64.
+Preparing to unpack .../16-linux-libc-dev_6.8.0-147.147_arm64.deb ...
+Unpacking linux-libc-dev:arm64 (6.8.0-147.147) ...
+Selecting previously unselected package libcrypt-dev:arm64.
+Preparing to unpack .../17-libcrypt-dev_1%3a4.4.36-4build1_arm64.deb ...
+Unpacking libcrypt-dev:arm64 (1:4.4.36-4build1) ...
+Selecting previously unselected package rpcsvc-proto.
+Preparing to unpack .../18-rpcsvc-proto_1.4.2-0ubuntu7_arm64.deb ...
+Unpacking rpcsvc-proto (1.4.2-0ubuntu7) ...
+Selecting previously unselected package libc6-dev:arm64.
+Preparing to unpack .../19-libc6-dev_2.39-0ubuntu8.9_arm64.deb ...
+Unpacking libc6-dev:arm64 (2.39-0ubuntu8.9) ...
+Selecting previously unselected package gcc-13-base:arm64.
+Preparing to unpack .../20-gcc-13-base_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking gcc-13-base:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package libisl23:arm64.
+Preparing to unpack .../21-libisl23_0.26-3build1.1_arm64.deb ...
+Unpacking libisl23:arm64 (0.26-3build1.1) ...
+Selecting previously unselected package libmpc3:arm64.
+Preparing to unpack .../22-libmpc3_1.3.1-1build1.1_arm64.deb ...
+Unpacking libmpc3:arm64 (1.3.1-1build1.1) ...
+Selecting previously unselected package cpp-13-aarch64-linux-gnu.
+Preparing to unpack .../23-cpp-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking cpp-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package cpp-13.
+Preparing to unpack .../24-cpp-13_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking cpp-13 (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package cpp-aarch64-linux-gnu.
+Preparing to unpack .../25-cpp-aarch64-linux-gnu_4%3a13.2.0-7ubuntu1_arm64.deb ...
+Unpacking cpp-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+Selecting previously unselected package cpp.
+Preparing to unpack .../26-cpp_4%3a13.2.0-7ubuntu1_arm64.deb ...
+Unpacking cpp (4:13.2.0-7ubuntu1) ...
+Selecting previously unselected package libcc1-0:arm64.
+Preparing to unpack .../27-libcc1-0_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libcc1-0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libgomp1:arm64.
+Preparing to unpack .../28-libgomp1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libgomp1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libitm1:arm64.
+Preparing to unpack .../29-libitm1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libitm1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libatomic1:arm64.
+Preparing to unpack .../30-libatomic1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libatomic1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libasan8:arm64.
+Preparing to unpack .../31-libasan8_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libasan8:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package liblsan0:arm64.
+Preparing to unpack .../32-liblsan0_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking liblsan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libtsan2:arm64.
+Preparing to unpack .../33-libtsan2_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libtsan2:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libubsan1:arm64.
+Preparing to unpack .../34-libubsan1_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libubsan1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libhwasan0:arm64.
+Preparing to unpack .../35-libhwasan0_14.2.0-4ubuntu2~24.04.1_arm64.deb ...
+Unpacking libhwasan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Selecting previously unselected package libgcc-13-dev:arm64.
+Preparing to unpack .../36-libgcc-13-dev_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking libgcc-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package gcc-13-aarch64-linux-gnu.
+Preparing to unpack .../37-gcc-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking gcc-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package gcc-13.
+Preparing to unpack .../38-gcc-13_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking gcc-13 (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package gcc-aarch64-linux-gnu.
+Preparing to unpack .../39-gcc-aarch64-linux-gnu_4%3a13.2.0-7ubuntu1_arm64.deb ...
+Unpacking gcc-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+Selecting previously unselected package gcc.
+Preparing to unpack .../40-gcc_4%3a13.2.0-7ubuntu1_arm64.deb ...
+Unpacking gcc (4:13.2.0-7ubuntu1) ...
+Selecting previously unselected package libstdc++-13-dev:arm64.
+Preparing to unpack .../41-libstdc++-13-dev_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking libstdc++-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package g++-13-aarch64-linux-gnu.
+Preparing to unpack .../42-g++-13-aarch64-linux-gnu_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking g++-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package g++-13.
+Preparing to unpack .../43-g++-13_13.3.0-6ubuntu2~24.04.1_arm64.deb ...
+Unpacking g++-13 (13.3.0-6ubuntu2~24.04.1) ...
+Selecting previously unselected package g++-aarch64-linux-gnu.
+Preparing to unpack .../44-g++-aarch64-linux-gnu_4%3a13.2.0-7ubuntu1_arm64.deb ...
+Unpacking g++-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+Selecting previously unselected package g++.
+Preparing to unpack .../45-g++_4%3a13.2.0-7ubuntu1_arm64.deb ...
+Unpacking g++ (4:13.2.0-7ubuntu1) ...
+Selecting previously unselected package make.
+Preparing to unpack .../46-make_4.3-4.1build2_arm64.deb ...
+Unpacking make (4.3-4.1build2) ...
+Selecting previously unselected package libdpkg-perl.
+Preparing to unpack .../47-libdpkg-perl_1.22.6ubuntu6.6_all.deb ...
+Unpacking libdpkg-perl (1.22.6ubuntu6.6) ...
+Selecting previously unselected package bzip2.
+Preparing to unpack .../48-bzip2_1.0.8-5.1ubuntu0.1_arm64.deb ...
+Unpacking bzip2 (1.0.8-5.1ubuntu0.1) ...
+Selecting previously unselected package lto-disabled-list.
+Preparing to unpack .../49-lto-disabled-list_47_all.deb ...
+Unpacking lto-disabled-list (47) ...
+Selecting previously unselected package dpkg-dev.
+Preparing to unpack .../50-dpkg-dev_1.22.6ubuntu6.6_all.deb ...
+Unpacking dpkg-dev (1.22.6ubuntu6.6) ...
+Selecting previously unselected package build-essential.
+Preparing to unpack .../51-build-essential_12.10ubuntu1_arm64.deb ...
+Unpacking build-essential (12.10ubuntu1) ...
+Selecting previously unselected package gettext.
+Preparing to unpack .../52-gettext_0.21-14ubuntu2_arm64.deb ...
+Unpacking gettext (0.21-14ubuntu2) ...
+Selecting previously unselected package libtext-unidecode-perl.
+Preparing to unpack .../53-libtext-unidecode-perl_1.30-3_all.deb ...
+Unpacking libtext-unidecode-perl (1.30-3) ...
+Selecting previously unselected package libtool.
+Preparing to unpack .../54-libtool_2.4.7-7build1_all.deb ...
+Unpacking libtool (2.4.7-7build1) ...
+Selecting previously unselected package libxml-namespacesupport-perl.
+Preparing to unpack .../55-libxml-namespacesupport-perl_1.12-2_all.deb ...
+Unpacking libxml-namespacesupport-perl (1.12-2) ...
+Selecting previously unselected package libxml-sax-base-perl.
+Preparing to unpack .../56-libxml-sax-base-perl_1.09-3_all.deb ...
+Unpacking libxml-sax-base-perl (1.09-3) ...
+Selecting previously unselected package libxml-sax-perl.
+Preparing to unpack .../57-libxml-sax-perl_1.02+dfsg-3_all.deb ...
+Unpacking libxml-sax-perl (1.02+dfsg-3) ...
+Selecting previously unselected package libxml-libxml-perl.
+Preparing to unpack .../58-libxml-libxml-perl_2.0207+dfsg+really+2.0134-1build4_arm64.deb ...
+Unpacking libxml-libxml-perl (2.0207+dfsg+really+2.0134-1build4) ...
+Selecting previously unselected package libzstd-dev:arm64.
+Preparing to unpack .../59-libzstd-dev_1.5.5+dfsg2-2build1.1_arm64.deb ...
+Unpacking libzstd-dev:arm64 (1.5.5+dfsg2-2build1.1) ...
+Selecting previously unselected package nasm.
+Preparing to unpack .../60-nasm_2.16.01-1build1_arm64.deb ...
+Unpacking nasm (2.16.01-1build1) ...
+Selecting previously unselected package python-is-python3.
+Preparing to unpack .../61-python-is-python3_3.11.4-1_all.deb ...
+Unpacking python-is-python3 (3.11.4-1) ...
+Selecting previously unselected package tex-common.
+Preparing to unpack .../62-tex-common_6.18_all.deb ...
+Unpacking tex-common (6.18) ...
+Selecting previously unselected package texinfo-lib.
+Preparing to unpack .../63-texinfo-lib_7.1-3build2_arm64.deb ...
+Unpacking texinfo-lib (7.1-3build2) ...
+Selecting previously unselected package texinfo.
+Preparing to unpack .../64-texinfo_7.1-3build2_all.deb ...
+Unpacking texinfo (7.1-3build2) ...
+Selecting previously unselected package unzip.
+Preparing to unpack .../65-unzip_6.0-28ubuntu4.1_arm64.deb ...
+Unpacking unzip (6.0-28ubuntu4.1) ...
+Selecting previously unselected package zlib1g-dev:arm64.
+Preparing to unpack .../66-zlib1g-dev_1%3a1.3.dfsg-3.1ubuntu2.3_arm64.deb ...
+Unpacking zlib1g-dev:arm64 (1:1.3.dfsg-3.1ubuntu2.3) ...
+Setting up lto-disabled-list (47) ...
+Setting up libzstd-dev:arm64 (1.5.5+dfsg2-2build1.1) ...
+Setting up attr (1:2.5.2-1ubuntu0.1) ...
+Setting up unzip (6.0-28ubuntu4.1) ...
+Setting up binutils-common:arm64 (2.42-4ubuntu2.10) ...
+Setting up linux-libc-dev:arm64 (6.8.0-147.147) ...
+Setting up libxml-namespacesupport-perl (1.12-2) ...
+Setting up libctf-nobfd0:arm64 (2.42-4ubuntu2.10) ...
+Setting up m4 (1.4.19-4build1) ...
+Setting up texinfo-lib (7.1-3build2) ...
+Setting up libgomp1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up bzip2 (1.0.8-5.1ubuntu0.1) ...
+Setting up libsframe1:arm64 (2.42-4ubuntu2.10) ...
+Setting up tex-common (6.18) ...
+update-language: texlive-base not installed and configured, doing nothing!
+Setting up libxml-sax-base-perl (1.09-3) ...
+Setting up autotools-dev (20220109.1) ...
+Setting up rpcsvc-proto (1.4.2-0ubuntu7) ...
+Setting up gcc-13-base:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+Setting up make (4.3-4.1build2) ...
+Setting up libmpc3:arm64 (1.3.1-1build1.1) ...
+Setting up libatomic1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up nasm (2.16.01-1build1) ...
+Setting up libdpkg-perl (1.22.6ubuntu6.6) ...
+Setting up autoconf (2.71-3) ...
+Setting up libubsan1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up libhwasan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up libcrypt-dev:arm64 (1:4.4.36-4build1) ...
+Setting up libasan8:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up bison (2:3.8.2+dfsg-1ubuntu0.24.04.1) ...
+update-alternatives: using /usr/bin/bison.yacc to provide /usr/bin/yacc (yacc) in auto mode
+Setting up libtsan2:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up libbinutils:arm64 (2.42-4ubuntu2.10) ...
+Setting up libisl23:arm64 (0.26-3build1.1) ...
+Setting up libtext-unidecode-perl (1.30-3) ...
+Setting up libc-dev-bin (2.39-0ubuntu8.9) ...
+Setting up python-is-python3 (3.11.4-1) ...
+Setting up libcc1-0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up liblsan0:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up libitm1:arm64 (14.2.0-4ubuntu2~24.04.1) ...
+Setting up libctf0:arm64 (2.42-4ubuntu2.10) ...
+Setting up automake (1:1.16.5-1.3ubuntu1) ...
+update-alternatives: using /usr/bin/automake-1.16 to provide /usr/bin/automake (automake) in auto mode
+Setting up flex (2.6.4-8.2build1) ...
+Setting up gettext (0.21-14ubuntu2) ...
+Setting up cpp-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+Setting up libxml-sax-perl (1.02+dfsg-3) ...
+update-perl-sax-parsers: Registering Perl SAX parser XML::SAX::PurePerl with priority 10...
+update-perl-sax-parsers: Updating overall Perl SAX parser modules info file...
+
+Creating config file /etc/perl/XML/SAX/ParserDetails.ini with new version
+Setting up cpp-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+Setting up libgprofng0:arm64 (2.42-4ubuntu2.10) ...
+Setting up libxml-libxml-perl (2.0207+dfsg+really+2.0134-1build4) ...
+update-perl-sax-parsers: Registering Perl SAX parser XML::LibXML::SAX::Parser with priority 50...
+update-perl-sax-parsers: Registering Perl SAX parser XML::LibXML::SAX with priority 50...
+update-perl-sax-parsers: Updating overall Perl SAX parser modules info file...
+Replacing config file /etc/perl/XML/SAX/ParserDetails.ini with new version
+Setting up libgcc-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+Setting up libc6-dev:arm64 (2.39-0ubuntu8.9) ...
+Setting up libstdc++-13-dev:arm64 (13.3.0-6ubuntu2~24.04.1) ...
+Setting up cpp-13 (13.3.0-6ubuntu2~24.04.1) ...
+Setting up binutils-aarch64-linux-gnu (2.42-4ubuntu2.10) ...
+Setting up binutils (2.42-4ubuntu2.10) ...
+Setting up gcc-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+Setting up dpkg-dev (1.22.6ubuntu6.6) ...
+Setting up gcc-13 (13.3.0-6ubuntu2~24.04.1) ...
+Setting up texinfo (7.1-3build2) ...
+Setting up zlib1g-dev:arm64 (1:1.3.dfsg-3.1ubuntu2.3) ...
+Setting up cpp (4:13.2.0-7ubuntu1) ...
+Setting up g++-13-aarch64-linux-gnu (13.3.0-6ubuntu2~24.04.1) ...
+Setting up gcc-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+Setting up g++-13 (13.3.0-6ubuntu2~24.04.1) ...
+Setting up libtool (2.4.7-7build1) ...
+Setting up gcc (4:13.2.0-7ubuntu1) ...
+Setting up g++-aarch64-linux-gnu (4:13.2.0-7ubuntu1) ...
+Setting up g++ (4:13.2.0-7ubuntu1) ...
+update-alternatives: using /usr/bin/g++ to provide /usr/bin/c++ (c++) in auto mode
+Setting up build-essential (12.10ubuntu1) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for install-info (7.1-3build2) ...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+######## install[3]: curl -sSLf "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
+######## install[4]: (cd /tmp && unzip -q awscliv2.zip && ./aws/install)
+You can now run: /usr/local/bin/aws --version
+Tip: run 'aws configure agent-toolkit' to set up AWS skills and the AWS MCP server for your AI coding agent(s).
+######## phase install done
+######## pre_build[0]: set -euo pipefail
+######## pre_build[1]: export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+######## pre_build[2]: export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+######## pre_build[3]: echo "HAIKU_TOP=$HAIKU_TOP  GEN=$GEN"
+HAIKU_TOP=/opt/src/haiku  GEN=/opt/src/haiku/generated.arm64
+######## pre_build[4]: git clone --depth 1 --branch "$BUILDTOOLS_BRANCH" "$BUILDTOOLS_REPO" "$HAIKU_TOP/../buildtools"
+Cloning into '/opt/src/haiku/../buildtools'...
+Updating files:  10% (17639/169489)Updating files:  11% (18644/169489)Updating files:  12% (20339/169489)Updating files:  13% (22034/169489)Updating files:  14% (23729/169489)Updating files:  15% (25424/169489)Updating files:  16% (27119/169489)Updating files:  17% (28814/169489)Updating files:  18% (30509/169489)Updating files:  19% (32203/169489)Updating files:  19% (33595/169489)Updating files:  20% (33898/169489)Updating files:  21% (35593/169489)Updating files:  22% (37288/169489)Updating files:  23% (38983/169489)Updating files:  24% (40678/169489)Updating files:  25% (42373/169489)Updating files:  26% (44068/169489)Updating files:  27% (45763/169489)Updating files:  28% (47457/169489)Updating files:  28% (47939/169489)Updating files:  29% (49152/169489)Updating files:  30% (50847/169489)Updating files:  31% (52542/169489)Updating files:  32% (54237/169489)Updating files:  33% (55932/169489)Updating files:  34% (57627/169489)Updating files:  35% (59322/169489)Updating files:  36% (61017/169489)Updating files:  37% (62711/169489)Updating files:  38% (64406/169489)Updating files:  39% (66101/169489)Updating files:  40% (67796/169489)Updating files:  41% (69491/169489)Updating files:  42% (71186/169489)Updating files:  43% (72881/169489)Updating files:  44% (74576/169489)Updating files:  45% (76271/169489)Updating files:  46% (77965/169489)Updating files:  47% (79660/169489)Updating files:  48% (81355/169489)Updating files:  49% (83050/169489)Updating files:  50% (84745/169489)Updating files:  51% (86440/169489)Updating files:  51% (87920/169489)Updating files:  52% (88135/169489)Updating files:  53% (89830/169489)Updating files:  54% (91525/169489)Updating files:  55% (93219/169489)Updating files:  56% (94914/169489)Updating files:  57% (96609/169489)Updating files:  58% (98304/169489)Updating files:  59% (99999/169489)Updating files:  60% (101694/169489)Updating files:  61% (103389/169489)Updating files:  62% (105084/169489)Updating files:  63% (106779/169489)Updating files:  64% (108473/169489)Updating files:  65% (110168/169489)Updating files:  66% (111863/169489)Updating files:  67% (113558/169489)Updating files:  68% (115253/169489)Updating files:  69% (116948/169489)Updating files:  70% (118643/169489)Updating files:  71% (120338/169489)Updating files:  72% (122033/169489)Updating files:  73% (123727/169489)Updating files:  74% (125422/169489)Updating files:  75% (127117/169489)Updating files:  76% (128812/169489)Updating files:  76% (129419/169489)Updating files:  77% (130507/169489)Updating files:  78% (132202/169489)Updating files:  79% (133897/169489)Updating files:  80% (135592/169489)Updating files:  81% (137287/169489)Updating files:  82% (138981/169489)Updating files:  83% (140676/169489)Updating files:  84% (142371/169489)Updating files:  85% (144066/169489)Updating files:  86% (145761/169489)Updating files:  86% (147129/169489)Updating files:  87% (147456/169489)Updating files:  88% (149151/169489)Updating files:  89% (150846/169489)Updating files:  90% (152541/169489)Updating files:  91% (154235/169489)Updating files:  92% (155930/169489)Updating files:  93% (157625/169489)Updating files:  94% (159320/169489)Updating files:  95% (161015/169489)Updating files:  96% (162710/169489)Updating files:  97% (164405/169489)Updating files:  97% (165583/169489)Updating files:  98% (166100/169489)Updating files:  99% (167795/169489)Updating files: 100% (169489/169489)Updating files: 100% (169489/169489), done.
+######## pre_build[5]: export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+######## pre_build[6]: if ! command -v jam >/dev/null 2>&1; then
+== build + install jam from buildtools ==
+cc -o ./jam0 -O -DOPT_HEADER_CACHE_EXT -DOPT_JAMFILE_CACHE_EXT -DOPT_JAM_TARGETS_VARIABLE_EXT builtins.c command.c compile.c execunix.c execvms.c expand.c filent.c fileos2.c fileunix.c filevms.c glob.c hash.c headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c newstr.c option.c parse.c pathunix.c pathvms.c regexp.c rules.c scan.c search.c timestamp.c variable.c jcache.c hcache.c 
+LINKLIBS= ./jam0
+...patience...
+...found 216 target(s)...
+...updating 33 target(s)...
+MkDir1 bin.linuxarm 
+Cc bin.linuxarm/builtins.o 
+Cc bin.linuxarm/command.o 
+Cc bin.linuxarm/compile.o 
+Cc bin.linuxarm/execunix.o 
+Cc bin.linuxarm/fileunix.o 
+Cc bin.linuxarm/pathunix.o 
+Cc bin.linuxarm/jamgram.o 
+Cc bin.linuxarm/jcache.o 
+Cc bin.linuxarm/hcache.o 
+Cc bin.linuxarm/expand.o 
+Cc bin.linuxarm/glob.o 
+Cc bin.linuxarm/hash.o 
+Cc bin.linuxarm/headers.o 
+Cc bin.linuxarm/lists.o 
+Cc bin.linuxarm/make.o 
+Cc bin.linuxarm/make1.o 
+Cc bin.linuxarm/newstr.o 
+Cc bin.linuxarm/option.o 
+Cc bin.linuxarm/parse.o 
+Cc bin.linuxarm/regexp.o 
+Cc bin.linuxarm/rules.o 
+Cc bin.linuxarm/scan.o 
+Cc bin.linuxarm/search.o 
+Cc bin.linuxarm/timestamp.o 
+Cc bin.linuxarm/variable.o 
+Archive bin.linuxarm/libjam.a 
+ar: creating bin.linuxarm/libjam.a
+Ranlib bin.linuxarm/libjam.a 
+Cc bin.linuxarm/mkjambase.o 
+Link bin.linuxarm/mkjambase 
+Chmod1 bin.linuxarm/mkjambase 
+Cc bin.linuxarm/jam.o 
+GenFile1 jambase.c 
+Cc bin.linuxarm/jambase.o 
+Link bin.linuxarm/jam 
+Chmod1 bin.linuxarm/jam 
+...updated 33 target(s)...
+...patience...
+...found 215 target(s)...
+...updating 1 target(s)...
+Install /usr/local/bin/jam 
+Chmod1 /usr/local/bin/jam 
+...updated 1 target(s)...
+/usr/local/bin/jam
+######## pre_build[7]: BT_SHA="$(git -C "$HAIKU_TOP/../buildtools" rev-parse --short HEAD)"
+######## pre_build[8]: echo "buildtools HEAD=$BT_SHA"
+buildtools HEAD=d2e0a41eb
+######## pre_build[9]: CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64-${BT_SHA}.tar.zst"
+######## pre_build[10]: mkdir -p "$GEN"
+######## pre_build[11]: if aws s3 cp "$CT_CACHE" /tmp/ct.tar.zst --region "$AWS_DEFAULT_REGION" 2>/dev/null; then
+Completed 83.9 MiB/83.9 MiB (215.3 MiB/s) with 1 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/cache/cross-tools-arm64-d2e0a41eb.tar.zst to ../../../tmp/ct.tar.zst
+== restoring cross-tools cache (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/cache/cross-tools-arm64-d2e0a41eb.tar.zst) ==
+######## pre_build[12]: printf 'HAVE_CROSS_TOOLS=%s\nCT_CACHE=%s\n' "$HAVE_CROSS_TOOLS" "$CT_CACHE" > /tmp/ct.env
+######## phase pre_build done
+######## build[0]: set -euo pipefail
+######## build[1]: export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+######## build[2]: export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+######## build[3]: export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+######## build[4]: . /tmp/ct.env
+######## build[5]: NPROC="$(nproc)"
+######## build[6]: cd "$GEN"
+######## build[7]: if [ "$HAVE_CROSS_TOOLS" = "1" ] && [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; t
+== configure (reuse cached cross-tools) ==
+Configured successfully!
+######## build[8]: export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
+######## build[9]: mkdir -p "$HG_POOL_DIR"
+######## build[10]: aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude 
+Completed 106.9 KiB/62.5 MiB (1.2 MiB/s) with 33 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg to ../hpkg-pool/ca_root_certificates-2026_07_16-1-any.hpkg
+Completed 106.9 KiB/62.5 MiB (1.2 MiB/s) with 32 file(s) remainingCompleted 168.6 KiB/62.5 MiB (1.9 MiB/s) with 32 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite-1.0.9-3-arm64.hpkg
+Completed 168.6 KiB/62.5 MiB (1.9 MiB/s) with 31 file(s) remainingCompleted 248.1 KiB/62.5 MiB (2.8 MiB/s) with 31 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg to ../hpkg-pool/fluidlite_devel-1.0.9-3-arm64.hpkg
+Completed 248.1 KiB/62.5 MiB (2.8 MiB/s) with 30 file(s) remainingCompleted 304.2 KiB/62.5 MiB (3.4 MiB/s) with 30 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+Completed 304.2 KiB/62.5 MiB (3.4 MiB/s) with 29 file(s) remainingCompleted 524.0 KiB/62.5 MiB (5.8 MiB/s) with 29 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis-1.3.7-1-arm64.hpkg
+Completed 524.0 KiB/62.5 MiB (5.8 MiB/s) with 28 file(s) remainingCompleted 553.5 KiB/62.5 MiB (6.1 MiB/s) with 28 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper_devel-2.0.33-2-arm64.hpkg
+Completed 553.5 KiB/62.5 MiB (6.1 MiB/s) with 27 file(s) remainingCompleted 970.9 KiB/62.5 MiB (10.7 MiB/s) with 27 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg to ../hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg
+Completed 970.9 KiB/62.5 MiB (10.7 MiB/s) with 26 file(s) remainingCompleted 1.1 MiB/62.5 MiB (9.6 MiB/s) with 26 file(s) remaining   download: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg to ../hpkg-pool/libvorbis_devel-1.3.7-1-arm64.hpkg
+Completed 1.1 MiB/62.5 MiB (9.6 MiB/s) with 25 file(s) remainingCompleted 1.3 MiB/62.5 MiB (11.1 MiB/s) with 25 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16_devel-1.6.53-1-arm64.hpkg
+Completed 1.3 MiB/62.5 MiB (11.1 MiB/s) with 24 file(s) remainingCompleted 1.5 MiB/62.5 MiB (11.8 MiB/s) with 24 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/jasper-2.0.33-2-arm64.hpkg to ../hpkg-pool/jasper-2.0.33-2-arm64.hpkg
+Completed 1.5 MiB/62.5 MiB (11.8 MiB/s) with 23 file(s) remainingCompleted 1.8 MiB/62.5 MiB (14.5 MiB/s) with 23 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/libpng16-1.6.53-1-arm64.hpkg to ../hpkg-pool/libpng16-1.6.53-1-arm64.hpkg
+Completed 1.8 MiB/62.5 MiB (14.5 MiB/s) with 22 file(s) remainingCompleted 2.7 MiB/62.5 MiB (16.9 MiB/s) with 22 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6_bootstrap-1-arm64.hpkg
+Completed 2.7 MiB/62.5 MiB (16.9 MiB/s) with 21 file(s) remainingCompleted 3.3 MiB/62.5 MiB (18.2 MiB/s) with 21 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg to ../hpkg-pool/libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+Completed 3.3 MiB/62.5 MiB (18.2 MiB/s) with 20 file(s) remainingCompleted 4.0 MiB/62.5 MiB (22.4 MiB/s) with 20 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/ncurses6-6.6-1-arm64.hpkg to ../hpkg-pool/ncurses6-6.6-1-arm64.hpkg
+Completed 4.0 MiB/62.5 MiB (22.4 MiB/s) with 19 file(s) remainingCompleted 8.0 MiB/62.5 MiB (40.3 MiB/s) with 19 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3-3.5.9-3-arm64.hpkg to ../hpkg-pool/openssl3-3.5.9-3-arm64.hpkg
+Completed 8.0 MiB/62.5 MiB (40.3 MiB/s) with 18 file(s) remainingCompleted 10.1 MiB/62.5 MiB (43.7 MiB/s) with 18 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.7-1-arm64.hpkg
+Completed 10.1 MiB/62.5 MiB (43.7 MiB/s) with 17 file(s) remainingCompleted 12.2 MiB/62.5 MiB (52.1 MiB/s) with 17 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.9-2-arm64.hpkg
+Completed 12.2 MiB/62.5 MiB (52.1 MiB/s) with 16 file(s) remainingCompleted 15.5 MiB/62.5 MiB (63.7 MiB/s) with 16 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3-3.5.9-2-arm64.hpkg to ../hpkg-pool/openssl3-3.5.9-2-arm64.hpkg
+Completed 15.5 MiB/62.5 MiB (63.7 MiB/s) with 15 file(s) remainingCompleted 19.0 MiB/62.5 MiB (76.3 MiB/s) with 15 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3-3.5.7-1-arm64.hpkg to ../hpkg-pool/openssl3-3.5.7-1-arm64.hpkg
+Completed 19.0 MiB/62.5 MiB (76.3 MiB/s) with 14 file(s) remainingCompleted 19.1 MiB/62.5 MiB (71.4 MiB/s) with 14 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/zlib-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib-1.3.2-1-arm64.hpkg
+Completed 19.1 MiB/62.5 MiB (71.4 MiB/s) with 13 file(s) remainingCompleted 19.3 MiB/62.5 MiB (71.3 MiB/s) with 13 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/tiff-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff-4.7.0-1-arm64.hpkg
+Completed 19.3 MiB/62.5 MiB (71.3 MiB/s) with 12 file(s) remainingCompleted 19.8 MiB/62.5 MiB (72.4 MiB/s) with 12 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3_man-3.5.7-1-any.hpkg to ../hpkg-pool/openssl3_man-3.5.7-1-any.hpkg
+Completed 19.8 MiB/62.5 MiB (72.4 MiB/s) with 11 file(s) remainingCompleted 19.9 MiB/62.5 MiB (63.9 MiB/s) with 11 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.6-2-arm64.hpkg
+Completed 19.9 MiB/62.5 MiB (63.9 MiB/s) with 10 file(s) remainingCompleted 55.1 MiB/62.5 MiB (174.3 MiB/s) with 10 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg to ../hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+Completed 55.1 MiB/62.5 MiB (174.3 MiB/s) with 9 file(s) remainingCompleted 55.1 MiB/62.5 MiB (174.2 MiB/s) with 9 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg to ../hpkg-pool/zlib_devel-1.3.2-1-arm64.hpkg
+Completed 55.1 MiB/62.5 MiB (174.2 MiB/s) with 8 file(s) remainingCompleted 55.6 MiB/62.5 MiB (175.3 MiB/s) with 8 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3_man-3.5.9-2-any.hpkg to ../hpkg-pool/openssl3_man-3.5.9-2-any.hpkg
+Completed 55.6 MiB/62.5 MiB (175.3 MiB/s) with 7 file(s) remainingCompleted 56.0 MiB/62.5 MiB (173.6 MiB/s) with 7 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/zstd-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd-1.5.6-2-arm64.hpkg
+Completed 56.0 MiB/62.5 MiB (173.6 MiB/s) with 6 file(s) remainingCompleted 56.1 MiB/62.5 MiB (172.1 MiB/s) with 6 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd_devel-1.5.7-1-arm64.hpkg
+Completed 56.1 MiB/62.5 MiB (172.1 MiB/s) with 5 file(s) remainingCompleted 56.6 MiB/62.5 MiB (167.2 MiB/s) with 5 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3_man-3.5.9-3-any.hpkg to ../hpkg-pool/openssl3_man-3.5.9-3-any.hpkg
+Completed 56.6 MiB/62.5 MiB (167.2 MiB/s) with 4 file(s) remainingCompleted 56.9 MiB/62.5 MiB (166.6 MiB/s) with 4 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/zstd-1.5.7-1-arm64.hpkg to ../hpkg-pool/zstd-1.5.7-1-arm64.hpkg
+Completed 56.9 MiB/62.5 MiB (166.6 MiB/s) with 3 file(s) remainingCompleted 59.0 MiB/62.5 MiB (172.0 MiB/s) with 3 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/openssl3_devel-3.5.9-3-arm64.hpkg to ../hpkg-pool/openssl3_devel-3.5.9-3-arm64.hpkg
+Completed 59.0 MiB/62.5 MiB (172.0 MiB/s) with 2 file(s) remainingCompleted 60.1 MiB/62.5 MiB (153.6 MiB/s) with 2 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg to ../hpkg-pool/tiff_devel-4.7.0-1-arm64.hpkg
+Completed 60.1 MiB/62.5 MiB (153.6 MiB/s) with 1 file(s) remainingCompleted 62.5 MiB/62.5 MiB (129.4 MiB/s) with 1 file(s) remainingdownload: s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/P/hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg to ../hpkg-pool/zstd_source-1.5.6-2-arm64.hpkg
+######## build[11]: # Must-have packages: the image is WRONG without these, so their
+ok: amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg was built from this tree's source (sha256:c2516c23c3bfe7948937642c3b4628619b7e7306ae9eb022ff70d6141eb514e2)
+total 64076
+drwxr-xr-x  2 root root     4096 Nov  4 03:54 .
+drwxr-xr-x 13 root root     4096 Nov  4 03:54 ..
+-rw-r--r--  1 root root 36856490 Nov  4 03:52 amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg
+-rw-r--r--  1 root root   109432 Nov  4 03:52 ca_root_certificates-2026_07_16-1-any.hpkg
+-rw-r--r--  1 root root   427396 Nov  4 03:52 debeos_cloudwatch-0.1.0-1-arm64.hpkg
+-rw-r--r--  1 root root    63254 Nov  4 03:52 fluidlite-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root    81370 Nov  4 03:52 fluidlite_devel-1.0.9-3-arm64.hpkg
+-rw-r--r--  1 root root   184608 Nov  4 03:52 jasper-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root    30188 Nov  4 03:52 jasper_devel-2.0.33-2-arm64.hpkg
+-rw-r--r--  1 root root   600692 Nov  4 03:52 libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root    57443 Nov  4 03:52 libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+-rw-r--r--  1 root root   349435 Nov  4 03:52 libpng16-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   194287 Nov  4 03:52 libpng16_devel-1.6.53-1-arm64.hpkg
+-rw-r--r--  1 root root   225097 Nov  4 03:52 libvorbis-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   153942 Nov  4 03:52 libvorbis_devel-1.3.7-1-arm64.hpkg
+-rw-r--r--  1 root root   795387 Nov  4 03:52 ncurses6-6.6-1-arm64.hpkg
+-rw-r--r--  1 root root   958992 Nov  4 03:52 ncurses6-6.6_bootstrap-1-arm64.hpkg
+-rw-r--r--  1 root root  3717163 Nov  4 03:52 openssl3-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  3400263 Nov  4 03:52 openssl3-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root  4131650 Nov  4 03:52 openssl3-3.5.9-3-arm64.hpkg
+-rw-r--r--  1 root root  2278528 Nov  4 03:52 openssl3_devel-3.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2179701 Nov  4 03:52 openssl3_devel-3.5.9-2-arm64.hpkg
+-rw-r--r--  1 root root  2179850 Nov  4 03:52 openssl3_devel-3.5.9-3-arm64.hpkg
+-rw-r--r--  1 root root   555837 Nov  4 03:52 openssl3_man-3.5.7-1-any.hpkg
+-rw-r--r--  1 root root   520649 Nov  4 03:52 openssl3_man-3.5.9-2-any.hpkg
+-rw-r--r--  1 root root   520681 Nov  4 03:52 openssl3_man-3.5.9-3-any.hpkg
+-rw-r--r--  1 root root   193823 Nov  4 03:52 tiff-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root  1154788 Nov  4 03:52 tiff_devel-4.7.0-1-arm64.hpkg
+-rw-r--r--  1 root root   120495 Nov  4 03:52 zlib-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root    34849 Nov  4 03:52 zlib_devel-1.3.2-1-arm64.hpkg
+-rw-r--r--  1 root root   408182 Nov  4 03:52 zstd-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root   364566 Nov  4 03:52 zstd-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root    88366 Nov  4 03:52 zstd_devel-1.5.6-2-arm64.hpkg
+-rw-r--r--  1 root root    87602 Nov  4 03:52 zstd_devel-1.5.7-1-arm64.hpkg
+-rw-r--r--  1 root root  2501000 Nov  4 03:52 zstd_source-1.5.6-2-arm64.hpkg
+warning: no host 'package' tool under /opt/src/haiku/generated.arm64/objects, so the
+  vendor of the staged files is UNVERIFIED. A file not vendored
+  'Haiku Project' will instead fail much later, in jam, as "has
+  unexpected vendor" from RepositoryCache1 .../HaikuPorts-local.
+  Run a jam pass first, then re-run this script, to check it here.
+staged: ca_root_certificates-2026_07_16-1-any.hpkg
+staged: openssl3_man-3.5.9-3-any.hpkg
+staged: jasper-2.0.33-2-arm64.hpkg
+staged: jasper_devel-2.0.33-2-arm64.hpkg
+staged: libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+staged: libjpeg_turbo_devel-3.1.4.1-1-arm64.hpkg
+staged: libpng16-1.6.53-1-arm64.hpkg
+staged: libpng16_devel-1.6.53-1-arm64.hpkg
+staged: tiff-4.7.0-1-arm64.hpkg
+staged: tiff_devel-4.7.0-1-arm64.hpkg
+staged: openssl3-3.5.9-3-arm64.hpkg
+staged: openssl3_devel-3.5.9-3-arm64.hpkg
+staged: zstd-1.5.7-1-arm64.hpkg
+staged: zstd_devel-1.5.7-1-arm64.hpkg
+staged: zstd_source-1.5.6-2-arm64.hpkg
+staged: zlib-1.3.2-1-arm64.hpkg
+staged: zlib_devel-1.3.2-1-arm64.hpkg
+MISSING in pool: haikuwebkit-1.10.0-2-arm64.hpkg
+MISSING in pool: haikuwebkit_devel-1.10.0-2-arm64.hpkg
+MISSING in pool: which-2.21-6-arm64.hpkg
+staged: fluidlite-1.0.9-3-arm64.hpkg
+staged: fluidlite_devel-1.0.9-3-arm64.hpkg
+staged: libvorbis-1.3.7-1-arm64.hpkg
+staged: libvorbis_devel-1.3.7-1-arm64.hpkg
+21 staged into /opt/src/haiku/generated.arm64/download, 3 missing from /opt/src/haiku/hpkg-pool, 0 rejected, 0 already staged with the wrong vendor
+stage-local-packages reported missing packages (features for any un-staged pkg stay off)
+######## build[12]: stopping before: echo "== jam pass 0 (pre-extract all build-feature archives) =="
+######## phase build done
+setup rc=0
+combo=574a9f60ed0d32807e31f4c7d27becc1d628feb5
+end setup 20261104T035429Z
