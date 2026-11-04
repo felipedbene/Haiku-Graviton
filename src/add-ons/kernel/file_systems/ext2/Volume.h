@@ -183,6 +183,8 @@ private:
 
 			void*				fBlockCache;
 			Inode*				fRootNode;
+			int32				fSuperBlockTransaction;
+				// the transaction this volume listens to, or -1
 
 			uint32				fChecksumSeed;
 };

@@ -371,10 +371,8 @@ Inode::Resize(Transaction& transaction, off_t size)
 	status_t status;
 	if (size > oldSize) {
 		status = _EnlargeDataStream(transaction, size);
-		if (status != B_OK) {
-			// Restore original size
-			_ShrinkDataStream(transaction, oldSize);
-		}
+			// on failure, the stream has given back what it allocated, and
+			// the size is still the old one
 	} else
 		status = _ShrinkDataStream(transaction, size);
 
@@ -867,24 +865,34 @@ Inode::_EnlargeDataStream(Transaction& transaction, off_t size)
 	off_t added = end;
 		// in: the file's new length in blocks; out: the blocks the stream
 		// really allocated, its indirect or extent tree blocks included
+	status_t status;
 	if (Flags() & EXT2_INODE_EXTENTS) {
 		ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
-		stream.Enlarge(transaction, added);
+		status = stream.Enlarge(transaction, added);
 		ASSERT(stream.Check());
 	} else {
 		DataStream stream(fVolume, &fNode.stream, oldSize);
-		stream.Enlarge(transaction, added);
+		status = stream.Enlarge(transaction, added);
 	}
-	TRACE("Inode::_EnlargeDataStream(): Setting size to %" B_PRIdOFF "\n",
-		size);
-	fNode.SetSize(size);
 	TRACE("Inode::_EnlargeDataStream(): Adding %" B_PRIdOFF " blocks to the "
 		"allocated block count\n", added);
 
 	// i_blocks counts every block the inode owns, in 512-byte units: data,
 	// indirect or extent tree blocks, and an extended attribute block. It
 	// can't be derived from the size, so it is adjusted by what changed.
-	return _SetNumBlocks(NumBlocks() + added * (fVolume->BlockSize() / 512));
+	status_t countStatus = _SetNumBlocks(NumBlocks()
+		+ added * (fVolume->BlockSize() / 512));
+	if (status != B_OK) {
+		// The stream has undone its part. Keep the old size: a size past
+		// the mapped blocks would have the page writer look up blocks that
+		// don't exist.
+		return status;
+	}
+
+	TRACE("Inode::_EnlargeDataStream(): Setting size to %" B_PRIdOFF "\n",
+		size);
+	fNode.SetSize(size);
+	return countStatus;
 }
 
 
@@ -915,23 +923,27 @@ Inode::_ShrinkDataStream(Transaction& transaction, off_t size)
 	off_t freed = end;
 		// in: the file's new length in blocks; out: the blocks the stream
 		// really freed, its indirect or extent tree blocks included
+	status_t status;
 	if (Flags() & EXT2_INODE_EXTENTS) {
 		ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
-		stream.Shrink(transaction, freed);
+		status = stream.Shrink(transaction, freed);
 		ASSERT(stream.Check());
 	} else {
 		DataStream stream(fVolume, &fNode.stream, oldSize);
-		stream.Shrink(transaction, freed);
+		status = stream.Shrink(transaction, freed);
 	}
 
+	// Even when the stream stopped part way, the blocks past the new size
+	// may already be gone, so the size goes down anyway.
 	fNode.SetSize(size);
 	TRACE("Inode::_ShrinkDataStream(): Removing %" B_PRIdOFF " blocks from "
 		"the allocated block count\n", freed);
 
 	uint64 numBlocks = NumBlocks();
 	uint64 freedSectors = freed * (fVolume->BlockSize() / 512);
-	return _SetNumBlocks(freedSectors < numBlocks
+	status_t countStatus = _SetNumBlocks(freedSectors < numBlocks
 		? numBlocks - freedSectors : 0);
+	return status != B_OK ? status : countStatus;
 }
 
 

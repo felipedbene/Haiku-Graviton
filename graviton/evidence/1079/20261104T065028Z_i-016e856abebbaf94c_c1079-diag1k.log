@@ -1,0 +1,116 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1079-diag1k
+# instance: i-016e856abebbaf94c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1079: diagnose the failed 2 MiB write on full1k after rm
+# start: 20261104T065028Z   end: 20261104T065039Z   rc: 0
+# script sha256: ae34d8aa63cb5c5ee3e25fc029d276fc5e74649a26350cc4bdb95882883b61e1
+# ---- script ----
+# | # arm c1079: after the ENOSPC run, why does writing 2 MiB to full1k (ext2, 1 KiB) fail
+# | # after rm fill? Mount it again, show the free space, try writes of several sizes, and show
+# | # the ext2 messages in the syslog.
+# | set -x
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/4 ] && [ ! -e $d/5 ] && DD=$d; done
+# | mkdir -p /efull1k && mount -t ext2 $DD/1 /efull1k || exit 1
+# | cd /efull1k && ls -ls && df -k . 
+# | dd if=/dev/zero of=t64k bs=65536 count=1; echo "64K rc=$?"
+# | dd if=/dev/zero of=t1m bs=65536 count=16; echo "1M rc=$?"
+# | dd if=/dev/zero of=t1m1 bs=1048576 count=1; echo "1M one write rc=$?"
+# | ls -ls; df -k .
+# | grep -iE "ext2|DataStream|ExtentStream|Inode::" /var/log/syslog | tail -40
+# | cd /; unmount /efull1k; echo "unmount rc=$?"
+# ---- raw output ----
+total 1041
+   0 -rw-r--r-- 1 baron root       0 Nov  4 06:50 after
+1029 -rw-rw-rw- 1 baron root 1048576 Nov  4 06:14 lin-1m
+  12 drwx------ 2 baron root   12288 Nov  4 06:14 lost+found
+   Device No.: 13
+   Mounted at: /efull1k
+  Volume Name: "full1k"
+  File System: ext2
+       Device: /dev/disk/nvme/1/1
+        Flags: -A--P--
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    1.0 KiB (1024 byte)
+ Total Blocks:   32.0 MiB (32768 blocks)
+  Used Blocks:   32.0 MiB (32722 blocks)
+  Free Blocks:   46.0 KiB (46 blocks)
+      Usage %:   99.9 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 2
+64K rc=1
+1M rc=1
+1M one write rc=1
+total 1041
+   0 -rw-r--r-- 1 baron root       0 Nov  4 06:50 after
+1029 -rw-rw-rw- 1 baron root 1048576 Nov  4 06:14 lin-1m
+  12 drwx------ 2 baron root   12288 Nov  4 06:14 lost+found
+   Device No.: 13
+   Mounted at: /efull1k
+  Volume Name: "full1k"
+  File System: ext2
+       Device: /dev/disk/nvme/1/1
+        Flags: -A--P--
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    1.0 KiB (1024 byte)
+ Total Blocks:   32.0 MiB (32768 blocks)
+  Used Blocks:   32.0 MiB (32722 blocks)
+  Free Blocks:   46.0 KiB (46 blocks)
+      Usage %:   99.9 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 2
+KERN:     disk system:       file_systems/ext2/v1
+KERN:     disk system:       file_systems/ext2/v1
+KERN:     disk system:       file_systems/ext2/v1
+KERN:     disk system:       file_systems/ext2/v1
+KERN:     disk system:       file_systems/ext2/v1
+KERN: module_init_post_boot_device() failed to normalize path of module image 0xffff00000080ee10, "ext2"
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDirectBlocks() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForDoubleIndirectBlock() failed
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForIndirectBlock() failed
+KERN: [34mext2:[0m Failed to free blocks from 652 to 8169. Some were already freed.
+KERN: [34mext2:[0m DataStream::Shrink(): _RemoveFromDoubleIndirectBlock() failed
+KERN: [34mext2:[0m Failed to free blocks from 652 to 8169. Some were already freed.
+KERN: [34mext2:[0m DataStream::_GetBlock(): AllocateBlocks() failed()
+KERN: [34mext2:[0m DataStream::Enlarge(): _AddForIndirectBlock() failed
+KERN: [34mext2:[0m ExtentStream::Enlarge(): AllocateBlocks() failed()
+KERN: [34mext2:[0m AllocationBlockGroup(0,642)::Initialize(): Mismatch between counted free blocks (18/8192) and what is set on the group descriptor (6316)
+KERN: [34mext2:[0m could not initialize block allocator, going read-only!
+unmount rc=0
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/4 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/4 ']'
++ '[' '!' -e /dev/disk/nvme/1/5 ']'
++ DD=/dev/disk/nvme/1
++ mkdir -p /efull1k
++ mount -t ext2 /dev/disk/nvme/1/1 /efull1k
++ cd /efull1k
++ ls -ls
++ df -k .
++ dd if=/dev/zero of=t64k bs=65536 count=1
+dd: failed to open 't64k': Read-only file system
++ echo '64K rc=1'
++ dd if=/dev/zero of=t1m bs=65536 count=16
+dd: failed to open 't1m': Read-only file system
++ echo '1M rc=1'
++ dd if=/dev/zero of=t1m1 bs=1048576 count=1
+dd: failed to open 't1m1': Read-only file system
++ echo '1M one write rc=1'
++ ls -ls
++ df -k .
++ grep -iE 'ext2|DataStream|ExtentStream|Inode::' /var/log/syslog
++ tail -40
++ cd /
++ unmount /efull1k
++ echo 'unmount rc=0'
