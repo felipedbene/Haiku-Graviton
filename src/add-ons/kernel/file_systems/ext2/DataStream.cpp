@@ -377,9 +377,11 @@ DataStream::_BlocksNeeded(off_t numBlocks)
 						blocksNeeded += 2 + (numBlocks - kMaxDoubleIndirect - 1)
 							/ kIndirectsPerBlock2;
 					} else {
+						// the leaf blocks were counted with the double
+						// indirect range above; add the new second level ones
 						blocksNeeded += (numBlocks - kMaxDoubleIndirect - 1)
-							/ kIndirectsPerBlock - (fNumBlocks 
-								- kMaxDoubleIndirect - 1) / kIndirectsPerBlock;
+							/ kIndirectsPerBlock2 - (fNumBlocks
+								- kMaxDoubleIndirect - 1) / kIndirectsPerBlock2;
 					}
 				}
 			}
