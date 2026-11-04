@@ -1,0 +1,335 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference-c7g4xl
+# instance: i-019c78ab81fdc4b64   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T025347Z   end: 20261104T025431Z   rc: 0
+# script sha256: 28d8d7af502c2f6ed2ad97d554ba3aafa2131a8a06c598ed37888839894ddffe
+# ---- script ----
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | command -v gcc || { apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libc6-dev > /tmp/apt.log 2>&1; }
+# | mkdir -p /opt/ref && cd /opt/ref
+# | curl -sSf -o ipv6frag965.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/ipv6frag965.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/tcp900.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o hoplimit958.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/hoplimit958.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/udp947.c?<PRESIGNED>' || exit 4
+# | sha256sum *.c
+# | uname -a; grep PRETTY /etc/os-release
+# | TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60'); echo "instance type: $(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type)"
+# | for p in ipv6frag965 tcp900 hoplimit958 udp947; do gcc -O2 -Wall -o $p $p.c || exit 2; done
+# | for mtu in 9001 1280; do
+# | 	ip link set lo mtu $mtu; echo "=== lo mtu $(cat /sys/class/net/lo/mtu)"
+# | 	./ipv6frag965; echo "rc=$?"
+# | done
+# | ip link set lo mtu 65536; echo "=== lo mtu $(cat /sys/class/net/lo/mtu)"
+# | ./ipv6frag965; echo "rc=$?"
+# | echo "=== hoplimit958"; ./hoplimit958; echo "rc=$?"
+# | echo "=== udp947"; ./udp947 | tail -20; echo "rc=$?"
+# | echo "=== udp947 -t"; ./udp947 -t; echo "rc=$?"
+# | echo "=== tcp900"; ./tcp900 2>&1 | tail -45; echo "rc=$?"
+# | ip link set lo mtu 1280; echo "=== tcp900 (lo mtu $(cat /sys/class/net/lo/mtu))"; ./tcp900 2>&1 | tail -45; echo "rc=$?"
+# | ip link set lo mtu 65536
+# ---- raw output ----
+101eddf2f54010d6157bf7a45dcada0ecfe6d3d7e837e99325fad5223cc6e1fc  hoplimit958.c
+1a327f64dcc2b02db81e360e9a3c5d7e4c2ad0d5b41bb452c01d28e157473d13  ipv6frag965.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+Linux ip-10-128-10-86 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+instance type: c7g.4xlarge
+=== lo mtu 9001
+  loopback alive
+send udp 127.0.0.1    100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp ::1          100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp 127.0.0.1   1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp ::1         1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp 127.0.0.1   8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp ::1         8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp 127.0.0.1   9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp ::1         9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp 127.0.0.1  20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp ::1        20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp 127.0.0.1  60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp ::1        60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp 127.0.0.1  65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp ::1        65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp 127.0.0.1  65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65527 bytes                            PASS  sent 65527, received 65527, intact
+  loopback alive
+crafted 3 fragments, in order                              PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, in reverse                            PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, middle first                          PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, one sent twice                        PASS  received 2992 of 2992, intact
+  loopback alive
+crafted atomic fragment (RFC 6946)                         PASS  received 992 of 992, intact
+  loopback alive
+crafted non-last fragment of 1001 bytes                    PASS  dropped, as it must be
+  loopback alive
+crafted fragment header naming itself as next              PASS  raw send ok
+  loopback alive
+crafted ... and with more fragments to come                PASS  raw send ok
+  loopback alive
+crafted destination options chain off the end              PASS  raw send ok
+  loopback alive
+0 FAIL(s)
+rc=0
+=== lo mtu 1280
+  loopback alive
+send udp 127.0.0.1    100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp ::1          100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp 127.0.0.1   1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp ::1         1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp 127.0.0.1   8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp ::1         8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp 127.0.0.1   9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp ::1         9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp 127.0.0.1  20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp ::1        20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp 127.0.0.1  60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp ::1        60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp 127.0.0.1  65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp ::1        65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp 127.0.0.1  65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65527 bytes                            PASS  sent 65527, received 65527, intact
+  loopback alive
+crafted 3 fragments, in order                              PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, in reverse                            PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, middle first                          PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, one sent twice                        PASS  received 2992 of 2992, intact
+  loopback alive
+crafted atomic fragment (RFC 6946)                         PASS  received 992 of 992, intact
+  loopback alive
+crafted non-last fragment of 1001 bytes                    PASS  dropped, as it must be
+  loopback alive
+crafted fragment header naming itself as next              PASS  raw send ok
+  loopback alive
+crafted ... and with more fragments to come                PASS  raw send ok
+  loopback alive
+crafted destination options chain off the end              PASS  raw send ok
+  loopback alive
+0 FAIL(s)
+rc=0
+=== lo mtu 65536
+  loopback alive
+send udp 127.0.0.1    100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp ::1          100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp 127.0.0.1   1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp ::1         1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp 127.0.0.1   8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp ::1         8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp 127.0.0.1   9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp ::1         9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp 127.0.0.1  20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp ::1        20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp 127.0.0.1  60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp ::1        60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp 127.0.0.1  65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp ::1        65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp 127.0.0.1  65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65527 bytes                            PASS  sent 65527, received 65527, intact
+  loopback alive
+crafted 3 fragments, in order                              PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, in reverse                            PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, middle first                          PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, one sent twice                        PASS  received 2992 of 2992, intact
+  loopback alive
+crafted atomic fragment (RFC 6946)                         PASS  received 992 of 992, intact
+  loopback alive
+crafted non-last fragment of 1001 bytes                    PASS  dropped, as it must be
+  loopback alive
+crafted fragment header naming itself as next              PASS  raw send ok
+  loopback alive
+crafted ... and with more fragments to come                PASS  raw send ok
+  loopback alive
+crafted destination options chain off the end              PASS  raw send ok
+  loopback alive
+0 FAIL(s)
+rc=0
+=== hoplimit958
+udp ::1, sender hops 1                               PASS  recvmsg=3 [IPV6_HOPLIMIT 1]
+udp ::1, sender hops 7                               PASS  recvmsg=3 [IPV6_HOPLIMIT 7]
+udp ::1, sender hops 200                             PASS  recvmsg=3 [IPV6_HOPLIMIT 200]
+udp ::1, MSG_PEEK then read, sender hops 9           PASS  peek=3 [IPV6_HOPLIMIT 9], then recvmsg=3 [IPV6_HOPLIMIT 9]
+raw IPPROTO_UDP socket, sender hops 11               PASS  raw recvmsg=11 [IPV6_HOPLIMIT 11]
+v4-to-dual 127.0.0.1 -> ::, no IPV6_HOPLIMIT         PASS  recvmsg=3 [IPV6_HOPLIMIT -1]
+0 FAIL(s)
+rc=0
+=== udp947
+ipv4 none                                                  PASS  controllen=0 flags=0x0
+ipv4 IP_PKTINFO                                            PASS  controllen=32 flags=0x0 [IP_PKTINFO 127.0.0.1]
+ipv4 IP_PKTINFO set+cleared                                PASS  controllen=0 flags=0x0
+ipv4 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+ipv6 none                                                  PASS  controllen=0 flags=0x0
+ipv6 IPV6_RECVPKTINFO                                      PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVHOPLIMIT                                     PASS  controllen=24 flags=0x0 [IPV6_HOPLIMIT 7]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    PASS  controllen=64 flags=0x0 [IPV6_PKTINFO ::1 if 1] [IPV6_HOPLIMIT 7]
+ipv6 IPV6_RECVPKTINFO set+cleared                          PASS  controllen=0 flags=0x0
+ipv6 both set+cleared                                      PASS  controllen=0 flags=0x0
+ipv6 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+v4-to-dual none                                            PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO                                PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVPKTINFO set+cleared                    PASS  controllen=0 flags=0x0
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 18 passed, 0 failed
+rc=0
+=== udp947 -t
+ipv4 IP_PKTINFO, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x8; next recv=3 "2nd"
+ipv6 IPV6_RECVPKTINFO, 4-byte control buffer               PASS  recvmsg=3 data="947" controllen=0 flags=0x8; next recv=3 "2nd"
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         PASS  recvmsg=3 data="947" controllen=0 flags=0x8; next recv=3 "2nd"
+udp947 -t: 3 passed, 0 failed
+rc=0
+=== tcp900
+tcp ::1               s2c    32755 in   32755 writes       PASS  delivered 32755/32755 in 0.000s, 304.1 MiB/s, eof
+tcp ::1               s2c    32756 in   32756 writes       PASS  delivered 32756/32756 in 0.000s, 381.4 MiB/s, eof
+tcp ::1               s2c    32KiB in   32KiB writes       PASS  delivered 32768/32768 in 0.000s, 432.5 MiB/s, eof
+tcp ::1               s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 74.9 MiB/s, eof
+tcp ::1               c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 75.5 MiB/s, eof
+tcp ::1               s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 345.1 MiB/s, eof
+tcp ::1               c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 429.1 MiB/s, eof
+tcp ::1               s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 386.1 MiB/s, eof
+tcp ::1               c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 396.7 MiB/s, eof
+tcp ::1               s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.133s, 479.7 MiB/s, eof
+tcp ::1               c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.133s, 480.8 MiB/s, eof
+tcp ::1               s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 473.1 MiB/s, eof
+tcp ::1               c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 473.7 MiB/s, eof
+tcp ::ffff:127.0.0.1  TCP_MAXSEG 32768
+tcp ::ffff:127.0.0.1  s2c    32755 in   32755 writes       PASS  delivered 32755/32755 in 0.000s, 421.2 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    32756 in   32756 writes       PASS  delivered 32756/32756 in 0.000s, 427.6 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    32KiB in   32KiB writes       PASS  delivered 32768/32768 in 0.000s, 437.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 65.1 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 78.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 451.7 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 439.4 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 392.2 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 399.0 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.133s, 479.6 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.133s, 480.0 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 474.2 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 473.0 MiB/s, eof
+tcp 127.0.0.1         TCP_MAXSEG 32768
+tcp 127.0.0.1         s2c    32755 in   32755 writes       PASS  delivered 32755/32755 in 0.000s, 424.1 MiB/s, eof
+tcp 127.0.0.1         s2c    32756 in   32756 writes       PASS  delivered 32756/32756 in 0.000s, 431.9 MiB/s, eof
+tcp 127.0.0.1         s2c    32KiB in   32KiB writes       PASS  delivered 32768/32768 in 0.000s, 441.2 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 79.6 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 81.6 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 410.0 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 443.0 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.003s, 388.1 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.002s, 400.4 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.133s, 479.5 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.133s, 480.1 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 474.5 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 474.1 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, delivered 65488
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 1.6s, 0 FAIL
+rc=0
+=== tcp900 (lo mtu 1280)
+tcp ::1               s2c     1195 in    1195 writes       PASS  delivered 1195/1195 in 0.000s, 48.4 MiB/s, eof
+tcp ::1               s2c     1196 in    1196 writes       PASS  delivered 1196/1196 in 0.000s, 77.6 MiB/s, eof
+tcp ::1               s2c     1208 in    1208 writes       PASS  delivered 1208/1208 in 0.000s, 86.3 MiB/s, eof
+tcp ::1               s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 77.0 MiB/s, eof
+tcp ::1               c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 77.7 MiB/s, eof
+tcp ::1               s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 309.5 MiB/s, eof
+tcp ::1               c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 361.6 MiB/s, eof
+tcp ::1               s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.002s, 401.9 MiB/s, eof
+tcp ::1               c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.002s, 411.3 MiB/s, eof
+tcp ::1               s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.137s, 468.7 MiB/s, eof
+tcp ::1               c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.136s, 469.3 MiB/s, eof
+tcp ::1               s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.138s, 465.4 MiB/s, eof
+tcp ::1               c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.137s, 465.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  TCP_MAXSEG 1228
+tcp ::ffff:127.0.0.1  s2c     1215 in    1215 writes       PASS  delivered 1215/1215 in 0.000s, 77.8 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1216 in    1216 writes       PASS  delivered 1216/1216 in 0.000s, 87.7 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1228 in    1228 writes       PASS  delivered 1228/1228 in 0.000s, 93.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 80.6 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 80.1 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 404.8 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 409.7 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.002s, 403.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.002s, 406.4 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.137s, 468.8 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.136s, 468.9 MiB/s, eof
+tcp ::ffff:127.0.0.1  s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 473.1 MiB/s, eof
+tcp ::ffff:127.0.0.1  c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 473.0 MiB/s, eof
+tcp 127.0.0.1         TCP_MAXSEG 1228
+tcp 127.0.0.1         s2c     1215 in    1215 writes       PASS  delivered 1215/1215 in 0.000s, 70.8 MiB/s, eof
+tcp 127.0.0.1         s2c     1216 in    1216 writes       PASS  delivered 1216/1216 in 0.000s, 90.4 MiB/s, eof
+tcp 127.0.0.1         s2c     1228 in    1228 writes       PASS  delivered 1228/1228 in 0.000s, 92.3 MiB/s, eof
+tcp 127.0.0.1         s2c     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 78.0 MiB/s, eof
+tcp 127.0.0.1         c2s     1KiB in    1KiB writes       PASS  delivered 1024/1024 in 0.000s, 79.2 MiB/s, eof
+tcp 127.0.0.1         s2c    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 403.0 MiB/s, eof
+tcp 127.0.0.1         c2s    64KiB in   64KiB writes       PASS  delivered 65536/65536 in 0.000s, 412.8 MiB/s, eof
+tcp 127.0.0.1         s2c     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.002s, 401.4 MiB/s, eof
+tcp 127.0.0.1         c2s     1MiB in    1MiB writes       PASS  delivered 1048576/1048576 in 0.002s, 408.2 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.136s, 469.0 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in    1MiB writes       PASS  delivered 67108864/67108864 in 0.137s, 468.7 MiB/s, eof
+tcp 127.0.0.1         s2c    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 473.4 MiB/s, eof
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.135s, 473.5 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, delivered 65488
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 1.7s, 0 FAIL
+rc=0

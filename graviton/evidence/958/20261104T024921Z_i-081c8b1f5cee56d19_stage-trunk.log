@@ -1,0 +1,77 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-trunk
+# instance: i-081c8b1f5cee56d19   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T024921Z   end: 20261104T024941Z   rc: 0
+# script sha256: fc620846ba186a286c0636069d77ab685eb70f39eecb17dc962b3b4d68b1b957
+# ---- script ----
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | mkdir -p $D/protocols /boot/home/wD && cd /boot/home/wD
+# | pkgman install -y curl gcc binutils haiku_devel 2>&1 | tail -2
+# | command -v curl gcc
+# | echo "--- overrides before"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | curl -sSf -o stack.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/stack?<PRESIGNED>' || exit 4
+# | echo '4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  stack.mod' | sha256sum -c || exit 5
+# | cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | curl -sSf -o ipv4.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/ipv4?<PRESIGNED>' || exit 4
+# | echo '095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  ipv4.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | curl -sSf -o ipv6.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/ipv6?<PRESIGNED>' || exit 4
+# | echo '3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  ipv6.mod' | sha256sum -c || exit 5
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6
+# | curl -sSf -o tcp.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/tcp?<PRESIGNED>' || exit 4
+# | echo '07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  tcp.mod' | sha256sum -c || exit 5
+# | cp tcp.mod $D/protocols/tcp.new && mv $D/protocols/tcp.new $D/protocols/tcp
+# | curl -sSf -o udp.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/udp?<PRESIGNED>' || exit 4
+# | echo '6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  udp.mod' | sha256sum -c || exit 5
+# | cp udp.mod $D/protocols/udp.new && mv $D/protocols/udp.new $D/protocols/udp
+# | curl -sSf -o unix.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/unix?<PRESIGNED>' || exit 4
+# | echo '883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  unix.mod' | sha256sum -c || exit 5
+# | cp unix.mod $D/protocols/unix.new && mv $D/protocols/unix.new $D/protocols/unix
+# | curl -sSf -o icmp.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/icmp?<PRESIGNED>' || exit 4
+# | echo 'c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  icmp.mod' | sha256sum -c || exit 5
+# | cp icmp.mod $D/protocols/icmp.new && mv $D/protocols/icmp.new $D/protocols/icmp
+# | curl -sSf -o icmp6.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/mod/trunk/icmp6?<PRESIGNED>' || exit 4
+# | echo '4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  icmp6.mod' | sha256sum -c || exit 5
+# | cp icmp6.mod $D/protocols/icmp6.new && mv $D/protocols/icmp6.new $D/protocols/icmp6
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | echo "--- packaged"
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/protocols/* /boot/system/kernel_arm64
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/curl
+/boot/system/bin/gcc
+--- overrides before
+stack.mod: OK
+ipv4.mod: OK
+ipv6.mod: OK
+tcp.mod: OK
+udp.mod: OK
+unix.mod: OK
+icmp.mod: OK
+icmp6.mod: OK
+--- overrides after
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- packaged
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/system/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/system/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/system/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/system/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/system/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/system/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/system/add-ons/kernel/network/protocols/unix
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+STAGE-DONE

@@ -1,0 +1,88 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-modules
+# instance: i-03fb3df360a64ff51   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T024344Z   end: 20261104T024456Z   rc: 0
+# script sha256: 513cc9c0c14432216c3587d3432299eb5cec4d41bf370ddd4edda8da15c54da8
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/D
+# | cd /opt/wD/hg/generated || exit 1
+# | git -C .. fetch -q --depth 80 origin graviton
+# | path_of() {
+# | 	case $1 in
+# | 		stack) echo objects/haiku/arm64/release/add-ons/kernel/network/stack/stack ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | build() {
+# | 	local label=$1 ref=$2 patch=$3; shift 3
+# | 	git -C .. checkout -q -f --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	git -C .. clean -q -fd -- src headers
+# | 	if [ "$patch" != none ]; then
+# | 		aws s3 cp --quiet $OUT/patch/$patch /opt/wD/$patch || return 1
+# | 		sha256sum /opt/wD/$patch
+# | 		git -C .. apply --whitespace=nowarn /opt/wD/$patch || { echo "apply failed"; return 1; }
+# | 	fi
+# | 	git -C .. diff --stat -- src headers
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(dirname $(path_of $t))"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 "$@" > jam-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) patch=$patch rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam-$label.log) warnings=$(grep -c 'warning:' jam-$label.log)"
+# | 	[ $rc = 0 ] || { grep -E 'error|Error' jam-$label.log | head -40; tail -30 jam-$label.log; }
+# | 	grep -A3 'warning:' jam-$label.log | grep -E 'protocols/(ipv6|ipv4|udp)/|stack/(net_buffer|net_socket)' | head -20
+# | 	mkdir -p /opt/wD/out/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of $t)" /opt/wD/out/$label/$t && sha256sum /opt/wD/out/$label/$t | sed "s|/opt/wD/out/||"
+# | 		aws s3 cp --quiet /opt/wD/out/$label/$t $OUT/mod/$label/$t
+# | 	done
+# | 	return $rc
+# | }
+# | build trunk origin/graviton none stack ipv4 ipv6 tcp udp unix icmp icmp6
+# | build f965 origin/graviton 965-v1.patch ipv6
+# | build f959 origin/graviton 959-v1.patch stack ipv4 ipv6 udp
+# | build f958 origin/graviton 958-v1.patch stack ipv6
+# ---- raw output ----
+JAM trunk ref=origin/graviton head=a9954f42 patch=none rc=0 wall=18s failed=0 warnings=122
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  trunk/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  trunk/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  trunk/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  trunk/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  trunk/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  trunk/unix
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  trunk/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  trunk/icmp6
+8ad6bbe587f5f2cfdcc8a3cbc7a26cfed09d1dbc3ab613285b285e28089d485d  /opt/wD/965-v1.patch
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 401 ++++++++++++++++-----
+ 1 file changed, 313 insertions(+), 88 deletions(-)
+JAM f965 ref=origin/graviton head=a9954f42 patch=965-v1.patch rc=0 wall=6s failed=0 warnings=2
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+32bb4e4d36dbd25fd342248008929ae3510c2ac836c0cb7d87c32d617e8176a3  f965/ipv6
+6e922e215d38dca772ebc9d9f17c1032bb8b012bab518d73561b121fc8232724  /opt/wD/959-v1.patch
+ headers/private/net/net_protocol.h                 |  3 ++-
+ src/add-ons/kernel/network/protocols/ipv4/ipv4.cpp | 11 ++++++++---
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp | 17 ++++++++++++-----
+ src/add-ons/kernel/network/protocols/udp/udp.cpp   |  4 ++--
+ src/add-ons/kernel/network/stack/net_socket.cpp    |  4 +++-
+ 5 files changed, 27 insertions(+), 12 deletions(-)
+JAM f959 ref=origin/graviton head=a9954f42 patch=959-v1.patch rc=0 wall=8s failed=0 warnings=2
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+735090ae58b93ad315ab83ed38de15b24d0ba41bc4779fb55906946bd7dd62ef  f959/stack
+7b9be4b952bdc275f0c6ad86bcd57ed8d0871355b252876343d2158b8d97166e  f959/ipv4
+001505a31a6c74881f3f8fdeaea17afed691c624074b411ff47538241225ac3f  f959/ipv6
+00fcc2e7d92ba4472297a3c8945273ef22eb3b142885980ea63f725efd209c22  f959/udp
+bce3d0bdaee47eb8a838183d39178d21e0000b78ffe770726f69b641d844e903  /opt/wD/958-v1.patch
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp |  8 ++++++--
+ src/add-ons/kernel/network/stack/net_buffer.cpp    | 24 +++++++++++++++++++++-
+ 2 files changed, 29 insertions(+), 3 deletions(-)
+JAM f958 ref=origin/graviton head=a9954f42 patch=958-v1.patch rc=0 wall=7s failed=0 warnings=2
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+73118328041c5a9884ae5706577649d29e6e4d749f1b0c400f27e698807708c2  f958/stack
+d60840ac17bb303a48a82230f7cbae034031d2c404b11ee266687f22c5cccb98  f958/ipv6
