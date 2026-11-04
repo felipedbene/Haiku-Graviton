@@ -1,0 +1,1584 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed2
+# instance: i-0fdd8b3004eb86c28   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: partition the seed EBS volume for #1080/#1079: five ext2/ext4 file systems with Linux-made (sparse, preallocated) files
+# start: 20261104T061400Z   end: 20261104T061413Z   rc: 0
+# script sha256: 49a502cdf4cb91b8b38a712dcdc3622728688a35145fdd010ad60daefaef3915
+# ---- script ----
+# | # Seed volume for #1080/#1079: one 1 GiB EBS volume, GPT, five file systems made by Ubuntu mke2fs.
+# | #  p1 full4k  ext2, 4 KiB blocks, 32 MiB  -- write until ENOSPC (indirect)
+# | #  p2 full1k  ext2, 1 KiB blocks, 32 MiB  -- write until ENOSPC (into the double indirect range)
+# | #  p3 fullx   ext4 (extents, no journal/orphan_file/metadata_csum), 32 MiB -- ENOSPC
+# | #  p4 lspx    ext4 as p3, 600 MiB: Linux-made sparse extent files for Haiku truncate/remove/append:
+# | #     xa   40 MiB, 4 KiB at 0, 5, 20, 39 MiB (the #1080 repro)      -> truncate 22M, then 3000
+# | #     xrm  as xa                                                    -> rm
+# | #     xb   10 MiB, 4 KiB at 0 and 2 MiB of data at 4..6 MiB          -> truncate 5M (inside an extent)
+# | #     xc   26 MiB, 4 KiB every 64 KiB (400 extents: a depth-1 tree)   -> truncate 13M, then rm
+# | #     xd   40 MiB as xa                                             -> 128 KiB O_APPEND at 40 MiB
+# | #     xe   8 MiB preallocated (fallocate: uninitialized extent) over blocks that held random data
+# | #                                                                   -> truncate 3M
+# | #  p5 lsp     ext2, 4 KiB, 200 MiB: Linux-made sparse indirect files sa, srm (as xa) -> truncate, rm
+# | # Each file system also holds lin-1m (1 MiB random). The md5 of the expected results is
+# | # recorded here, from Linux, for the Linux check afterwards.
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0bf0524437abf73c2 '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "seed device $D"; lsblk $D || exit 1
+# | sgdisk -Z $D > /dev/null; sgdisk -n1:0:+32M -n2:0:+32M -n3:0:+32M -n4:0:+600M -n5:0:+200M $D || exit 1
+# | partprobe $D; sleep 2; P=${D}p
+# | X="-O ^has_journal,^orphan_file,^metadata_csum"
+# | mkfs.ext2 -q -F -b 4096 -L full4k ${P}1 && mkfs.ext2 -q -F -b 1024 -L full1k ${P}2 && mkfs.ext4 -q -F $X -L fullx ${P}3 && mkfs.ext4 -q -F $X -L lspx ${P}4 && mkfs.ext2 -q -F -b 4096 -L lsp ${P}5 || exit 1
+# | mkdir -p /opt/seed2 && cd /opt/seed2 && head -c 1048576 /dev/urandom > lin-1m && md5sum lin-1m
+# | mkdir -p m
+# | sp4() { truncate -s 40M $1; for o in 0 5 20 39; do dd if=/dev/urandom of=$1 bs=4096 count=1 seek=$((o * 256)) conv=notrunc status=none; done; }
+# | for n in 1 2 3 4 5; do
+# | 	mount ${P}$n m || exit 1
+# | 	cp lin-1m m/ && chmod 777 m && chmod 666 m/lin-1m
+# | 	if [ $n = 4 ]; then
+# | 		(cd m
+# | 		sp4 xa; sp4 xrm; sp4 xd
+# | 		truncate -s 10M xb; dd if=/dev/urandom of=xb bs=4096 count=1 conv=notrunc status=none
+# | 		dd if=/dev/urandom of=xb bs=1M count=2 seek=4 conv=notrunc status=none
+# | 		truncate -s 26M xc; i=0; while [ $i -lt 400 ]; do dd if=/dev/urandom of=xc bs=4096 count=1 seek=$((i * 16)) conv=notrunc status=none; i=$((i + 1)); done
+# | 		head -c 16M /dev/urandom > junk; sync; rm junk; sync
+# | 		fallocate -l 8M xe; sync
+# | 		chmod 666 x*
+# | 		echo "expected after Haiku: xa = first 3000 B, xb = first 5 MiB, xe = 3 MiB of zeros"
+# | 		echo "xa-3000 $(head -c 3000 xa | md5sum | cut -d' ' -f1)"
+# | 		echo "xb-5M $(head -c 5242880 xb | md5sum | cut -d' ' -f1)"
+# | 		echo "xe-3M-zeros $(head -c 3145728 /dev/zero | md5sum | cut -d' ' -f1)"
+# | 		echo "xd-40M $(head -c 41943040 xd | md5sum | cut -d' ' -f1)"
+# | 		echo "xc-13M $(head -c 13631488 xc | md5sum | cut -d' ' -f1)"
+# | 		filefrag -v xe | head -8
+# | 		filefrag xa xb xc xd xe
+# | 		debugfs -R "stat xc" ${P}4 2>/dev/null | grep -iE "extents|depth|blocks" | head -4)
+# | 		# the blocks under xe's preallocated extent: random, not zeros, so a lost
+# | 		# uninitialized flag would show on Linux as non-zero data
+# | 		st=$(filefrag -v m/xe | awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }')
+# | 		echo "xe first physical block $st; md5 of its first 3 MiB on disk: $(dd if=${P}4 bs=4096 skip=$st count=768 status=none | md5sum | cut -d' ' -f1)"
+# | 	fi
+# | 	if [ $n = 5 ]; then
+# | 		(cd m; sp4 sa; sp4 srm; chmod 666 s*
+# | 		echo "sa-3000 $(head -c 3000 sa | md5sum | cut -d' ' -f1)")
+# | 	fi
+# | 	sync; ls -ls m; umount m
+# | done
+# | for n in 1 2 3 4 5; do echo "== p$n"; dumpe2fs -h ${P}$n 2>/dev/null | grep -E "volume name|features|Block size"; e2fsck -fn ${P}$n; echo "e2fsck p$n rc=$?"; done
+# | sync
+# ---- raw output ----
+seed device /dev/nvme1n1
+NAME    MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+nvme1n1 259:4    0   1G  0 disk 
+Creating new GPT entries in memory.
+The operation has completed successfully.
+c12839f5c87791084c222039d9680ce1  lin-1m
+total 1044
+1028 -rw-rw-rw- 1 root root 1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 root root   16384 Nov  4 06:14 lost+found
+total 1041
+1029 -rw-rw-rw- 1 root root 1048576 Nov  4 06:14 lin-1m
+  12 drwx------ 2 root root   12288 Nov  4 06:14 lost+found
+total 1040
+1024 -rw-rw-rw- 1 root root 1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 root root   16384 Nov  4 06:14 lost+found
+expected after Haiku: xa = first 3000 B, xb = first 5 MiB, xe = 3 MiB of zeros
+xa-3000 f8fe75759f3564962d74b60eaf91ec15
+xb-5M 5f3431014d7abf7ef9437207ac7ca09f
+xe-3M-zeros d1dd210d6b1312cb342b56d02bd5e651
+xd-40M 8cbd1f17cc45608b449b99e177614972
+xc-13M 244763008dd95de0ea70158bbafe4f22
+Filesystem type is: ef53
+File size of xe is 8388608 (2048 blocks of 4096 bytes)
+ ext:     logical_offset:        physical_offset: length:   expected: flags:
+   0:        0..    2047:      61440..     63487:   2048:             last,unwritten,eof
+xe: 1 extent found
+xa: 3 extents found
+xb: 1 extent found
+xc: 1 extent found
+xd: 3 extents found
+xe: 1 extent found
+EXTENTS:
+xe first physical block 61440; md5 of its first 3 MiB on disk: d39b1900c63567b1e60a6252a490f80d
+total 12940
+1024 -rw-rw-rw- 1 root root  1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 root root    16384 Nov  4 06:14 lost+found
+  16 -rw-rw-rw- 1 root root 41943040 Nov  4 06:14 xa
+2052 -rw-rw-rw- 1 root root 10485760 Nov  4 06:14 xb
+1608 -rw-rw-rw- 1 root root 27262976 Nov  4 06:14 xc
+  16 -rw-rw-rw- 1 root root 41943040 Nov  4 06:14 xd
+8192 -rw-rw-rw- 1 root root  8388608 Nov  4 06:14 xe
+  16 -rw-rw-rw- 1 root root 41943040 Nov  4 06:14 xrm
+sa-3000 e678db14668cefee8b476b751792c8a6
+total 1108
+1028 -rw-rw-rw- 1 root root  1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 root root    16384 Nov  4 06:14 lost+found
+  32 -rw-rw-rw- 1 root root 41943040 Nov  4 06:14 sa
+  32 -rw-rw-rw- 1 root root 41943040 Nov  4 06:14 srm
+== p1
+Filesystem volume name:   full4k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               4096
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+full4k: 12/8192 files (8.3% non-contiguous), 780/8192 blocks
+e2fsck p1 rc=0
+== p2
+Filesystem volume name:   full1k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               1024
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+full1k: 12/8192 files (8.3% non-contiguous), 3487/32768 blocks
+e2fsck p2 rc=0
+== p3
+Filesystem volume name:   fullx
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               4096
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+fullx: 12/8192 files (8.3% non-contiguous), 781/8192 blocks
+e2fsck p3 rc=0
+== p4
+Filesystem volume name:   lspx
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block size:               4096
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+lspx: 18/38400 files (27.8% non-contiguous), 5875/153600 blocks
+e2fsck p4 rc=0
+== p5
+Filesystem volume name:   lsp
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block size:               4096
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+lsp: 14/51200 files (21.4% non-contiguous), 3511/51200 blocks
+e2fsck p5 rc=0
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0bf0524437abf73c2 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ D=/dev/nvme1n1
++ echo 'seed device /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ sgdisk -Z /dev/nvme1n1
++ sgdisk -n1:0:+32M -n2:0:+32M -n3:0:+32M -n4:0:+600M -n5:0:+200M /dev/nvme1n1
++ partprobe /dev/nvme1n1
++ sleep 2
++ P=/dev/nvme1n1p
++ X='-O ^has_journal,^orphan_file,^metadata_csum'
++ mkfs.ext2 -q -F -b 4096 -L full4k /dev/nvme1n1p1
++ mkfs.ext2 -q -F -b 1024 -L full1k /dev/nvme1n1p2
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L fullx /dev/nvme1n1p3
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L lspx /dev/nvme1n1p4
++ mkfs.ext2 -q -F -b 4096 -L lsp /dev/nvme1n1p5
++ mkdir -p /opt/seed2
++ cd /opt/seed2
++ head -c 1048576 /dev/urandom
++ md5sum lin-1m
++ mkdir -p m
++ for n in 1 2 3 4 5
++ mount /dev/nvme1n1p1 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ '[' 1 = 4 ']'
++ '[' 1 = 5 ']'
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5
++ mount /dev/nvme1n1p2 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ '[' 2 = 4 ']'
++ '[' 2 = 5 ']'
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5
++ mount /dev/nvme1n1p3 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ '[' 3 = 4 ']'
++ '[' 3 = 5 ']'
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5
++ mount /dev/nvme1n1p4 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ '[' 4 = 4 ']'
++ cd m
++ sp4 xa
++ truncate -s 40M xa
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xa bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xa bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xa bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xa bs=4096 count=1 seek=9984 conv=notrunc status=none
++ sp4 xrm
++ truncate -s 40M xrm
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xrm bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xrm bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xrm bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xrm bs=4096 count=1 seek=9984 conv=notrunc status=none
++ sp4 xd
++ truncate -s 40M xd
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xd bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xd bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xd bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=xd bs=4096 count=1 seek=9984 conv=notrunc status=none
++ truncate -s 10M xb
++ dd if=/dev/urandom of=xb bs=4096 count=1 conv=notrunc status=none
++ dd if=/dev/urandom of=xb bs=1M count=2 seek=4 conv=notrunc status=none
++ truncate -s 26M xc
++ i=0
++ '[' 0 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=0 conv=notrunc status=none
++ i=1
++ '[' 1 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=16 conv=notrunc status=none
++ i=2
++ '[' 2 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=32 conv=notrunc status=none
++ i=3
++ '[' 3 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=48 conv=notrunc status=none
++ i=4
++ '[' 4 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=64 conv=notrunc status=none
++ i=5
++ '[' 5 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=80 conv=notrunc status=none
++ i=6
++ '[' 6 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=96 conv=notrunc status=none
++ i=7
++ '[' 7 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=112 conv=notrunc status=none
++ i=8
++ '[' 8 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=128 conv=notrunc status=none
++ i=9
++ '[' 9 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=144 conv=notrunc status=none
++ i=10
++ '[' 10 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=160 conv=notrunc status=none
++ i=11
++ '[' 11 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=176 conv=notrunc status=none
++ i=12
++ '[' 12 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=192 conv=notrunc status=none
++ i=13
++ '[' 13 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=208 conv=notrunc status=none
++ i=14
++ '[' 14 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=224 conv=notrunc status=none
++ i=15
++ '[' 15 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=240 conv=notrunc status=none
++ i=16
++ '[' 16 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=256 conv=notrunc status=none
++ i=17
++ '[' 17 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=272 conv=notrunc status=none
++ i=18
++ '[' 18 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=288 conv=notrunc status=none
++ i=19
++ '[' 19 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=304 conv=notrunc status=none
++ i=20
++ '[' 20 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=320 conv=notrunc status=none
++ i=21
++ '[' 21 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=336 conv=notrunc status=none
++ i=22
++ '[' 22 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=352 conv=notrunc status=none
++ i=23
++ '[' 23 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=368 conv=notrunc status=none
++ i=24
++ '[' 24 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=384 conv=notrunc status=none
++ i=25
++ '[' 25 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=400 conv=notrunc status=none
++ i=26
++ '[' 26 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=416 conv=notrunc status=none
++ i=27
++ '[' 27 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=432 conv=notrunc status=none
++ i=28
++ '[' 28 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=448 conv=notrunc status=none
++ i=29
++ '[' 29 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=464 conv=notrunc status=none
++ i=30
++ '[' 30 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=480 conv=notrunc status=none
++ i=31
++ '[' 31 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=496 conv=notrunc status=none
++ i=32
++ '[' 32 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=512 conv=notrunc status=none
++ i=33
++ '[' 33 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=528 conv=notrunc status=none
++ i=34
++ '[' 34 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=544 conv=notrunc status=none
++ i=35
++ '[' 35 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=560 conv=notrunc status=none
++ i=36
++ '[' 36 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=576 conv=notrunc status=none
++ i=37
++ '[' 37 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=592 conv=notrunc status=none
++ i=38
++ '[' 38 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=608 conv=notrunc status=none
++ i=39
++ '[' 39 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=624 conv=notrunc status=none
++ i=40
++ '[' 40 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=640 conv=notrunc status=none
++ i=41
++ '[' 41 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=656 conv=notrunc status=none
++ i=42
++ '[' 42 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=672 conv=notrunc status=none
++ i=43
++ '[' 43 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=688 conv=notrunc status=none
++ i=44
++ '[' 44 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=704 conv=notrunc status=none
++ i=45
++ '[' 45 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=720 conv=notrunc status=none
++ i=46
++ '[' 46 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=736 conv=notrunc status=none
++ i=47
++ '[' 47 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=752 conv=notrunc status=none
++ i=48
++ '[' 48 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=768 conv=notrunc status=none
++ i=49
++ '[' 49 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=784 conv=notrunc status=none
++ i=50
++ '[' 50 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=800 conv=notrunc status=none
++ i=51
++ '[' 51 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=816 conv=notrunc status=none
++ i=52
++ '[' 52 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=832 conv=notrunc status=none
++ i=53
++ '[' 53 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=848 conv=notrunc status=none
++ i=54
++ '[' 54 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=864 conv=notrunc status=none
++ i=55
++ '[' 55 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=880 conv=notrunc status=none
++ i=56
++ '[' 56 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=896 conv=notrunc status=none
++ i=57
++ '[' 57 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=912 conv=notrunc status=none
++ i=58
++ '[' 58 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=928 conv=notrunc status=none
++ i=59
++ '[' 59 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=944 conv=notrunc status=none
++ i=60
++ '[' 60 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=960 conv=notrunc status=none
++ i=61
++ '[' 61 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=976 conv=notrunc status=none
++ i=62
++ '[' 62 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=992 conv=notrunc status=none
++ i=63
++ '[' 63 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1008 conv=notrunc status=none
++ i=64
++ '[' 64 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1024 conv=notrunc status=none
++ i=65
++ '[' 65 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1040 conv=notrunc status=none
++ i=66
++ '[' 66 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1056 conv=notrunc status=none
++ i=67
++ '[' 67 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1072 conv=notrunc status=none
++ i=68
++ '[' 68 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1088 conv=notrunc status=none
++ i=69
++ '[' 69 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1104 conv=notrunc status=none
++ i=70
++ '[' 70 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1120 conv=notrunc status=none
++ i=71
++ '[' 71 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1136 conv=notrunc status=none
++ i=72
++ '[' 72 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1152 conv=notrunc status=none
++ i=73
++ '[' 73 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1168 conv=notrunc status=none
++ i=74
++ '[' 74 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1184 conv=notrunc status=none
++ i=75
++ '[' 75 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1200 conv=notrunc status=none
++ i=76
++ '[' 76 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1216 conv=notrunc status=none
++ i=77
++ '[' 77 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1232 conv=notrunc status=none
++ i=78
++ '[' 78 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1248 conv=notrunc status=none
++ i=79
++ '[' 79 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1264 conv=notrunc status=none
++ i=80
++ '[' 80 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1280 conv=notrunc status=none
++ i=81
++ '[' 81 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1296 conv=notrunc status=none
++ i=82
++ '[' 82 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1312 conv=notrunc status=none
++ i=83
++ '[' 83 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1328 conv=notrunc status=none
++ i=84
++ '[' 84 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1344 conv=notrunc status=none
++ i=85
++ '[' 85 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1360 conv=notrunc status=none
++ i=86
++ '[' 86 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1376 conv=notrunc status=none
++ i=87
++ '[' 87 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1392 conv=notrunc status=none
++ i=88
++ '[' 88 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1408 conv=notrunc status=none
++ i=89
++ '[' 89 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1424 conv=notrunc status=none
++ i=90
++ '[' 90 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1440 conv=notrunc status=none
++ i=91
++ '[' 91 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1456 conv=notrunc status=none
++ i=92
++ '[' 92 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1472 conv=notrunc status=none
++ i=93
++ '[' 93 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1488 conv=notrunc status=none
++ i=94
++ '[' 94 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1504 conv=notrunc status=none
++ i=95
++ '[' 95 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1520 conv=notrunc status=none
++ i=96
++ '[' 96 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1536 conv=notrunc status=none
++ i=97
++ '[' 97 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1552 conv=notrunc status=none
++ i=98
++ '[' 98 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1568 conv=notrunc status=none
++ i=99
++ '[' 99 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1584 conv=notrunc status=none
++ i=100
++ '[' 100 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1600 conv=notrunc status=none
++ i=101
++ '[' 101 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1616 conv=notrunc status=none
++ i=102
++ '[' 102 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1632 conv=notrunc status=none
++ i=103
++ '[' 103 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1648 conv=notrunc status=none
++ i=104
++ '[' 104 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1664 conv=notrunc status=none
++ i=105
++ '[' 105 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1680 conv=notrunc status=none
++ i=106
++ '[' 106 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1696 conv=notrunc status=none
++ i=107
++ '[' 107 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1712 conv=notrunc status=none
++ i=108
++ '[' 108 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1728 conv=notrunc status=none
++ i=109
++ '[' 109 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1744 conv=notrunc status=none
++ i=110
++ '[' 110 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1760 conv=notrunc status=none
++ i=111
++ '[' 111 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1776 conv=notrunc status=none
++ i=112
++ '[' 112 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1792 conv=notrunc status=none
++ i=113
++ '[' 113 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1808 conv=notrunc status=none
++ i=114
++ '[' 114 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1824 conv=notrunc status=none
++ i=115
++ '[' 115 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1840 conv=notrunc status=none
++ i=116
++ '[' 116 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1856 conv=notrunc status=none
++ i=117
++ '[' 117 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1872 conv=notrunc status=none
++ i=118
++ '[' 118 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1888 conv=notrunc status=none
++ i=119
++ '[' 119 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1904 conv=notrunc status=none
++ i=120
++ '[' 120 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1920 conv=notrunc status=none
++ i=121
++ '[' 121 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1936 conv=notrunc status=none
++ i=122
++ '[' 122 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1952 conv=notrunc status=none
++ i=123
++ '[' 123 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1968 conv=notrunc status=none
++ i=124
++ '[' 124 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=1984 conv=notrunc status=none
++ i=125
++ '[' 125 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2000 conv=notrunc status=none
++ i=126
++ '[' 126 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2016 conv=notrunc status=none
++ i=127
++ '[' 127 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2032 conv=notrunc status=none
++ i=128
++ '[' 128 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2048 conv=notrunc status=none
++ i=129
++ '[' 129 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2064 conv=notrunc status=none
++ i=130
++ '[' 130 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2080 conv=notrunc status=none
++ i=131
++ '[' 131 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2096 conv=notrunc status=none
++ i=132
++ '[' 132 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2112 conv=notrunc status=none
++ i=133
++ '[' 133 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2128 conv=notrunc status=none
++ i=134
++ '[' 134 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2144 conv=notrunc status=none
++ i=135
++ '[' 135 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2160 conv=notrunc status=none
++ i=136
++ '[' 136 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2176 conv=notrunc status=none
++ i=137
++ '[' 137 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2192 conv=notrunc status=none
++ i=138
++ '[' 138 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2208 conv=notrunc status=none
++ i=139
++ '[' 139 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2224 conv=notrunc status=none
++ i=140
++ '[' 140 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2240 conv=notrunc status=none
++ i=141
++ '[' 141 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2256 conv=notrunc status=none
++ i=142
++ '[' 142 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2272 conv=notrunc status=none
++ i=143
++ '[' 143 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2288 conv=notrunc status=none
++ i=144
++ '[' 144 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2304 conv=notrunc status=none
++ i=145
++ '[' 145 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2320 conv=notrunc status=none
++ i=146
++ '[' 146 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2336 conv=notrunc status=none
++ i=147
++ '[' 147 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2352 conv=notrunc status=none
++ i=148
++ '[' 148 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2368 conv=notrunc status=none
++ i=149
++ '[' 149 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2384 conv=notrunc status=none
++ i=150
++ '[' 150 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2400 conv=notrunc status=none
++ i=151
++ '[' 151 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2416 conv=notrunc status=none
++ i=152
++ '[' 152 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2432 conv=notrunc status=none
++ i=153
++ '[' 153 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2448 conv=notrunc status=none
++ i=154
++ '[' 154 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2464 conv=notrunc status=none
++ i=155
++ '[' 155 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2480 conv=notrunc status=none
++ i=156
++ '[' 156 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2496 conv=notrunc status=none
++ i=157
++ '[' 157 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2512 conv=notrunc status=none
++ i=158
++ '[' 158 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2528 conv=notrunc status=none
++ i=159
++ '[' 159 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2544 conv=notrunc status=none
++ i=160
++ '[' 160 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2560 conv=notrunc status=none
++ i=161
++ '[' 161 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2576 conv=notrunc status=none
++ i=162
++ '[' 162 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2592 conv=notrunc status=none
++ i=163
++ '[' 163 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2608 conv=notrunc status=none
++ i=164
++ '[' 164 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2624 conv=notrunc status=none
++ i=165
++ '[' 165 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2640 conv=notrunc status=none
++ i=166
++ '[' 166 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2656 conv=notrunc status=none
++ i=167
++ '[' 167 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2672 conv=notrunc status=none
++ i=168
++ '[' 168 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2688 conv=notrunc status=none
++ i=169
++ '[' 169 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2704 conv=notrunc status=none
++ i=170
++ '[' 170 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2720 conv=notrunc status=none
++ i=171
++ '[' 171 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2736 conv=notrunc status=none
++ i=172
++ '[' 172 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2752 conv=notrunc status=none
++ i=173
++ '[' 173 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2768 conv=notrunc status=none
++ i=174
++ '[' 174 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2784 conv=notrunc status=none
++ i=175
++ '[' 175 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2800 conv=notrunc status=none
++ i=176
++ '[' 176 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2816 conv=notrunc status=none
++ i=177
++ '[' 177 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2832 conv=notrunc status=none
++ i=178
++ '[' 178 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2848 conv=notrunc status=none
++ i=179
++ '[' 179 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2864 conv=notrunc status=none
++ i=180
++ '[' 180 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2880 conv=notrunc status=none
++ i=181
++ '[' 181 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2896 conv=notrunc status=none
++ i=182
++ '[' 182 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2912 conv=notrunc status=none
++ i=183
++ '[' 183 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2928 conv=notrunc status=none
++ i=184
++ '[' 184 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2944 conv=notrunc status=none
++ i=185
++ '[' 185 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2960 conv=notrunc status=none
++ i=186
++ '[' 186 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2976 conv=notrunc status=none
++ i=187
++ '[' 187 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=2992 conv=notrunc status=none
++ i=188
++ '[' 188 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3008 conv=notrunc status=none
++ i=189
++ '[' 189 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3024 conv=notrunc status=none
++ i=190
++ '[' 190 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3040 conv=notrunc status=none
++ i=191
++ '[' 191 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3056 conv=notrunc status=none
++ i=192
++ '[' 192 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3072 conv=notrunc status=none
++ i=193
++ '[' 193 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3088 conv=notrunc status=none
++ i=194
++ '[' 194 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3104 conv=notrunc status=none
++ i=195
++ '[' 195 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3120 conv=notrunc status=none
++ i=196
++ '[' 196 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3136 conv=notrunc status=none
++ i=197
++ '[' 197 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3152 conv=notrunc status=none
++ i=198
++ '[' 198 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3168 conv=notrunc status=none
++ i=199
++ '[' 199 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3184 conv=notrunc status=none
++ i=200
++ '[' 200 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3200 conv=notrunc status=none
++ i=201
++ '[' 201 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3216 conv=notrunc status=none
++ i=202
++ '[' 202 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3232 conv=notrunc status=none
++ i=203
++ '[' 203 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3248 conv=notrunc status=none
++ i=204
++ '[' 204 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3264 conv=notrunc status=none
++ i=205
++ '[' 205 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3280 conv=notrunc status=none
++ i=206
++ '[' 206 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3296 conv=notrunc status=none
++ i=207
++ '[' 207 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3312 conv=notrunc status=none
++ i=208
++ '[' 208 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3328 conv=notrunc status=none
++ i=209
++ '[' 209 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3344 conv=notrunc status=none
++ i=210
++ '[' 210 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3360 conv=notrunc status=none
++ i=211
++ '[' 211 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3376 conv=notrunc status=none
++ i=212
++ '[' 212 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3392 conv=notrunc status=none
++ i=213
++ '[' 213 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3408 conv=notrunc status=none
++ i=214
++ '[' 214 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3424 conv=notrunc status=none
++ i=215
++ '[' 215 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3440 conv=notrunc status=none
++ i=216
++ '[' 216 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3456 conv=notrunc status=none
++ i=217
++ '[' 217 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3472 conv=notrunc status=none
++ i=218
++ '[' 218 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3488 conv=notrunc status=none
++ i=219
++ '[' 219 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3504 conv=notrunc status=none
++ i=220
++ '[' 220 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3520 conv=notrunc status=none
++ i=221
++ '[' 221 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3536 conv=notrunc status=none
++ i=222
++ '[' 222 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3552 conv=notrunc status=none
++ i=223
++ '[' 223 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3568 conv=notrunc status=none
++ i=224
++ '[' 224 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3584 conv=notrunc status=none
++ i=225
++ '[' 225 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3600 conv=notrunc status=none
++ i=226
++ '[' 226 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3616 conv=notrunc status=none
++ i=227
++ '[' 227 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3632 conv=notrunc status=none
++ i=228
++ '[' 228 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3648 conv=notrunc status=none
++ i=229
++ '[' 229 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3664 conv=notrunc status=none
++ i=230
++ '[' 230 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3680 conv=notrunc status=none
++ i=231
++ '[' 231 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3696 conv=notrunc status=none
++ i=232
++ '[' 232 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3712 conv=notrunc status=none
++ i=233
++ '[' 233 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3728 conv=notrunc status=none
++ i=234
++ '[' 234 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3744 conv=notrunc status=none
++ i=235
++ '[' 235 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3760 conv=notrunc status=none
++ i=236
++ '[' 236 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3776 conv=notrunc status=none
++ i=237
++ '[' 237 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3792 conv=notrunc status=none
++ i=238
++ '[' 238 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3808 conv=notrunc status=none
++ i=239
++ '[' 239 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3824 conv=notrunc status=none
++ i=240
++ '[' 240 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3840 conv=notrunc status=none
++ i=241
++ '[' 241 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3856 conv=notrunc status=none
++ i=242
++ '[' 242 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3872 conv=notrunc status=none
++ i=243
++ '[' 243 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3888 conv=notrunc status=none
++ i=244
++ '[' 244 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3904 conv=notrunc status=none
++ i=245
++ '[' 245 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3920 conv=notrunc status=none
++ i=246
++ '[' 246 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3936 conv=notrunc status=none
++ i=247
++ '[' 247 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3952 conv=notrunc status=none
++ i=248
++ '[' 248 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3968 conv=notrunc status=none
++ i=249
++ '[' 249 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=3984 conv=notrunc status=none
++ i=250
++ '[' 250 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4000 conv=notrunc status=none
++ i=251
++ '[' 251 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4016 conv=notrunc status=none
++ i=252
++ '[' 252 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4032 conv=notrunc status=none
++ i=253
++ '[' 253 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4048 conv=notrunc status=none
++ i=254
++ '[' 254 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4064 conv=notrunc status=none
++ i=255
++ '[' 255 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4080 conv=notrunc status=none
++ i=256
++ '[' 256 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4096 conv=notrunc status=none
++ i=257
++ '[' 257 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4112 conv=notrunc status=none
++ i=258
++ '[' 258 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4128 conv=notrunc status=none
++ i=259
++ '[' 259 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4144 conv=notrunc status=none
++ i=260
++ '[' 260 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4160 conv=notrunc status=none
++ i=261
++ '[' 261 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4176 conv=notrunc status=none
++ i=262
++ '[' 262 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4192 conv=notrunc status=none
++ i=263
++ '[' 263 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4208 conv=notrunc status=none
++ i=264
++ '[' 264 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4224 conv=notrunc status=none
++ i=265
++ '[' 265 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4240 conv=notrunc status=none
++ i=266
++ '[' 266 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4256 conv=notrunc status=none
++ i=267
++ '[' 267 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4272 conv=notrunc status=none
++ i=268
++ '[' 268 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4288 conv=notrunc status=none
++ i=269
++ '[' 269 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4304 conv=notrunc status=none
++ i=270
++ '[' 270 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4320 conv=notrunc status=none
++ i=271
++ '[' 271 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4336 conv=notrunc status=none
++ i=272
++ '[' 272 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4352 conv=notrunc status=none
++ i=273
++ '[' 273 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4368 conv=notrunc status=none
++ i=274
++ '[' 274 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4384 conv=notrunc status=none
++ i=275
++ '[' 275 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4400 conv=notrunc status=none
++ i=276
++ '[' 276 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4416 conv=notrunc status=none
++ i=277
++ '[' 277 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4432 conv=notrunc status=none
++ i=278
++ '[' 278 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4448 conv=notrunc status=none
++ i=279
++ '[' 279 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4464 conv=notrunc status=none
++ i=280
++ '[' 280 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4480 conv=notrunc status=none
++ i=281
++ '[' 281 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4496 conv=notrunc status=none
++ i=282
++ '[' 282 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4512 conv=notrunc status=none
++ i=283
++ '[' 283 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4528 conv=notrunc status=none
++ i=284
++ '[' 284 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4544 conv=notrunc status=none
++ i=285
++ '[' 285 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4560 conv=notrunc status=none
++ i=286
++ '[' 286 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4576 conv=notrunc status=none
++ i=287
++ '[' 287 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4592 conv=notrunc status=none
++ i=288
++ '[' 288 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4608 conv=notrunc status=none
++ i=289
++ '[' 289 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4624 conv=notrunc status=none
++ i=290
++ '[' 290 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4640 conv=notrunc status=none
++ i=291
++ '[' 291 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4656 conv=notrunc status=none
++ i=292
++ '[' 292 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4672 conv=notrunc status=none
++ i=293
++ '[' 293 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4688 conv=notrunc status=none
++ i=294
++ '[' 294 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4704 conv=notrunc status=none
++ i=295
++ '[' 295 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4720 conv=notrunc status=none
++ i=296
++ '[' 296 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4736 conv=notrunc status=none
++ i=297
++ '[' 297 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4752 conv=notrunc status=none
++ i=298
++ '[' 298 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4768 conv=notrunc status=none
++ i=299
++ '[' 299 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4784 conv=notrunc status=none
++ i=300
++ '[' 300 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4800 conv=notrunc status=none
++ i=301
++ '[' 301 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4816 conv=notrunc status=none
++ i=302
++ '[' 302 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4832 conv=notrunc status=none
++ i=303
++ '[' 303 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4848 conv=notrunc status=none
++ i=304
++ '[' 304 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4864 conv=notrunc status=none
++ i=305
++ '[' 305 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4880 conv=notrunc status=none
++ i=306
++ '[' 306 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4896 conv=notrunc status=none
++ i=307
++ '[' 307 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4912 conv=notrunc status=none
++ i=308
++ '[' 308 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4928 conv=notrunc status=none
++ i=309
++ '[' 309 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4944 conv=notrunc status=none
++ i=310
++ '[' 310 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4960 conv=notrunc status=none
++ i=311
++ '[' 311 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4976 conv=notrunc status=none
++ i=312
++ '[' 312 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=4992 conv=notrunc status=none
++ i=313
++ '[' 313 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5008 conv=notrunc status=none
++ i=314
++ '[' 314 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5024 conv=notrunc status=none
++ i=315
++ '[' 315 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5040 conv=notrunc status=none
++ i=316
++ '[' 316 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5056 conv=notrunc status=none
++ i=317
++ '[' 317 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5072 conv=notrunc status=none
++ i=318
++ '[' 318 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5088 conv=notrunc status=none
++ i=319
++ '[' 319 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5104 conv=notrunc status=none
++ i=320
++ '[' 320 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5120 conv=notrunc status=none
++ i=321
++ '[' 321 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5136 conv=notrunc status=none
++ i=322
++ '[' 322 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5152 conv=notrunc status=none
++ i=323
++ '[' 323 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5168 conv=notrunc status=none
++ i=324
++ '[' 324 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5184 conv=notrunc status=none
++ i=325
++ '[' 325 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5200 conv=notrunc status=none
++ i=326
++ '[' 326 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5216 conv=notrunc status=none
++ i=327
++ '[' 327 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5232 conv=notrunc status=none
++ i=328
++ '[' 328 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5248 conv=notrunc status=none
++ i=329
++ '[' 329 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5264 conv=notrunc status=none
++ i=330
++ '[' 330 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5280 conv=notrunc status=none
++ i=331
++ '[' 331 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5296 conv=notrunc status=none
++ i=332
++ '[' 332 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5312 conv=notrunc status=none
++ i=333
++ '[' 333 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5328 conv=notrunc status=none
++ i=334
++ '[' 334 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5344 conv=notrunc status=none
++ i=335
++ '[' 335 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5360 conv=notrunc status=none
++ i=336
++ '[' 336 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5376 conv=notrunc status=none
++ i=337
++ '[' 337 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5392 conv=notrunc status=none
++ i=338
++ '[' 338 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5408 conv=notrunc status=none
++ i=339
++ '[' 339 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5424 conv=notrunc status=none
++ i=340
++ '[' 340 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5440 conv=notrunc status=none
++ i=341
++ '[' 341 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5456 conv=notrunc status=none
++ i=342
++ '[' 342 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5472 conv=notrunc status=none
++ i=343
++ '[' 343 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5488 conv=notrunc status=none
++ i=344
++ '[' 344 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5504 conv=notrunc status=none
++ i=345
++ '[' 345 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5520 conv=notrunc status=none
++ i=346
++ '[' 346 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5536 conv=notrunc status=none
++ i=347
++ '[' 347 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5552 conv=notrunc status=none
++ i=348
++ '[' 348 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5568 conv=notrunc status=none
++ i=349
++ '[' 349 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5584 conv=notrunc status=none
++ i=350
++ '[' 350 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5600 conv=notrunc status=none
++ i=351
++ '[' 351 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5616 conv=notrunc status=none
++ i=352
++ '[' 352 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5632 conv=notrunc status=none
++ i=353
++ '[' 353 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5648 conv=notrunc status=none
++ i=354
++ '[' 354 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5664 conv=notrunc status=none
++ i=355
++ '[' 355 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5680 conv=notrunc status=none
++ i=356
++ '[' 356 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5696 conv=notrunc status=none
++ i=357
++ '[' 357 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5712 conv=notrunc status=none
++ i=358
++ '[' 358 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5728 conv=notrunc status=none
++ i=359
++ '[' 359 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5744 conv=notrunc status=none
++ i=360
++ '[' 360 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5760 conv=notrunc status=none
++ i=361
++ '[' 361 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5776 conv=notrunc status=none
++ i=362
++ '[' 362 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5792 conv=notrunc status=none
++ i=363
++ '[' 363 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5808 conv=notrunc status=none
++ i=364
++ '[' 364 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5824 conv=notrunc status=none
++ i=365
++ '[' 365 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5840 conv=notrunc status=none
++ i=366
++ '[' 366 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5856 conv=notrunc status=none
++ i=367
++ '[' 367 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5872 conv=notrunc status=none
++ i=368
++ '[' 368 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5888 conv=notrunc status=none
++ i=369
++ '[' 369 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5904 conv=notrunc status=none
++ i=370
++ '[' 370 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5920 conv=notrunc status=none
++ i=371
++ '[' 371 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5936 conv=notrunc status=none
++ i=372
++ '[' 372 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5952 conv=notrunc status=none
++ i=373
++ '[' 373 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5968 conv=notrunc status=none
++ i=374
++ '[' 374 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=5984 conv=notrunc status=none
++ i=375
++ '[' 375 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6000 conv=notrunc status=none
++ i=376
++ '[' 376 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6016 conv=notrunc status=none
++ i=377
++ '[' 377 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6032 conv=notrunc status=none
++ i=378
++ '[' 378 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6048 conv=notrunc status=none
++ i=379
++ '[' 379 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6064 conv=notrunc status=none
++ i=380
++ '[' 380 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6080 conv=notrunc status=none
++ i=381
++ '[' 381 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6096 conv=notrunc status=none
++ i=382
++ '[' 382 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6112 conv=notrunc status=none
++ i=383
++ '[' 383 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6128 conv=notrunc status=none
++ i=384
++ '[' 384 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6144 conv=notrunc status=none
++ i=385
++ '[' 385 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6160 conv=notrunc status=none
++ i=386
++ '[' 386 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6176 conv=notrunc status=none
++ i=387
++ '[' 387 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6192 conv=notrunc status=none
++ i=388
++ '[' 388 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6208 conv=notrunc status=none
++ i=389
++ '[' 389 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6224 conv=notrunc status=none
++ i=390
++ '[' 390 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6240 conv=notrunc status=none
++ i=391
++ '[' 391 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6256 conv=notrunc status=none
++ i=392
++ '[' 392 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6272 conv=notrunc status=none
++ i=393
++ '[' 393 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6288 conv=notrunc status=none
++ i=394
++ '[' 394 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6304 conv=notrunc status=none
++ i=395
++ '[' 395 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6320 conv=notrunc status=none
++ i=396
++ '[' 396 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6336 conv=notrunc status=none
++ i=397
++ '[' 397 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6352 conv=notrunc status=none
++ i=398
++ '[' 398 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6368 conv=notrunc status=none
++ i=399
++ '[' 399 -lt 400 ']'
++ dd if=/dev/urandom of=xc bs=4096 count=1 seek=6384 conv=notrunc status=none
++ i=400
++ '[' 400 -lt 400 ']'
++ head -c 16M /dev/urandom
++ sync
++ rm junk
++ sync
++ fallocate -l 8M xe
++ sync
++ chmod 666 xa xb xc xd xe xrm
++ echo 'expected after Haiku: xa = first 3000 B, xb = first 5 MiB, xe = 3 MiB of zeros'
+++ head -c 3000 xa
+++ md5sum
+++ cut '-d ' -f1
++ echo 'xa-3000 f8fe75759f3564962d74b60eaf91ec15'
+++ head -c 5242880 xb
+++ md5sum
+++ cut '-d ' -f1
++ echo 'xb-5M 5f3431014d7abf7ef9437207ac7ca09f'
+++ head -c 3145728 /dev/zero
+++ md5sum
+++ cut '-d ' -f1
++ echo 'xe-3M-zeros d1dd210d6b1312cb342b56d02bd5e651'
+++ head -c 41943040 xd
+++ md5sum
+++ cut '-d ' -f1
++ echo 'xd-40M 8cbd1f17cc45608b449b99e177614972'
+++ head -c 13631488 xc
+++ md5sum
+++ cut '-d ' -f1
++ echo 'xc-13M 244763008dd95de0ea70158bbafe4f22'
++ filefrag -v xe
++ head -8
++ filefrag xa xb xc xd xe
++ debugfs -R 'stat xc' /dev/nvme1n1p4
++ grep -iE 'extents|depth|blocks'
++ head -4
+++ filefrag -v m/xe
+++ awk '/^ *0:/ { gsub(/\.\./, " "); print $4 }'
++ st=61440
+++ dd if=/dev/nvme1n1p4 bs=4096 skip=61440 count=768 status=none
+++ md5sum
+++ cut '-d ' -f1
++ echo 'xe first physical block 61440; md5 of its first 3 MiB on disk: d39b1900c63567b1e60a6252a490f80d'
++ '[' 4 = 5 ']'
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5
++ mount /dev/nvme1n1p5 m
++ cp lin-1m m/
++ chmod 777 m
++ chmod 666 m/lin-1m
++ '[' 5 = 4 ']'
++ '[' 5 = 5 ']'
++ cd m
++ sp4 sa
++ truncate -s 40M sa
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=sa bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=sa bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=sa bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=sa bs=4096 count=1 seek=9984 conv=notrunc status=none
++ sp4 srm
++ truncate -s 40M srm
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=srm bs=4096 count=1 seek=0 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=srm bs=4096 count=1 seek=1280 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=srm bs=4096 count=1 seek=5120 conv=notrunc status=none
++ for o in 0 5 20 39
++ dd if=/dev/urandom of=srm bs=4096 count=1 seek=9984 conv=notrunc status=none
++ chmod 666 sa srm
+++ head -c 3000 sa
+++ md5sum
+++ cut '-d ' -f1
++ echo 'sa-3000 e678db14668cefee8b476b751792c8a6'
++ sync
++ ls -ls m
++ umount m
++ for n in 1 2 3 4 5
++ echo '== p1'
++ dumpe2fs -h /dev/nvme1n1p1
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme1n1p1
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p1 rc=0'
++ for n in 1 2 3 4 5
++ echo '== p2'
++ dumpe2fs -h /dev/nvme1n1p2
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme1n1p2
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p2 rc=0'
++ for n in 1 2 3 4 5
++ echo '== p3'
++ dumpe2fs -h /dev/nvme1n1p3
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme1n1p3
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p3 rc=0'
++ for n in 1 2 3 4 5
++ echo '== p4'
++ dumpe2fs -h /dev/nvme1n1p4
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme1n1p4
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p4 rc=0'
++ for n in 1 2 3 4 5
++ echo '== p5'
++ dumpe2fs -h /dev/nvme1n1p5
++ grep -E 'volume name|features|Block size'
++ e2fsck -fn /dev/nvme1n1p5
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p5 rc=0'
++ sync
