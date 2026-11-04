@@ -202,8 +202,6 @@ ppp_send_data(net_device *_device, net_buffer *buffer)
 		return B_BAD_VALUE;
 	}
 
-	size_t net_buffer_size = buffer->size;
-		// store buffer->size in case buffer freed in KPPP_Interface->Send
 	status_t status = device->KPPP_Interface->Send(buffer, 0x0021); // IP_PROTOCOL 0x0021
 
 	if (status != B_OK) {
