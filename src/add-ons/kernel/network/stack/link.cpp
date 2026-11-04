@@ -72,6 +72,9 @@ private:
 									net_buffer* buffer);
 
 private:
+			mutex				fMonitorLock;
+				// serializes starting and stopping a capture; never taken
+				// by the device's callbacks, and always before fLock
 			net_device_monitor	fMonitor;
 			net_device_interface* fMonitoredDevice;
 			net_device_interface* fBoundToDevice;
@@ -88,6 +91,7 @@ LinkProtocol::LinkProtocol(net_socket* socket)
 	fMonitoredDevice(NULL),
 	fBoundToDevice(NULL)
 {
+	mutex_init(&fMonitorLock, "link capture");
 	fMonitor.cookie = this;
 	fMonitor.receive = _MonitorData;
 	fMonitor.event = _MonitorEvent;
@@ -104,12 +108,15 @@ LinkProtocol::~LinkProtocol()
 	// A bound socket may also have started capturing; its receive handler
 	// must go either way, or the device calls into a deleted protocol.
 	Unbind();
+
+	mutex_destroy(&fMonitorLock);
 }
 
 
 status_t
 LinkProtocol::StartMonitoring(const char* deviceName)
 {
+	MutexLocker monitorLocker(fMonitorLock);
 	MutexLocker locker(fLock);
 
 	if (fMonitoredDevice != NULL)
@@ -133,6 +140,10 @@ LinkProtocol::StartMonitoring(const char* deviceName)
 status_t
 LinkProtocol::StopMonitoring(const char* deviceName)
 {
+	// Held until the monitor is unregistered: fMonitor stays linked into the
+	// device's list until then, and a capture started in between would link
+	// it again.
+	MutexLocker monitorLocker(fMonitorLock);
 	MutexLocker locker(fLock);
 
 	if (fMonitoredDevice == NULL
