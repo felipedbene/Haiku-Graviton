@@ -193,9 +193,11 @@ ExtentStream::_Enlarge(Transaction& transaction, off_t targetBlocks,
 				/ fVolume->BlocksPerGroup();
 		
 		if (fPending == 0) {
+			// One run becomes one extent, which holds at most
+			// EXT2_EXTENT_MAX_LENGTH blocks.
 			status_t status = fVolume->AllocateBlocks(transaction, 1,
-				targetBlocks - fNumBlocks, blockGroup, fAllocatedPos,
-				fPending);
+				min_c(targetBlocks - fNumBlocks, (off_t)EXT2_EXTENT_MAX_LENGTH),
+				blockGroup, fAllocatedPos, fPending);
 			if (status != B_OK) {
 				ERROR("Enlarge(): AllocateBlocks() failed()\n");
 				return status;

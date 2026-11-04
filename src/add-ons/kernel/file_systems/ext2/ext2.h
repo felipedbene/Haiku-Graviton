@@ -419,7 +419,11 @@ struct ext2_extent_entry {
 	void SetLogicalBlock(uint32 block) {
 		logical_block = B_HOST_TO_LENDIAN_INT32(block); }
 	void SetLength(uint16 _length) {
-		length = B_HOST_TO_LENDIAN_INT16(_length) & 0x7fff; }
+		// An initialized extent holds 1 to EXT2_EXTENT_MAX_LENGTH (0x8000)
+		// blocks, the latter stored as is; above it, the high bit marks an
+		// uninitialized extent, so callers never pass more.
+		length = B_HOST_TO_LENDIAN_INT16(
+			_length <= EXT2_EXTENT_MAX_LENGTH ? _length : _length & 0x7fff); }
 	bool IsUninitialized() const
 		{ return B_LENDIAN_TO_HOST_INT16(length) > 0x8000; }
 		// a preallocated extent whose blocks read as zeros (fallocate)
