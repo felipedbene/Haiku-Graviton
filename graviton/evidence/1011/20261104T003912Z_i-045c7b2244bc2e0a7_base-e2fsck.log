@@ -1,0 +1,96 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-e2fsck
+# instance: i-045c7b2244bc2e0a7   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: e2fsck -fn on Linux of the base arm's images after its Haiku run
+# start: 20261104T003912Z   end: 20261104T003923Z   rc: 0
+# script sha256: b5b3a152993f2545c6a55ed7309a4dc9c75f5b2efb3a5d4871827c95174e641b
+# ---- script ----
+# | # e2fsck -fn (read-only, forced) of an arm's ext2 images after its Haiku run, fetched from S3.
+# | ARM=base
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/fs1011/after
+# | mkdir -p /opt/after && cd /opt/after
+# | for i in ext2-1011 ext2-stk; do
+# | 	aws s3 cp --quiet $B/$ARM-$i.img $ARM-$i.img || exit 1
+# | 	sha256sum $ARM-$i.img
+# | 	echo "=== e2fsck -fn $ARM-$i.img ==="; e2fsck -fn $ARM-$i.img > $ARM-$i.fsck 2>&1; echo "e2fsck rc=$?"
+# | 	echo "lines: $(wc -l < $ARM-$i.fsck)  'Unattached inode': $(grep -c 'Unattached inode' $ARM-$i.fsck)  'Unconnected directory': $(grep -c 'Unconnected directory' $ARM-$i.fsck)  'ref count is': $(grep -c 'ref count is' $ARM-$i.fsck)"
+# | 	head -40 $ARM-$i.fsck; echo "[...]"; tail -6 $ARM-$i.fsck
+# | done
+# ---- raw output ----
+b4ee77a12ec9e737c729f18084f262033a4cf1d42c5f6c2be546fe44d1e41ac7  base-ext2-1011.img
+=== e2fsck -fn base-ext2-1011.img ===
+e2fsck rc=4
+lines: 21024  'Unattached inode': 5002  'Unconnected directory': 1  'ref count is': 1
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Unconnected directory inode 13 (was in /t1011.444)
+Connect to /lost+found? no
+
+'..' in ... (13) is /t1011.444 (12), should be <The NULL inode> (0).
+Fix? no
+
+Pass 4: Checking reference counts
+Inode 12 ref count is 5, should be 6.  Fix? no
+
+Unattached inode 14
+Connect to /lost+found? no
+
+Unattached inode 19
+Connect to /lost+found? no
+
+Unattached inode 23
+Connect to /lost+found? no
+
+Unattached inode 24
+Connect to /lost+found? no
+
+Unattached inode 25
+Connect to /lost+found? no
+
+Unattached inode 26
+Connect to /lost+found? no
+
+Unattached inode 27
+Connect to /lost+found? no
+
+Unattached inode 28
+Connect to /lost+found? no
+
+Unattached inode 29
+Connect to /lost+found? no
+
+[...]
+
+Pass 5: Checking group summary information
+
+base-ext2-1011.img: ********** WARNING: Filesystem still has errors **********
+
+base-ext2-1011.img: 5021/65536 files (0.0% non-contiguous), 6150/65536 blocks
+b70aecfed1569c1f0f94e0e71bfc4f7b44496b47876675d6072d36684360c501  base-ext2-stk.img
+=== e2fsck -fn base-ext2-stk.img ===
+e2fsck rc=4
+lines: 15  'Unattached inode': 1  'Unconnected directory': 0  'ref count is': 0
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Unattached zero-length inode 20.  Clear? no
+
+Unattached inode 20
+Connect to /lost+found? no
+
+Pass 5: Checking group summary information
+
+base-ext2-stk.img: ********** WARNING: Filesystem still has errors **********
+
+base-ext2-stk.img: 20/65536 files (0.0% non-contiguous), 4145/65536 blocks
+[...]
+
+Pass 5: Checking group summary information
+
+base-ext2-stk.img: ********** WARNING: Filesystem still has errors **********
+
+base-ext2-stk.img: 20/65536 files (0.0% non-contiguous), 4145/65536 blocks

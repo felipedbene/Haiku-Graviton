@@ -1,0 +1,28 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-relaunch
+# instance: i-045c7b2244bc2e0a7   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: relaunch the detached build without btrfs (its zlib.h comes from a build package this module-only tree never extracted; btrfs is read-only and outside both fixes, so every arm keeps canonical's btrfs)
+# start: 20261104T002343Z   end: 20261104T002355Z   rc: 0
+# script sha256: 014721860319d331a7bca288602de9c7968f17d82bd9ef6cd3809ae8dde18612
+# ---- script ----
+# | # btrfs failed: system_dependencies.h:57: fatal error: zlib.h (first launch, jam-trunk.log).
+# | # Drop btrfs from the build; every arm keeps canonical's btrfs. Same script otherwise.
+# | set -x
+# | cd /opt/t/out && mv jam-trunk.log jam-trunk-attempt1.log && mv xb.log xb-attempt1.log; rm -f xb.rc
+# | sed -i -e 's/ bfs ramfs ext2 btrfs > / bfs ramfs ext2 > /' -e 's/^for m in bfs ramfs ext2 btrfs; do/for m in bfs ramfs ext2; do/' -e 's/ ext2\.\* btrfs\.\* | tee/ ext2.* | tee/' /opt/t/xb.sh
+# | grep -n "btrfs" /opt/t/xb.sh; sha256sum /opt/t/xb.sh
+# | nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc' > /dev/null 2>&1 &
+# | sleep 3; echo launched
+# ---- raw output ----
+2f15b4e357eaf807aac2c6574abc3dca3055988a73f745d573e7479c2bb3c210  /opt/t/xb.sh
+launched
++ cd /opt/t/out
++ mv jam-trunk.log jam-trunk-attempt1.log
++ mv xb.log xb-attempt1.log
++ rm -f xb.rc
++ sed -i -e 's/ bfs ramfs ext2 btrfs > / bfs ramfs ext2 > /' -e 's/^for m in bfs ramfs ext2 btrfs; do/for m in bfs ramfs ext2; do/' -e 's/ ext2\.\* btrfs\.\* | tee/ ext2.* | tee/' /opt/t/xb.sh
++ grep -n btrfs /opt/t/xb.sh
++ sha256sum /opt/t/xb.sh
++ sleep 3
++ nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc'
++ echo launched
