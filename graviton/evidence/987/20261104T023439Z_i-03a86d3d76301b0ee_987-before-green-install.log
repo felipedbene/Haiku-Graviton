@@ -1,0 +1,64 @@
+# 20261104T023439Z instance=i-03a86d3d76301b0ee label=987-before-green-install
+# script:
+#   pkgman search -a -D openssh 2>&1 | grep -i ssh
+#   catattr SYS:PACKAGE_FILE /boot/system/bin/sshd
+#   # Answer "solution 1" (allow deinstallation of openssh_debeos), then confirm.
+#   printf '1\ny\n' | pkgman install openssh 2>&1 | tail -25
+#   echo "pkgman rc=$?"
+#   grep -i -E "post-install|keymaker|exit code" /var/log/syslog | tail -10
+#   ls -la /boot/system/settings/ssh/
+#   pkgman search -i -a -D openssh 2>&1 | grep -i ssh
+#   ls -la /boot/system/boot/post-install/ 2>&1
+# output:
+ssm-run: command 8dd6b2ca-1c20-441f-85c5-0d26cc04dce9 on i-03a86d3d76301b0ee (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/H/ssm-out/run-11406-7925fe)
+DeBeOS      autossh                                  1.4g-1                         arm64 
+DeBeOS      libssh2                                  1.11.1-2                       arm64 
+DeBeOS      libssh2_devel                            1.11.1-2                       arm64 
+DeBeOS      openssh                                  10.4p1-2                       arm64 
+<system>    openssh_debeos                           10.4p1-1                       arm64 
+DeBeOS      ssh_askpass                              0.3-1                          arm64 
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
+ PFn©™ repochecksum-1 []
+Validating checksum for DeBeOS...done.
+Encountered problems:
+problem 1: package openssh_debeos-10.4p1-1 conflicts with openssh provided by openssh-10.4p1-2
+  solution 1:
+    - allow deinstallation of openssh_debeos-10.4p1-1
+  solution 2:
+    - do not install "providing openssh"
+Please select a solution, skip the problem for now or quit.
+select [1...2/s/q]: The following changes will be made:
+  in system:
+    install package libedit-20230828_3.1-1 from repository DeBeOS
+    install package openssh-10.4p1-2 from repository DeBeOS
+    uninstall package openssh_debeos-10.4p1-1
+Continue? [yes/no] (yes) :        libedit-20230828_3.1-1-arm64.hpkg [ KiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/libedit-20230828_3.1-1-arm64.hpkg...done.
+       openssh-10.4p1-2-arm64.hpkg [ MiB]
+Validating checksum for http://packages.debene.dev/arm64/packages/openssh-10.4p1-2-arm64.hpkg...done.
+[system] Applying changes ...
+[system] warning: package openssh-10.4p1-2-arm64.hpkg: The post-installation script  "/boot/system/boot/post-install/sshd_keymaker.sh" failed with exit code 126.
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_02:34:42"
+[system] Cleaning up ...
+[system] Done.
+pkgman rc=0
+KERN: package_daemon: [161052501:    65] KERN: Volume::CommitTransactionHandler::_RunPostOrPreScript(): running post-installation script "boot/post-install/sshd_keymaker.sh" of package openssh-10.4p1-2-arm64.hpkg failed: 126 (errno: No such file or directory)
+total 702
+drwxr-xr-x 1 baron root   2048 Nov  4 02:34 .
+drwxr-xr-x 1 baron root   2048 Nov  4 02:32 ..
+-rw-r--r-- 1 baron root 673940 Nov  3 01:56 moduli
+-rw-r--r-- 1 baron root   1591 Nov  4 02:34 ssh_config
+-rw-r--r-- 1 baron root   1495 Nov  4 00:14 ssh_config.bak
+-rw------- 1 baron root    411 Nov  4 02:32 ssh_host_ed25519_key
+-rw-r--r-- 1 baron root     96 Nov  4 02:32 ssh_host_ed25519_key.pub
+-rw------- 1 baron root   4006 Nov  4 02:32 ssh_host_mldsa44-ed25519_key
+-rw-r--r-- 1 baron root   1892 Nov  4 02:32 ssh_host_mldsa44-ed25519_key.pub
+-rw-r--r-- 1 baron root   2321 Nov  4 00:14 sshd_config
+<system>    openssh                10.4p1-2                       arm64
+total 3
+dr-xr-xr-x 1 baron root    0 Nov  3 01:56 .
+dr-xr-xr-x 1 baron root    0 Nov  4 00:14 ..
+-r-xr-xr-x 1 baron root  903 Nov  3 01:56 fix_openssh_config_paths.sh
+-r--r--r-- 1 baron root 1449 Nov  3 01:56 sshd_keymaker.sh
+ssm-run: Success
+# ssm-run rc=0
