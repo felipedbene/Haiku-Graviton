@@ -1,0 +1,114 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-fix
+# instance: i-0c90b4eb4d4ac04b1   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: rebuild fix1082 icmp6/ipv6 (amended patch), prove trunk rebuild matches, upload
+# start: 20261104T071129Z   end: 20261104T071152Z   rc: 0
+# script sha256: 484a2442291265b3ae2e665748a92d478e82844008d749dbc4fd96bda571086c
+# ---- script ----
+# | # Rebuild fix1082 (amended: defines in6addr_any, which IN6_IS_ADDR_UNSPECIFIED needs in a
+# | # kernel module) on the same tree; trunk outputs from the first pass are kept.
+# | set -x
+# | cd /opt/t/out
+# | echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>' | base64 -d > fix1082.patch
+# | sha256sum fix1082.patch
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out; REV=hrev59996
+# | P=objects/haiku/arm64/release/add-ons/kernel/network/protocols
+# | git -C .. checkout -q -f origin/graviton && git -C .. log -1 --format='trunk %H %s'
+# | git -C .. apply --check $O/fix1082.patch && git -C .. apply $O/fix1082.patch || exit 1
+# | git -C .. diff --stat
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV icmp6 ipv6 > $O/jam-fix1082.log 2>&1 || { grep -B2 -A8 -E "error|failed" $O/jam-fix1082.log | head -60; exit 1; }
+# | grep -E "updated .* target|warning:" $O/jam-fix1082.log
+# | for m in icmp6 ipv6; do cp $(find $P/$m -maxdepth 1 -type f -name $m) $O/$m.fix1082 || exit 1; done
+# | git -C .. checkout -q -f origin/graviton
+# | # trunk modules rebuilt from a clean tree, to show the build reproduces canonical's bit for bit
+# | rm -rf $P/icmp6/*.o $P/ipv6/*.o $P/icmp6/icmp6 $P/ipv6/ipv6
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV icmp6 ipv6 > $O/jam-trunk2.log 2>&1 || exit 1
+# | for m in icmp6 ipv6; do cmp $(find $P/$m -maxdepth 1 -type f -name $m) $O/$m.trunk && echo "$m trunk rebuild identical"; done
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | cd $O
+# | echo "symbols (trunk / fix):"; ${X}nm -C icmp6.trunk | grep -E "error_reply|in6addr"; ${X}nm -C icmp6.fix1082 | grep -E "error_reply|error_rate|is_error_allowed|net_error_to_icmp6|in6addr"
+# | ${X}nm -D icmp6.fix1082 | grep " U " | head -40
+# | cmp -s icmp6.trunk icmp6.fix1082 && { echo "icmp6 fix identical to trunk?"; exit 1; }
+# | cmp -s ipv6.trunk ipv6.fix1082 && { echo "ipv6 fix identical to trunk?"; exit 1; }
+# | sha256sum icmp6.* ipv6.* udp.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude 'jam-*' --exclude 'xb.*' --exclude '*.patch' . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/T/1082/out/ && echo uploaded
+# ---- raw output ----
+50619baa7ff6531b7676e568bb0cb497cc33be5bb20eaf3a5e3a3358ddfa1d98  fix1082.patch
+trunk a9954f424adad9f0a9ebbf64a4f8493add9bd620 evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+ .../kernel/network/protocols/icmp6/icmp6.cpp       | 311 ++++++++++++++++++++-
+ src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp |   7 +-
+ 2 files changed, 316 insertions(+), 2 deletions(-)
+...updated 2 target(s)...
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+../src/add-ons/kernel/network/protocols/ipv6/multicast.h:43:42: warning: converting a packed 'const in6_addr' pointer (alignment 1) to a 'const uint32' {aka 'const unsigned int'} pointer (alignment 4) may result in an unaligned pointer value [-Waddress-of-packed-member]
+...updated 6 target(s)...
+icmp6 trunk rebuild identical
+ipv6 trunk rebuild identical
+symbols (trunk / fix):
+0000000000001248 T icmp6_error_reply(net_protocol*, net_buffer*, net_error, net_error_data*)
+0000000000001a40 T icmp6_error_reply(net_protocol*, net_buffer*, net_error, net_error_data*)
+0000000000002250 R in6addr_any
+                 U _ZSt7nothrow@KERNEL_BASE
+                 U _ZdlPvm@KERNEL_BASE
+                 U _ZnwmRKSt9nothrow_t@KERNEL_BASE
+                 U mutex_lock@KERNEL_BASE
+                 U mutex_unlock@KERNEL_BASE
+                 U system_time@KERNEL_BASE
+8e1b0afe43a12e469850bdb0d3ecc715f5d0612520d0bcb3ba99a2f9a1ba38f4  icmp6.fix1082
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  icmp6.trunk
+ef4ae881f389141602e9b9e6af8339a5805afcb5fd7040dc1967058dabb82328  ipv6.fix1082
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  ipv6.trunk
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  udp.trunk
+uploaded
++ cd /opt/t/out
++ base64 -d
++ echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>'
++ sha256sum fix1082.patch
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ REV=hrev59996
++ P=objects/haiku/arm64/release/add-ons/kernel/network/protocols
++ git -C .. checkout -q -f origin/graviton
++ git -C .. log -1 '--format=trunk %H %s'
++ git -C .. apply --check /opt/t/out/fix1082.patch
++ git -C .. apply /opt/t/out/fix1082.patch
++ git -C .. diff --stat
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 icmp6 ipv6
++ grep -E 'updated .* target|warning:' /opt/t/out/jam-fix1082.log
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6 -maxdepth 1 -type f -name icmp6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 /opt/t/out/icmp6.fix1082
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6 -maxdepth 1 -type f -name ipv6
++ cp objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6 /opt/t/out/ipv6.fix1082
++ git -C .. checkout -q -f origin/graviton
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_address.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6_utils.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/multicast.o objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 icmp6 ipv6
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6 -maxdepth 1 -type f -name icmp6
++ cmp objects/haiku/arm64/release/add-ons/kernel/network/protocols/icmp6/icmp6 /opt/t/out/icmp6.trunk
++ echo 'icmp6 trunk rebuild identical'
++ for m in icmp6 ipv6
+++ find objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6 -maxdepth 1 -type f -name ipv6
++ cmp objects/haiku/arm64/release/add-ons/kernel/network/protocols/ipv6/ipv6 /opt/t/out/ipv6.trunk
++ echo 'ipv6 trunk rebuild identical'
++ X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
++ cd /opt/t/out
++ echo 'symbols (trunk / fix):'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C icmp6.trunk
++ grep -E 'error_reply|in6addr'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -C icmp6.fix1082
++ grep -E 'error_reply|error_rate|is_error_allowed|net_error_to_icmp6|in6addr'
++ /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-nm -D icmp6.fix1082
++ grep ' U '
++ head -40
++ cmp -s icmp6.trunk icmp6.fix1082
++ cmp -s ipv6.trunk ipv6.fix1082
++ sha256sum icmp6.fix1082 icmp6.trunk ipv6.fix1082 ipv6.trunk udp.trunk
++ tee SHA256SUMS
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet --recursive --exclude 'jam-*' --exclude 'xb.*' --exclude '*.patch' . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/T/1082/out/
++ echo uploaded

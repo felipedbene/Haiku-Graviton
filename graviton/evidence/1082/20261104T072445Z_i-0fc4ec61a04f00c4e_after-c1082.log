@@ -1,0 +1,84 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-c1082
+# instance: i-0fc4ec61a04f00c4e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #1082 after: fresh launch of candidate ami (canonical + icmp6.fix1082 + ipv6.fix1082): repro, udprefused993, resolver row, udp947, tcp900, ping ::1, traceroute6
+# start: 20261104T072445Z   end: 20261104T072456Z   rc: 0
+# script sha256: 8384498beb10259cd53b76df0fa42dd2286d95dd05d51bf3431be5ea1466960c
+# ---- script ----
+# | # #1082 arm run: the repro, Group I's udprefused993, the resolver row with no resolv.conf
+# | # (moved aside and put back), then the regressions udp947 and tcp900 and ping over ::1.
+# | cd /boot/home/t1082
+# | uname -v
+# | echo "== module sha256"
+# | for m in icmp6 ipv6 udp; do sha256sum /boot/system/add-ons/kernel/network/protocols/$m; done
+# | echo "== icmp6unreach1082"; ./icmp6unreach1082; echo "rc=$?"
+# | echo "== udprefused993"; ./udprefused993; echo "rc=$?"
+# | echo "== resolver, no resolv.conf"
+# | R=/boot/system/settings/network/resolv.conf
+# | mv $R $R.1082 && ls /boot/system/settings/network/
+# | ./resolve1082 debeos-1082.invalid example.com localhost
+# | mv $R.1082 $R && echo "restored: $(grep -c nameserver $R) nameserver line(s)"
+# | echo "== resolver, with resolv.conf (control)"
+# | ./resolve1082 debeos-1082.invalid
+# | echo "== udp947"; ./udp947 > udp947.out 2>&1; echo "rc=$?"; grep -cE "^PASS|PASS" udp947.out; grep -E "FAIL" udp947.out | head; tail -3 udp947.out
+# | echo "== tcp900"; ./tcp900 > tcp900.out 2>&1; echo "rc=$?"; grep -E "FAIL" tcp900.out | head; tail -5 tcp900.out
+# | echo "== ping ::1"; ping -c 3 ::1 2>&1 | tail -4
+# | echo "== traceroute6 ::1"; traceroute6 -n -q 1 -w 2 ::1 2>&1 | tail -3
+# ---- raw output ----
+hrev59996 Nov  4 2026 00:11:36
+== module sha256
+8e1b0afe43a12e469850bdb0d3ecc715f5d0612520d0bcb3ba99a2f9a1ba38f4  /boot/system/add-ons/kernel/network/protocols/icmp6
+ef4ae881f389141602e9b9e6af8339a5805afcb5fd7040dc1967058dabb82328  /boot/system/add-ons/kernel/network/protocols/ipv6
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/system/add-ons/kernel/network/protocols/udp
+== icmp6unreach1082
+udp [::1]:<unused> recv                      PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> poll                      PASS  0.000s  poll=1 revents=0x5 SO_ERROR=Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> second send()             PASS  0.200s  send 2 = -1 Connection refused
+udp [::]:53 recv (resolver default)          PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> 4000 B, quote <= 1280     PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 1240
+rate limit: 200 back-to-back to <unused>     INFO  sent 200 in 0.004s, 52 errors back
+PASS: 0 failure(s)
+rc=0
+== udprefused993
+udp 127.0.0.1:<unused> recv        PASS  0.000s  recv=-1 Connection refused
+udp 127.0.0.1:<unused> poll        PASS  0.000s  poll=1 revents=0x5 SO_ERROR=Connection refused
+udp ::1:<unused> recv              PASS  0.000s  recv=-1 Connection refused
+udp ::1:<unused> poll              PASS  0.000s  poll=1 revents=0x5 SO_ERROR=Connection refused
+udp 0.0.0.0:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+udp [::]:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+PASS: 6/6 refused
+rc=0
+== resolver, no resolv.conf
+hostname
+hosts
+resolv.conf.1082
+services
+getaddrinfo(debeos-1082.invalid) = 2 (Temporary failure in name resolution)  0.001s
+getaddrinfo(example.com) = 2 (Temporary failure in name resolution)  0.001s
+getaddrinfo(localhost) = 0 (ok)  0.000s
+restored: 1 nameserver line(s)
+== resolver, with resolv.conf (control)
+getaddrinfo(debeos-1082.invalid) = 7 (No address associated with hostname)  0.011s
+== udp947
+rc=4
+14
+ipv6 IPV6_RECVHOPLIMIT                                     FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               FAIL  controllen=24 flags=0x0 [IPV6_HOPLIMIT 64]
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              FAIL  controllen=64 flags=0x0 [IPV6_HOPLIMIT 64] [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 14 passed, 4 failed
+== tcp900
+rc=0
+total 2.2s, 0 FAIL
+tcp 127.0.0.1         c2s    64MiB in   64KiB writes       PASS  delivered 67108864/67108864 in 0.162s, 394.0 MiB/s, eof
+udp ::1               65535-byte IP packet (65487 payload) sent 65487, delivered 65487
+udp ::1               65536-byte IP packet (65488 payload) sent 65488, delivered 65488
+udp 127.0.0.1         65535-byte IP packet (65507 payload) sent 65507, delivered 65507
+total 2.2s, 0 FAIL
+== ping ::1
+ping: cannot resolve ::1: No address associated with hostname
+== traceroute6 ::1
+traceroute6 to ::1 (::1) from ::1, 30 hops max, 12 byte packets
+ 1  ::1  0.053 ms

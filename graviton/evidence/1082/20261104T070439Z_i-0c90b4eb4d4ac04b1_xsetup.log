@@ -1,0 +1,77 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xsetup
+# instance: i-0c90b4eb4d4ac04b1   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #1082 cross-build host setup (method of #933/#1011 xsetup): toolchain, jam, oven cross-tools cache, configure; tcpdump for the Linux reference
+# start: 20261104T070439Z   end: 20261104T070619Z   rc: 0
+# script sha256: e8fd63f10786d9004ec0cc7fc3e24f5713907256e9bf6b466b466f654cbec9db
+# ---- script ----
+# | # Cross-build host setup for issue 1082 (method of #933/#1011 xsetup): toolchain, jam,
+# | # oven cross-tools cache, configure; tcpdump and a C compiler for the Linux reference.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file tcpdump > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -r
+# | mkdir -p /opt/t && cd /opt/t
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg log -1 --format='%H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-$BT.tar.zst /tmp/ct.tar.zst || aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -3
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | nproc; df -h /opt | tail -1
+# ---- raw output ----
+apt rc=0
+7.0.0-1014-aws
+a9954f424adad9f0a9ebbf64a4f8493add9bd620 evidence: canonical ami-00632cb3ccefc53dc ships the sticky /tmp, and Claude Code messaging is on (#1014)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+aarch64-unknown-haiku-as
+Configured successfully!
+32
+/dev/root        77G  5.9G   71G   8% /
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file tcpdump
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ uname -r
++ mkdir -p /opt/t
++ cd /opt/t
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg log -1 '--format=%H %s'
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -3
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ nproc
++ df -h /opt
++ tail -1

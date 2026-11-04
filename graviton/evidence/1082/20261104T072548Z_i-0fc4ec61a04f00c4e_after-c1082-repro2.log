@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-c1082-repro2
+# instance: i-0fc4ec61a04f00c4e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #1082 after (candidate ami): repro v2 with the echo row
+# start: 20261104T072548Z   end: 20261104T072558Z   rc: 0
+# script sha256: 28a04e890318bfb765251d1c7135610959ca1f04715ef69eea67e7997a8f03f9
+# ---- script ----
+# | # #1082 repro v2 (adds the ICMPv6 echo row): compile and run icmp6unreach1082 only.
+# | cd /boot/home/t1082 && sha256sum icmp6unreach1082.c
+# | gcc -O2 -Wall -o icmp6unreach1082 icmp6unreach1082.c -lnetwork || exit 3
+# | sha256sum /boot/system/add-ons/kernel/network/protocols/icmp6 /boot/system/add-ons/kernel/network/protocols/ipv6
+# | ./icmp6unreach1082; echo "rc=$?"
+# ---- raw output ----
+7dfa6335a05df3aaef615313404cfbcd03ebdc985f88ce9ab04ae6104d9d981c  icmp6unreach1082.c
+8e1b0afe43a12e469850bdb0d3ecc715f5d0612520d0bcb3ba99a2f9a1ba38f4  /boot/system/add-ons/kernel/network/protocols/icmp6
+ef4ae881f389141602e9b9e6af8339a5805afcb5fd7040dc1967058dabb82328  /boot/system/add-ons/kernel/network/protocols/ipv6
+udp [::1]:<unused> recv                      PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> poll                      PASS  0.000s  poll=1 revents=0x5 SO_ERROR=Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> second send()             PASS  0.200s  send 2 = -1 Connection refused
+udp [::]:53 recv (resolver default)          PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 57
+udp [::1]:<unused> 4000 B, quote <= 1280     PASS  0.000s  recv=-1 Connection refused | capture: icmp6 type 1 code 4 len 1240
+icmp6 echo request to ::1                    PASS  0.000s  echo reply seq 1
+rate limit: 200 back-to-back to <unused>     INFO  sent 200 in 0.004s, 52 errors back
+PASS: 0 failure(s)
+rc=0

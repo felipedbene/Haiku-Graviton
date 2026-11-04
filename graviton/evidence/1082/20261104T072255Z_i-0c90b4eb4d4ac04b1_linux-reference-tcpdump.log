@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference-tcpdump
+# instance: i-0c90b4eb4d4ac04b1   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #1082 Linux reference: tcpdump -i lo of the ICMPv6 errors the repro triggers
+# start: 20261104T072255Z   end: 20261104T072306Z   rc: 0
+# script sha256: d34891cb2589df329f4af29a6f79d33d4ef609f83d7b9093cd0cda9287e52e95
+# ---- script ----
+# | # Linux reference for #1082, the peer capture: tcpdump -i lo of the first 8 ICMPv6 errors
+# | # while the repro runs (started 2 s after tcpdump, in the background).
+# | cd /opt/t/l1082
+# | ( sleep 2; ./icmp6unreach1082 > repro.txt 2>&1; echo "repro rc=$?" > repro.rc ) &
+# | timeout 20 tcpdump -l -c 8 -n -v -i lo 'icmp6 and ip6[40] < 128' 2>&1
+# | echo "tcpdump rc=$?"
+# | sleep 3; cat repro.rc; tail -1 repro.txt
+# ---- raw output ----
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+07:23:00.463322 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 57) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 48059
+07:23:00.463378 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 57) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 48059
+07:23:00.463400 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 57) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 48059
+07:23:00.663516 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 57) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 53
+07:23:00.663546 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 1240) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 48059
+07:23:00.663567 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 57) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 48059
+07:23:00.663575 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 57) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 48059
+07:23:00.663583 IP6 (flowlabel 0xd2b7e, hlim 64, next-header ICMPv6 (58) payload length: 57) ::1 > ::1: [icmp6 sum ok] ICMP6, destination unreachable, unreachable port, ::1 udp port 48059
+8 packets captured
+250 packets received by filter
+0 packets dropped by kernel
+tcpdump rc=0
+repro rc=0
+PASS: 0 failure(s)

@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-stock-repro2
+# instance: i-0e9438abf6c7bba6f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #1082 before (stock canonical): repro v2 with the echo row
+# start: 20261104T072548Z   end: 20261104T072610Z   rc: 0
+# script sha256: 28a04e890318bfb765251d1c7135610959ca1f04715ef69eea67e7997a8f03f9
+# ---- script ----
+# | # #1082 repro v2 (adds the ICMPv6 echo row): compile and run icmp6unreach1082 only.
+# | cd /boot/home/t1082 && sha256sum icmp6unreach1082.c
+# | gcc -O2 -Wall -o icmp6unreach1082 icmp6unreach1082.c -lnetwork || exit 3
+# | sha256sum /boot/system/add-ons/kernel/network/protocols/icmp6 /boot/system/add-ons/kernel/network/protocols/ipv6
+# | ./icmp6unreach1082; echo "rc=$?"
+# ---- raw output ----
+7dfa6335a05df3aaef615313404cfbcd03ebdc985f88ce9ab04ae6104d9d981c  icmp6unreach1082.c
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/system/add-ons/kernel/network/protocols/icmp6
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/system/add-ons/kernel/network/protocols/ipv6
+udp [::1]:<unused> recv                      FAIL  3.000s  recv=-1 Operation timed out | capture: none
+udp [::1]:<unused> poll                      FAIL  3.000s  poll=0 revents=0x0 SO_ERROR=0 | capture: none
+udp [::1]:<unused> second send()             FAIL  0.200s  send 2 = 1 
+udp [::]:53 recv (resolver default)          FAIL  3.000s  recv=-1 Operation timed out | capture: none
+udp [::1]:<unused> 4000 B, quote <= 1280     FAIL  3.000s  recv=-1 Operation timed out | capture: none
+icmp6 echo request to ::1                    PASS  0.000s  echo reply seq 1
+rate limit: 200 back-to-back to <unused>     INFO  sent 200 in 0.003s, 0 errors back
+FAIL: 5 failure(s)
+rc=1
