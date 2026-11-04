@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: peer2-start
+# instance: i-0affe0d7adbe48a46   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T055811Z   end: 20261104T055822Z   rc: 0
+# script sha256: a0dcfa6d04abfef6eebdf5b1f304ec2bc0c71d7bc6bb31216f19555feecbeb85
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | mkdir -p /opt/t975b && cd /opt/t975b
+# | aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/rv/src/tcp975-peer.py tcp975-peer.py
+# | sha256sum tcp975-peer.py
+# | # a second peer on 9761/9762, so the shutfin runs on the first one go on undisturbed
+# | nohup python3 -I /opt/t975b/tcp975-peer.py 9761 9762 > /opt/t975b/peer.log 2>&1 &
+# | nohup tcpdump -i any -nn -s 128 -B 32768 -U -w /opt/t975b/rv2.pcap 'tcp port 9761' > /opt/t975b/tcpdump.log 2>&1 &
+# | sleep 3; ss -ltnp | grep -E '976[124]'; ps aux | grep -c '[t]cpdump'
+# ---- raw output ----
+abdd632347112cce51394410c78b494afdb7900eddfa58bfe8d690545a8dd180  tcp975-peer.py
+LISTEN 0      64           0.0.0.0:9761      0.0.0.0:*    users:(("python3",pid=9765,fd=3))        
+LISTEN 0      64           0.0.0.0:9762      0.0.0.0:*    users:(("python3",pid=9765,fd=7))        
+LISTEN 0      64           0.0.0.0:9764      0.0.0.0:*    users:(("python3",pid=9765,fd=4))        
+2
