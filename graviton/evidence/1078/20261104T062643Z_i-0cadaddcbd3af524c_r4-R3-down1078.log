@@ -1,0 +1,62 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r4-R3-down1078
+# instance: i-0cadaddcbd3af524c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 4, arm R3 (#1084 round 3, fresh boot): down1078 2000, remove mode, regressions
+# start: 20261104T062643Z   end: 20261104T062718Z   rc: 0
+# script sha256: 1f174f9d0331bbac9c55e5543cb0d5eccd8ae4dc86136e7a7c550d86bb86c559
+# ---- script ----
+# | # Round 4: down1078 2000 cycles, then the remove mode (a capture must end when tap/0 is removed),
+# | # then regressions.
+# | cd /boot/home/j
+# | sha256sum down1078
+# | ifconfig tap/0 up 2>/dev/null; ifconfig tap/0 | head -1
+# | (./down1078 2000 > down.out 2>&1; echo "down1078 exit=$?" >> down.out) &
+# | for i in $(seq 1 60); do sleep 5; grep -q "exit=\|HANG" down.out && break; done
+# | cat down.out
+# | echo "--- remove mode"
+# | (./down1078 remove > remove.out 2>&1; echo "down1078 remove exit=$?" >> remove.out) &
+# | for i in $(seq 1 12); do sleep 2; grep -q "exit=" remove.out && break; done
+# | cat remove.out
+# | echo "--- regressions"
+# | ping -c 5 10.128.4.1 2>&1 | tail -2
+# | ./tcp900 $(ifconfig /dev/net/ena/0 | sed -n 's/.*inet addr: \([0-9.]*\),.*/\1/p') > tcp900.out 2>&1; echo "tcp900 exit=$?"; tail -1 tcp900.out
+# | ./udp947 > udp947.out 2>&1; echo "udp947 exit=$?"; tail -1 udp947.out
+# | grep -h "DHCP status" /var/log/syslog | tail -1
+# ---- raw output ----
+efd984d1c5838fb9af332dfd8ae459d2ddce0a896ff01928fe09aca497a76ba0  down1078
+tap/0	Hardware type: Ethernet, Address: c2:8c:9e:61:4e:66
+down-up      PASS  2000 cycles in 14.8s: capture (re)started 2000, a frame before down 2000, capture ended at down 2000, down 2000, up 2000; toggler starts 34939; frames written 242000
+RESULT failures=0
+down1078 exit=0
+--- remove mode
+usage: ifconfig [<interface> [<address family>] [<address> [<mask>] | auto-config] [<option/flags>...]]
+       ifconfig --delete <interface> [...]
+       ifconfig <interface> [scan|join|leave] [<network> [<password>]]
+
+Where <option> can be the following:
+  netmask <addr>     - networking subnet mask
+  prefixlen <number> - subnet mask length in bits
+  broadcast <addr>   - set broadcast address
+  peer <addr>        - ppp-peer address
+  mtu <bytes>        - maximal transfer unit
+  metric <number>    - metric number to use (defaults to 0)
+  media <media>      - media type to use (defaults to auto)
+For Ethernet <media> can be one of: 10baseT 100baseTX 1000baseT 1000baseSX 10GbaseT 10GbaseSR 10GbaseLR 10GbaseLRM 10GbaseCR 
+For Wireless Ethernet <media> can be one of: 802.11a 802.11b 802.11g 802.11 FH 802.11n(a) 802.11n(g) 802.11ac 
+For All <media> can be one of: auto 
+And <flags> can be: up, down, [-]promisc, [-]allmulti, [-]bcast, [-]ht, loopback
+If you specify "auto-config" instead of an address, it will be configured automatically.
+
+Example:
+	ifconfig loop 127.0.0.1 255.0.0.0 up
+remove       FAIL  capture = 0, a frame before = 1, ifconfig tap/0 remove = 1, capture ended within 3 s = 0
+RESULT failures=1
+down1078 remove exit=1
+--- regressions
+5 packets transmitted, 5 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 0.077/0.113/0.193/0.041 ms
+tcp900 exit=0
+total 3.0s, 0 FAIL
+udp947 exit=4
+udp947: 14 passed, 4 failed
+DAEMON 'DHCP': /dev/net/ena/0: DHCP status = No error

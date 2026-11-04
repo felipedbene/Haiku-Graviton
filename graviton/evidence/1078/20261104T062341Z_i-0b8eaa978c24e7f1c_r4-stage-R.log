@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r4-stage-R
+# instance: i-0b8eaa978c24e7f1c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 4: stage arm R
+# start: 20261104T062341Z   end: 20261104T062401Z   rc: 0
+# script sha256: a8796e10ccf96587fd45e32677644765ae4d2d49313d677e0792ad17f5f5b8f5
+# ---- script ----
+# | # Stage round-4 arm R on canonical: gcc and the repros built natively; the arm's stack and
+# | # ethernet_frame as non-packaged overrides (method of #947). A fresh launch of an image of this box is the arm.
+# | set -e
+# | pkgman install -y wget gcc binutils haiku_devel 2>&1 | tail -1
+# | mkdir -p /boot/home/j && cd /boot/home/j
+# | wget -q -O close1063.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src4/close1063.c?<PRESIGNED>'
+# | wget -q -O down1078.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src4/down1078.c?<PRESIGNED>'
+# | wget -q -O tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src4/tcp900.c?<PRESIGNED>'
+# | wget -q -O udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src4/udp947.c?<PRESIGNED>'
+# | for p in close1063 down1078; do gcc -O2 -Wall -Wextra -Wno-unused-parameter -o $p $p.c -lnetwork; done
+# | gcc -O2 -Wall -o tcp900 tcp900.c -lnetwork; gcc -O2 -Wall -o udp947 udp947.c -lnetwork
+# | sha256sum *.c close1063 down1078
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network; mkdir -p $D/datalink_protocols
+# | wget -q -O stack.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/r4/mod/R/stack?<PRESIGNED>'; cp stack.mod $D/stack.new && mv $D/stack.new $D/stack
+# | wget -q -O ef.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/r4/mod/R/ethernet_frame?<PRESIGNED>'; cp ef.mod $D/datalink_protocols/ethernet_frame.new && mv $D/datalink_protocols/ethernet_frame.new $D/datalink_protocols/ethernet_frame
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | sync; sync; echo STAGE-DONE
+# ---- raw output ----
+[system] Done.
+5088611a87c42815c65c6f8d86d5333428a3d5a05b67537a5ccb97e1379bc10f  close1063.c
+9f8ed667823c20669c1163809463444f3972acc0430e71bd8c6422bbc96ae32a  down1078.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+ab494890f4000722556d61003589eb4e267d7f13ec314fc31a7cf7b4be4128dc  close1063
+efd984d1c5838fb9af332dfd8ae459d2ddce0a896ff01928fe09aca497a76ba0  down1078
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+f7a37a4a7ab606897991140e205ae752966c91c5695dbbb56063c8131aa5b3fd  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+STAGE-DONE
