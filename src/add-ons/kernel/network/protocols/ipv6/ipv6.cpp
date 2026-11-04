@@ -100,7 +100,8 @@ public:
 								~FragmentPacket();
 
 			status_t			AddFragment(uint16 start, uint16 end,
-									net_buffer* buffer, bool lastFragment);
+									net_buffer* buffer, bool lastFragment,
+									bool* _abandon);
 			void				SetHeaders(uint8* headers, uint32 length,
 									uint32 nextHeaderField);
 			status_t			Reassemble(net_buffer* to);
@@ -432,8 +433,10 @@ FragmentPacket::~FragmentPacket()
 
 status_t
 FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
-	bool lastFragment)
+	bool lastFragment, bool* _abandon)
 {
+	*_abandon = false;
+
 	if (start >= end) {
 		// invalid fragment
 		return B_BAD_DATA;
@@ -474,9 +477,22 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 
 	if (previous != NULL && previous->fragment.start <= start
 		&& previous->fragment.end >= end) {
-		// we do, so we can just drop this fragment
+		// we do, so we can just drop this fragment: a duplicate, which
+		// changes nothing since the bytes already held are kept
 		gBufferModule->free(buffer);
 		return B_OK;
+	}
+
+	// Any other overlap abandons the whole datagram (RFC 5722, RFC 8200 4.5).
+	// Trimming it, as RFC 791 allows for IPv4, let the overlapping part of a
+	// fragment be dropped while the rest was kept, and a fragment spanning
+	// more than one held fragment lost its data past the first. As on Linux,
+	// "duplicate" above means wholly inside contiguous data already held.
+	if ((previous != NULL && previous->fragment.end > start)
+		|| (next != NULL && end > next->fragment.start)) {
+		TRACE("    overlaps held data, abandoning the datagram");
+		*_abandon = true;
+		return B_BAD_DATA;
 	}
 
 	// Charged until the packet goes, whatever merging makes of the buffer.
@@ -488,19 +504,6 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		// adopt the buffer's device index
 
 	TRACE("    previous: %p, next: %p", previous, next);
-
-	// If we have parts of the data already, truncate as needed
-
-	if (previous != NULL && previous->fragment.end > start) {
-		TRACE("    remove header %d bytes", previous->fragment.end - start);
-		gBufferModule->remove_header(buffer, previous->fragment.end - start);
-		start = previous->fragment.end;
-	}
-	if (next != NULL && end > next->fragment.start) {
-		TRACE("    remove trailer %d bytes", end - next->fragment.start);
-		gBufferModule->remove_trailer(buffer, end - next->fragment.start);
-		end = next->fragment.start;
-	}
 
 	// Now try if we can already merge the fragments together
 
@@ -890,7 +893,7 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 
 	// Every fragment, the first one included, keeps only its data, so that a
 	// fragment's buffer offsets are its offsets in the reassembled data. That
-	// is what AddFragment() trims overlaps by.
+	// is what AddFragment() finds overlaps by.
 	status = gBufferModule->remove_header(buffer, dataOffset);
 	if (status != B_OK)
 		return status;
@@ -933,7 +936,14 @@ reassemble_fragments(const IPv6Header &header, net_buffer** _buffer,
 		packet->SetHeaders((uint8*)headersDeleter.Detach(), offset,
 			nextHeaderField);
 
-	status = packet->AddFragment(start, end, buffer, lastFragment);
+	bool abandon;
+	status = packet->AddFragment(start, end, buffer, lastFragment, &abandon);
+	if (abandon) {
+		// No tombstone is kept, as on Linux: later fragments with the same
+		// key start a new datagram.
+		release_fragment_packet(packet);
+		return status;
+	}
 	if (status != B_OK) {
 		// A failing AddFragment() never keeps the buffer, so a packet created
 		// for it is still empty.

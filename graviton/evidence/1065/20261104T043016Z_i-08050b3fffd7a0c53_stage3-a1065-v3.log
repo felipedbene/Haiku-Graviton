@@ -1,0 +1,48 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage3-a1065-v3
+# instance: i-08050b3fffd7a0c53   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T043016Z   end: 20261104T043026Z   rc: 0
+# script sha256: 95a894bb0525c9ad242cd7032cc831c394024ef8b42cd21f538bd5ffe53d108d
+# ---- script ----
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | mkdir -p $D/protocols /boot/home/wL && cd /boot/home/wL
+# | pkgman install -y curl gcc binutils haiku_devel 2>&1 | tail -2
+# | command -v curl gcc
+# | echo "--- overrides before"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | curl -sSf -o ipv4.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/L/mod/a1065/ipv4?<PRESIGNED>' || exit 4
+# | echo 'f135649880c6203130d0c53a5006c0dca37817ffc06f5260d021b7860d660e10  ipv4.mod' | sha256sum -c || exit 5
+# | curl -sSf -o ipv6.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/L/mod/a1065/ipv6?<PRESIGNED>' || exit 4
+# | echo 'b39ffa465cad62059a0b7f95caca27ca78d47805611ff80c541a1fed8260dc59  ipv6.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6
+# | curl -sSf -o ipfragconf.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/L/src/ipfragconf.c?<PRESIGNED>' || exit 4
+# | echo 'bd2962510f51a151b0a1984ee9e7c6f1dd172b2ddc892b9cdbf41238e1a8f538  ipfragconf.c' | sha256sum -c || exit 5
+# | gcc -O2 -Wall -o ipfragconf ipfragconf.c -lnetwork || exit 6
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | echo "--- packaged"
+# | sha256sum /boot/system/add-ons/kernel/network/stack /boot/system/add-ons/kernel/network/protocols/ipv4 /boot/system/add-ons/kernel/network/protocols/ipv6 /boot/system/kernel_arm64
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+Nothing to do.
+Validating checksum for DeBeOS...done.
+/boot/system/bin/curl
+/boot/system/bin/gcc
+--- overrides before
+f135649880c6203130d0c53a5006c0dca37817ffc06f5260d021b7860d660e10  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+b9198ecdf92f4d918304f86869e87aee397c3d68845e5e4193891b6b423c2a1d  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ipv4.mod: OK
+ipv6.mod: OK
+ipfragconf.c: OK
+--- overrides after
+f135649880c6203130d0c53a5006c0dca37817ffc06f5260d021b7860d660e10  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+b39ffa465cad62059a0b7f95caca27ca78d47805611ff80c541a1fed8260dc59  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+--- packaged
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/system/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/system/add-ons/kernel/network/protocols/ipv6
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+STAGE-DONE
