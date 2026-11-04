@@ -933,12 +933,33 @@ ntfs_fuse_rm(struct lowntfs_context *ctx, ino_t parent, const char *name,
 #endif /* defined(__sun) && defined (__SVR4) */
 	int no_check_open = (rm_type & RM_NO_CHECK_OPEN) != 0;
 	rm_type &= ~RM_NO_CHECK_OPEN;
+#ifdef __HAIKU__
+	int* close_state = NULL;
+#endif
 
 	/* Deny removing from $Extend */
 	if (parent == FILE_Extend) {
 		res = -EPERM;
 		goto exit;
 	}
+#ifdef __HAIKU__
+	/*
+	 * Fetch the close state, which is kept in the vnode, before any inode
+	 * is open. get_vnode() may have to load the vnode, and fs_get_vnode()
+	 * opens the target and each of its ancestor directories to build the
+	 * vnode; while dir_ni or ni are open, that opens the same inode a
+	 * second time, and closing the second copy into the inode cache
+	 * panics ("already in cache"). Upstream only walks its list of open
+	 * files here, which opens nothing. A rename over an existing target
+	 * always hit this: its last step unlinks the temporary name of the old
+	 * target, whose vnode the step before had already removed.
+	 */
+	if (!no_check_open) {
+		ino = ntfs_fuse_inode_lookup(ctx, parent, name);
+		if (ino != (ino_t)-1 && ino >= FILE_first_user)
+			close_state = ntfs_haiku_get_close_state(ctx, ino);
+	}
+#endif
 	/* Open parent directory. */
 	dir_ni = ntfs_inode_open(ctx->vol, INODE(parent));
 	if (!dir_ni) {
@@ -1030,9 +1051,7 @@ ntfs_fuse_rm(struct lowntfs_context *ctx, ino_t parent, const char *name,
 	for (of=ctx->open_files; of; of = of->next) {
 		if ((of->ino == ino) && !(of->state & CLOSE_GHOST)) {
 #else
-	int* close_state = NULL;
 	if (!no_check_open) {
-		close_state = ntfs_haiku_get_close_state(ctx, ino);
 		if (close_state && (*close_state & CLOSE_GHOST) == 0) {
 #endif
 			/* file was open, create a ghost in unlink parent */
