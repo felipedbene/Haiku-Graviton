@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-f1099
+# instance: i-04922ea1855d4a1ff   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T075948Z   end: 20261104T075958Z   rc: 0
+# script sha256: f34c73fbb39f3c3a42c32e157207f5945c9256e142e543b9f5827c1413b58c60
+# ---- script ----
+# | # Stage the 1099 candidate's ipv4 and ipv6 (1099-v1.patch, xbuild-modules) as
+# | # non-packaged overrides (method of #959); the image of this disk boots them.
+# | set -u
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network
+# | mkdir -p $D/protocols /boot/home/w1099/mod && cd /boot/home/w1099/mod
+# | echo "--- overrides before"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | curl -sSf -o ipv4.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1099/mod/f1099/ipv4?<PRESIGNED>' || exit 4
+# | echo '22f124a8ab6512baeaa6910d822ff7798afa2253f46f73fdbcff1221d0648eb8  ipv4.mod' | sha256sum -c || exit 5
+# | cp ipv4.mod $D/protocols/ipv4.new && mv $D/protocols/ipv4.new $D/protocols/ipv4
+# | curl -sSf -o ipv6.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/S/1099/mod/f1099/ipv6?<PRESIGNED>' || exit 4
+# | echo '79924c22d56969252a25f4656877390c144233f16d4494ea0bc60d554e74b053  ipv6.mod' | sha256sum -c || exit 5
+# | cp ipv6.mod $D/protocols/ipv6.new && mv $D/protocols/ipv6.new $D/protocols/ipv6
+# | echo "--- overrides after"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sync; echo STAGE-DONE
+# ---- raw output ----
+--- overrides before
+ipv4.mod: OK
+ipv6.mod: OK
+--- overrides after
+22f124a8ab6512baeaa6910d822ff7798afa2253f46f73fdbcff1221d0648eb8  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+79924c22d56969252a25f4656877390c144233f16d4494ea0bc60d554e74b053  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+STAGE-DONE
