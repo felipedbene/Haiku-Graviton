@@ -119,6 +119,9 @@ public:
 private:
 			status_t			_SetDomainFamily(int family);
 			status_t			_MoveToFamily(int family);
+			status_t			_SourceFromControlData(net_buffer* buffer,
+									net_domain* domain,
+									uint32* _interfaceIndex);
 
 			UdpDomainSupport*	fManager;
 			bool				fActive;
@@ -1342,6 +1345,197 @@ UdpEndpoint::_MoveToFamily(int family)
 // #pragma mark - outbound
 
 
+static bool
+is_loopback_address(const sockaddr* address)
+{
+	if (address->sa_family == AF_INET) {
+		return ntohl(((const sockaddr_in*)address)->sin_addr.s_addr) >> 24
+			== IN_LOOPBACKNET;
+	}
+	if (address->sa_family == AF_INET6) {
+		static const in6_addr kLoopback = IN6ADDR_LOOPBACK_INIT;
+		return memcmp(&((const sockaddr_in6*)address)->sin6_addr, &kLoopback,
+			sizeof(in6_addr)) == 0;
+	}
+	return false;
+}
+
+
+/*!	Returns a reference to the route out of interface \a index for a datagram
+	to \a destination, which an IP_PKTINFO or IPV6_PKTINFO interface index
+	asks for. That is the destination's own route if it already leaves through
+	the interface. Otherwise the datagram goes out on-link from the interface,
+	the way a socket bound to a device sends (see datalink_send_data()).
+*/
+static status_t
+get_interface_route(net_domain* domain, uint32 index,
+	const sockaddr* destination, net_route** _route)
+{
+	net_interface* interface = gDatalinkModule->get_interface(domain, index);
+	if (interface == NULL)
+		return ENODEV;
+			// as on Linux
+
+	net_route* route = gDatalinkModule->get_route(domain, destination);
+	if (route != NULL && (route->interface_address == NULL
+			|| route->interface_address->interface->index != index)) {
+		gDatalinkModule->put_route(domain, route);
+		route = NULL;
+	}
+
+	net_interface_address* address = NULL;
+	while (route == NULL
+		&& gDatalinkModule->get_next_interface_address(interface, &address)) {
+		if (address->domain != domain || address->local == NULL)
+			continue;
+
+		route = gDatalinkModule->get_route(domain, address->local);
+		if (route != NULL && (route->interface_address == NULL
+				|| route->interface_address->interface->index != index)) {
+			gDatalinkModule->put_route(domain, route);
+			route = NULL;
+		}
+	}
+	gDatalinkModule->put_interface_address(address);
+	gDatalinkModule->put_interface(interface);
+
+	if (route == NULL)
+		return ENETUNREACH;
+
+	*_route = route;
+	return B_OK;
+}
+
+
+/*!	Applies the source address that an IP_PKTINFO, IP_SENDSRCADDR or
+	IPV6_PKTINFO control message (see udp_add_ancillary_data()) asks for to
+	\a buffer, which is about to go out through \a domain, and returns the
+	interface it asks for, or 0. As on Linux, the address must be one of this
+	host's, the socket keeps its port, and the last such message wins.
+*/
+status_t
+UdpEndpoint::_SourceFromControlData(net_buffer* buffer, net_domain* domain,
+	uint32* _interfaceIndex)
+{
+	*_interfaceIndex = 0;
+
+	ancillary_data_container* container
+		= gBufferModule->get_ancillary_data(buffer);
+	if (container == NULL)
+		return B_OK;
+
+	sockaddr_storage source;
+	bool hasSource = false;
+	uint32 interfaceIndex = 0;
+
+	ancillary_data_header header;
+	void* data = NULL;
+	while ((data = gStackModule->next_ancillary_data(container, data,
+			&header)) != NULL) {
+		in_addr address;
+
+		if (header.level == IPPROTO_IPV6 && header.type == IPV6_PKTINFO) {
+			in6_pktinfo info;
+			memcpy(&info, data, sizeof(info));
+			interfaceIndex = info.ipi6_ifindex;
+			static const in6_addr kUnspecified = IN6ADDR_ANY_INIT;
+			hasSource = memcmp(&info.ipi6_addr, &kUnspecified,
+				sizeof(in6_addr)) != 0;
+			if (!hasSource)
+				continue;
+
+			if (domain->family == AF_INET6) {
+				sockaddr_in6& source6 = (sockaddr_in6&)source;
+				memset(&source6, 0, sizeof(sockaddr_in6));
+				source6.sin6_len = sizeof(sockaddr_in6);
+				source6.sin6_family = AF_INET6;
+				source6.sin6_addr = info.ipi6_addr;
+				continue;
+			}
+
+			// an IPv4 datagram of a dual-stack socket has an IPv4 source
+			if (!IN6_IS_ADDR_V4MAPPED(&info.ipi6_addr))
+				return B_BAD_VALUE;
+			memcpy(&address, &info.ipi6_addr.s6_addr[12], sizeof(in_addr));
+		} else if (header.level == IPPROTO_IP && domain->family == AF_INET) {
+			if (header.type == IP_PKTINFO) {
+				// ipi_addr only means something on receive
+				in_pktinfo info;
+				memcpy(&info, data, sizeof(info));
+				interfaceIndex = info.ipi_ifindex;
+				address = info.ipi_spec_dst;
+			} else {
+				// IP_SENDSRCADDR
+				interfaceIndex = 0;
+				memcpy(&address, data, sizeof(in_addr));
+			}
+		} else {
+			// an IPv4 control message for an IPv6 datagram is ignored, as on
+			// Linux
+			continue;
+		}
+
+		hasSource = address.s_addr != INADDR_ANY;
+		if (!hasSource)
+			continue;
+
+		sockaddr_in& source4 = (sockaddr_in&)source;
+		memset(&source4, 0, sizeof(sockaddr_in));
+		source4.sin_len = sizeof(sockaddr_in);
+		source4.sin_family = AF_INET;
+		source4.sin_addr = address;
+	}
+
+	if (interfaceIndex != 0 && fSocket->bound_to_device != 0
+		&& interfaceIndex != fSocket->bound_to_device)
+		return B_BAD_VALUE;
+
+	if (hasSource) {
+		// A broadcast or multicast source is not an address at all (EINVAL,
+		// as on Linux). A unicast one must be this host's, and a link-local
+		// one on the link the datagram leaves by; otherwise EADDRNOTAVAIL, as
+		// bind() answers.
+		bool multicast = domain->family == AF_INET6
+			? IN6_IS_ADDR_MULTICAST(&((sockaddr_in6&)source).sin6_addr)
+			: IN_MULTICAST(ntohl(((sockaddr_in&)source).sin_addr.s_addr))
+				|| ((sockaddr_in&)source).sin_addr.s_addr == INADDR_BROADCAST;
+		if (multicast)
+			return B_BAD_VALUE;
+
+		net_interface_address* interfaceAddress = NULL;
+		uint32 matchedType = 0;
+		if (!gDatalinkModule->is_local_address(domain, (sockaddr*)&source,
+				&interfaceAddress, &matchedType))
+			return EADDRNOTAVAIL;
+
+		bool wrongLink = interfaceIndex != 0 && domain->family == AF_INET6
+			&& IN6_IS_ADDR_LINKLOCAL(&((sockaddr_in6&)source).sin6_addr)
+			&& interfaceAddress->interface->index != interfaceIndex;
+		gDatalinkModule->put_interface_address(interfaceAddress);
+		if (matchedType == MSG_BCAST)
+			return B_BAD_VALUE;
+		if (wrongLink)
+			return EADDRNOTAVAIL;
+
+		// A loopback source must not leave the host: as on Linux, it only
+		// goes to an address of this host.
+		if (is_loopback_address((sockaddr*)&source)
+			&& !is_loopback_address(buffer->destination)
+			&& !gDatalinkModule->is_local_address(domain, buffer->destination,
+				NULL, NULL))
+			return B_BAD_VALUE;
+
+		net_address_module_info* addressModule = domain->address_module;
+		addressModule->set_port((sockaddr*)&source,
+			addressModule->get_port(buffer->source));
+		memcpy(buffer->source, &source, source.ss_len);
+	}
+
+	*_interfaceIndex = interfaceIndex;
+	return B_OK;
+}
+
+
 status_t
 UdpEndpoint::SendRoutedData(net_buffer *buffer, net_route *route)
 {
@@ -1445,7 +1639,29 @@ UdpEndpoint::SendData(net_buffer *buffer)
 		addressModule->set_port(destination, port);
 	}
 
-	return gDatalinkModule->send_data(this, domain, buffer);
+	uint32 interfaceIndex;
+	status = _SourceFromControlData(buffer, domain, &interfaceIndex);
+	if (status != B_OK)
+		return status;
+
+	if (interfaceIndex == 0)
+		return gDatalinkModule->send_data(this, domain, buffer);
+
+	net_route* route;
+	status = get_interface_route(domain, interfaceIndex, destination, &route);
+	if (status != B_OK)
+		return status;
+
+	// what get_buffer_route() does for the route it picks
+	if (route->interface_address->local != NULL) {
+		status = addressModule->update_to(buffer->source,
+			route->interface_address->local);
+	}
+	if (status == B_OK)
+		status = SendRoutedData(buffer, route);
+
+	gDatalinkModule->put_route(domain, route);
+	return status;
 }
 
 
@@ -1675,6 +1891,40 @@ ssize_t
 udp_send_avail(net_protocol *protocol)
 {
 	return ((UdpEndpoint *)protocol)->SendAvailable();
+}
+
+
+/*!	Accepts the control messages sendmsg() can carry on a UDP socket: a source
+	address and interface (IP_PKTINFO, IPV6_PKTINFO) or a source address
+	(IP_SENDSRCADDR). UdpEndpoint::SendData() applies them.
+*/
+status_t
+udp_add_ancillary_data(net_protocol *protocol,
+	ancillary_data_container *container, const cmsghdr *header)
+{
+	size_t length;
+	if (header->cmsg_level == IPPROTO_IP && header->cmsg_type == IP_PKTINFO)
+		length = sizeof(in_pktinfo);
+	else if (header->cmsg_level == IPPROTO_IP
+		&& header->cmsg_type == IP_SENDSRCADDR)
+		length = sizeof(in_addr);
+	else if (header->cmsg_level == IPPROTO_IPV6
+		&& header->cmsg_type == IPV6_PKTINFO
+		&& protocol->socket->family == AF_INET6)
+		length = sizeof(in6_pktinfo);
+	else
+		return B_NOT_SUPPORTED;
+
+	if (header->cmsg_len != CMSG_LEN(length))
+		return B_BAD_VALUE;
+
+	ancillary_data_header dataHeader;
+	dataHeader.level = header->cmsg_level;
+	dataHeader.type = header->cmsg_type;
+	dataHeader.len = length;
+
+	return gStackModule->add_ancillary_data(container, &dataHeader,
+		(const uint8*)header + CMSG_LEN(0), NULL, NULL, NULL);
 }
 
 
@@ -1927,7 +2177,7 @@ net_protocol_module_info sUDPModule = {
 	udp_deliver_data,
 	udp_error_received,
 	udp_error_reply,
-	NULL,		// add_ancillary_data()
+	udp_add_ancillary_data,
 	NULL,		// process_ancillary_data()
 	udp_process_ancillary_data_no_container,
 	NULL,		// send_data_no_buffer()

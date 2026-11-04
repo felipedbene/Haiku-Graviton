@@ -105,6 +105,14 @@ struct ip_mreq_source {
 	struct in_addr imr_interface;	/* IP address of interface */
 };
 
+/* IP_PKTINFO: the destination of a received datagram, or the source and
+   interface to send one from (as on Linux) */
+struct in_pktinfo {
+	unsigned int	ipi_ifindex;	/* send/recv interface index */
+	struct in_addr	ipi_spec_dst;	/* send: source; recv: local address */
+	struct in_addr	ipi_addr;		/* recv: header destination address */
+};
+
 struct group_req {
 	uint32_t                gr_interface; /* interface index */
 	struct sockaddr_storage gr_group;     /* group address */
@@ -127,6 +135,8 @@ struct group_source_req {
 #define IP_RECVOPTS					5	/* bool; receive all IP opts w/dgram */
 #define IP_RECVRETOPTS				6	/* bool; receive IP opts for response */
 #define IP_RECVDSTADDR				7	/* bool; receive IP dst addr w/dgram */
+#define IP_SENDSRCADDR				IP_RECVDSTADDR
+	/* in_addr; send cmsg: source address (as on BSD) */
 #define IP_RETOPTS					8	/* ip_opts; set/get IP options */
 #define IP_MULTICAST_IF				9	/* in_addr; set/get IP multicast i/f  */
 #define IP_MULTICAST_TTL			10	/* u_char; set/get IP multicast ttl */
@@ -165,6 +175,8 @@ struct group_source_req {
 #define IPV6_RTHDR					37  /* struct ip6_rthdr */
 
 #define IP_DONTFRAG					38  /* bool; don't fragment */
+#define IP_PKTINFO					39	/* int; receive in_pktinfo w/dgram;
+										   in_pktinfo send cmsg */
 
 
 #define INADDR_ANY					((in_addr_t)0x00000000)
