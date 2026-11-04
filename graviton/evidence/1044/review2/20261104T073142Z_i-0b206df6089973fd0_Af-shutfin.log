@@ -1,0 +1,43 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: Af-shutfin
+# instance: i-0b206df6089973fd0   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T073142Z   end: 20261104T074759Z   rc: 0
+# script sha256: 434e8a569739ecbcfc36ec656ee1f5fcd5c149e682d6bdb2e2c093d1bb03c85a
+# ---- script ----
+# | set -u
+# | P=10.128.5.159
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then NS="netstat -n -t"; CAP=1300; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'
+# | else NS="ss -tno"; CAP=2000; fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 $P 9754 9752 shutfin $CAP > out.shutfin 2>&1 &
+# | for i in $(seq 1 90); do grep -q FIN-OWED-CHECK out.shutfin && break; sleep 1; done
+# | echo "--- FIN owed into a closed window: expect FIN-WAIT-1 with an empty send queue"
+# | $NS | grep ':9754'
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | grep -v 'control: COUNT\|control: INQ\|control: RCVWND' out.shutfin
+# ---- raw output ----
+Haiku ip-10-128-4-42.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+4d73cd09f86853b270bb2a3fcf2bd5b5faec19fb6ff0c9603560c5c778a119d5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2106 0xffff0000022eb000 0xffff0000022fe000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+4b8984b8637e198a9975c00d306235096b8e30c1d99b844100cb61a41384ca4a  tcp975
+start 2026-11-04T07:31:45Z
+--- FIN owed into a closed window: expect FIN-WAIT-1 with an empty send queue
+tcp         0 204359 [10.128.4.42]:42009   [10.128.5.159]:9754   fin-wait1    467/tcp975
+tcp         0      0 [10.128.4.42]:42013   [10.128.5.159]:9754   fin-wait1    467/tcp975
+end 2026-11-04T07:47:50Z
+  [07:31:45Z shutfin] connected from port 
+  local port 42009
+  [07:31:45Z shutfin] control: STOPREAD 42009 100000
+  capacity 114372; second connection from port 42013
+  [07:31:50Z shutfin] control: STOPREAD 42013 100000
+  the peer holds 97988, still offers 15810
+  the peer holds 113798, still offers 2
+  the peer holds 113800, still offers 0
+  [07:31:53Z shutfin] control: DROPFIN 42013
+FIN-OWED-CHECK now
+  [07:32:18Z shutfin] control: DROP 42013
+RESULT shutfin PASS recv() after SHUT_WR failed with ETIMEDOUT after 931.8 s

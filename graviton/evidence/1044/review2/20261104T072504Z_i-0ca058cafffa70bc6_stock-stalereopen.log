@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-stalereopen
+# instance: i-0ca058cafffa70bc6   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T072504Z   end: 20261104T072534Z   rc: 0
+# script sha256: 1603f607256bc4d78bf7502d28bbd7f8cc4f82eb446c37420bcbd537ac772f6d
+# ---- script ----
+# | set -u
+# | P=10.128.5.159
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'; else sysctl net.ipv4.tcp_retries2; fi
+# | sha256sum tcp975
+# | for m in stalereopen; do
+# | 	echo "=== $m"
+# | 	./tcp975 $P 9751 9752 $m 120 2>&1 | grep -v 'control: COUNT\|control: INQ'
+# | done
+# ---- raw output ----
+Haiku ip-10-128-6-224.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+ 2087 0xffff0000022f4000 0xffff000002306000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+4b8984b8637e198a9975c00d306235096b8e30c1d99b844100cb61a41384ca4a  tcp975
+=== stalereopen
+  [07:25:07Z stalereopen] connected from port 
+  local port 41973
+  [07:25:07Z stalereopen] control: STOPREAD 41973 100000
+  [07:25:17Z stalereopen] control: MUTE 41973
+  [07:25:17Z stalereopen] control: INJECT 41973 staleopen
+  inject: OK seq 1493904710 ack 24126799 win 255
+  [07:25:20Z stalereopen] control: STOPREAD 41973 0
+  [07:25:25Z stalereopen] control: UNMUTE 41973
+RESULT stalereopen PASS all 327680 bytes arrived 0.6 s after the peer could be heard again

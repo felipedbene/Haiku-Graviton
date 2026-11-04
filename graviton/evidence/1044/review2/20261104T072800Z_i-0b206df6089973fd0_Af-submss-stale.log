@@ -1,0 +1,46 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: Af-submss-stale
+# instance: i-0b206df6089973fd0   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T072800Z   end: 20261104T073105Z   rc: 1
+# script sha256: 89be791264b6e952bc3d78fbfb88fee9514c84f3edd74cc7307aa6ea1fb267d6
+# ---- script ----
+# | set -u
+# | P=10.128.5.159
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'; else sysctl net.ipv4.tcp_retries2; fi
+# | sha256sum tcp975
+# | for m in submss stale; do
+# | 	echo "=== $m"
+# | 	./tcp975 $P 9751 9752 $m 120 2>&1 | grep -v 'control: COUNT\|control: INQ'
+# | done
+# ---- raw output ----
+Haiku ip-10-128-4-42.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+4d73cd09f86853b270bb2a3fcf2bd5b5faec19fb6ff0c9603560c5c778a119d5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2106 0xffff0000022eb000 0xffff0000022fe000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+4b8984b8637e198a9975c00d306235096b8e30c1d99b844100cb61a41384ca4a  tcp975
+=== submss
+  [07:28:02Z submss] connected from port 
+  local port 41678
+  [07:28:02Z submss] control: STOPREAD 41678 100000
+  [07:28:12Z submss] control: MUTE 41678
+  [07:29:22Z submss] control: INJECT 41678 submss
+  inject: OK seq 967617636 ack 12308062 win 1
+INJECTED 07:29:22
+  [07:30:52Z submss] control: UNMUTE 41678
+RESULT submss DONE see the capture for the first data after the injection
+=== stale
+  [07:30:52Z stale] connected from port 
+  local port 41742
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  [07:30:54Z stale] control: INJECT 41742 stalezero
+  inject: OK seq 1422648525 ack 22821987 win 0
+  after: 1 KiB arrived in 1.002 s
+  after: 1 KiB arrived in 0.002 s
+  after: 1 KiB arrived in 0.002 s
+RESULT stale FAIL the old zero-window ACK closed the window: worst delivery 1.002 s after it (0.002 s before)
+failed to run commands: exit status 1
