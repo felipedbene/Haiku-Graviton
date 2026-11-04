@@ -1,0 +1,78 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b-regr-setup
+# instance: i-0a7031147d2db1490   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm, regressions box: setup
+# start: 20261104T162009Z   end: 20261104T162038Z   rc: 0
+# script sha256: 2446506845f297ec5d29448346364ca7eb181368d90cc333a1d354c378e6398b
+# ---- script ----
+# | # Haiku arm setup for #1118 (group W): checksums, toolchain, the mkntfs test image and repros
+# | # (sha256 checked), compile; register two image copies with diskimage (mounted from a LATER
+# | # command): k1 for the rename cases, k2 for the regressions.
+# | set -x
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/ntfs
+# | pkgman install -y gcc binutils haiku_devel wget curl 2>&1 | tail -1
+# | command -v gcc wget curl || exit 1
+# | rm -rf /boot/home/t1118 && mkdir -p /boot/home/t1118 && cd /boot/home/t1118
+# | wget -q -O ntfs.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.img?<PRESIGNED>'
+# | wget -q -O rename1118.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/rename1118.c?<PRESIGNED>'
+# | wget -q -O rename1118.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/rename1118.sh?<PRESIGNED>'
+# | wget -q -O unmount1115.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/unmount1115.sh?<PRESIGNED>'
+# | wget -q -O silent967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/silent967.c?<PRESIGNED>'
+# | wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/chmod967.c?<PRESIGNED>'
+# | wget -q -O atime933.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/atime933.c?<PRESIGNED>'
+# | printf '%s\n' '5e21c0ad2fa7c81130c2e25b6df6d7b0f8c46a4d61f54896572ea33ca4862001  ntfs.img' 'cdf5e5a9ee0ccc1f882f4a32977bbf4f8aeecc00877238944f02e93ec7963a88  rename1118.c' 'f031c57d8ab18539d5692e2db5d4025a650093c3be158d7e45e9090a3f1d6e35  rename1118.sh' '50cd71f74b0e6e765b32764ec9579a4e290292c29858efc27909970b8460b5ae  unmount1115.sh' 'b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c' 'e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c' '549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c' | sha256sum -c || exit 1
+# | for p in rename1118 silent967 chmod967 atime933; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | cp ntfs.img k1.img && cp ntfs.img k2.img
+# | diskimage register /boot/home/t1118/k1.img
+# | diskimage register /boot/home/t1118/k2.img
+# | diskimage list
+# ---- raw output ----
+2d3115ffdbf1c4fc979371cbd2c68556f83050d457154487b37e07ecdc476fbe  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+a43b5e724a2db527861d125297db76cdd2a54a1c31a8d8ecf420dec7ffc63626  /boot/system/add-ons/kernel/file_systems/ntfs
+[system] Done.
+/boot/system/bin/gcc
+/boot/system/bin/wget
+/boot/system/bin/curl
+ntfs.img: OK
+rename1118.c: OK
+rename1118.sh: OK
+unmount1115.sh: OK
+silent967.c: OK
+chmod967.c: OK
+atime933.c: OK
+Registered file as disk device "/dev/disk/virtual/files/3/raw" with ID 3.
+Registered file as disk device "/dev/disk/virtual/files/4/raw" with ID 4.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1118/k1.img            /dev/disk/virtual/files/3/raw
+     4  /boot/home/t1118/k2.img            /dev/disk/virtual/files/4/raw
++ sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/ntfs
++ pkgman install -y gcc binutils haiku_devel wget curl
++ tail -1
++ command -v gcc wget curl
++ rm -rf /boot/home/t1118
++ mkdir -p /boot/home/t1118
++ cd /boot/home/t1118
++ wget -q -O ntfs.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.img?<PRESIGNED>'
++ wget -q -O rename1118.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/rename1118.c?<PRESIGNED>'
++ wget -q -O rename1118.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/rename1118.sh?<PRESIGNED>'
++ wget -q -O unmount1115.sh 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/unmount1115.sh?<PRESIGNED>'
++ wget -q -O silent967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/silent967.c?<PRESIGNED>'
++ wget -q -O chmod967.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/chmod967.c?<PRESIGNED>'
++ wget -q -O atime933.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/src1118/atime933.c?<PRESIGNED>'
++ printf '%s\n' '5e21c0ad2fa7c81130c2e25b6df6d7b0f8c46a4d61f54896572ea33ca4862001  ntfs.img' 'cdf5e5a9ee0ccc1f882f4a32977bbf4f8aeecc00877238944f02e93ec7963a88  rename1118.c' 'f031c57d8ab18539d5692e2db5d4025a650093c3be158d7e45e9090a3f1d6e35  rename1118.sh' '50cd71f74b0e6e765b32764ec9579a4e290292c29858efc27909970b8460b5ae  unmount1115.sh' 'b1b862e5a253c6d2822316cedab3ead728ddc837e09bceaa197bd5ca53c51aa4  silent967.c' 'e637f2d9effc8233c58243a636430eac3e5976bd4e36569629deed874214bf50  chmod967.c' '549a15d3d438c6c32bec332cb10f8fc965cf6a78b97605b800335e6aabaaa5f5  atime933.c'
++ sha256sum -c
++ for p in rename1118 silent967 chmod967 atime933
++ gcc -O2 -Wall -o rename1118 rename1118.c
++ for p in rename1118 silent967 chmod967 atime933
++ gcc -O2 -Wall -o silent967 silent967.c
++ for p in rename1118 silent967 chmod967 atime933
++ gcc -O2 -Wall -o chmod967 chmod967.c
++ for p in rename1118 silent967 chmod967 atime933
++ gcc -O2 -Wall -o atime933 atime933.c
++ cp ntfs.img k1.img
++ cp ntfs.img k2.img
++ diskimage register /boot/home/t1118/k1.img
++ diskimage register /boot/home/t1118/k2.img
++ diskimage list

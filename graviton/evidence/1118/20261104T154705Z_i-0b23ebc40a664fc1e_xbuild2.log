@@ -1,0 +1,88 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2
+# instance: i-0b23ebc40a664fc1e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ntfs.after with the lowntfs.c-only patch; image; upload
+# start: 20261104T154705Z   end: 20261104T154734Z   rc: 0
+# script sha256: 4c494cd6ec1c6478927d07da5f31a8a68d1c0518fc6c71598e26339660fe66ae
+# ---- script ----
+# | # #1118 build, second step: the first xbuild's ntfs1118.patch also carried #1033's hunk (made
+# | # against a9954f424a, while trunk 87b11c0a19 already has #1033), so it did not apply on top.
+# | # Re-fetch the lowntfs.c-only patch and build ntfs.after; kernel and ntfs.before are from step 1.
+# | set -x
+# | O=/opt/t/out; cd /opt/t/hg/generated || exit 1
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/src1118/ntfs1118.patch $O/ntfs1118.patch && sha256sum $O/ntfs1118.patch
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | git -C .. checkout -q -f 87b11c0a19
+# | git -C .. apply $O/ntfs1115.patch && git -C .. apply $O/ntfs1118.patch || exit 1
+# | git -C .. diff --stat
+# | rm -rf $A/ntfs
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > $O/jam-after.log 2>&1 || { tail -40 $O/jam-after.log; exit 1; }
+# | grep -E "warning:" $O/jam-after.log | grep -E "lowntfs.c:(9[0-9][0-9]|1[01][0-9][0-9]):" 
+# | cp $A/ntfs/ntfs $O/ntfs.after
+# | rm -rf $A/ntfs; jam -q -j$(nproc) -sHAIKU_REVISION=$REV ntfs > /dev/null 2>&1 && cmp $A/ntfs/ntfs $O/ntfs.after && echo "ntfs.after rebuild identical"
+# | echo "before-build uninitialised warnings:"; grep -E "may be used uninitialized" $O/jam-before.log
+# | echo "after-build uninitialised warnings:"; grep -E "may be used uninitialized" $O/jam-after.log
+# | git -C .. checkout -q -f 87b11c0a19
+# | cd $O && truncate -s 256M ntfs.img && mkntfs -F -Q -L NTFS1118 ntfs.img > /dev/null 2>&1 || exit 1
+# | sha256sum kernel_arm64.trunk ntfs.before ntfs.after ntfs.img
+# | for f in kernel_arm64.trunk ntfs.before ntfs.after ntfs.img; do aws s3 cp --quiet $f s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/out1118/$f || exit 1; done; echo uploaded
+# ---- raw output ----
+56f0a08b1066839af3ef126b504bf7d2036124fa81e6516c9b1eb2217775e174  /opt/t/out/ntfs1118.patch
+ .../kernel/file_systems/ntfs/kernel_interface.cpp  | 16 +++++++++++----
+ src/add-ons/kernel/file_systems/ntfs/lowntfs.c     | 23 ++++++++++++++++++++--
+ 2 files changed, 33 insertions(+), 6 deletions(-)
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1072:43: warning: format '%llu' expects argument of type 'long long unsigned int', but argument 3 has type 'u64' {aka 'long unsigned int'} [-Wformat=]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1097:41: warning: passing argument 5 of 'ntfs_fuse_newlink' from incompatible pointer type [-Wincompatible-pointer-types]
+ntfs.after rebuild identical
+before-build uninitialised warnings:
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1129:17: warning: 'ino' may be used uninitialized [-Wmaybe-uninitialized]
+../src/add-ons/kernel/file_systems/ntfs/lowntfs.c:1128:12: warning: 'close_state' may be used uninitialized [-Wmaybe-uninitialized]
+after-build uninitialised warnings:
+2d3115ffdbf1c4fc979371cbd2c68556f83050d457154487b37e07ecdc476fbe  kernel_arm64.trunk
+a43b5e724a2db527861d125297db76cdd2a54a1c31a8d8ecf420dec7ffc63626  ntfs.before
+7b8d7f2aeda9cd9988486d5180d2179c88b87f0cfb5106515dca0803e48e3701  ntfs.after
+5e21c0ad2fa7c81130c2e25b6df6d7b0f8c46a4d61f54896572ea33ca4862001  ntfs.img
+uploaded
++ O=/opt/t/out
++ cd /opt/t/hg/generated
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/src1118/ntfs1118.patch /opt/t/out/ntfs1118.patch
++ sha256sum /opt/t/out/ntfs1118.patch
++ REV=hrev59996
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ git -C .. checkout -q -f 87b11c0a19
++ git -C .. apply /opt/t/out/ntfs1115.patch
++ git -C .. apply /opt/t/out/ntfs1118.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ grep -E warning: /opt/t/out/jam-after.log
++ grep -E 'lowntfs.c:(9[0-9][0-9]|1[01][0-9][0-9]):'
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.after
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ntfs
++ cmp objects/haiku/arm64/release/add-ons/kernel/file_systems/ntfs/ntfs /opt/t/out/ntfs.after
++ echo 'ntfs.after rebuild identical'
++ echo 'before-build uninitialised warnings:'
++ grep -E 'may be used uninitialized' /opt/t/out/jam-before.log
++ echo 'after-build uninitialised warnings:'
++ grep -E 'may be used uninitialized' /opt/t/out/jam-after.log
++ git -C .. checkout -q -f 87b11c0a19
++ cd /opt/t/out
++ truncate -s 256M ntfs.img
++ mkntfs -F -Q -L NTFS1118 ntfs.img
++ sha256sum kernel_arm64.trunk ntfs.before ntfs.after ntfs.img
++ for f in kernel_arm64.trunk ntfs.before ntfs.after ntfs.img
++ aws s3 cp --quiet kernel_arm64.trunk s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1118/kernel_arm64.trunk
++ for f in kernel_arm64.trunk ntfs.before ntfs.after ntfs.img
++ aws s3 cp --quiet ntfs.before s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1118/ntfs.before
++ for f in kernel_arm64.trunk ntfs.before ntfs.after ntfs.img
++ aws s3 cp --quiet ntfs.after s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1118/ntfs.after
++ for f in kernel_arm64.trunk ntfs.before ntfs.after ntfs.img
++ aws s3 cp --quiet ntfs.img s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/out1118/ntfs.img
++ echo uploaded

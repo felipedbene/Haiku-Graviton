@@ -1,0 +1,61 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-after2
+# instance: i-01ef24750d9c821fd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical with trunk kernel + ntfs.after2 (+#1119 +both fix commits)
+# start: 20261104T160849Z   end: 20261104T160901Z   rc: 127
+# script sha256: 4e6fdc91b81a3b8fc132ba41963135d70eaaa0a11733044e48192af9e09e8fa9
+# ---- script ----
+# | # Repack arm "after2" for #1118: canonical haiku.hpkg with the trunk 87b11c0a19 kernel (carries
+# | # #1086) and ntfs.after2; libroot and everything else stay canonical's. Method of #898/#933/#1033.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O kernel_arm64.trunk 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/kernel_arm64.trunk?<PRESIGNED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/kernel_arm64.trunk?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/kernel_arm64.trunk?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/kernel_arm64.trunk?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/kernel_arm64.trunk?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/kernel_arm64.trunk?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/kernel_arm64.trunk?<PRESIGNED>'X-Amz-<REDACTED>'
+# | wget -q -O ntfs.after2 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.after22?<PRESIGNED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.after2?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.after2?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.after2?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.after2?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.after2?<PRESIGNED>'X-Amz-<REDACTED>'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/W/out1118/ntfs.after2?<PRESIGNED>'X-Amz-<REDACTED>'
+# | printf '%s\n' '2d3115ffdbf1c4fc979371cbd2c68556f83050d457154487b37e07ecdc476fbe  kernel_arm64.trunk' '6b7becd9e4f4ed9f6b6401047330117dc135004992f92200061471139879fe79  ntfs.after2' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/ntfs
+# | cat kernel_arm64.trunk > x/kernel_arm64; cat ntfs.after2 > $A/ntfs
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/ntfs
+# | package create -C x ../haiku-new.hpkg > /dev/null && mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> No such file or directory
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> No such file or directory
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> No such file or directory
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> No such file or directory
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> No such file or directory
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+/tmp/run-47817-ec2b41.sh: line 6: X-Amz-<REDACTED> command not found
+failed to run commands: exit status 127

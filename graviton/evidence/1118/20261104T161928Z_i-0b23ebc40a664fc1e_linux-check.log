@@ -1,0 +1,121 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-check
+# instance: i-0b23ebc40a664fc1e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux ntfsfix -n and ntfs-3g read-only mount of the Haiku-written after2 images
+# start: 20261104T161928Z   end: 20261104T161945Z   rc: 0
+# script sha256: 6a1fcbc98056c10c80f5e183782d80223fbd387d8dc955d41bc08704a77b3d65
+# ---- script ----
+# | # Linux check for #1118: the k1 images the two after2 boxes wrote (every rename1118 case run on
+# | # Haiku), checked with ntfsfix -n, then mounted read-only by ntfs-3g; the same manifest pipeline
+# | # as rename1118.sh (path, type, sha256 prefix), and a search for temporary/ghost names.
+# | set -x
+# | cd /opt/t/out || exit 1
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | dpkg -s ntfs-3g | grep -E "^Version"; uname -r
+# | mkdir -p m
+# | for n in a2-1 a2-2; do
+# | 	aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/W/up1118/$n-k1.img $n-k1.img || exit 1
+# | 	sha256sum $n-k1.img
+# | 	set +x
+# | 	echo "=== $n: ntfsfix -n"; ntfsfix -n $n-k1.img; echo "ntfsfix -n rc=$?"
+# | 	LD=$(losetup -f --show -r $n-k1.img) && ntfs-3g -o ro $LD m || { echo "ntfs-3g mount failed"; continue; }
+# | 	echo "=== $n: names with .ntfs-3g- or .ghost-ntfs-3g- (expect none)"; find m -name '*.ntfs-3g-*' -o -name '.ghost-ntfs-3g-*' | wc -l
+# | 	(cd m && find . -path ./System\ Volume\ Information -prune -o -print | grep -v '^\.$' | sort | while read -r p; do
+# | 		if [ -d "$p" ]; then echo "d $p"; else echo "f $p $(sha256sum < "$p" | cut -c1-16)"; fi
+# | 	done) > $n.linux.manifest
+# | 	echo "manifest: $(wc -l < $n.linux.manifest) entries, sha256 $(sha256sum < $n.linux.manifest | cut -c1-16)"
+# | 	cat $n.linux.manifest
+# | 	for f in r-file/b r-mvfile20/t r-remount/b r-dir/d2/x r-across/y/b r-open/b; do printf '%s=%s ' $f "$(cat m/$f)"; done; echo
+# | 	umount m; losetup -d $LD
+# | 	set -x
+# | done
+# ---- raw output ----
+Version: 1:2022.10.3-5ubuntu1.1
+7.0.0-1016-aws
+81ad8bb7cc2a3b7dd9bc809c0694ff5eb9f6158fb3eac0141e2ff53638ca2ab0  a2-1-k1.img
+=== a2-1: ntfsfix -n
+Mounting volume... OK
+Processing of $MFT and $MFTMirr completed successfully.
+Checking the alternate boot sector... OK
+NTFS volume version is 3.1.
+NTFS partition a2-1-k1.img was processed successfully.
+ntfsfix -n rc=0
+=== a2-1: names with .ntfs-3g- or .ghost-ntfs-3g- (expect none)
+0
+manifest: 24 entries, sha256 902e039d8423e17e
+d ./r-across
+d ./r-across/x
+d ./r-across/y
+f ./r-across/y/b 06f961b802bc46ee
+d ./r-dir
+d ./r-dir/d2
+f ./r-dir/d2/x 7058299627365fc7
+d ./r-dirfull
+d ./r-dirfull/d1
+f ./r-dirfull/d1/x 7058299627365fc7
+d ./r-dirfull/d2
+f ./r-dirfull/d2/y d08c5f95ebb8581e
+d ./r-file
+f ./r-file/b 06f961b802bc46ee
+d ./r-mvfile20
+f ./r-mvfile20/t 5378796307535df3
+d ./r-open
+f ./r-open/b 06f961b802bc46ee
+d ./r-remount
+f ./r-remount/b 06f961b802bc46ee
+d ./r-rmdir
+f ./r-rmdir/keep b810e5beca5358b8
+d ./r-unlink
+f ./r-unlink/keep b810e5beca5358b8
+r-file/b=A r-mvfile20/t=20 r-remount/b=A r-dir/d2/x=X r-across/y/b=A r-open/b=A 
+4af0a2d07aa77ecce8414d5c22543b303f1bfbc0a6178bb0c09145e1f0ddec57  a2-2-k1.img
+=== a2-2: ntfsfix -n
+Mounting volume... OK
+Processing of $MFT and $MFTMirr completed successfully.
+Checking the alternate boot sector... OK
+NTFS volume version is 3.1.
+NTFS partition a2-2-k1.img was processed successfully.
+ntfsfix -n rc=0
+=== a2-2: names with .ntfs-3g- or .ghost-ntfs-3g- (expect none)
+0
+manifest: 24 entries, sha256 902e039d8423e17e
+d ./r-across
+d ./r-across/x
+d ./r-across/y
+f ./r-across/y/b 06f961b802bc46ee
+d ./r-dir
+d ./r-dir/d2
+f ./r-dir/d2/x 7058299627365fc7
+d ./r-dirfull
+d ./r-dirfull/d1
+f ./r-dirfull/d1/x 7058299627365fc7
+d ./r-dirfull/d2
+f ./r-dirfull/d2/y d08c5f95ebb8581e
+d ./r-file
+f ./r-file/b 06f961b802bc46ee
+d ./r-mvfile20
+f ./r-mvfile20/t 5378796307535df3
+d ./r-open
+f ./r-open/b 06f961b802bc46ee
+d ./r-remount
+f ./r-remount/b 06f961b802bc46ee
+d ./r-rmdir
+f ./r-rmdir/keep b810e5beca5358b8
+d ./r-unlink
+f ./r-unlink/keep b810e5beca5358b8
+r-file/b=A r-mvfile20/t=20 r-remount/b=A r-dir/d2/x=X r-across/y/b=A r-open/b=A 
++ cd /opt/t/out
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ dpkg -s ntfs-3g
++ grep -E '^Version'
++ uname -r
++ mkdir -p m
++ for n in a2-1 a2-2
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/up1118/a2-1-k1.img a2-1-k1.img
++ sha256sum a2-1-k1.img
++ set +x
++ for n in a2-1 a2-2
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/W/up1118/a2-2-k1.img a2-2-k1.img
++ sha256sum a2-2-k1.img
++ set +x

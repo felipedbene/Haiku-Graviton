@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b-dir-run
+# instance: i-05e4cf41e5ebc41c2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: box b-dir: rename1118 case dir (a KDL is expected before the fix)
+# start: 20261104T155547Z   end: 20261104T155600Z   rc: 0
+# script sha256: 5e9b421f4fc9e1dee8644d972e145289a7b4eef86e9274faba4116b9e5e216b4
+# ---- script ----
+# | # #1118 run on box b-dir: rename1118 cases [dir] on k1.
+# | cd /boot/home/t1118 || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ntfs
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | bash ./rename1118.sh $(dev k1) /k1 ./rename1118 dir; echo "rename1118 rc=$?"
+# | echo "still-referenced lines: $(grep -c "still referenced" /var/log/syslog)"
+# ---- raw output ----
+2d3115ffdbf1c4fc979371cbd2c68556f83050d457154487b37e07ecdc476fbe  /boot/system/kernel_arm64
+a43b5e724a2db527861d125297db76cdd2a54a1c31a8d8ecf420dec7ffc63626  /boot/system/add-ons/kernel/file_systems/ntfs
+== case dir
+FAIL dir: d1 renamed over the empty d2, its file inside
+== unmount, remount, check again
+FAIL dir: d1 renamed over the empty d2, its file inside
+manifest: 4 entries, sha256 59cb66af01f94420
+d ./r-dir
+d ./r-dir/d1
+f ./r-dir/d1/x 7058299627365fc7
+d ./r-dir/d2
+PASS final unmount
+SUMMARY failures=2
+rename1118 rc=2
+still-referenced lines: 0
+./rename1118.sh: line 94: ./rename1118: No such file or directory

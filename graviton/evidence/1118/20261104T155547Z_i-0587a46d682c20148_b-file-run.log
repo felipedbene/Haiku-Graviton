@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: b-file-run
+# instance: i-0587a46d682c20148   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: box b-file: rename1118 case file (a KDL is expected before the fix)
+# start: 20261104T155547Z   end: 20261104T160001Z   rc: 1
+# script sha256: 5ad5853f82e03a90a19750c45c3158f6477c6b42e9188a9e396eba7affe6e93f
+# ---- script ----
+# | # #1118 run on box b-file: rename1118 cases [file] on k1.
+# | cd /boot/home/t1118 || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ntfs
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | bash ./rename1118.sh $(dev k1) /k1 ./rename1118 file; echo "rename1118 rc=$?"
+# | echo "still-referenced lines: $(grep -c "still referenced" /var/log/syslog)"
+# ---- raw output ----

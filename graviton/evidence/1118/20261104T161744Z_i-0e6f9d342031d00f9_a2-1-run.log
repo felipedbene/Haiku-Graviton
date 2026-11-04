@@ -1,0 +1,122 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: a2-1-run
+# instance: i-0e6f9d342031d00f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: box a2-1: rename1118 (all cases), regressions, image upload
+# start: 20261104T161744Z   end: 20261104T161807Z   rc: 0
+# script sha256: 336f980764184b0ce0521037755173b8dac6b4686713e62f7a9d412bd9bf30dd
+# ---- script ----
+# | # #1118 run on box a2-1: rename1118 cases [] on k1; then regressions on k2 (unmount1115 3 cycles, silent967, chmod967, atime933), and the k1 image uploaded for the Linux ntfsfix/ntfs-3g check.
+# | cd /boot/home/t1118 || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ntfs
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | bash ./rename1118.sh $(dev k1) /k1 ./rename1118 ; echo "rename1118 rc=$?"
+# | echo "=== regressions on k2"
+# | bash ./unmount1115.sh $(dev k2) /k2 3 w | grep -E "^FAIL|SUMMARY|PASS every"; echo "unmount1115 rc=${PIPESTATUS[0]}"
+# | mkdir -p /k2 && mount -t ntfs $(dev k2) /k2 && mkdir /k2/s /k2/m /k2/a
+# | ./silent967 /k2/s | grep -E "^FAIL|SUMMARY"; echo "silent967 rc=${PIPESTATUS[0]}"
+# | ./chmod967 /k2/m | grep -E "^FAIL|SUMMARY"; echo "chmod967 rc=${PIPESTATUS[0]}"
+# | ./atime933 /k2/a | grep -E "^FAIL|SUMMARY"; echo "atime933 rc=${PIPESTATUS[0]}"
+# | cd /; sleep 2; unmount /k2; echo "unmount k2 rc=$?"
+# | echo "=== upload k1 for the Linux check"
+# | sync; sha256sum /boot/home/t1118/k1.img
+# | curl -sS -f -T /boot/home/t1118/k1.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/bugfix/W/up1118/a2-1-k1.img?<PRESIGNED>'; echo "upload rc=$?"
+# | echo "still-referenced lines: $(grep -c "still referenced" /var/log/syslog)"
+# ---- raw output ----
+2d3115ffdbf1c4fc979371cbd2c68556f83050d457154487b37e07ecdc476fbe  /boot/system/kernel_arm64
+6b7becd9e4f4ed9f6b6401047330117dc135004992f92200061471139879fe79  /boot/system/add-ons/kernel/file_systems/ntfs
+== case file
+mv rc=0
+PASS file: b holds a's data, a is gone, no leftovers
+== case mvfile20
+PASS mvfile20: 20 renames over an existing file, last data kept
+== case remount
+rename rc=0
+PASS remount: rename() over a file whose vnode was not loaded
+== case dir
+rename rc=0
+PASS dir: d1 renamed over the empty d2, its file inside
+== case dirfull
+rename rc=-1 Directory not empty
+(a refusal is expected)
+PASS dirfull: rename over a non-empty directory refused, both intact
+== case across
+rename rc=0
+PASS across: x/a renamed over y/b
+== case open
+rename rc=0
+open target still reads "B"
+close rc=0
+PASS open: b renamed over while open; the name now holds a's data
+== case unlink
+unlink rc=0
+PASS unlink: unlink() of a file whose vnode was not loaded
+== case rmdir
+rmdir rc=0
+PASS rmdir: rmdir() of a directory whose vnode was not loaded
+== unmount, remount, check again
+PASS file: b holds a's data, a is gone, no leftovers
+PASS mvfile20: 20 renames over an existing file, last data kept
+PASS remount: rename() over a file whose vnode was not loaded
+PASS dir: d1 renamed over the empty d2, its file inside
+PASS dirfull: rename over a non-empty directory refused, both intact
+PASS across: x/a renamed over y/b
+PASS open: b renamed over while open; the name now holds a's data
+PASS unlink: unlink() of a file whose vnode was not loaded
+PASS rmdir: rmdir() of a directory whose vnode was not loaded
+manifest: 24 entries, sha256 902e039d8423e17e
+d ./r-across
+d ./r-across/x
+d ./r-across/y
+f ./r-across/y/b 06f961b802bc46ee
+d ./r-dir
+d ./r-dir/d2
+f ./r-dir/d2/x 7058299627365fc7
+d ./r-dirfull
+d ./r-dirfull/d1
+f ./r-dirfull/d1/x 7058299627365fc7
+d ./r-dirfull/d2
+f ./r-dirfull/d2/y d08c5f95ebb8581e
+d ./r-file
+f ./r-file/b 06f961b802bc46ee
+d ./r-mvfile20
+f ./r-mvfile20/t 5378796307535df3
+d ./r-open
+f ./r-open/b 06f961b802bc46ee
+d ./r-remount
+f ./r-remount/b 06f961b802bc46ee
+d ./r-rmdir
+f ./r-rmdir/keep b810e5beca5358b8
+d ./r-unlink
+f ./r-unlink/keep b810e5beca5358b8
+PASS final unmount
+SUMMARY failures=0
+rename1118 rc=0
+=== regressions on k2
+PASS every cycle's tree survived the remounts
+SUMMARY rounds=33 failures=0
+unmount1115 rc=0
+FAIL root    chmod(other)          -> errno-2147459058 (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    chmod(0600)           -> errno-2147459058 (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    fchmod(0600)          -> errno-2147459058 (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    fchmodat(other)       -> errno-2147459058 (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    chmod(same|S_ISUID)   -> errno-2147459058 (expect ok    ) asked 004666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    chmod(S_IFDIR|same)   -> ok       (expect refuse) asked 040666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    dir chmod(other)      -> errno-2147459058 (expect ok    ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793809068 ctime same
+FAIL root    dir chmod(S_IFREG|..) -> ok       (expect refuse) asked 100777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793809068 ctime same
+FAIL root    chown(1002,-1)        -> errno-2147459058 (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    chown(-1,1002)        -> errno-2147459058 (expect ok    ) asked -1:1002   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    chown(1002,1002)      -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    fchown(1002,1002)     -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    lchown(1002,-1)       -> errno-2147459058 (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793809068 ctime same
+FAIL root    dir chown(1002,1002)  -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793809068 ctime same
+SUMMARY cases=38 failures=14
+silent967 rc=14
+SUMMARY cases=16 failures=0 refused-by-fs=3
+chmod967 rc=0
+SUMMARY cases=44 failures=0 errno-notes=0 unsupported=2
+atime933 rc=0
+unmount k2 rc=0
+=== upload k1 for the Linux check
+81ad8bb7cc2a3b7dd9bc809c0694ff5eb9f6158fb3eac0141e2ff53638ca2ab0  /boot/home/t1118/k1.img
+upload rc=0
+still-referenced lines: 0
