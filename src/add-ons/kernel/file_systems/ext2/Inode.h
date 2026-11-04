@@ -148,6 +148,8 @@ private:
 							off_t size);
 	
 			status_t	_SetNumBlocks(uint64 numBlocks);
+			status_t	_FillHoles(Transaction& transaction, off_t start,
+							off_t end, off_t oldSize);
 
 			uint32		_InodeChecksum(ext2_inode* inode);
 

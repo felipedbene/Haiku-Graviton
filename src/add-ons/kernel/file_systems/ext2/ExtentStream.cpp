@@ -68,6 +68,8 @@ ExtentStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 		panic("ExtentStream::FindBlock() invalid header\n");
 
 	CachedBlock cached(fVolume);
+	fileblock_t next = ~(fileblock_t)0;
+		// where the next leaf starts: a hole at the end of this one ends there
 	while (stream->extent_header.Depth() != 0) {
 		TRACE("FindBlock() depth %d\n",
 			stream->extent_header.Depth());
@@ -75,6 +77,10 @@ ExtentStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 		while (i < stream->extent_header.NumEntries()
 			&& stream->extent_index[i].LogicalBlock() <= index) {
 			i++;
+		}
+		if (i < stream->extent_header.NumEntries()
+			&& stream->extent_index[i].LogicalBlock() < next) {
+			next = stream->extent_index[i].LogicalBlock();
 		}
 		TRACE("FindBlock() getting index %" B_PRId32 " at %" B_PRIu64 "\n",
 			i - 1, stream->extent_index[i - 1].PhysicalBlock());
@@ -115,6 +121,8 @@ ExtentStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 
 	fileblock_t logicalEndIndex
 		= (fSize + fVolume->BlockSize() - 1) >> fVolume->BlockShift();
+	if (logicalEndIndex > next)
+		logicalEndIndex = next;
 
 	if (extentIndex == 0) {
 		// sparse block at the beginning of the stream
@@ -212,7 +220,9 @@ ExtentStream::_Enlarge(Transaction& transaction, off_t targetBlocks,
 		// allocate new blocks
 		uint32 blockGroup = (fAllocatedPos - fFirstBlock)
 				/ fVolume->BlocksPerGroup();
-		
+		if (blockGroup >= fVolume->NumGroups())
+			blockGroup = 0;
+
 		if (fPending == 0) {
 			// One run becomes one extent, which holds at most
 			// EXT2_EXTENT_MAX_LENGTH blocks.
@@ -730,6 +740,213 @@ ExtentStream::_ZeroVecs(const iovec* vecs, size_t count, off_t offset,
 		length -= chunk;
 		offset = 0;
 	}
+}
+
+
+status_t
+ExtentStream::FillHoles(Transaction& transaction, off_t pos, off_t length,
+	off_t& added)
+{
+	// A file made elsewhere can have holes inside its size (truncate -s,
+	// fallocate --punch-hole). The page writer cannot write to a hole, so
+	// before a write's pages reach one, give it blocks. The file cache
+	// writes the whole of each page it dirties, so the new blocks get data
+	// or the zeros the hole read as.
+	added = 0;
+	if (length <= 0)
+		return B_OK;
+
+	uint32 shift = fVolume->BlockShift();
+	fileblock_t first = (pos & ~(off_t)(B_PAGE_SIZE - 1)) >> shift;
+	fileblock_t end = ((pos + length + B_PAGE_SIZE - 1)
+		& ~(off_t)(B_PAGE_SIZE - 1)) >> shift;
+	if (end > (fileblock_t)fNumBlocks)
+		end = fNumBlocks;
+
+	bool zeroed = false;
+	status_t status = _FillHoles(transaction, first, end, added, zeroed);
+	if (zeroed) {
+		// the zeros must be on the disk before the new mapping can be
+		ioctl(fVolume->Device(), B_FLUSH_DRIVE_CACHE);
+	}
+	return status;
+}
+
+
+status_t
+ExtentStream::_FillHoles(Transaction& transaction, fileblock_t first,
+	fileblock_t end, off_t& added, bool& zeroed)
+{
+	while (first < end) {
+		CachedBlock cached(fVolume);
+		ext2_extent_stream* stream;
+		fsblock_t leafBlock;
+		int32 i;
+		fileblock_t next;
+		status_t status = _LookUp(first, cached, stream, leafBlock, i, next);
+		if (status != B_OK)
+			return status;
+
+		int32 count = stream->extent_header.NumEntries();
+		fileblock_t holeEnd = end;
+		if (i < count) {
+			const ext2_extent_entry& extent = stream->extent_entries[i];
+			if (extent.LogicalBlock() <= first) {
+				// mapped already
+				first = (fileblock_t)extent.LogicalBlock() + extent.Length();
+				continue;
+			}
+			holeEnd = min_c(holeEnd, (fileblock_t)extent.LogicalBlock());
+		}
+		// an extent must not reach into the range of the next leaf
+		holeEnd = min_c(holeEnd, next);
+
+		// allocate a run for (the start of) the hole, right after what
+		// precedes it if possible
+		fsblock_t start = fFirstBlock;
+		if (i > 0) {
+			const ext2_extent_entry& previous = stream->extent_entries[i - 1];
+			start = previous.PhysicalBlock() + previous.Length();
+		}
+		uint32 blockGroup = (start - fFirstBlock) / fVolume->BlocksPerGroup();
+		if (blockGroup >= fVolume->NumGroups())
+			blockGroup = 0;
+		uint32 allocated;
+		status = fVolume->AllocateBlocks(transaction, 1,
+			min_c(holeEnd - first, (fileblock_t)EXT2_EXTENT_MAX_LENGTH),
+			blockGroup, start, allocated);
+		if (status != B_OK)
+			return status;
+		// The blocks may hold anything; a partial write of an uncached page
+		// reads them back first. Zero them before they are mapped.
+		status = _ZeroBlocks(start, allocated);
+		if (status != B_OK) {
+			fVolume->FreeBlocks(transaction, start, allocated);
+			return status;
+		}
+		zeroed = true;
+
+		bool merge = false;
+		if (i > 0) {
+			const ext2_extent_entry& previous = stream->extent_entries[i - 1];
+			merge = !previous.IsUninitialized()
+				&& (fileblock_t)previous.LogicalBlock() + previous.Length()
+					== first
+				&& previous.PhysicalBlock() + previous.Length() == start
+				&& previous.Length() + allocated <= EXT2_EXTENT_MAX_LENGTH;
+		}
+
+		if (!merge && count >= stream->extent_header.MaxEntries()) {
+			fVolume->FreeBlocks(transaction, start, allocated);
+			if (stream != fStream || stream->extent_header.Depth() != 0) {
+				// Making room in a full leaf below the root would need a
+				// split; fail the write rather than lose its data.
+				ERROR("FillHoles(): leaf full, can't fill the hole at %"
+					B_PRIu64 "\n", first);
+				return B_UNSUPPORTED;
+			}
+			// the root in the inode is full: move it to a leaf block
+			fsblock_t newBlock = fStream->extent_entries[0].PhysicalBlock();
+			uint32 firstLogical = fStream->extent_entries[0].LogicalBlock();
+			blockGroup = (newBlock - fFirstBlock) / fVolume->BlocksPerGroup();
+			if (blockGroup >= fVolume->NumGroups())
+				blockGroup = 0;
+			status = fVolume->AllocateBlocks(transaction, 1, 1, blockGroup,
+				newBlock, allocated);
+			if (status != B_OK)
+				return status;
+			ext2_extent_stream* leaf = (ext2_extent_stream*)
+				cached.SetToWritable(transaction, newBlock, true);
+			if (leaf == NULL) {
+				fVolume->FreeBlocks(transaction, newBlock, 1);
+				return B_IO_ERROR;
+			}
+			memcpy(leaf, fStream, sizeof(ext2_extent_stream));
+			leaf->extent_header.SetMaxEntries((fVolume->BlockSize()
+				- sizeof(ext2_extent_header)) / sizeof(ext2_extent_entry));
+			fInode->SetExtentChecksum(leaf);
+			fStream->extent_header.SetDepth(1);
+			fStream->extent_header.SetNumEntries(1);
+			// an index key is the first logical block of its child, as
+			// Linux checks
+			memset(&fStream->extent_index[0], 0, sizeof(ext2_extent_index));
+			fStream->extent_index[0].SetLogicalBlock(firstLogical);
+			fStream->extent_index[0].SetPhysicalBlock(newBlock);
+			added++;
+			continue;
+		}
+
+		if (leafBlock != 0) {
+			stream = (ext2_extent_stream*)cached.SetToWritable(transaction,
+				leafBlock);
+			if (stream == NULL) {
+				fVolume->FreeBlocks(transaction, start, allocated);
+				return B_IO_ERROR;
+			}
+		}
+
+		if (merge) {
+			ext2_extent_entry& previous = stream->extent_entries[i - 1];
+			previous.SetLength(previous.Length() + allocated);
+		} else {
+			// insert the extent at index i, keeping the leaf sorted
+			memmove(&stream->extent_entries[i + 1],
+				&stream->extent_entries[i],
+				(count - i) * sizeof(ext2_extent_entry));
+			stream->extent_entries[i].SetLogicalBlock(first);
+			stream->extent_entries[i].SetLength(allocated);
+			stream->extent_entries[i].SetPhysicalBlock(start);
+			stream->extent_header.SetNumEntries(count + 1);
+		}
+		fInode->SetExtentChecksum(stream);
+
+		if (!merge && i == 0 && leafBlock != 0) {
+			// the leaf now starts lower: so must the keys leading to it
+			status = _LowerKeys(transaction, first);
+			if (status != B_OK)
+				return status;
+		}
+		added += allocated;
+		first += allocated;
+	}
+
+	return B_OK;
+}
+
+
+status_t
+ExtentStream::_LowerKeys(Transaction& transaction, fileblock_t first)
+{
+	// Along the path _LookUp() takes to "first", lower every index key that
+	// is above it to "first" (only the first entry of a node can be).
+	ext2_extent_stream* stream = fStream;
+	CachedBlock cached(fVolume);
+	fsblock_t nodeBlock = 0;
+	while (stream->extent_header.Depth() != 0) {
+		int32 count = stream->extent_header.NumEntries();
+		if (count == 0)
+			return B_BAD_DATA;
+		int32 i = 0;
+		while (i + 1 < count
+			&& stream->extent_index[i + 1].LogicalBlock() <= first) {
+			i++;
+		}
+		if (stream->extent_index[i].LogicalBlock() > first) {
+			if (nodeBlock != 0) {
+				stream = (ext2_extent_stream*)cached.SetToWritable(
+					transaction, nodeBlock);
+				if (stream == NULL)
+					return B_IO_ERROR;
+			}
+			stream->extent_index[i].SetLogicalBlock(first);
+			fInode->SetExtentChecksum(stream);
+		}
+		nodeBlock = stream->extent_index[i].PhysicalBlock();
+		stream = (ext2_extent_stream*)cached.SetTo(nodeBlock);
+		if (stream == NULL)
+			return B_IO_ERROR;
+	}
+	return B_OK;
 }
 
 

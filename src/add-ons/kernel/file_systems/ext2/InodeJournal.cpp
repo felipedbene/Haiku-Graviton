@@ -86,5 +86,9 @@ status_t
 InodeJournal::MapBlock(off_t logical, fsblock_t& physical)
 {
 	TRACE("InodeJournal::MapBlock()\n");
-	return fInode->FindBlock(logical * fBlockSize, physical);
+	status_t status = fInode->FindBlock(logical * fBlockSize, physical);
+	if (status == B_OK && physical == 0)
+		return B_BAD_DATA;
+			// a hole in the journal
+	return status;
 }

@@ -13,6 +13,7 @@
 #include "Transaction.h"
 
 
+class CachedBlock;
 class Volume;
 
 
@@ -27,12 +28,18 @@ public:
 						uint32 *_count = NULL);
 	status_t		Enlarge(Transaction& transaction, off_t& numBlocks);
 	status_t		Shrink(Transaction& transaction, off_t& numBlocks);
+	status_t		FillHoles(Transaction& transaction, off_t pos,
+						off_t length, off_t& added);
 
 private:
 	status_t		_Enlarge(Transaction& transaction, off_t targetBlocks);
 	status_t		_Shrink(Transaction& transaction, off_t numBlocks);
 
 	uint32			_BlocksNeeded(off_t end);
+
+	status_t		_FillHole(Transaction& transaction, off_t index);
+	status_t		_HoleLevel(Transaction& transaction, uint32* pointer,
+						CachedBlock& cached, uint32*& block);
 
 	status_t		_GetBlock(Transaction& transaction, uint32& block);
 	status_t		_PrepareBlock(Transaction& transaction, uint32* pos,
@@ -96,6 +103,7 @@ private:
 	uint32			fRemovedBlocks;
 	off_t			fAddedBlocks;
 	off_t			fFreedBlocks;
+	void*			fZeroBuffer;
 	off_t			fSize;
 };
 
