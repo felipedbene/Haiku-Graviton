@@ -374,7 +374,7 @@ dialup_send_data(net_device* _device, net_buffer* buffer)
 		return B_FILE_ERROR;
 
 	dprintf("try to send HDLC packet of %" B_PRIu32 " bytes "
-		"(flags 0x%" B_PRIx32 "):\n", buffer->size, buffer->flags);
+		"(flags 0x%" B_PRIx16 "):\n", buffer->size, buffer->buffer_flags);
 
 	if (buffer->size < HDLC_HEADER_LENGTH)
 		return B_BAD_VALUE;
