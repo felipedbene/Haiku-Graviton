@@ -1,0 +1,88 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1079-e1-linux-check
+# instance: i-0fdd8b3004eb86c28   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck of isolation run e1's full1k
+# start: 20261104T065629Z   end: 20261104T065641Z   rc: 0
+# script sha256: 248a0fec533596cfe861ff5efa2b7dc100987d4c5721d6dbf8d64fd8548160af
+# ---- script ----
+# | # Linux check of isolation run e1's full1k (p2) on volume vol-080152c34cb55d4a5: e2fsck -fn, and debugfs stat of fill.
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol080152c34cb55d4a5 '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "device $D"
+# | e2fsck -fn ${D}p2 2>&1 | cut -c1-300; echo "e2fsck rc=$?"
+# | debugfs -R "stat fill" ${D}p2 2>/dev/null | head -12
+# | debugfs -R "stat big" ${D}p2 2>/dev/null | head -6
+# | dumpe2fs ${D}p2 2>/dev/null | grep -E "^Group|block bitmap|Inode bitmap|free blocks" | head -24
+# ---- raw output ----
+device /dev/nvme6n1
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+
+Running additional passes to resolve blocks claimed by more than one inode...
+Pass 1B: Rescanning for multiply-claimed blocks
+Multiply-claimed block(s) in inode 13: 25230--25231
+Pass 1C: Scanning directories for inodes with multiply-claimed blocks
+Pass 1D: Reconciling multiply-claimed blocks
+(There are 1 inodes containing multiply-claimed blocks.)
+
+File /fill (inode #13, mod time Wed Nov  4 06:55:24 2026) 
+  has 2 multiply-claimed block(s), shared with 1 file(s):
+	<filesystem metadata>
+Clone multiply-claimed blocks? no
+
+Delete file? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  +24579 +(24582--24584) +24587 +24589 +(24591--24592) +24594 +(24603--24606) +(24608--24610) +24612 +24614 +(24616--24617) +24621 +(24623--24625) +(24627--24632) +(24634--24636) +24638 +24640 +24643 +(24646--24647) +24649 +(24651--24652) +24659 +24661 +24663 +(24665--24670)
+Fix? no
+
+Free blocks count wrong for group #3 (16, counted=4100).
+Fix? no
+
+Free blocks count wrong (46, counted=4130).
+Fix? no
+
+Inode bitmap differences:  -(6145--6146) -(6149--6151) -6155 -6157 -(6159--6162) -6165 -(6169--6170) -6172 -(6183--6185) -(6188--6193) -6196 -6198 -(6200--6202) -(6207--6209) -(6212--6215) -(6217--6218) -6220 -(6224--6225) -(6232--6241) -6245 -(6247--6249) -(6251--6257) -6259 -6261 -6264 -6268 -6273
+Fix? no
+
+Free inodes count wrong for group #3 (2048, counted=1007).
+Fix? no
+
+Free inodes count wrong (8179, counted=7138).
+Fix? no
+
+Padding at end of inode bitmap is not set. Fix? no
+
+Padding at end of block bitmap is not set. Fix? no
+
+
+full1k: ********** WARNING: Filesystem still has errors **********
+
+full1k: 13/8192 files (7.7% non-contiguous), 32722/32768 blocks
+e2fsck rc=4
+Inode: 13   Type: regular    Mode:  0644   Flags: 0x0
+Generation: 0    Version: 0x00000000:00000000
+User:     0   Group:     0   Project:     0   Size: 29818880
+File ACL: 0
+Links: 1   Blockcount: 58470
+Fragment:  Address: 0    Number: 0    Size: 0
+ ctime: 0x00000000:00000000 -- Thu Jan  1 00:00:00 1970
+ atime: 0x6aead6d8:00000000 -- Wed Nov  4 06:55:20 2026
+ mtime: 0x6aead6dc:00000000 -- Wed Nov  4 06:55:24 2026
+crtime: 0x00000000:00000000 -- Thu Jan  1 00:00:00 1970
+Size of extra inode fields: 32
+BLOCKS:
+Group 0: (Blocks 1-8192)
+  Inode bitmap at 643 (+642)
+  18 free blocks, 2035 free inodes, 2 directories
+Group 1: (Blocks 8193-16384)
+  Inode bitmap at 8839 (+646)
+  4 free blocks, 2048 free inodes, 0 directories
+Group 2: (Blocks 16385-24576)
+  Inode bitmap at 16906 (+521)
+  8 free blocks, 2048 free inodes, 0 directories
+Group 3: (Blocks 24577-32767)
+  Inode bitmap at 25231 (+654)
+  16 free blocks, 2048 free inodes, 0 directories

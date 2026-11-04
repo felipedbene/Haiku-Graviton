@@ -1,0 +1,152 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1079-lspx
+# instance: i-016e856abebbaf94c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1079 (#1080 + #1079): truncate/remove/append on Linux-made sparse files
+# start: 20261104T064939Z   end: 20261104T064950Z   rc: 0
+# script sha256: 9e84a1d0992ed581faa34552b4e7258051f448f069ac0f2c878fdb066b1b8a69
+# ---- script ----
+# | # Issue 1080, arm c1079: on the Linux-made data volume (EBS, not diskimage-backed), truncate,
+# | # remove and append to Linux-made sparse files: p5 lsp (indirect, DataStream) first, then
+# | # p4 lspx (extents). The order puts the known trunk hang (xa, truncate 3000) after the rest
+# | # of p5. Expected results are checked on Linux (seed2 log has the md5s).
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/4 ] && [ ! -e $d/5 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no 5-partition data disk"; exit 1; }
+# | echo "data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /elspx /elsp
+# | mount -t ext2 $DD/3 /elspx || exit 1
+# | mount -t ext2 $DD/4 /elsp || exit 1
+# | echo "--- loaded ext2 image"; listimage 1 | grep ext2
+# | dd if=/dev/urandom of=/boot/home/chunk128k bs=65536 count=2 2>/dev/null
+# | echo "chunk128k md5 $(md5sum < /boot/home/chunk128k)"
+# | echo "=== lsp (indirect)"
+# | cd /elsp && ls -ls
+# | truncate -s 22M sa; echo "sa truncate 22M rc=$?"
+# | truncate -s 3000 sa; echo "sa truncate 3000 rc=$?"
+# | rm srm; echo "rm srm rc=$?"
+# | ls -ls; sync
+# | echo "=== lspx (extents)"
+# | cd /elspx && ls -ls
+# | truncate -s 5M xb; echo "xb truncate 5M rc=$?"
+# | truncate -s 13M xc; echo "xc truncate 13M rc=$?"
+# | truncate -s 3M xe; echo "xe truncate 3M rc=$?"
+# | cat /boot/home/chunk128k >> xd; echo "xd append 128K rc=$?"
+# | sync
+# | truncate -s 22M xa; echo "xa truncate 22M rc=$?"
+# | truncate -s 3000 xa; echo "xa truncate 3000 rc=$?"
+# | rm xrm; echo "rm xrm rc=$?"
+# | ls -ls; sync
+# | cd /
+# | unmount /elsp; echo "unmount lsp rc=$?"
+# | unmount /elspx; echo "unmount lspx rc=$?"
+# | sync
+# ---- raw output ----
+Haiku ip-10-128-6-57.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+93321d3eac6611ee43eedbf2bfce855bb319562734b44a58168bb2d160d9ee15  /boot/system/add-ons/kernel/file_systems/ext2
+data disk /dev/disk/nvme/1: 0 1 2 3 4 raw 
+--- loaded ext2 image
+   11 0xffff0000023d9000 0xffff0000023fc000     0          0 ext2
+chunk128k md5 6ccb34e23d146d9cd8bbb1f77608f4ae  -
+=== lsp (indirect)
+total 1108
+1028 -rw-rw-rw- 1 baron root  1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 baron root    16384 Nov  4 06:14 lost+found
+  32 -rw-rw-rw- 1 baron root 41943040 Nov  4 06:14 sa
+  32 -rw-rw-rw- 1 baron root 41943040 Nov  4 06:14 srm
+sa truncate 22M rc=0
+sa truncate 3000 rc=0
+rm srm rc=0
+total 1048
+1028 -rw-rw-rw- 1 baron root 1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 baron root   16384 Nov  4 06:14 lost+found
+   4 -rw-rw-rw- 1 baron root    3000 Nov  4 06:49 sa
+=== lspx (extents)
+total 12940
+1024 -rw-rw-rw- 1 baron root  1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 baron root    16384 Nov  4 06:14 lost+found
+  16 -rw-rw-rw- 1 baron root 41943040 Nov  4 06:14 xa
+2052 -rw-rw-rw- 1 baron root 10485760 Nov  4 06:14 xb
+1608 -rw-rw-rw- 1 baron root 27262976 Nov  4 06:14 xc
+  16 -rw-rw-rw- 1 baron root 41943040 Nov  4 06:14 xd
+8192 -rw-rw-rw- 1 baron root  8388608 Nov  4 06:14 xe
+  16 -rw-rw-rw- 1 baron root 41943040 Nov  4 06:14 xrm
+xb truncate 5M rc=0
+xc truncate 13M rc=0
+xe truncate 3M rc=0
+xd append 128K rc=0
+xa truncate 22M rc=0
+xa truncate 3000 rc=0
+rm xrm rc=0
+total 6128
+1024 -rw-rw-rw- 1 baron root  1048576 Nov  4 06:14 lin-1m
+  16 drwx------ 2 baron root    16384 Nov  4 06:14 lost+found
+   4 -rw-rw-rw- 1 baron root     3000 Nov  4 06:49 xa
+1028 -rw-rw-rw- 1 baron root  5242880 Nov  4 06:49 xb
+ 836 -rw-rw-rw- 1 baron root 13631488 Nov  4 06:49 xc
+ 148 -rw-rw-rw- 1 baron root 42074112 Nov  4 06:49 xd
+3072 -rw-rw-rw- 1 baron root  3145728 Nov  4 06:49 xe
+unmount lsp rc=0
+unmount lspx rc=0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/4 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/4 ']'
++ '[' '!' -e /dev/disk/nvme/1/5 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'data disk /dev/disk/nvme/1: 0 1 2 3 4 raw '
++ mkdir -p /elspx /elsp
++ mount -t ext2 /dev/disk/nvme/1/3 /elspx
++ mount -t ext2 /dev/disk/nvme/1/4 /elsp
++ echo '--- loaded ext2 image'
++ listimage 1
++ grep ext2
++ dd if=/dev/urandom of=/boot/home/chunk128k bs=65536 count=2
+++ md5sum
++ echo 'chunk128k md5 6ccb34e23d146d9cd8bbb1f77608f4ae  -'
++ echo '=== lsp (indirect)'
++ cd /elsp
++ ls -ls
++ truncate -s 22M sa
++ echo 'sa truncate 22M rc=0'
++ truncate -s 3000 sa
++ echo 'sa truncate 3000 rc=0'
++ rm srm
++ echo 'rm srm rc=0'
++ ls -ls
++ sync
++ echo '=== lspx (extents)'
++ cd /elspx
++ ls -ls
++ truncate -s 5M xb
++ echo 'xb truncate 5M rc=0'
++ truncate -s 13M xc
++ echo 'xc truncate 13M rc=0'
++ truncate -s 3M xe
++ echo 'xe truncate 3M rc=0'
++ cat /boot/home/chunk128k
++ echo 'xd append 128K rc=0'
++ sync
++ truncate -s 22M xa
++ echo 'xa truncate 22M rc=0'
++ truncate -s 3000 xa
++ echo 'xa truncate 3000 rc=0'
++ rm xrm
++ echo 'rm xrm rc=0'
++ ls -ls
++ sync
++ cd /
++ unmount /elsp
++ echo 'unmount lsp rc=0'
++ unmount /elspx
++ echo 'unmount lspx rc=0'
++ sync
