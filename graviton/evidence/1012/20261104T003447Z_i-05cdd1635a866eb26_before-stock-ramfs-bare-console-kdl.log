@@ -1,0 +1,125 @@
+# evidence: before-stock-ramfs-bare-console-kdl
+# instance: i-05cdd1635a866eb26   region: us-west-2   transport: aws ec2 get-console-output --latest
+# what: serial console of the stock-canonical instance after the bare ramfs mount+unmount
+# captured: 20261104T003447Z
+# ---- console (last 120 lines) ----
+PageWriteWrapper: Failed to write page 0xffff0000167443c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016744370: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016744320: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167442d0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016743880: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167437e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016743790: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016743740: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167436f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167436a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016743650: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016743600: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167435b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016743560: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167434c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016743470: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016742a20: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e9100: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e86b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e8660: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e8610: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e85c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e8570: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e8520: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e84d0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e8480: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e83e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e8390: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e8340: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e82f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7850: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7800: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7710: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e76c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7670: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7620: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e75d0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7530: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e74e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7490: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e7440: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e73a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e6950: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e68b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e6860: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e6810: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000166e67c0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167429d0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016742930: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167428e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016742890: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016742840: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167427f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167427a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016742750: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016742700: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167426b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741c60: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741c10: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741b70: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741ad0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741a80: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741a30: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167419e0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741990: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741940: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167418f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff0000167418a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741850: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d09a80: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016741800: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d09bc0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d093f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d0b150: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d0b1a0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d07190: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d0b1f0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d0b0b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d0b100: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016ba7bb0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d0a480: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d0a4d0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d08720: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d07cd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d07b40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d07a00: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d079b0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d08cc0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d08c70: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d08bd0: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d08a40: Bad address
+PageWriteWrapper: Failed to write page 0xffff000016d08770: Bad address
+page writer: no page written for 181353 ms with 2003 page(s) modified; writeback is making no progress
+PANIC: ASSERT FAILED (../src/system/kernel/fs/vfs.cpp:148): vnodes.IsEmpty()
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 695 "unmount" running on CPU 3
+iframe 0xffff0000dea39cc7 (end = 0xffff0000dea39fff)
+stack trace for thread 0x2b7 "unmount"
+    kernel stack: 0xffff0000dea35000 to 0xffff0000dea3a000
+      user stack: 0x0000016d533be000 to 0x0000016d573be000
+frame            caller     <image>:function + offset
+ 0 ffff0000dea39810 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000dea39860 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000dea398d0[0m [36m"����"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000dea398d0 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff0000dea39990[0m [36m"����"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�2C���"[0m, std::__va_list: [34m0x1a7920[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff0000dea39990 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000dea39ab0 (+ 288) ffff000000136dac   <kernel_arm64> fs_unmount(char*: [34m0xffff0000dea39b40[0m, int32: [34m1301280[0m, uint32: [34m0xffff0000[0m, [34mfalse[0m) + 0x28c
+ 5 ffff0000dea39b40 (+ 144) ffff00000013db20   <kernel_arm64> _user_unmount + 0xa0
+ 6 ffff0000dea39ba0 (+  96) ffff0000000a71e8   <kernel_arm64> syscall_dispatcher + 0x1318
+ 7 ffff0000dea39bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+ 8 ffff0000dea39cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff0000dea39cc7
+ELR=000000b663627530 SPSR=0000000020000000
+LR =0000014e581d2198 SP  =0000016d573bdef0 FP =0000016d573bdef0
+ESR=000000005600006a FAR =0000014e581e20b8
+ 9 0000016d573bdef0 (+   0) 000000b663627530   </boot/system/lib/libroot.so> _kern_unmount (nearest) + 0x04
+10 0000016d573bdfa0 (+ 176) 0000014e581d2310   </boot/system/bin/unmount> _start + 0x50
+11 0000016d573bdfd0 (+  48) 000000c76f3c3348   </boot/system/runtime_loader> runtime_loader + 0x128
+12 0000000000000000 (+   0) 0000076f1c474208   <commpage> commpage_thread_exit + 0x00
+

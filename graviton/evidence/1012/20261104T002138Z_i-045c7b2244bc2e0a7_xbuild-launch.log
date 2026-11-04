@@ -1,0 +1,78 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-launch
+# instance: i-045c7b2244bc2e0a7   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: start the detached build of trunk kernel/libroot/bfs/ramfs/ext2/btrfs and the two fix modules (ext2 for 1011, ramfs for 1012)
+# start: 20261104T002138Z   end: 20261104T002149Z   rc: 0
+# script sha256: 116ed6b207ae04c0a5e4952048381e534a002718bd092082b832717997f6260b
+# ---- script ----
+# | # Build, from origin/graviton 79292bc67f (detached; log /opt/t/out/xb.log, rc /opt/t/out/xb.rc):
+# | #  trunk:   <revisioned>kernel_arm64 + <revisioned>libroot.so (#937: shipped together), bfs,
+# | #           ramfs, ext2, btrfs -- revision pinned to canonical's hrev59996 (method of #898)
+# | #  fix1011: trunk + fix/1011-ext2-rmdir-nonempty 23629506f1 -> ext2 only
+# | #  fix1012: trunk + fix/1012-ramfs-unmount-root 7c72a8dd0a -> ramfs only
+# | # Each patch is carried inline (git format-patch of the branch's single fix commit).
+# | set -x
+# | mkdir -p /opt/t/out && cd /opt/t/out && rm -f xb.rc
+# | echo 'RnJvbSAyMzYyOTUwNmYxZDE5ZjVmMWM5NWU5NTQxYmIyYjc3NTBkOTY4Yzc1IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDE4OjEwOjMxIC0wNjAwClN1YmplY3Q6IFtQQVRDSF0gZXh0MjogcmVmdXNlIHRvIHJlbW92ZSBvciByZXBsYWNlIGEgbm9uLWVtcHR5IGRpcmVjdG9yeQoKZXh0Ml9yZW1vdmVfZGlyKCkgcmVsaWVkIG9uIElub2RlOjpVbmxpbmsoKSwgd2hpY2ggcmVtb3ZlcyBhbnkgZGlyZWN0b3J5Cndob3NlIGxpbmsgY291bnQgaXMgMi4gUmVndWxhciBmaWxlcyBkbyBub3QgYWRkIHRvIGEgZGlyZWN0b3J5J3MgbGluawpjb3VudCwgc28gYSBkaXJlY3RvcnkgaG9sZGluZyBvbmx5IGZpbGVzIHdhcyByZW1vdmVkIHdpdGggaXRzIGVudHJpZXMKc3RpbGwgaW4gaXQsIG9ycGhhbmluZyB0aGVtLiBBIHJlbmFtZSBvbnRvIGFuIGV4aXN0aW5nIGRpcmVjdG9yeSBoYWQgdGhlCnNhbWUgaG9sZS4KCkFkZCBJbm9kZTo6SXNFbXB0eSgpLCB3aGljaCB3YWxrcyB0aGUgZGlyZWN0b3J5IGZvciBhbnkgZW50cnkgYmVzaWRlcwoiLiIgYW5kICIuLiIsIGFuZCByZXR1cm4gQl9ESVJFQ1RPUllfTk9UX0VNUFRZIGZyb20gcm1kaXIgYW5kIGZyb20gYQpyZW5hbWUgdGhhdCB3b3VsZCByZXBsYWNlIGEgbm9uLWVtcHR5IGRpcmVjdG9yeS4gUmVtb3ZpbmcgYSBub24tZGlyZWN0b3J5CnRocm91Z2ggcm1kaXIgbm93IGZhaWxzIHdpdGggQl9OT1RfQV9ESVJFQ1RPUlkuIEFsc28gc3RvcCBsZWFraW5nIHRoZQpsb29rdXAgaXRlcmF0b3IgaW4gZXh0Ml9yZW1vdmVfZGlyKCkuCgpGaXhlcyAjMTAxMQotLS0KIC4uLi9rZXJuZWwvZmlsZV9zeXN0ZW1zL2V4dDIvSW5vZGUuY3BwICAgICAgICB8IDQzICsrKysrKysrKysrKysrKysrKysKIHNyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZXh0Mi9Jbm9kZS5oICB8ICAxICsKIC4uLi9maWxlX3N5c3RlbXMvZXh0Mi9rZXJuZWxfaW50ZXJmYWNlLmNwcCAgICB8IDIyICsrKysrKysrKysKIDMgZmlsZXMgY2hhbmdlZCwgNjYgaW5zZXJ0aW9ucygrKQoKZGlmZiAtLWdpdCBhL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZXh0Mi9Jbm9kZS5jcHAgYi9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2V4dDIvSW5vZGUuY3BwCmluZGV4IGNkZDQ3NTk3MTkuLjJhMWM4NGRiZTUgMTAwNjQ0Ci0tLSBhL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZXh0Mi9Jbm9kZS5jcHAKKysrIGIvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9leHQyL0lub2RlLmNwcApAQCAtNDY4LDYgKzQ2OCw0OSBAQCBJbm9kZTo6VW5saW5rKFRyYW5zYWN0aW9uJiB0cmFuc2FjdGlvbikKIH0KIAogCisvKiEJU2V0cyBcYSBfaXNFbXB0eSB0byB3aGV0aGVyIHRoaXMgZGlyZWN0b3J5IGhvbGRzIG5vIGVudHJpZXMgb3RoZXIgdGhhbgorCSIuIiBhbmQgIi4uIi4gT25seSBzdWJkaXJlY3RvcmllcyBhZGQgdG8gYSBkaXJlY3RvcnkncyBsaW5rIGNvdW50LCBzbyB0aGUKKwlsaW5rIGNvdW50IGNhbm5vdCBhbnN3ZXIgdGhpcyBvbiBpdHMgb3duLgorKi8KK3N0YXR1c190CitJbm9kZTo6SXNFbXB0eShib29sJiBfaXNFbXB0eSkKK3sKKwlpZiAoIUlzRGlyZWN0b3J5KCkpCisJCXJldHVybiBCX05PVF9BX0RJUkVDVE9SWTsKKworCURpcmVjdG9yeUl0ZXJhdG9yIGl0ZXJhdG9yKHRoaXMpOworCXN0YXR1c190IHN0YXR1cyA9IGl0ZXJhdG9yLkluaXRDaGVjaygpOworCWlmIChzdGF0dXMgIT0gQl9PSykKKwkJcmV0dXJuIHN0YXR1czsKKworCWNoYXIgbmFtZVtFWFQyX05BTUVfTEVOR1RIICsgMV07CisJd2hpbGUgKHRydWUpIHsKKwkJc2l6ZV90IG5hbWVMZW5ndGggPSBzaXplb2YobmFtZSk7CisJCWlub190IGlkOworCQluYW1lWzBdID0gJ1wwJzsKKwkJc3RhdHVzID0gaXRlcmF0b3IuR2V0TmV4dChuYW1lLCAmbmFtZUxlbmd0aCwgJmlkKTsKKwkJaWYgKHN0YXR1cyA9PSBCX0VOVFJZX05PVF9GT1VORCkKKwkJCWJyZWFrOworCQlpZiAoc3RhdHVzICE9IEJfT0spCisJCQlyZXR1cm4gc3RhdHVzOworCisJCWlmIChzdHJjbXAobmFtZSwgIi4iKSAhPSAwICYmIHN0cmNtcChuYW1lLCAiLi4iKSAhPSAwKSB7CisJCQlfaXNFbXB0eSA9IGZhbHNlOworCQkJcmV0dXJuIEJfT0s7CisJCX0KKworCQlzdGF0dXMgPSBpdGVyYXRvci5OZXh0KCk7CisJCWlmIChzdGF0dXMgPT0gQl9FTlRSWV9OT1RfRk9VTkQpCisJCQlicmVhazsKKwkJaWYgKHN0YXR1cyAhPSBCX09LKQorCQkJcmV0dXJuIHN0YXR1czsKKwl9CisKKwlfaXNFbXB0eSA9IHRydWU7CisJcmV0dXJuIEJfT0s7Cit9CisKKwogLypzdGF0aWMqLyBzdGF0dXNfdAogSW5vZGU6OkNyZWF0ZShUcmFuc2FjdGlvbiYgdHJhbnNhY3Rpb24sIElub2RlKiBwYXJlbnQsIGNvbnN0IGNoYXIqIG5hbWUsCiAJaW50MzIgbW9kZSwgaW50IG9wZW5Nb2RlLCB1aW50OCB0eXBlLCBib29sKiBfY3JlYXRlZCwgaW5vX3QqIF9pZCwKZGlmZiAtLWdpdCBhL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZXh0Mi9Jbm9kZS5oIGIvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9leHQyL0lub2RlLmgKaW5kZXggMGE0MGVmY2VlYS4uY2I0ZWIwZWM1ZSAxMDA2NDQKLS0tIGEvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9leHQyL0lub2RlLmgKKysrIGIvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9leHQyL0lub2RlLmgKQEAgLTk5LDYgKzk5LDcgQEAgcHVibGljOgogCQkJc3RhdHVzX3QJSW5pdERpcmVjdG9yeShUcmFuc2FjdGlvbiYgdHJhbnNhY3Rpb24sIElub2RlKiBwYXJlbnQpOwogCiAJCQlzdGF0dXNfdAlVbmxpbmsoVHJhbnNhY3Rpb24mIHRyYW5zYWN0aW9uKTsKKwkJCXN0YXR1c190CUlzRW1wdHkoYm9vbCYgX2lzRW1wdHkpOwogCiAJc3RhdGljCXN0YXR1c190CUNyZWF0ZShUcmFuc2FjdGlvbiYgdHJhbnNhY3Rpb24sIElub2RlKiBwYXJlbnQsCiAJCQkJCQkJY29uc3QgY2hhciogbmFtZSwgaW50MzIgbW9kZSwgaW50IG9wZW5Nb2RlLApkaWZmIC0tZ2l0IGEvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9leHQyL2tlcm5lbF9pbnRlcmZhY2UuY3BwIGIvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9leHQyL2tlcm5lbF9pbnRlcmZhY2UuY3BwCmluZGV4IDViMzc4MjYyNTMuLjFkYTkxMzcyNTYgMTAwNjQ0Ci0tLSBhL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZXh0Mi9rZXJuZWxfaW50ZXJmYWNlLmNwcAorKysgYi9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2V4dDIva2VybmVsX2ludGVyZmFjZS5jcHAKQEAgLTEwNDYsNiArMTA0NiwxNiBAQCBleHQyX3JlbmFtZShmc192b2x1bWUqIF92b2x1bWUsIGZzX3Zub2RlKiBfb2xkRGlyLCBjb25zdCBjaGFyKiBvbGROYW1lLAogCQkJCTogQl9OT1RfQV9ESVJFQ1RPUlk7CiAJCX0KIAorCQkvLyByZXBsYWNpbmcgYSBkaXJlY3RvcnkgaXMgb25seSBhbGxvd2VkIGlmIGl0IGlzIGVtcHR5CisJCWlmIChleGlzdGVudC0+SXNEaXJlY3RvcnkoKSkgeworCQkJYm9vbCBpc0VtcHR5OworCQkJc3RhdHVzID0gZXhpc3RlbnQtPklzRW1wdHkoaXNFbXB0eSk7CisJCQlpZiAoc3RhdHVzICE9IEJfT0spCisJCQkJcmV0dXJuIHN0YXR1czsKKwkJCWlmICghaXNFbXB0eSkKKwkJCQlyZXR1cm4gQl9ESVJFQ1RPUllfTk9UX0VNUFRZOworCQl9CisKIAkJLy8gVE9ETzogUGVyaGFwcyB3ZSBoYXZlIHRvIHJldmVydCB0aGlzIGluIGNhc2Ugb2YgZXJyb3I/CiAJCXN0YXR1cyA9IG5ld0l0ZXJhdG9yLT5DaGFuZ2VFbnRyeSh0cmFuc2FjdGlvbiwgb2xkSUQsIGZpbGVUeXBlKTsKIAkJaWYgKHN0YXR1cyAhPSBCX09LKQpAQCAtMTM5NCw2ICsxNDA0LDkgQEAgZXh0Ml9yZW1vdmVfZGlyKGZzX3ZvbHVtZSogX3ZvbHVtZSwgZnNfdm5vZGUqIF9kaXJlY3RvcnksIGNvbnN0IGNoYXIqIG5hbWUpCiAJaWYgKHN0YXR1cyAhPSBCX09LKQogCQlyZXR1cm4gc3RhdHVzOwogCisJT2JqZWN0RGVsZXRlcjxEaXJlY3RvcnlJdGVyYXRvcj4gZGlyZWN0b3J5SXRlcmF0b3JEZWxldGVyKAorCQlkaXJlY3RvcnlJdGVyYXRvcik7CisKIAlpbm9fdCBpZDsKIAlzdGF0dXMgPSBkaXJlY3RvcnlJdGVyYXRvci0+RmluZEVudHJ5KG5hbWUsICZpZCk7CiAJaWYgKHN0YXR1cyAhPSBCX09LKQpAQCAtMTQxMiw2ICsxNDI1LDE1IEBAIGV4dDJfcmVtb3ZlX2Rpcihmc192b2x1bWUqIF92b2x1bWUsIGZzX3Zub2RlKiBfZGlyZWN0b3J5LCBjb25zdCBjaGFyKiBuYW1lKQogCWlmIChzdGF0dXMgIT0gQl9PSykKIAkJcmV0dXJuIHN0YXR1czsKIAorCS8vIElub2RlOjpVbmxpbmsoKSB3b3VsZCByZW1vdmUgYSBkaXJlY3RvcnkgdGhhdCBzdGlsbCBob2xkcyBmaWxlcywgYXMKKwkvLyB0aG9zZSBkbyBub3QgYWRkIHRvIGl0cyBsaW5rIGNvdW50CisJYm9vbCBpc0VtcHR5OworCXN0YXR1cyA9IGlub2RlLT5Jc0VtcHR5KGlzRW1wdHkpOworCWlmIChzdGF0dXMgIT0gQl9PSykKKwkJcmV0dXJuIHN0YXR1czsKKwlpZiAoIWlzRW1wdHkpCisJCXJldHVybiBCX0RJUkVDVE9SWV9OT1RfRU1QVFk7CisKIAlzdGF0dXMgPSBpbm9kZS0+VW5saW5rKHRyYW5zYWN0aW9uKTsKIAlpZiAoc3RhdHVzICE9IEJfT0spCiAJCXJldHVybiBzdGF0dXM7Ci0tIAoyLjU0LjAgKEFwcGxlIEdpdC0xNTcpCgo=' | base64 -d > fix1011.patch
+# | echo 'RnJvbSA3YzcyYThkZDBhZmQwYjdjYWM3NmZjMTgzZjU3MjYxOTYyYzhmZGE2IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDE4OjEwOjMyIC0wNjAwClN1YmplY3Q6IFtQQVRDSF0gcmFtZnM6IHB1dCB0aGUgcm9vdCB2bm9kZSBvbiB1bm1vdW50Cgpmc191bm1vdW50KCkgZnJlZXMgZXZlcnkgdm5vZGUgb2YgdGhlIG1vdW50IGJ1dCB0aGUgcm9vdCwgbGVhdmVzIHRoZQpyb290IG9uIHRoZSBtb3VudCdzIHZub2RlIGxpc3QsIGFuZCBleHBlY3RzIHRoZSBmaWxlIHN5c3RlbSdzIHVubW91bnQKaG9vayB0byBwdXQgdGhlIHJlZmVyZW5jZSBwdWJsaXNoX3Zub2RlKCkgZ2F2ZSBpdC4gcmFtZnMgbmV2ZXIgZGlkLCBzbwp+ZnNfbW91bnQoKSBoaXQgQVNTRVJUKHZub2Rlcy5Jc0VtcHR5KCkpIG9uIGV2ZXJ5IHVubW91bnQgKGFuZCBhCm5vbi1LREVCVUcga2VybmVsIGxlYWtlZCB0aGUgdm5vZGUpLgoKUHV0IHRoZSByb290IHZub2RlIGluIFZvbHVtZTo6VW5tb3VudCgpIHdoaWxlIHRoZSB2b2x1bWUgaXMgc3RpbGwKbW91bnRlZCwgYXMgQkZTIGFuZCBleHQyIGRvLgoKRml4ZXMgIzEwMTIKLS0tCiBzcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL3JhbWZzL1ZvbHVtZS5jcHAgfCA3ICsrKysrKysKIDEgZmlsZSBjaGFuZ2VkLCA3IGluc2VydGlvbnMoKykKCmRpZmYgLS1naXQgYS9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL3JhbWZzL1ZvbHVtZS5jcHAgYi9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL3JhbWZzL1ZvbHVtZS5jcHAKaW5kZXggNzdkMGVlY2JkZi4uNmNjZDM5OTFlNCAxMDA2NDQKLS0tIGEvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9yYW1mcy9Wb2x1bWUuY3BwCisrKyBiL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvcmFtZnMvVm9sdW1lLmNwcApAQCAtMjIxLDYgKzIyMSwxMyBAQCBWb2x1bWU6Ok1vdW50KHVpbnQzMiBmbGFncykKIHN0YXR1c190CiBWb2x1bWU6OlVubW91bnQoKQogeworCS8vIEdpdmUgYmFjayB0aGUgcmVmZXJlbmNlIHB1Ymxpc2hfdm5vZGUoKSBnYXZlIHRoZSByb290IGF0IG1vdW50IHRpbWU6CisJLy8gZnNfdW5tb3VudCgpIGxlYXZlcyB0aGUgcm9vdCB2bm9kZSBvbiB0aGUgbW91bnQncyBsaXN0IGZvciB1cyB0byBwdXQsCisJLy8gYW5kIGFzc2VydHMgdGhhdCBsaXN0IGlzIGVtcHR5IGFmdGVyd2FyZHMuIFdoZW4gbW91bnRpbmcgZmFpbGVkLCBvcgorCS8vIHRoaXMgaXMgdGhlIFVubW91bnQoKSBhdCB0aGUgc3RhcnQgb2YgTW91bnQoKSwgaXQgd2FzIG5ldmVyIHB1Ymxpc2hlZC4KKwlpZiAoZk1vdW50ZWQgJiYgZlJvb3REaXJlY3RvcnkgIT0gTlVMTCkKKwkJcHV0X3Zub2RlKEZTVm9sdW1lKCksIGZSb290RGlyZWN0b3J5LT5HZXRJRCgpKTsKKwogCWZNb3VudGVkID0gZmFsc2U7CiAJLy8gZGVsZXRlIHRoZSByb290IGRpcmVjdG9yeQogCWlmIChmUm9vdERpcmVjdG9yeSkgewotLSAKMi41NC4wIChBcHBsZSBHaXQtMTU3KQoK' | base64 -d > fix1012.patch
+# | sha256sum fix1011.patch fix1012.patch
+# | cat > /opt/t/xb.sh <<'XB'
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | REV=hrev59996
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | R=objects/haiku/arm64/release/system
+# | git -C .. checkout -q -f 79292bc67f && git -C .. log -1 --format='trunk %H %s' || exit 1
+# | rm -rf $R $A
+# | s=$(date +%s)
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" "<revisioned>libroot.so" bfs ramfs ext2 btrfs > $O/jam-trunk.log 2>&1 || { tail -40 $O/jam-trunk.log; exit 1; }
+# | echo "JAM trunk ok wall=$(( $(date +%s) - s ))s"
+# | cp $R/kernel/revisioned/kernel_arm64 $O/kernel_arm64.trunk
+# | cp $R/libroot/revisioned/libroot.so $O/libroot.so.trunk
+# | for m in bfs ramfs ext2 btrfs; do cp $(find $A/$m -maxdepth 1 -type f -name $m) $O/$m.trunk || exit 1; done
+# | fixbuild() {	# fixbuild <label> <patch> <module>
+# | 	git -C .. checkout -q -f 79292bc67f
+# | 	git -C .. apply --check $O/$2 && git -C .. apply $O/$2 || return 1
+# | 	git -C .. diff --stat
+# | 	rm -rf $A/$3
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV $3 > $O/jam-$1.log 2>&1 || { tail -40 $O/jam-$1.log; return 1; }
+# | 	grep -E "warning:|error:" $O/jam-$1.log | grep -E "$3/" 
+# | 	cp $(find $A/$3 -maxdepth 1 -type f -name $3) $O/$3.$1 || return 1
+# | 	git -C .. checkout -q -f 79292bc67f
+# | }
+# | fixbuild fix1011 fix1011.patch ext2 || exit 1
+# | fixbuild fix1012 fix1012.patch ramfs || exit 1
+# | # rebuild the trunk modules from a clean tree to show the build reproduces bit for bit
+# | rm -rf $A/ext2 $A/ramfs
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV ext2 ramfs > $O/jam-trunk2.log 2>&1 || exit 1
+# | for m in ext2 ramfs; do cmp $(find $A/$m -maxdepth 1 -type f -name $m) $O/$m.trunk && echo "$m trunk rebuild identical"; done
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | cd $O
+# | for f in libroot.so.trunk; do ${X}objcopy -O binary --only-section=_haiku_revision $f /tmp/r.bin; echo "$f revision: $(tr -d '\0' < /tmp/r.bin)"; done
+# | echo "kernel exports check_sticky_permissions:"; ${X}nm -D kernel_arm64.trunk | grep check_sticky_permissions
+# | echo "ext2 IsEmpty symbol (trunk / fix1011):"; ${X}nm -C ext2.trunk | grep -c "Inode::IsEmpty"; ${X}nm -C ext2.fix1011 | grep "Inode::IsEmpty"
+# | echo "ramfs put_vnode import (trunk / fix1012):"; ${X}nm -D ramfs.trunk | grep -w put_vnode; ${X}nm -D ramfs.fix1012 | grep -w put_vnode
+# | cmp -s ext2.trunk ext2.fix1011 && { echo "ext2 fix identical to trunk?"; exit 1; }
+# | cmp -s ramfs.trunk ramfs.fix1012 && { echo "ramfs fix identical to trunk?"; exit 1; }
+# | sha256sum kernel_arm64.* libroot.so.* bfs.* ramfs.* ext2.* btrfs.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude 'jam-*' --exclude 'xb.*' . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/fs1011/out/ && echo uploaded
+# | XB
+# | nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc' > /dev/null 2>&1 &
+# | sleep 3; echo launched
+# ---- raw output ----
+09b536a1c71e74dc0e4e205ec008aa800e4018a17d0fe3898277de9bf324baa7  fix1011.patch
+c1d5561cd74ff84a6a492a0eea274500c890e0e5abe3061d8c31b28575e1e2df  fix1012.patch
+launched
++ mkdir -p /opt/t/out
++ cd /opt/t/out
++ rm -f xb.rc
++ base64 -d
++ echo RnJvbSAyMzYyOTUwNmYxZDE5ZjVmMWM5NWU5NTQxYmIyYjc3NTBkOTY4Yzc1IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDE4OjEwOjMxIC0wNjAw...<base64 elided, see the script section>
++ echo RnJvbSA3YzcyYThkZDBhZmQwYjdjYWM3NmZjMTgzZjU3MjYxOTYyYzhmZGE2IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDE4OjEwOjMyIC0wNjAw...<base64 elided, see the script section>
++ base64 -d
++ sha256sum fix1011.patch fix1012.patch
++ cat
++ sleep 3
++ nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc'
++ echo launched

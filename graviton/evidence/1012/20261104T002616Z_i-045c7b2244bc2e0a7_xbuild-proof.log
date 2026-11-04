@@ -1,0 +1,61 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-proof
+# instance: i-045c7b2244bc2e0a7   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: prove the built modules: jam target counts, ramfs put_vnode import, SHA256SUMS, S3 listing
+# start: 20261104T002616Z   end: 20261104T002628Z   rc: 0
+# script sha256: 5943d3c50b9a3f2046a2cbda417f629938c79de3bca318d2feedd6a1857d1b0d
+# ---- script ----
+# | # Proof for the module build (log /opt/t/out/xb.log): what jam updated in each pass, that
+# | # the fix1012 ramfs differs from trunk in Volume::Unmount (it now calls put_vnode), and the
+# | # staged SHA256SUMS.
+# | cd /opt/t/out
+# | grep -h "updated .* target" jam-trunk-attempt1.log jam-trunk.log jam-fix1011.log jam-fix1012.log jam-trunk2.log
+# | X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | echo "ramfs dynamic imports matching put_vnode (trunk / fix1012):"; ${X}nm -D ramfs.trunk | grep put_vnode; echo --; ${X}nm -D ramfs.fix1012 | grep put_vnode
+# | echo "calls to put_vnode inside Volume::Unmount (trunk / fix1012):"
+# | for f in ramfs.trunk ramfs.fix1012; do ${X}objdump -d -C $f | awk '/<Volume::Unmount\(\)>:/{p=1} p&&/^$/{p=0} p' | grep -c "put_vnode"; done
+# | cat SHA256SUMS
+# | aws s3 ls s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/fs1011/out/
+# ---- raw output ----
+...updated 856 target(s)...
+...updated 960 target(s)...
+...updated 24 target(s)...
+...updated 28 target(s)...
+...updated 23 target(s)...
+...updated 17 target(s)...
+...updated 327 target(s)...
+...updated 952 target(s)...
+...updated 22 target(s)...
+...updated 28 target(s)...
+...updated 23 target(s)...
+...updated 23 target(s)...
+...updated 28 target(s)...
+...updated 23 target(s)...
+...updated 28 target(s)...
+ramfs dynamic imports matching put_vnode (trunk / fix1012):
+                 U put_vnode@KERNEL_BASE
+                 U vfs_put_vnode@KERNEL_BASE
+--
+                 U put_vnode@KERNEL_BASE
+                 U vfs_put_vnode@KERNEL_BASE
+calls to put_vnode inside Volume::Unmount (trunk / fix1012):
+0
+1
+a9173dbaa0584b102e22a8f56d7134c5c6d51f23634ec2d0b02045985bf13105  kernel_arm64.trunk
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  bfs.trunk
+962ffd941436354ccd4318698f3945d1acb5c4c0bc020d6ba054fc75b5c09960  ramfs.fix1012
+d6acb3318a46c7fbe0a6330a4575769cd3c263d2301c547c35a54ecc8577dc40  ramfs.trunk
+e395f8e48fe70b1bf3c5e17a3907a52e3fa150a7e7127e01a87c49baaf6f097b  ext2.fix1011
+d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  ext2.trunk
+2026-11-04 00:24:20        558 SHA256SUMS
+2026-11-04 00:24:20     276931 bfs.trunk
+2026-11-04 00:24:20     195483 ext2.fix1011
+2026-11-04 00:24:20     194883 ext2.trunk
+2026-11-04 00:24:20       4715 fix1011.patch
+2026-11-04 00:24:20       1563 fix1012.patch
+2026-11-04 00:24:20    2551417 kernel_arm64.trunk
+2026-11-04 00:24:20    1366771 libroot.so.trunk
+2026-11-04 00:24:20     279187 ramfs.fix1012
+2026-11-04 00:24:20     279155 ramfs.trunk
+2026-11-04 00:24:20      24252 xb-attempt1.log
