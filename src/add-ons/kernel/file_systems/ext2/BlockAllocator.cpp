@@ -148,6 +148,12 @@ AllocationBlockGroup::Initialize(Volume* volume, uint32 blockGroup,
 		fLargestLength = fFreeBits;
 		fLargestStart = _FirstFreeBlock();
 		TRACE("Group %" B_PRIu32 " is uninit\n", fBlockGroup);
+		// An aborted transaction restores these: left at zero, the first
+		// abort in this group would make it look full until the next mount.
+		fPreviousFreeBits = fFreeBits;
+		fPreviousFirstFree = fFirstFree;
+		fPreviousLargestStart = fLargestStart;
+		fPreviousLargestLength = fLargestLength;
 		return B_OK;
 	}
 	

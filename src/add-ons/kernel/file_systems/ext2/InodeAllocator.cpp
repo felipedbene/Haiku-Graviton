@@ -149,19 +149,24 @@ InodeAllocator::_AllocateInGroup(Transaction& transaction, uint32 blockGroup,
 		return B_DEVICE_FULL;
 	TRACE("InodeAllocator::_Allocate() freeInodes %" B_PRId32 "\n",
 		freeInodes);
-	group->SetFreeInodes(freeInodes - 1, fVolume->Has64bitFeature());
-	if (isDirectory) {
-		group->SetUsedDirectories(group->UsedDirectories(
-			fVolume->Has64bitFeature()) + 1,
-			fVolume->Has64bitFeature());
-	}
-	
+
 	uint32 pos = 0;
 	uint32 checksum = 0;
 	status = _MarkInBitmap(transaction, block, blockGroup, 
 		fVolume->InodesPerGroup(), pos, checksum);
 	if (status != B_OK)
 		return status;
+
+	// Only now that the inode is really taken: on failure, _Allocate() goes
+	// on to the next group, and writing that one's descriptor block (which
+	// may hold this descriptor too) would write out counts for an inode
+	// that was never marked.
+	group->SetFreeInodes(freeInodes - 1, fVolume->Has64bitFeature());
+	if (isDirectory) {
+		group->SetUsedDirectories(group->UsedDirectories(
+			fVolume->Has64bitFeature()) + 1,
+			fVolume->Has64bitFeature());
+	}
 
 	if ((fVolume->HasChecksumFeature() || fVolume->HasMetaGroupChecksumFeature())
 		&& pos > (fVolume->InodesPerGroup()

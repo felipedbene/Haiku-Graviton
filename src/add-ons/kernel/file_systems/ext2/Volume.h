@@ -153,6 +153,9 @@ private:
 			uint32				_GroupDescriptorBlock(uint32 blockIndex);
 			uint16				_GroupCheckSum(ext2_block_group *group,
 									int32 index);
+			void				_ListenToTransaction(
+									Transaction& transaction);
+			status_t			_ReloadGroupDescriptors();
 			void				_SuperBlockChecksumSeed();
 			bool				_VerifySuperBlock();
 
