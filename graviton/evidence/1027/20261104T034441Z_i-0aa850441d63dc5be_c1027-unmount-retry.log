@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1027-unmount-retry
+# instance: i-0aa850441d63dc5be   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1027: retry the FAT unmount that returned EBUSY
+# start: 20261104T034441Z   end: 20261104T034452Z   rc: 0
+# script sha256: 7f4f9d0a81c955fbf820d804f44e37c87ee99f37df5a1c8f1ae7bf3f356fb80a
+# ---- script ----
+# | # Retry the FAT unmount that returned EBUSY in c1027-verify, after a pause.
+# | cd /boot/home/t1027
+# | sleep 5
+# | df | grep -E "f1027|e1027"
+# | sh diskimage1027.sh unmount /f1027
+# ---- raw output ----
+[1m/f1027            [0m
+unmount /f1027 rc=0

@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1026-write
+# instance: i-050bea36283110776   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1026: diskimage1027 write phase on FAT and ext2
+# start: 20261104T033712Z   end: 20261104T033834Z   rc: 0
+# script sha256: 880eb6fd75b0263b173fbf5fe1daad0b6fc87ba8b1b17720eee69adf80e42e59
+# ---- script ----
+# | # Phase "write" on FAT (/dev/disk/virtual/files/3/raw) and ext2 (.../4/raw).
+# | cd /boot/home/t1027
+# | sh diskimage1027.sh write /dev/disk/virtual/files/3/raw /f1027 fat
+# | sh diskimage1027.sh write /dev/disk/virtual/files/4/raw /e1027 ext2
+# | grep -E "failed to lock memory|PageWriteWrapper|writeback is making no progress" /var/log/syslog | sort | uniq -c | sort -rn | head -5
+# | true
+# ---- raw output ----
+31e33b9a248d66df7f2b11c8e8d1677b  /f1027/lin-1m
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+da8b4cffe0141f822edd3d3890bbe8a5  h-1m
+write-back failures logged during this phase: 15
+31e33b9a248d66df7f2b11c8e8d1677b  /e1027/lin-1m
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+e8952ec99314a29f9a930cd0624bad76  h-1m
+write-back failures logged during this phase: 24
+     39 KERN: [33mnvme_disk:[0m failed to lock memory: Bad address
+     23 KERN: PageWriteWrapper: Failed to write page 0xffff00000339b1f0: Bad address
+     23 KERN: PageWriteWrapper: Failed to write page 0xffff00000338c8d0: Bad address
+      9 KERN: PageWriteWrapper: Failed to write page 0xffff00000391eff0: Bad address
+      9 KERN: PageWriteWrapper: Failed to write page 0xffff0000032cd610: Bad address
+md5sum: /f1027/lin-small: Bad address
+md5sum: /e1027/lin-small: Bad address

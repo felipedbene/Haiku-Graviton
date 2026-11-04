@@ -1,0 +1,43 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-c1026
+# instance: i-00a78fb56d95b727e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical haiku.hpkg with kernel_arm64.fix1026
+# start: 20261104T033253Z   end: 20261104T033348Z   rc: 0
+# script sha256: f5fcb4ae706be8577428cd7aee1198ef532393bc2b9f34b5c6368af8822488e5
+# ---- script ----
+# | # Repack arm "c1026": canonical haiku.hpkg with kernel_arm64.fix1026 (trunk a9954f424a, fix1026, revision
+# | # hrev59996); everything else stays canonical's. A fresh launch of an image of this box boots it.
+# | # Method of #898/#933/#1011. (Second pass on this box: the first put the wrong kernel in.)
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O kernel_arm64.fix1026 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/out2/kernel_arm64.fix1026?<PRESIGNED>
+# | echo 'b29b97a45d2722c9a7a974068dcafeb25d17bb231bc3a9cc9edd89ab1fbb19d0  kernel_arm64.fix1026' | sha256sum -c
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | sha256sum x/kernel_arm64 x/lib/libroot.so x/add-ons/kernel/file_systems/fat
+# | cat kernel_arm64.fix1026 > x/kernel_arm64
+# | sha256sum x/kernel_arm64 x/lib/libroot.so x/add-ons/kernel/file_systems/fat
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+Validating checksum for DeBeOS...done.
+kernel_arm64.fix1026: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+0f30f78ef77cedaa6bd809c45f753a78245c11672b240886e56f06944a0f85e1  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+e925aaa5624101f77bc8000a62a3851a714f5c76f57a23261ced16591343671c  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  x/add-ons/kernel/file_systems/fat
+b29b97a45d2722c9a7a974068dcafeb25d17bb231bc3a9cc9edd89ab1fbb19d0  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  x/add-ons/kernel/file_systems/fat
+----- Package Info ----------------
+header size:                     80
+heap size:                 20508560
+TOC size:                    324054
+package attributes size:       1100
+total size:                20508640
+-----------------------------------
+-rw-r--r-- 1 baron root 20508640 Nov  4 03:33 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20509245 Nov  4 03:32 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+5a652bfbc7e5c9c6ebab12b26e4e02f10863a7c7592135c34dfd78ead5f8adaf  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

@@ -1,0 +1,75 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: mkimgs
+# instance: i-02c7b790e3e31cf94   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: make the FAT32 and ext2 test images with two Linux-written files each
+# start: 20261104T033040Z   end: 20261104T033051Z   rc: 0
+# script sha256: fd7c8e342e98b0ef88d1a2f5fdd69491943ec8bdd6ab8bb0db1aeaf53dfadd43
+# ---- script ----
+# | # Test images for #1026/#1027, made by Ubuntu tools (256 MiB, unpartitioned, as diskimage
+# | # registers a file): fat.img (mkfs.vfat -F 32) with two Linux-written files to read back on
+# | # Haiku (lin-1m: 1 MiB random, lin-small: 3 bytes), and ext2.img (mkfs.ext2) with the same
+# | # two files, a second file system on a diskimage device as a regression check.
+# | set -x
+# | mkdir -p /opt/img2 && cd /opt/img2 && rm -rf ./*
+# | head -c 1048576 /dev/urandom > lin-1m; printf 'abc' > lin-small; md5sum lin-1m lin-small
+# | truncate -s 256M fat.img && mkfs.vfat -F 32 -n FAT1027 fat.img || exit 1
+# | truncate -s 256M ext2.img && mkfs.ext2 -q -F ext2.img || exit 1
+# | mkdir -p m
+# | mount -t vfat -o loop fat.img m && cp lin-1m lin-small m/ && sync && md5sum m/lin-1m m/lin-small && umount m || exit 1
+# | mount -t ext2 -o loop ext2.img m && cp lin-1m lin-small m/ && chmod 666 m/lin-1m m/lin-small && chmod 777 m && sync && umount m || exit 1
+# | fsck.vfat -n fat.img; echo "fsck.vfat rc=$?"; e2fsck -fn ext2.img; echo "e2fsck rc=$?"
+# | sha256sum fat.img ext2.img
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/E
+# | aws s3 cp --quiet fat.img $B/img2/fat.img && aws s3 cp --quiet ext2.img $B/img2/ext2.img && echo uploaded
+# ---- raw output ----
+31e33b9a248d66df7f2b11c8e8d1677b  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+mkfs.fat 4.2 (2021-01-31)
+31e33b9a248d66df7f2b11c8e8d1677b  m/lin-1m
+900150983cd24fb0d6963f7d28e17f72  m/lin-small
+fsck.fat 4.2 (2021-01-31)
+fat.img: 3 files, 2050/516190 clusters
+fsck.vfat rc=0
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+ext2.img: 13/65536 files (7.7% non-contiguous), 4398/65536 blocks
+e2fsck rc=0
+5b707ee57aeda7633e591f476c64a90c2b1da80fb9629bc1c67199d4c2e12cb1  fat.img
+0816a611c04430a1684a2648a0ed54a230037f2ea37460c0cfe956753c0ff497  ext2.img
+uploaded
++ mkdir -p /opt/img2
++ cd /opt/img2
++ rm -rf './*'
++ head -c 1048576 /dev/urandom
++ printf abc
++ md5sum lin-1m lin-small
++ truncate -s 256M fat.img
++ mkfs.vfat -F 32 -n FAT1027 fat.img
++ truncate -s 256M ext2.img
++ mkfs.ext2 -q -F ext2.img
++ mkdir -p m
++ mount -t vfat -o loop fat.img m
++ cp lin-1m lin-small m/
++ sync
++ md5sum m/lin-1m m/lin-small
++ umount m
++ mount -t ext2 -o loop ext2.img m
++ cp lin-1m lin-small m/
++ chmod 666 m/lin-1m m/lin-small
++ chmod 777 m
++ sync
++ umount m
++ fsck.vfat -n fat.img
++ echo 'fsck.vfat rc=0'
++ e2fsck -fn ext2.img
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck rc=0'
++ sha256sum fat.img ext2.img
+++ aws sts get-caller-identity --query Account --output text
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E
++ aws s3 cp --quiet fat.img s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/img2/fat.img
++ aws s3 cp --quiet ext2.img s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/img2/ext2.img
++ echo uploaded

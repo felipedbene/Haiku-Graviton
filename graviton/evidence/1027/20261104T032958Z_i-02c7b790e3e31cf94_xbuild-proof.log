@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-proof
+# instance: i-02c7b790e3e31cf94   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: symbol sizes: free_vnode and FileDevice::Read/Write in each kernel build
+# start: 20261104T032958Z   end: 20261104T033008Z   rc: 0
+# script sha256: 67e38b63274cef2f75ca8f9e29a9adc6d3fdc796e8947033ea9e708e9f255f8b
+# ---- script ----
+# | # Which kernel carries which change: free_vnode() and FileDevice::Read/Write sizes per build.
+# | cd /opt/t/out; X=/opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | for l in trunk fix1026 fix1027 both; do echo "== $l"; ${X}nm -S -C kernel_arm64.$l | grep -E "free_vnode|FileDevice::(Read|Write)" ; done
+# ---- raw output ----
+== trunk
+ffff00000012f0c8 00000000000002f0 t free_vnode(vnode*, bool)
+ffff0000000ffb20 0000000000000058 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb20 0000000000000058 t BPrivate::FileDevice::Read(void*, long, void*, unsigned long*) [clone .localalias]
+ffff0000000ffb80 0000000000000058 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+ffff0000000ffb80 0000000000000058 t BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*) [clone .localalias]
+== fix1026
+ffff00000012f0c8 0000000000000338 t free_vnode(vnode*, bool)
+ffff0000000ffb20 0000000000000058 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb20 0000000000000058 t BPrivate::FileDevice::Read(void*, long, void*, unsigned long*) [clone .localalias]
+ffff0000000ffb80 0000000000000058 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+ffff0000000ffb80 0000000000000058 t BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*) [clone .localalias]
+== fix1027
+ffff00000012f2a8 00000000000002f0 t free_vnode(vnode*, bool)
+ffff0000000ffb20 0000000000000150 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb20 0000000000000150 t BPrivate::FileDevice::Read(void*, long, void*, unsigned long*) [clone .localalias]
+ffff0000000ffc70 0000000000000144 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+ffff0000000ffc70 0000000000000144 t BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*) [clone .localalias]
+== both
+ffff00000012f2a8 0000000000000338 t free_vnode(vnode*, bool)
+ffff0000000ffb20 0000000000000150 T BPrivate::FileDevice::Read(void*, long, void*, unsigned long*)
+ffff0000000ffb20 0000000000000150 t BPrivate::FileDevice::Read(void*, long, void*, unsigned long*) [clone .localalias]
+ffff0000000ffc70 0000000000000144 T BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*)
+ffff0000000ffc70 0000000000000144 t BPrivate::FileDevice::Write(void*, long, void const*, unsigned long*) [clone .localalias]

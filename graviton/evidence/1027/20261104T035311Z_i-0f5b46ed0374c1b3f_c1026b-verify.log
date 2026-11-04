@@ -1,0 +1,38 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1026b-verify
+# instance: i-0f5b46ed0374c1b3f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1026b: unmount ext2, remount both and md5 from disk
+# start: 20261104T035311Z   end: 20261104T035330Z   rc: 0
+# script sha256: 8a0af1e5986b23f05c28918e7057571a8f88665730d5733618ef6de91103e421
+# ---- script ----
+# | # Phase "unmount" on ext2, then "verify" on both volumes (remount, md5 from disk), unmount again.
+# | cd /boot/home/t1027
+# | sh diskimage1027.sh unmount /e1027
+# | sh diskimage1027.sh verify /dev/disk/virtual/files/3/raw /f1027 fat
+# | sh diskimage1027.sh unmount /f1027
+# | sh diskimage1027.sh verify /dev/disk/virtual/files/4/raw /e1027 ext2
+# | sh diskimage1027.sh unmount /e1027
+# | true
+# ---- raw output ----
+unmount /e1027 rc=0
+31e33b9a248d66df7f2b11c8e8d1677b  /f1027/lin-1m
+h-2b: FAILED open or read
+h-4k: FAILED open or read
+h-1m: OK
+verify rc=1
+unmount /f1027 rc=1
+31e33b9a248d66df7f2b11c8e8d1677b  /e1027/lin-1m
+h-2b: FAILED open or read
+h-4k: FAILED open or read
+h-1m: OK
+verify rc=1
+unmount /e1027 rc=0
+md5sum: /f1027/lin-small: Bad address
+md5sum: h-2b: Bad address
+md5sum: h-4k: Bad address
+md5sum: WARNING: 2 listed files could not be read
+unmount: unmounting failed: Device/File/Resource busy
+md5sum: /e1027/lin-small: Bad address
+md5sum: h-2b: Bad address
+md5sum: h-4k: Bad address
+md5sum: WARNING: 2 listed files could not be read

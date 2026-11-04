@@ -1,0 +1,59 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-fat
+# instance: i-02c7b790e3e31cf94   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build fat.fix1026 (dosfs_release_vnode commit) and trunk fat at a9954f424a (hrev59996), plus <build>fat_shell
+# start: 20261104T034356Z   end: 20261104T034426Z   rc: 0
+# script sha256: 415ce16968c4a8bc9ccd07278f595ae7ef1ad58b218b4f7988d60cd7cf5acf13
+# ---- script ----
+# | # Build fat.fix1026 (trunk a9954f424a + the dosfs_release_vnode() commit), and trunk fat, both at
+# | # hrev59996; force fat's kernel_interface.o to rebuild (1 s mtimes, see xbuild).
+# | set -x
+# | O=/opt/t/out; cd /opt/t/hg/generated
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems/fat
+# | echo 'RnJvbSA0Yjc2MzQ0NTVmYjQ5MzVlNDM2Y2Q4NTMzNjU2Y2M5NDkzNzFiZDQ4IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDIxOjQzOjM0IC0wNjAwClN1YmplY3Q6IFtQQVRDSF0gZmF0OiBkbyBub3QgZmx1c2ggdGhlIGZpbGUgY2FjaGUgYWdhaW4gaW4KIGRvc2ZzX3JlbGVhc2Vfdm5vZGUoKQoKZnJlZV92bm9kZSgpIGZsdXNoZXMgYSB2bm9kZSdzIGNhY2hlIHRocm91Z2ggdGhlIGZzeW5jIGhvb2
+# | git -C .. checkout -q -f a9954f424a
+# | rm -rf $A; jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 fat > $O/jam-fat-trunk.log 2>&1 || exit 1; cp $A/fat $O/fat.trunk
+# | git -C .. apply $O/fix1026-fat.patch && git -C .. diff --stat
+# | rm -rf $A; jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 fat > $O/jam-fat-fix1026.log 2>&1 || { tail -30 $O/jam-fat-fix1026.log; exit 1; }
+# | grep -E "warning:|error:" $O/jam-fat-fix1026.log | grep kernel_interface
+# | cp $A/fat $O/fat.fix1026
+# | jam -q -j$(nproc) "<build>fat_shell" > $O/jam-fatshell-1026.log 2>&1; echo "JAM <build>fat_shell rc=$?"
+# | git -C .. checkout -q -f a9954f424a
+# | cd $O; sha256sum fat.trunk fat.fix1026
+# | aws s3 cp --quiet fat.fix1026 s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/E/out2/fat.fix1026 && echo uploaded
+# ---- raw output ----
+d6ac9f87637d86f4b2a0fbd4013e46eea01381f7965a26eb8548944ec23cd8f2  /opt/t/out/fix1026-fat.patch
+ src/add-ons/kernel/file_systems/fat/kernel_interface.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+JAM <build>fat_shell rc=0
+3ff2c11723aa9f01a99d3d59f9eea917fa90768f4f4c6619375c6782592d70ca  fat.trunk
+a58037848f1ca30e1c759781506c0d0790757e96a23a0f8397d151203b29b50c  fat.fix1026
+uploaded
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems/fat
++ echo RnJvbSA0Yjc2MzQ0NTVmYjQ5MzVlNDM2Y2Q4NTMzNjU2Y2M5NDkzNzFiZDQ4IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDIxOjQzOjM0IC0wNjAwClN1YmplY3Q6IFtQQVRDSF0gZmF0OiBkbyBub3QgZmx1c2ggdGhlIGZpbGUgY2FjaGUgYWdhaW4gaW4KIGRvc2ZzX3JlbGVhc2Vfdm5vZGUoKQoKZnJlZV92bm9kZSgpIGZsdXNoZXMgYSB2bm9kZSdzIGNhY2hlIHRocm91Z2ggdGhlIGZzeW5jIGhvb2sgYW5kIHRoZW4KY2FsbHMgcHV0X3Zub2RlKCksIGRvc2ZzX3JlbGVhc2Vfdm5vZGUoKSwgd2l0aCB0aGUgbm9kZSdzIHJlZmVyZW5jZQpjb3VudCBhbHJlYWR5IG5lZ2F0aXZlLiBkb3Nmc19yZWxlYXNlX3Zub2RlKCkgY2FsbGVkIGZpbGVfY2FjaGVfc3luYygpCm9uY2UgbW9yZS4gV2hlbiBwYWdlcyBhcmUgc3RpbGwgbW9kaWZpZWQgYXQgdGhhdCBwb2ludCAtLSB0aGVpcgp3cml0ZS1iYWNrIGZhaWxlZCAtLSB0aGF0IGlzc3VlcyBJL08gdGhyb3VnaCBkb3Nmc19pbygpLCB3aGljaAphY3F1aXJlX3Zub2RlKClzIHRoZSBub2RlIChBU1NFUlQgb2xkQ291bnQgPj0gMCB3aXRoIHRoZSBmcmVlX3Zub2RlKCkKZml4LCAibm9kZSB3YXNuJ3QgdXNlZCEiIHdpdGhvdXQgaXQpLCBhbmQgdGhlIEkvTyBjb3VsZCBmaW5pc2ggYWZ0ZXIKdGhlIG5vZGUgaXMgZnJlZWQgYSBmZXcgbGluZXMgZnVydGhlciBkb3duLgoKRHJvcCB0aGUgc2Vjb25kIGZsdXNoOyBCRlMncyBwdXRfdm5vZGUgaG9vayBkb2VzIG5vdCBmbHVzaCBlaXRoZXIuCgpGaXhlcyAjMTAyNgotLS0KIHNyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZmF0L2tlcm5lbF9pbnRlcmZhY2UuY3BwIHwgNiArKysrKy0KIDEgZmlsZSBjaGFuZ2VkLCA1IGluc2VydGlvbnMoKyksIDEgZGVsZXRpb24oLSkKCmRpZmYgLS1naXQgYS9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2ZhdC9rZXJuZWxfaW50ZXJmYWNlLmNwcCBiL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZmF0L2tlcm5lbF9pbnRlcmZhY2UuY3BwCmluZGV4IDY3YzhkNDQ0MWUuLjQzODAwODkxODEgMTAwNjQ0Ci0tLSBhL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZmF0L2tlcm5lbF9pbnRlcmZhY2UuY3BwCisrKyBiL3NyYy9hZGQtb25zL2tlcm5lbC9maWxlX3N5c3RlbXMvZmF0L2tlcm5lbF9pbnRlcmZhY2UuY3BwCkBAIC04NDksNyArODQ5LDExIEBAIGRvc2ZzX3JlbGVhc2Vfdm5vZGUoZnNfdm9sdW1lKiB2b2x1bWUsIGZzX3Zub2RlKiB2bm9kZSwgYm9vbCByZWVudGVyKQogCX0KIAogCWlmIChic2ROb2RlLT52X3R5cGUgPT0gVlJFRykgewotCQlzdGF0dXMgPSBmaWxlX2NhY2hlX3N5bmMoYnNkTm9kZS0+dl9jYWNoZSk7CisJCS8vIE5vIGZpbGVfY2FjaGVfc3luYygpIGhlcmU6IGZyZWVfdm5vZGUoKSBmbHVzaGVkIHRoZSBjYWNoZSB0aHJvdWdoIG91ciBmc3luYyBob29rCisJCS8vIHJpZ2h0IGJlZm9yZSBjYWxsaW5nIHVzLCBhbmQgdGhlIG5vZGUncyByZWZlcmVuY2UgY291bnQgaXMgYWxyZWFkeSBuZWdhdGl2ZSBub3cuCisJCS8vIFBhZ2VzIHN0aWxsIG1vZGlmaWVkIGF0IHRoaXMgcG9pbnQgYXJlIG9uZXMgd2hvc2Ugd3JpdGUtYmFjayBmYWlsZWQ7IHdyaXRpbmcgdGhlbQorCQkvLyBhZ2FpbiB3b3VsZCBhY3F1aXJlX3Zub2RlKCkgYSBub2RlIHRoYXQgY2FuIG5vIGxvbmdlciBiZSByZWZlcmVuY2VkLCBhbmQgdGhlIEkvTworCQkvLyBjb3VsZCBmaW5pc2ggYWZ0ZXIgdGhlIG5vZGUgaXMgZnJlZWQgYmVsb3cuCiAJCWZpbGVfY2FjaGVfZGVsZXRlKGJzZE5vZGUtPnZfY2FjaGUpOwogCQlmaWxlX21hcF9kZWxldGUoYnNkTm9kZS0+dl9maWxlX21hcCk7CiAJfSBlbHNlIHsKLS0gCjIuNTQuMCAoQXBwbGUgR2l0LTE1NykKCg==
++ base64 -d
++ sha256sum /opt/t/out/fix1026-fat.patch
++ git -C .. checkout -q -f a9954f424a
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 fat
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat /opt/t/out/fat.trunk
++ git -C .. apply /opt/t/out/fix1026-fat.patch
++ git -C .. diff --stat
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/fat
+++ nproc
++ jam -q -j64 -sHAIKU_REVISION=hrev59996 fat
++ grep -E 'warning:|error:' /opt/t/out/jam-fat-fix1026.log
++ grep kernel_interface
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/fat/fat /opt/t/out/fat.fix1026
+++ nproc
++ jam -q -j64 '<build>fat_shell'
++ echo 'JAM <build>fat_shell rc=0'
++ git -C .. checkout -q -f a9954f424a
++ cd /opt/t/out
++ sha256sum fat.trunk fat.fix1026
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet fat.fix1026 s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/out2/fat.fix1026
++ echo uploaded

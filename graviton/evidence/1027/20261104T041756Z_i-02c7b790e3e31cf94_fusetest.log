@@ -1,0 +1,141 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: fusetest
+# instance: i-02c7b790e3e31cf94   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: fat_fuse chown with the #970 FAT fix, fuse_chown() before/after
+# start: 20261104T041756Z   end: 20261104T041825Z   rc: 0
+# script sha256: eff667c94c524bc4d97233e725501ba6f1694324414e6d5505de5a4b3e0b8e9a
+# ---- script ----
+# | # #1032 review finding: fat_fuse's chown with the #970 FAT fix, fs_shell fuse.cpp before and
+# | # after the fuse_chown() fix. Build <build>fat_fuse from trunk a9954f424a + the #970 fat commit
+# | # (arm "old"), then + the fuse commit (arm "new"); mount the Linux-made fat.img with each (as
+# | # root) and run, on the Linux-written lin-small (fs_shell FUSE presents the volume under myfs/), "chown 0 f", "chgrp 0 f", "chown 0:0 f" and "chown 1002 f".
+# | set -x
+# | O=/opt/t/out; cd /opt/t/hg/generated
+# | echo 'RnJvbSBiNDAzOTI2YWFlZGRkNjYzZDQ5MDc5N2VkZTg1YmZmODMyZDQ2M2U0IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDIwOjI4OjQ2IC0wNjAwClN1YmplY3Q6IFtQQVRDSF0gZmF0OiByZWZ1c2UgY2hvd24oKS9jaGdycCgpIHRvIGFuIGlkIG90aGVyIHRoYW4gdGhlIHZvbHVtZSdzCiB3aXRoIEVQRVJNCgpGQVQgc3RvcmVzIG5vIG93bmVyOyBldmVyeSBub2RlIGJlbG9uZ3MgdG8gdGhlIHZvbH
+# | ls -l /dev/fuse; modprobe fuse 2>/dev/null; true
+# | F=objects/linux/arm64/release/tools/fat_shell/fat_fuse
+# | cp /opt/img2/fat.img /opt/fusetest.img 2>/dev/null || exit 1
+# | for arm in old new; do
+# | 	git -C .. checkout -q -f a9954f424a && git -C .. apply $O/fix970.patch || exit 1
+# | 	[ $arm = new ] && { git -C .. apply $O/fixfuse.patch || exit 1; }
+# | 	find objects/linux -path "*tools*" \( -name "fuse.o" -o -name "kernel_interface.o" \) -path "*fat*" -delete
+# | 	find objects/linux -path "*tools/fs_shell*" -name "fuse.o" -delete; rm -f $F
+# | 	jam -q -j$(nproc) "<build>fat_fuse" > $O/jam-fusetest-$arm.log 2>&1; echo "JAM fat_fuse $arm rc=$?"
+# | 	mkdir -p /mnt/ff && ($F /opt/fusetest.img /mnt/ff > /tmp/ff-$arm.log 2>&1 &) ; sleep 3
+# | 	grep " /mnt/ff " /proc/mounts || { cat /tmp/ff-$arm.log | tail -5; continue; }
+# | 	ls -la /mnt/ff/myfs; T=myfs/$(ls /mnt/ff/myfs | grep -i "lin-small" | head -1); echo "target: $T"; ls -ln "/mnt/ff/$T"
+# | 	chown 0 /mnt/ff/$T; echo "$arm: chown 0 rc=$?"
+# | 	chgrp 0 /mnt/ff/$T; echo "$arm: chgrp 0 rc=$?"
+# | 	chown 0:0 /mnt/ff/$T; echo "$arm: chown 0:0 rc=$?"
+# | 	chown 1002 /mnt/ff/$T; echo "$arm: chown 1002 rc=$? (EPERM expected: FAT stores no owner)"
+# | 	fusermount -u /mnt/ff || umount /mnt/ff; sleep 1
+# | done
+# | git -C .. checkout -q -f a9954f424a
+# ---- raw output ----
+5be10cc4b21433fd945c1cdcdc3c6d2f6827d8d6967c98f114db03a443425302  /opt/t/out/fix970.patch
+5317e17018a47cecd2cb61a8633a17ee60ac3a3c2715aacfd05720c004df2ae0  /opt/t/out/fixfuse.patch
+crw-rw-rw- 1 root root 10, 229 Nov  4 03:24 /dev/fuse
+JAM fat_fuse old rc=0
+/opt/fusetest.img /mnt/ff fuse rw,nosuid,nodev,relatime,user_id=0,group_id=0,allow_other 0 0
+total 1025
+drwxr-xr-x 1 root root     512 Jan  1  1980 .
+drwxr-xr-x 1 root root       0 Nov  4 04:18 ..
+-rw-r--r-- 1 root root 1048576 Nov  4 03:30 lin-1m
+-rw-r--r-- 1 root root       3 Nov  4 03:30 lin-small
+target: myfs/lin-small
+-rw-r--r-- 1 0 0 3 Nov  4 03:30 /mnt/ff/myfs/lin-small
+old: chown 0 rc=1
+old: chgrp 0 rc=1
+old: chown 0:0 rc=0
+old: chown 1002 rc=1 (EPERM expected: FAT stores no owner)
+JAM fat_fuse new rc=0
+/opt/fusetest.img /mnt/ff fuse rw,nosuid,nodev,relatime,user_id=0,group_id=0,allow_other 0 0
+total 1025
+drwxr-xr-x 1 root root     512 Jan  1  1980 .
+drwxr-xr-x 1 root root       0 Nov  4 04:18 ..
+-rw-r--r-- 1 root root 1048576 Nov  4 03:30 lin-1m
+-rw-r--r-- 1 root root       3 Nov  4 03:30 lin-small
+target: myfs/lin-small
+-rw-r--r-- 1 0 0 3 Nov  4 03:30 /mnt/ff/myfs/lin-small
+new: chown 0 rc=0
+new: chgrp 0 rc=0
+new: chown 0:0 rc=0
+new: chown 1002 rc=1 (EPERM expected: FAT stores no owner)
++ O=/opt/t/out
++ cd /opt/t/hg/generated
++ echo RnJvbSBiNDAzOTI2YWFlZGRkNjYzZDQ5MDc5N2VkZTg1YmZmODMyZDQ2M2U0IE1vbiBTZXAgMTcgMDA6MDA6MDAgMjAwMQpGcm9tOiBGZWxpcGUgRGUgQmVuZSA8YmVuZmVsaXBAYW1hem9uLmNvbT4KRGF0ZTogVHVlLCAzIE5vdiAyMDI2IDIwOjI4OjQ2IC0wNjAwClN1YmplY3Q6IFtQQVRDSF0gZmF0OiByZWZ1c2UgY2hvd24oKS9jaGdycCgpIHRvIGFuIGlkIG90aGVyIHRoYW4gdGhlIHZvbHVtZSdzCiB3aXRoIEVQRVJNCgpGQVQgc3RvcmVzIG5vIG93bmVyOyBldmVyeSBub2RlIGJlbG9uZ3MgdG8gdGhlIHZvbHVtZSdzIHBtX3VpZC9wbV9naWQuCmRvc2ZzX3dzdGF0KCkgc2V0IEJfQkFEX1ZBTFVFIGZvciBhbnkgb3RoZXIgdWlkIG9yIGdpZCwgYnV0IGRpZCBub3QKcmV0dXJuOiBkZXVwZGF0KCkncyBzdGF0dXMgb3Zlcndyb3RlIGl0IGZ1cnRoZXIgZG93biwgc28gcm9vdCdzIGNob3duKCkKdG8gYW5vdGhlciBpZCByZXBvcnRlZCBzdWNjZXNzIGFuZCBjaGFuZ2VkIG5vdGhpbmcsIGFuZCBhIGNhbGxlciBjb3VsZApub3QgdGVsbCBpdHMgY2hhbmdlIHdhcyBkcm9wcGVkLgoKUmVmdXNlIGl0IHVwIGZyb250IHdpdGggQl9OT1RfQUxMT1dFRCAoRVBFUk0pLCBuZXh0IHRvIHRoZSBwZXJtaXNzaW9uCmNoZWNrIGFuZCBiZWZvcmUgYW55dGhpbmcgaXMgY2hhbmdlZCwgYXMgTGludXggdmZhdCBkb2VzIHdpdGhvdXQgaXRzCiJxdWlldCIgb3B0aW9uLiBBIGNob3duKCkvY2hncnAoKSB0byB0aGUgdm9sdW1lJ3Mgb3duIGlkcyBzdGF5cyBhIG5vLW9wCnRoYXQgc3VjY2VlZHMuCgpGaXhlcyAjOTcwCi0tLQogLi4uL2ZpbGVfc3lzdGVtcy9mYXQva2VybmVsX2ludGVyZmFjZS5jcHAgICAgIHwgMjEgKysrKysrKystLS0tLS0tLS0tLQogMSBmaWxlIGNoYW5nZWQsIDkgaW5zZXJ0aW9ucygrKSwgMTIgZGVsZXRpb25zKC0pCgpkaWZmIC0tZ2l0IGEvc3JjL2FkZC1vbnMva2VybmVsL2ZpbGVfc3lzdGVtcy9mYXQva2VybmVsX2ludGVyZmFjZS5jcHAgYi9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2ZhdC9rZXJuZWxfaW50ZXJmYWNlLmNwcAppbmRleCA2N2M4ZDQ0NDFlLi4xYjNkZTNmNGQ0IDEwMDY0NAotLS0gYS9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2ZhdC9rZXJuZWxfaW50ZXJmYWNlLmNwcAorKysgYi9zcmMvYWRkLW9ucy9rZXJuZWwvZmlsZV9zeXN0ZW1zL2ZhdC9rZXJuZWxfaW50ZXJmYWNlLmNwcApAQCAtMTgyNyw2ICsxODI3LDE1IEBAIGRvc2ZzX3dzdGF0KGZzX3ZvbHVtZSogdm9sdW1lLCBmc192bm9kZSogdm5vZGUsIGNvbnN0IHN0cnVjdCBzdGF0KiBzdGF0LCB1aW50MzIKIAlpZiAoc3RhdHVzICE9IEJfT0spCiAJCVJFVFVSTl9FUlJPUihzdGF0dXMpOwogCisJLy8gRkFUIHN0b3JlcyBubyBvd25lcjogZXZlcnkgbm9kZSBiZWxvbmdzIHRvIHRoZSB2b2x1bWUncyB1aWQgYW5kIGdpZC4gQSBjaG93bigpL2NoZ3JwKCkgdG8KKwkvLyB0aG9zZSBpcyBhIG5vLW9wIHRoYXQgc3VjY2VlZHM7IHRvIGFueSBvdGhlciBpZCBpdCBpcyByZWZ1c2VkIHdpdGggRVBFUk0sIGFzIExpbnV4IHZmYXQgZG9lcworCS8vICh3aXRob3V0IGl0cyAicXVpZXQiIG9wdGlvbiksIHNvIHRoYXQgYSBjYWxsZXIgbGVhcm5zIGl0cyBjaGFuZ2Ugd2FzIG5vdCBtYWRlLiBMaWtlIHRoZQorCS8vIHBlcm1pc3Npb24gY2hlY2ssIHRoaXMgcnVucyBiZWZvcmUgYW55dGhpbmcgaXMgY2hhbmdlZC4KKwlpZiAoKChzdGF0TWFzayAmIEJfU1RBVF9VSUQpICE9IDAgJiYgc3RhdC0+c3RfdWlkICE9IGZhdFZvbHVtZS0+cG1fdWlkKQorCQl8fCAoKHN0YXRNYXNrICYgQl9TVEFUX0dJRCkgIT0gMCAmJiBzdGF0LT5zdF9naWQgIT0gZmF0Vm9sdW1lLT5wbV9naWQpKSB7CisJCVJFVFVSTl9FUlJPUihCX05PVF9BTExPV0VEKTsKKwl9CisKIAlvZmZfdCBwcmV2aW91c1NpemUgPSBmYXROb2RlLT5kZV9GaWxlU2l6ZTsKIAogCWlmICgoc3RhdE1hc2sgJiBCX1NUQVRfU0laRSkgIT0gMCkgewpAQCAtMTg5OCwxOCArMTkwNyw2IEBAIGRvc2ZzX3dzdGF0KGZzX3ZvbHVtZSogdm9sdW1lLCBmc192bm9kZSogdm5vZGUsIGNvbnN0IHN0cnVjdCBzdGF0KiBzdGF0LCB1aW50MzIKIAkJfQogCX0KIAotCWlmICgoc3RhdE1hc2sgJiBCX1NUQVRfVUlEKSAhPSAwKSB7Ci0JCVBSSU5UKCJjYW5ub3Qgc2V0IFVJRCBhdCBmaWxlIGxldmVsXG4iKTsKLQkJaWYgKHN0YXQtPnN0X3VpZCAhPSBmYXRWb2x1bWUtPnBtX3VpZCkKLQkJCXN0YXR1cyA9IEJfQkFEX1ZBTFVFOwotCX0KLQotCWlmICgoc3RhdE1hc2sgJiBCX1NUQVRfR0lEKSAhPSAwKSB7Ci0JCVBSSU5UKCJjYW5ub3Qgc2V0IEdJRCBhdCBmaWxlIGxldmVsXG4iKTsKLQkJaWYgKHN0YXQtPnN0X2dpZCAhPSBmYXRWb2x1bWUtPnBtX2dpZCkKLQkJCXN0YXR1cyA9IEJfQkFEX1ZBTFVFOwotCX0KLQogCWlmICgoc3RhdE1hc2sgJiBCX1NUQVRfQUNDRVNTX1RJTUUpICE9IDApIHsKIAkJUFJJTlQoInNldHRpbmcgYWNjZXNzIHRpbWVcbiIpOwogCQlmYXROb2RlLT5kZV9mbGFnICY9IH5ERV9BQ0NFU1M7Ci0tIAoyLjU0LjAgKEFwcGxlIEdpdC0xNTcpCgo=
++ base64 -d
++ sha256sum /opt/t/out/fix970.patch /opt/t/out/fixfuse.patch
++ ls -l /dev/fuse
++ modprobe fuse
++ true
++ F=objects/linux/arm64/release/tools/fat_shell/fat_fuse
++ cp /opt/img2/fat.img /opt/fusetest.img
++ for arm in old new
++ git -C .. checkout -q -f a9954f424a
++ git -C .. apply /opt/t/out/fix970.patch
++ '[' old = new ']'
++ find objects/linux -path '*tools*' '(' -name fuse.o -o -name kernel_interface.o ')' -path '*fat*' -delete
++ find objects/linux -path '*tools/fs_shell*' -name fuse.o -delete
++ rm -f objects/linux/arm64/release/tools/fat_shell/fat_fuse
+++ nproc
++ jam -q -j64 '<build>fat_fuse'
++ echo 'JAM fat_fuse old rc=0'
++ mkdir -p /mnt/ff
++ objects/linux/arm64/release/tools/fat_shell/fat_fuse /opt/fusetest.img /mnt/ff
++ sleep 3
++ grep ' /mnt/ff ' /proc/mounts
++ ls -la /mnt/ff/myfs
+++ ls /mnt/ff/myfs
+++ grep -i lin-small
+++ head -1
++ T=myfs/lin-small
++ echo 'target: myfs/lin-small'
++ ls -ln /mnt/ff/myfs/lin-small
++ chown 0 /mnt/ff/myfs/lin-small
+chown: changing ownership of '/mnt/ff/myfs/lin-small': Operation not permitted
++ echo 'old: chown 0 rc=1'
++ chgrp 0 /mnt/ff/myfs/lin-small
+chgrp: changing group of '/mnt/ff/myfs/lin-small': Operation not permitted
++ echo 'old: chgrp 0 rc=1'
++ chown 0:0 /mnt/ff/myfs/lin-small
++ echo 'old: chown 0:0 rc=0'
++ chown 1002 /mnt/ff/myfs/lin-small
+chown: changing ownership of '/mnt/ff/myfs/lin-small': Operation not permitted
++ echo 'old: chown 1002 rc=1 (EPERM expected: FAT stores no owner)'
++ fusermount -u /mnt/ff
++ sleep 1
++ for arm in old new
++ git -C .. checkout -q -f a9954f424a
++ git -C .. apply /opt/t/out/fix970.patch
++ '[' new = new ']'
++ git -C .. apply /opt/t/out/fixfuse.patch
++ find objects/linux -path '*tools*' '(' -name fuse.o -o -name kernel_interface.o ')' -path '*fat*' -delete
++ find objects/linux -path '*tools/fs_shell*' -name fuse.o -delete
++ rm -f objects/linux/arm64/release/tools/fat_shell/fat_fuse
+++ nproc
++ jam -q -j64 '<build>fat_fuse'
++ echo 'JAM fat_fuse new rc=0'
++ mkdir -p /mnt/ff
++ objects/linux/arm64/release/tools/fat_shell/fat_fuse /opt/fusetest.img /mnt/ff
++ sleep 3
++ grep ' /mnt/ff ' /proc/mounts
++ ls -la /mnt/ff/myfs
+++ ls /mnt/ff/myfs
+++ grep -i lin-small
+++ head -1
++ T=myfs/lin-small
++ echo 'target: myfs/lin-small'
++ ls -ln /mnt/ff/myfs/lin-small
++ chown 0 /mnt/ff/myfs/lin-small
++ echo 'new: chown 0 rc=0'
++ chgrp 0 /mnt/ff/myfs/lin-small
++ echo 'new: chgrp 0 rc=0'
++ chown 0:0 /mnt/ff/myfs/lin-small
++ echo 'new: chown 0:0 rc=0'
++ chown 1002 /mnt/ff/myfs/lin-small
+chown: changing ownership of '/mnt/ff/myfs/lin-small': Operation not permitted
++ echo 'new: chown 1002 rc=1 (EPERM expected: FAT stores no owner)'
++ fusermount -u /mnt/ff
++ sleep 1
++ git -C .. checkout -q -f a9954f424a

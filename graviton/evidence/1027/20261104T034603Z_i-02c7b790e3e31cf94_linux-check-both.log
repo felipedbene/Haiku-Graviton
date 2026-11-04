@@ -1,0 +1,85 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-check-both
+# instance: i-02c7b790e3e31cf94   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux check of arm both's FAT and ext2 images: fsck and md5 through the Linux drivers
+# start: 20261104T034603Z   end: 20261104T034620Z   rc: 0
+# script sha256: 938e7c768cd5008a80cc1a07fd7f878969b49bba9ff9f5447c9992be5e3913de
+# ---- script ----
+# | # Linux check of arm "both"'s images after the Haiku run: sha256 matches what Haiku reported,
+# | # fsck.vfat -n / e2fsck -fn, and md5 of every file through the Linux drivers.
+# | set -x
+# | mkdir -p /opt/back && cd /opt/back && rm -rf ./*
+# | B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/E/back
+# | aws s3 cp --quiet $B/both-fat.img fat.img && aws s3 cp --quiet $B/both-ext2.img ext2.img || exit 1
+# | sha256sum fat.img ext2.img
+# | fsck.vfat -n fat.img; echo "fsck.vfat rc=$?"
+# | e2fsck -fn ext2.img; echo "e2fsck rc=$?"
+# | mkdir -p m
+# | mount -t vfat -o loop,ro fat.img m && (cd m && ls -l && md5sum lin-1m lin-small h-2b h-4k h-1m); umount m
+# | mount -t ext2 -o loop,ro ext2.img m && (cd m && ls -l && md5sum lin-1m lin-small h-2b h-4k h-1m); umount m
+# ---- raw output ----
+c8c369f2814727390c678439471ed8b448f54520bf2ec73f2fafa225c8f53b37  fat.img
+fe9c44827d14e80590536346c3cdc9de724d0f082f193e6721c9f4bf7728e3ce  ext2.img
+fsck.fat 4.2 (2021-01-31)
+fat.img: 8 files, 4109/516190 clusters
+fsck.vfat rc=0
+Pass 1: Checking inodes, blocks, and sizes
+Inode 16, i_blocks is 128, should be 2056.  Fix? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+
+ext2.img: ********** WARNING: Filesystem still has errors **********
+
+ext2.img: 16/65536 files (6.3% non-contiguous), 4657/65536 blocks
+e2fsck rc=4
+total 2054
+drwxr-xr-x 3 root root     512 Nov  4 03:37 RECYCLED
+-rwxr-xr-x 1 root root 1048576 Nov  4 03:37 h-1m
+-rwxr-xr-x 1 root root       2 Nov  4 03:37 h-2b
+-rwxr-xr-x 1 root root    4096 Nov  4 03:37 h-4k
+-rwxr-xr-x 1 root root 1048576 Nov  4 03:30 lin-1m
+-rwxr-xr-x 1 root root       3 Nov  4 03:30 lin-small
+31e33b9a248d66df7f2b11c8e8d1677b  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+9314ce60b54a39041e004534b67bc172  h-1m
+total 1120
+-rw-r--r-- 1 root root 1048576 Nov  4 03:37 h-1m
+-rw-r--r-- 1 root root       2 Nov  4 03:37 h-2b
+-rw-r--r-- 1 root root    4096 Nov  4 03:37 h-4k
+-rw-rw-rw- 1 root root 1048576 Nov  4 03:30 lin-1m
+-rw-rw-rw- 1 root root       3 Nov  4 03:30 lin-small
+drwx------ 2 root root   16384 Nov  4 03:30 lost+found
+31e33b9a248d66df7f2b11c8e8d1677b  lin-1m
+900150983cd24fb0d6963f7d28e17f72  lin-small
+401b30e3b8b5d629635a5c613cdb7919  h-2b
+e52a2fd154853caf3a13cbbd7110eb0f  h-4k
+8e9f033a9e927f8c43396a17ab382645  h-1m
++ mkdir -p /opt/back
++ cd /opt/back
++ rm -rf './*'
+++ aws sts get-caller-identity --query Account --output text
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back/both-fat.img fat.img
++ aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/E/back/both-ext2.img ext2.img
++ sha256sum fat.img ext2.img
++ fsck.vfat -n fat.img
++ echo 'fsck.vfat rc=0'
++ e2fsck -fn ext2.img
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck rc=4'
++ mkdir -p m
++ mount -t vfat -o loop,ro fat.img m
++ cd m
++ ls -l
++ md5sum lin-1m lin-small h-2b h-4k h-1m
++ umount m
++ mount -t ext2 -o loop,ro ext2.img m
++ cd m
++ ls -l
++ md5sum lin-1m lin-small h-2b h-4k h-1m
++ umount m
