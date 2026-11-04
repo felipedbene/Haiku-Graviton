@@ -1,0 +1,96 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-f958
+# instance: i-03b26d2ab4e9b3c98   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T033044Z   end: 20261104T033101Z   rc: 0
+# script sha256: 8a2f2ec50e98a6977eaaf8bf87ecd563e1ba0b827aaf8bf46c39af0dbace7fea
+# ---- script ----
+# | set -u
+# | N=/boot/home/config/non-packaged/add-ons/kernel/network
+# | P=/boot/system/add-ons/kernel/network
+# | pkgman install -y curl gcc binutils haiku_devel 2>&1 | tail -2; command -v curl gcc
+# | mkdir -p $N/protocols $N/datalink_protocols $N/devices /boot/home/wK && cd /boot/home/wK
+# | echo "--- packaged network add-ons"
+# | find $P -type f | sort | xargs sha256sum
+# | echo "--- overrides before"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | put() {	# <module> <subdir or .> <url> <sha256>
+# | 	curl -sSf -o $1.mod "$3" || { echo "fetch $1 failed"; exit 4; }
+# | 	echo "$4  $1.mod" | sha256sum -c || exit 5
+# | 	[ -f $P/$2/$1 ] || { echo "$P/$2/$1 not packaged: not overriding"; return; }
+# | 	cp $1.mod $N/$2/$1.new && mv $N/$2/$1.new $N/$2/$1
+# | }
+# | put stack . 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/stack?<PRESIGNED>' 48f30d072a8dda5bd234e03d23e0af32a9d505891ef78400a63434cec0b87e10
+# | put ipv4 protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/ipv4?<PRESIGNED>' 095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0
+# | put ipv6 protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/ipv6?<PRESIGNED>' 119ada6ae47a9095d085ffab337303cf909431262ed84c6ceb73d93d9d4225a1
+# | put tcp protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/tcp?<PRESIGNED>' 07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c
+# | put udp protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/udp?<PRESIGNED>' 6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5
+# | put unix protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/unix?<PRESIGNED>' 883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200
+# | put icmp protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/icmp?<PRESIGNED>' c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7
+# | put icmp6 protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/icmp6?<PRESIGNED>' 4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2
+# | put arp datalink_protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/arp?<PRESIGNED>' ff4ec3f3359c2888bc267776fdaaeee2e5acbbf39ddd6b03612e355c0f29fbc4
+# | put ethernet_frame datalink_protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/ethernet_frame?<PRESIGNED>' 154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507
+# | put ipv6_datagram datalink_protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/ipv6_datagram?<PRESIGNED>' 1e8113d7be7e74247c75370f26ac8dc145f6d5754f9ecb413a2290620711e8e0
+# | put loopback_frame datalink_protocols 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/loopback_frame?<PRESIGNED>' 9fdbf84adebe7f81c57ad31741104b644d180f5ba99c3f56071d71b6c5a85754
+# | put ethernet devices 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/ethernet?<PRESIGNED>' d5075a6375417d7d2f16c16a054730516665a94ba29932a36a1f41873b1cefb8
+# | put loopback devices 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/loopback?<PRESIGNED>' a4433aa1c76e0c47bbaa81df4eeb6a1cdcde72d6e6646ebb9672cd514ee19f10
+# | put tunnel devices 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/K/mod/f958/tunnel?<PRESIGNED>' 60c46d614890cb7691ac4e9469f62d3716b6d893c02e2e8aada88c620bb19d22
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | sort | xargs sha256sum
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/curl
+/boot/system/bin/gcc
+--- packaged network add-ons
+ff4ec3f3359c2888bc267776fdaaeee2e5acbbf39ddd6b03612e355c0f29fbc4  /boot/system/add-ons/kernel/network/datalink_protocols/arp
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  /boot/system/add-ons/kernel/network/datalink_protocols/ethernet_frame
+1e8113d7be7e74247c75370f26ac8dc145f6d5754f9ecb413a2290620711e8e0  /boot/system/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+9fdbf84adebe7f81c57ad31741104b644d180f5ba99c3f56071d71b6c5a85754  /boot/system/add-ons/kernel/network/datalink_protocols/loopback_frame
+d5075a6375417d7d2f16c16a054730516665a94ba29932a36a1f41873b1cefb8  /boot/system/add-ons/kernel/network/devices/ethernet
+a4433aa1c76e0c47bbaa81df4eeb6a1cdcde72d6e6646ebb9672cd514ee19f10  /boot/system/add-ons/kernel/network/devices/loopback
+60c46d614890cb7691ac4e9469f62d3716b6d893c02e2e8aada88c620bb19d22  /boot/system/add-ons/kernel/network/devices/tunnel
+54b84612e02de6f31d46da432c0822d28ca546a24d972735a8c78e90ddacd5e3  /boot/system/add-ons/kernel/network/dns_resolver
+c154ea8da539497599e4b86fb8e64f8d2e3fb85d30e492c659c5a8d7ec5244b8  /boot/system/add-ons/kernel/network/notifications
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/system/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/system/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/system/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/system/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/system/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/system/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/system/add-ons/kernel/network/protocols/unix
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/system/add-ons/kernel/network/stack
+--- overrides before
+stack.mod: OK
+ipv4.mod: OK
+ipv6.mod: OK
+tcp.mod: OK
+udp.mod: OK
+unix.mod: OK
+icmp.mod: OK
+icmp6.mod: OK
+arp.mod: OK
+ethernet_frame.mod: OK
+ipv6_datagram.mod: OK
+loopback_frame.mod: OK
+ethernet.mod: OK
+loopback.mod: OK
+tunnel.mod: OK
+--- overrides after
+ff4ec3f3359c2888bc267776fdaaeee2e5acbbf39ddd6b03612e355c0f29fbc4  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/arp
+154a49aa19daba855b6df3e57c4a453eddffad2d4841953e91dfe2cde7608507  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+1e8113d7be7e74247c75370f26ac8dc145f6d5754f9ecb413a2290620711e8e0  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+9fdbf84adebe7f81c57ad31741104b644d180f5ba99c3f56071d71b6c5a85754  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/loopback_frame
+d5075a6375417d7d2f16c16a054730516665a94ba29932a36a1f41873b1cefb8  /boot/home/config/non-packaged/add-ons/kernel/network/devices/ethernet
+a4433aa1c76e0c47bbaa81df4eeb6a1cdcde72d6e6646ebb9672cd514ee19f10  /boot/home/config/non-packaged/add-ons/kernel/network/devices/loopback
+60c46d614890cb7691ac4e9469f62d3716b6d893c02e2e8aada88c620bb19d22  /boot/home/config/non-packaged/add-ons/kernel/network/devices/tunnel
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+119ada6ae47a9095d085ffab337303cf909431262ed84c6ceb73d93d9d4225a1  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+48f30d072a8dda5bd234e03d23e0af32a9d505891ef78400a63434cec0b87e10  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+STAGE-DONE

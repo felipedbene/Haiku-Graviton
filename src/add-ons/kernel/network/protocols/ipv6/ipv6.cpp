@@ -1631,6 +1631,9 @@ ipv6_receive_data(net_buffer* buffer)
 	// single translate point below.
 	uint8 ecnCodepoint = header.ServiceType() & kIPECNMask;
 
+	// kept for IPV6_RECVHOPLIMIT, for the same reason
+	buffer->hop_limit = header.header.ip6_hlim;
+
 	// Not a uint16: the payload length alone may be 65535, and with the fixed
 	// header a packet can reach 65575 bytes. On loopback (MTU 65536) every
 	// full-sized TCP segment is a 65536-byte packet, which a 16-bit sum
@@ -1844,7 +1847,11 @@ ipv6_process_ancillary_data_no_container(net_protocol* _protocol,
 	ipv6_protocol* protocol = (ipv6_protocol*)_protocol;
 	ssize_t bytesWritten = 0;
 
-	if (protocol->receive_hoplimit != 0) {
+	// An IPv4 datagram on a dual-stack socket has no hop limit to report:
+	// its header is an IPv4 one. Linux and the BSDs send no IPV6_HOPLIMIT for
+	// it either.
+	if (protocol->receive_hoplimit != 0
+		&& buffer->destination->sa_family == AF_INET6) {
 		TRACE("receive_hoplimit");
 
 		if (msgControlLen < CMSG_SPACE(sizeof(int))) {
@@ -1854,19 +1861,10 @@ ipv6_process_ancillary_data_no_container(net_protocol* _protocol,
 			return bytesWritten;
 		}
 
-		// use some default value (64 at the moment) when the real one fails
-		int hopLimit = IPV6_DEFHLIM;
-
-		if (gBufferModule->stored_header_length(buffer)
-				>= (int)sizeof(ip6_hdr)) {
-			IPv6Header header;
-			if (gBufferModule->restore_header(buffer, 0,
-					&header, sizeof(ip6_hdr)) == B_OK
-				&& header.ProtocolVersion() != IPV6_VERSION) {
-				// header is OK, take hoplimit from it
-				hopLimit = header.header.ip6_hlim;
-			}
-		}
+		// Taken from the buffer's metadata, which every clone and split
+		// carries, rather than from the stored header: a queued datagram is
+		// a clone, and a clone never has the header stored.
+		int hopLimit = buffer->hop_limit;
 
 		cmsghdr* messageHeader = (cmsghdr*)((char*)msgControl + bytesWritten);
 		messageHeader->cmsg_len = CMSG_LEN(sizeof(int));

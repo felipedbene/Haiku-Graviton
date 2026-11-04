@@ -81,6 +81,9 @@ typedef struct net_buffer {
 	uint32					msg_flags;
 	uint32					size;
 	uint8					protocol;
+	uint8					hop_limit;
+		// Receive: the IPv6 hop limit the packet arrived with. Fills what was
+		// padding before buffer_flags, so no other field moves.
 	uint16					buffer_flags;
 
 	// Wall-clock time (system_time(), microseconds) at which the device reader
