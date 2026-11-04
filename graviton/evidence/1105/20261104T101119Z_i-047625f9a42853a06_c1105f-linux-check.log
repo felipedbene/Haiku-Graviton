@@ -1,0 +1,174 @@
+# NOTE: the region checks of this log did not run (a template placeholder was left unreplaced); only its e2fsck results are valid. The final arm was rerun (c1105g/c1105h).
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1105f-linux-check
+# instance: i-047625f9a42853a06   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck + contents of arm c1105f's data volume vol-05575f045f1d9343b
+# start: 20261104T101119Z   end: 20261104T101131Z   rc: 32
+# script sha256: 0efdccbc4c0e9ff87b9b5cc5201f34ae52a90331cfb4a60e58d3792a500b71d3
+# ---- script ----
+# | # Linux check of arm c1105f's data volume vol-05575f045f1d9343b (seed4 layout) after Haiku's writes into holes:
+# | # e2fsck -fn on the three file systems; then for every written range, its md5 (to compare with
+# | # the chunk Haiku wrote), and whether everything outside the written ranges still equals the
+# | # Linux original (zeros in the holes, the data elsewhere). Whole-file md5s to compare with Haiku's.
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol05575f045f1d9343b '$9 == v { print $11 }' | sed 's|.*/||')
+# | P=/dev/${D}p; echo "volume /dev/$D"
+# | for n in 1 2 3; do echo "== p$n"; e2fsck -fn ${P}$n > /tmp/fsck-c1105f.out 2>&1; r=$?; grep -v "^Pass\|^e2fsck 1" /tmp/fsck-@ARM@.out | cut -c1-200 | head -20; echo "e2fsck p$n rc=$r"; done
+# | cat > /tmp/regions-c1105f.py <<'PY'
+# | import hashlib, sys
+# | path, orig = sys.argv[1], sys.argv[2]
+# | regions = [tuple(int(x) for x in r.split(':')) for r in sys.argv[3:]]
+# | a = open(path, 'rb').read(); b = open(orig, 'rb').read()
+# | print('%s size=%d (orig %d) md5=%s' % (path.split('/')[-1], len(a), len(b), hashlib.md5(a).hexdigest()))
+# | rest_a = bytearray(a); rest_b = bytearray(b)
+# | for off, ln in regions:
+# | 	print('  [%d,+%d) md5 %s' % (off, ln, hashlib.md5(a[off:off + ln]).hexdigest()))
+# | 	rest_a[off:off + ln] = b'\0' * ln; rest_b[off:off + ln] = b'\0' * ln
+# | print('  outside the written ranges: %s' % ('same as the Linux original' if rest_a == rest_b else 'DIFFERS from the Linux original'))
+# | PY
+# | mkdir -p /opt/chk/c1105f
+# | chk() { n=$1; shift; mount -o ro ${P}$n /opt/chk/c1105f || return; ls -ls /opt/chk/@ARM@; while [ $# -gt 0 ]; do f=$1; r=$2; shift 2; [ -f /opt/chk/@ARM@/$f ] && python3 /tmp/regions-@ARM@.py /opt/chk/@ARM@/$f /opt/seed4/orig/$f $r; done; [ -f /opt/chk/@ARM@/tf ] && filefrag -v /opt/chk/@ARM@/tf | sed -n 4,10p; [ $n = 1 ] && debugfs -R "ex tl" ${P}1 2>/dev/null; umount /opt/chk/@ARM@; }
+# | chk 1 th "3145728:262144 6225920:131072" ph "3145728:131072" tf "1048576:65536" ta "100:3996 4096:127076" tl "0:65536" tz "8192:10" tu "6000:4000"
+# | chk 2 ti "32768:65536 20971520:65536" pi "3145728:131072" tb "100:3996 4096:127076"
+# | chk 3 tk "1049088:1024"
+# ---- raw output ----
+volume /dev/nvme1n1
+== p1
+e2fsck p1 rc=0
+== p2
+e2fsck p2 rc=0
+== p3
+e2fsck p3 rc=0
+Level Entries       Logical        Physical Length Flags
+ 0/ 1   1/  1     0 -  2047  32819            2048
+ 1/ 1   1/  6     0 -    15  18242 -  18257     16 
+ 1/ 1   2/  6   256 -   256  17664 -  17664      1 
+ 1/ 1   3/  6   512 -   512  17920 -  17920      1 
+ 1/ 1   4/  6   768 -   768  18176 -  18176      1 
+ 1/ 1   5/  6  1024 -  1024   6977 -   6977      1 
+ 1/ 1   6/  6  1280 -  1280   7233 -   7233      1 
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol05575f045f1d9343b '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ P=/dev/nvme1n1p
++ echo 'volume /dev/nvme1n1'
++ for n in 1 2 3
++ echo '== p1'
++ e2fsck -fn /dev/nvme1n1p1
++ r=0
++ grep -v '^Pass\|^e2fsck 1' /tmp/fsck-@ARM@.out
++ cut -c1-200
++ head -20
+grep: /tmp/fsck-@ARM@.out: No such file or directory
++ echo 'e2fsck p1 rc=0'
++ for n in 1 2 3
++ echo '== p2'
++ e2fsck -fn /dev/nvme1n1p2
++ r=0
++ grep -v '^Pass\|^e2fsck 1' /tmp/fsck-@ARM@.out
++ cut -c1-200
++ head -20
+grep: /tmp/fsck-@ARM@.out: No such file or directory
++ echo 'e2fsck p2 rc=0'
++ for n in 1 2 3
++ echo '== p3'
++ e2fsck -fn /dev/nvme1n1p3
++ r=0
++ grep -v '^Pass\|^e2fsck 1' /tmp/fsck-@ARM@.out
++ cut -c1-200
++ head -20
+grep: /tmp/fsck-@ARM@.out: No such file or directory
++ echo 'e2fsck p3 rc=0'
++ cat
++ mkdir -p /opt/chk/c1105f
++ chk 1 th '3145728:262144 6225920:131072' ph 3145728:131072 tf 1048576:65536 ta '100:3996 4096:127076' tl 0:65536 tz 8192:10 tu 6000:4000
++ n=1
++ shift
++ mount -o ro /dev/nvme1n1p1 /opt/chk/c1105f
++ ls -ls /opt/chk/@ARM@
+ls: cannot access '/opt/chk/@ARM@': No such file or directory
++ '[' 14 -gt 0 ']'
++ f=th
++ r='3145728:262144 6225920:131072'
++ shift 2
++ '[' -f /opt/chk/@ARM@/th ']'
++ '[' 12 -gt 0 ']'
++ f=ph
++ r=3145728:131072
++ shift 2
++ '[' -f /opt/chk/@ARM@/ph ']'
++ '[' 10 -gt 0 ']'
++ f=tf
++ r=1048576:65536
++ shift 2
++ '[' -f /opt/chk/@ARM@/tf ']'
++ '[' 8 -gt 0 ']'
++ f=ta
++ r='100:3996 4096:127076'
++ shift 2
++ '[' -f /opt/chk/@ARM@/ta ']'
++ '[' 6 -gt 0 ']'
++ f=tl
++ r=0:65536
++ shift 2
++ '[' -f /opt/chk/@ARM@/tl ']'
++ '[' 4 -gt 0 ']'
++ f=tz
++ r=8192:10
++ shift 2
++ '[' -f /opt/chk/@ARM@/tz ']'
++ '[' 2 -gt 0 ']'
++ f=tu
++ r=6000:4000
++ shift 2
++ '[' -f /opt/chk/@ARM@/tu ']'
++ '[' 0 -gt 0 ']'
++ '[' -f /opt/chk/@ARM@/tf ']'
++ '[' 1 = 1 ']'
++ debugfs -R 'ex tl' /dev/nvme1n1p1
++ umount /opt/chk/@ARM@
+umount: /opt/chk/@ARM@: no mount point specified.
++ chk 2 ti '32768:65536 20971520:65536' pi 3145728:131072 tb '100:3996 4096:127076'
++ n=2
++ shift
++ mount -o ro /dev/nvme1n1p2 /opt/chk/c1105f
++ ls -ls /opt/chk/@ARM@
+ls: cannot access '/opt/chk/@ARM@': No such file or directory
++ '[' 6 -gt 0 ']'
++ f=ti
++ r='32768:65536 20971520:65536'
++ shift 2
++ '[' -f /opt/chk/@ARM@/ti ']'
++ '[' 4 -gt 0 ']'
++ f=pi
++ r=3145728:131072
++ shift 2
++ '[' -f /opt/chk/@ARM@/pi ']'
++ '[' 2 -gt 0 ']'
++ f=tb
++ r='100:3996 4096:127076'
++ shift 2
++ '[' -f /opt/chk/@ARM@/tb ']'
++ '[' 0 -gt 0 ']'
++ '[' -f /opt/chk/@ARM@/tf ']'
++ '[' 2 = 1 ']'
++ umount /opt/chk/@ARM@
+umount: /opt/chk/@ARM@: no mount point specified.
++ chk 3 tk 1049088:1024
++ n=3
++ shift
++ mount -o ro /dev/nvme1n1p3 /opt/chk/c1105f
++ ls -ls /opt/chk/@ARM@
+ls: cannot access '/opt/chk/@ARM@': No such file or directory
++ '[' 2 -gt 0 ']'
++ f=tk
++ r=1049088:1024
++ shift 2
++ '[' -f /opt/chk/@ARM@/tk ']'
++ '[' 0 -gt 0 ']'
++ '[' -f /opt/chk/@ARM@/tf ']'
++ '[' 3 = 1 ']'
++ umount /opt/chk/@ARM@
+umount: /opt/chk/@ARM@: no mount point specified.
+failed to run commands: exit status 32

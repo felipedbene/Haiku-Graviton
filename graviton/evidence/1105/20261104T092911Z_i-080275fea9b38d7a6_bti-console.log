@@ -1,0 +1,46 @@
+# evidence: bti-console (box stopped answering after step ti)
+# instance: i-080275fea9b38d7a6   region: us-west-2   transport: ec2 get-console-output --latest
+# ---- raw output ----
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/wacom
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+ps2_hid: init_hardware
+ps2_hid: init_driver
+module: Search for bus_managers/ps2/v1 failed.
+devfs: scanned "input": mode 2 -> 2, latched 2, probe No error, legacy No error
+AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+load addon /boot/system/add-ons/input_server/filters/screen_saver failed
+bfs: Could not find value in index "size"!
+bfs: Could not find value in index "last_modified"!
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+PANIC: ASSERT FAILED (../src/add-ons/kernel/file_systems/ext2/DataStream.cpp:73): block != 0
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 370 "sync" running on CPU 0
+iframe 0xffff0000dea89cc7 (end = 0xffff0000dea89fff)
+stack trace for thread 0x172 "sync"
+    kernel stack: 0xffff0000dea85000 to 0xffff0000dea8a000
+      user stack: 0x0000015849a36000 to 0x000001584da36000
+frame            caller     <image>:function + offset
+ 0 ffff0000dea88da0 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000dea88df0 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000dea88e60[0m [36m" ���"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000dea88e60 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff0000dea88f20[0m [36m"@���"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�@C���"[0m, std::__va_list: [34m0x23f9080[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff0000dea88f20 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000dea89040 (+ 288) ffff0000023e7dbc   <ext2> DataStream<[32m0xdea890c0[0m>::FindBlock(int64: [34m161830128580493312[0m, unsigned long&: [34m0x1000ffff0000[0m, unsigned int*: [34m0xdea891f800000000[0m) + 0x178
+ 5 ffff0000dea890c0 (+ 128) ffff0000023eefa4   <ext2> Inode<[32m0xdea89170[0m>::FindBlock(int64: [34m161936918647341056[0m, unsigned long&: [34m0x1ffff0000[0m, unsigned int*: [34m0xffffefff00000000[0m) + 0xb8
+ 6 ffff0000dea89170 (+ 176) ffff0000023f50c4   <ext2> ext2_get_file_map(fs_volume*: [34m0xffff0000dea89200[0m, fs_vnode*: [34m0xffff000000084ae0[0m, int64: [34m-281471248625536[0m, uint64: [34m0x18000[0m ([34m98304[0m), file_io_vec*: [34m0xffff0000dea89250[0m, unsigned long*: [34m0x80007029[0m) + 0x104
+ 7 ffff0000dea89200 (+ 144) ffff000000084ae0   <kernel_arm64> FileMap<[32m0xdea892d0[0m>::_Cache[clone .localalias] (int64: [34m2336071366934528[0m, int64: [34m281479271612416[0m) + 0xa0
+ 8 ffff0000dea892d0 (+ 208) ffff000000084ca4   <kernel_arm64> FileMap<[32m0xdea89350[0m>::Translate[clone .localalias] (int64: [34m161932950097559552[0m, uint64: [34m0x8000ffff0000[0m, file_io_vec*: [34m0xdea8940000000000[0m, unsigned long*: [34m0x29a2e470ffff0000[0m, uint64: [34m0xdea89490ffff0000[0m) + 0x7c
+ 9 ffff0000dea89350 (+ 128) ffff0000023f4d28   <ext2> ext2_write_pages(fs_volume*: [34m0xffff0000dea89480[0m, fs_vnode*: [34m0xffff000000143acc[0m, void*: [34m0x0[0m, int64: [34m32768[0m, iovec const*: [34m0xffff0000dea89550[0m, uint64: [34m0xffff000000863be8[0m, unsigned long*: [34m0xffff0000dea89508[0m) + 0xf8
+10 ffff0000dea89480 (+ 304) ffff000000143acc   <kernel_arm64> VnodeIO<[32m0xdea894a0[0m>::IO(int64: [34m5291438363312128[0m, void*: [34m0xdcb47000ffff0000[0m, unsigned long*: [34m0x10000ffff0000[0m) + 0x4c
+11 ffff0000dea894a0 (+  32) ffff00000012cc88   <kernel_arm64> synchronous_io(IORequest*: [34m0xffff0000dea89520[0m, DoIO&: [34m0xffff000000140e48[0m) + 0x60
+12 ffff0000dea89520 (+ 128) ffff000000140e48   <kernel_arm64> vfs_vnode_io.localalias + 0x88
+13 ffff0000dea89580 (+  96) ffff0000001417b4   <kernel_arm64> vfs_write_pages + 0xac
+14 ffff0000dea896f0 (+ 368) ffff00000016fefc   <kernel_arm64> PageWriteTransfer<[32m0xdea89720[0m>::Schedule[clone .localalias] (uint32: [34m0xffff0000[0m) + 0x6c
+15 ffff0000dea89720 (+  48) ffff000000170960   <kernel_arm64> vm_page_write_modified_page_range.localalias + 0x47c
+16 ffff0000dea89a30 (+ 784) ffff00000017a9c8   <kernel_arm64> VMCache<[32m0xdea89a50[0m>::WriteModified() + 0x3c
+17 ffff0000dea89a50 (+  32) ffff000000131dac   <kernel_arm64> fs_sync(int32: [34m-559375536[0m) + 0x3cc
+18 ffff0000dea89b50 (+ 256) ffff00000013c808   <kernel_arm64> _kern_sync.localalias + 0x28
+19 ffff0000dea89ba0 (+  80) ffff0000000a7188   <kernel_arm64> syscall_dispatcher + 0x12b8
+20 ffff0000dea89bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+21 ffff0000dea89cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0

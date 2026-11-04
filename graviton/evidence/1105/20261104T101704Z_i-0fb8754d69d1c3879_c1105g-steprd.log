@@ -1,0 +1,133 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1105g-steprd
+# instance: i-0fb8754d69d1c3879   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1105g, step rd
+# start: 20261104T101704Z   end: 20261104T101714Z   rc: 0
+# script sha256: 90ca31ca721de1b8de43c7bba60b6db0710c45b68c60cf889bdb2acd7535fe4f
+# ---- script ----
+# | # #1105 step rd, arm c1105g: read every test file back on Haiku (holes read as zeros)
+# | set -x
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | uname -a
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/2 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | mkdir -p /hx4k /he4k /hx1k
+# | [ -f /boot/home/c256k ] || { dd if=/dev/urandom of=/boot/home/c256k bs=65536 count=4; dd if=/dev/urandom of=/boot/home/c128k bs=65536 count=2; dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1; dd if=/dev/urandom of=/boot/home/c1k bs=1024 count=1; } 2>/dev/null
+# | for c in c256k c128k c64k c1k; do echo "$c md5 $(md5sum < /boot/home/$c)"; done
+# | mount -t ext2 $DD/0 /hx4k || exit 1
+# | echo "th md5 $(md5sum < /hx4k/th)"
+# | echo "ta md5 $(md5sum < /hx4k/ta)"
+# | echo "tl md5 $(md5sum < /hx4k/tl)"
+# | echo "ph md5 $(md5sum < /hx4k/ph)"
+# | echo "tf md5 $(md5sum < /hx4k/tf)"
+# | unmount /hx4k
+# | mount -t ext2 $DD/1 /he4k || exit 1
+# | echo "ti md5 $(md5sum < /he4k/ti)"
+# | echo "tb md5 $(md5sum < /he4k/tb)"
+# | echo "pi md5 $(md5sum < /he4k/pi)"
+# | unmount /he4k
+# | mount -t ext2 $DD/2 /hx1k || exit 1
+# | echo "tk md5 $(md5sum < /hx1k/tk)"
+# | unmount /hx1k
+# ---- raw output ----
+Haiku ip-10-128-6-189.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+8f74dd8b89a4a24b3613b0e16d5fb7ee77f3e11d35fa3d1580166226d50eb0ef  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 2 raw 
+Haiku ip-10-128-6-189.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+8f74dd8b89a4a24b3613b0e16d5fb7ee77f3e11d35fa3d1580166226d50eb0ef  /boot/system/add-ons/kernel/file_systems/ext2
+c256k md5 4ae37c4818b9aaebf6d76b24f62d7196  -
+c128k md5 39b780e5586ef082f37fe9d0a829d9f1  -
+c64k md5 db8ab81a6b819ffa19976f1f91305a32  -
+c1k md5 650f503160b6516d5e3a7518b10053f3  -
+th md5 9db57c075adeda648eaf73339af09f77  -
+ta md5 b18c8e8d1c3317607ed4e015622615d8  -
+tl md5 33f3e05257248d260abae8132094f313  -
+ph md5 d0756806d6b920419ff69602296ab79a  -
+tf md5 d8d43f83d6505166f9dd0090f1beb43e  -
+ti md5 959b7103d98ba10919252b5d482779bb  -
+tb md5 4a28daba210d0db5f6277d62715748d2  -
+pi md5 df99d6d1bec50057c42795a5ab9f4779  -
+tk md5 6ca4c5fb68d3590a15bbe8871bf59d13  -
++ set -x
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 2 raw '
++ mkdir -p /ex4k /ex1k
++ uname -a
++ sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/2 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
++ mkdir -p /hx4k /he4k /hx1k
++ '[' -f /boot/home/c256k ']'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c256k md5 4ae37c4818b9aaebf6d76b24f62d7196  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c128k md5 39b780e5586ef082f37fe9d0a829d9f1  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c64k md5 db8ab81a6b819ffa19976f1f91305a32  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c1k md5 650f503160b6516d5e3a7518b10053f3  -'
++ mount -t ext2 /dev/disk/nvme/1/0 /hx4k
+++ md5sum
++ echo 'th md5 9db57c075adeda648eaf73339af09f77  -'
+++ md5sum
++ echo 'ta md5 b18c8e8d1c3317607ed4e015622615d8  -'
+++ md5sum
++ echo 'tl md5 33f3e05257248d260abae8132094f313  -'
+++ md5sum
++ echo 'ph md5 d0756806d6b920419ff69602296ab79a  -'
+++ md5sum
++ echo 'tf md5 d8d43f83d6505166f9dd0090f1beb43e  -'
++ unmount /hx4k
++ mount -t ext2 /dev/disk/nvme/1/1 /he4k
+++ md5sum
++ echo 'ti md5 959b7103d98ba10919252b5d482779bb  -'
+++ md5sum
++ echo 'tb md5 4a28daba210d0db5f6277d62715748d2  -'
+++ md5sum
++ echo 'pi md5 df99d6d1bec50057c42795a5ab9f4779  -'
++ unmount /he4k
++ mount -t ext2 /dev/disk/nvme/1/2 /hx1k
+++ md5sum
++ echo 'tk md5 6ca4c5fb68d3590a15bbe8871bf59d13  -'
++ unmount /hx1k

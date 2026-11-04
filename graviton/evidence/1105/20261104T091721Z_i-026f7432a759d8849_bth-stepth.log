@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: bth-stepth
+# instance: i-026f7432a759d8849   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm bth, step th
+# start: 20261104T091721Z   end: 20261104T092731Z   rc: 1
+# script sha256: 5f4f6ae83395e6202db3be0fb58e01b18377fe9fb47931911661361e11473ecf
+# ---- script ----
+# | # #1105 step th, arm bth: ext4 th (truncate -s hole 1..6 MiB): 256 KiB at 3 MiB, 128 KiB at 6 MiB - 64 KiB (hole into data)
+# | set -x
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | uname -a
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/2 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | mkdir -p /hx4k /he4k /hx1k
+# | [ -f /boot/home/c256k ] || { dd if=/dev/urandom of=/boot/home/c256k bs=65536 count=4; dd if=/dev/urandom of=/boot/home/c128k bs=65536 count=2; dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1; dd if=/dev/urandom of=/boot/home/c1k bs=1024 count=1; } 2>/dev/null
+# | for c in c256k c128k c64k c1k; do echo "$c md5 $(md5sum < /boot/home/$c)"; done
+# | mount -t ext2 $DD/0 /hx4k || exit 1
+# | cd /hx4k && ls -ls
+# | dd if=/boot/home/c256k of=th bs=262144 seek=12 conv=notrunc 2>&1 | tail -1; echo "th write1 rc=$?"
+# | dd if=/boot/home/c128k of=th bs=65536 seek=95 conv=notrunc 2>&1 | tail -1; echo "th write2 rc=$?"
+# | sync; cd /; unmount /hx4k; echo "unmount rc=$?"
+# ---- raw output ----

@@ -1,0 +1,119 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1105h-steptb
+# instance: i-03a056d87ea1b66ee   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1105h, step tb
+# start: 20261104T101538Z   end: 20261104T101549Z   rc: 0
+# script sha256: 683dadfd823754729ca18576d8cf52290f87c806e56330728f04216733cf6171
+# ---- script ----
+# | # #1105 step tb, arm c1105h: ext2 tb (100 bytes, its only block a hole): append 128 KiB
+# | set -x
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | uname -a
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/2 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | mkdir -p /hx4k /he4k /hx1k
+# | [ -f /boot/home/c256k ] || { dd if=/dev/urandom of=/boot/home/c256k bs=65536 count=4; dd if=/dev/urandom of=/boot/home/c128k bs=65536 count=2; dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1; dd if=/dev/urandom of=/boot/home/c1k bs=1024 count=1; } 2>/dev/null
+# | for c in c256k c128k c64k c1k; do echo "$c md5 $(md5sum < /boot/home/$c)"; done
+# | lockbefore=$(grep -c "failed to lock memory" /var/log/syslog)
+# | mount -t ext2 $DD/1 /he4k || exit 1
+# | cd /he4k && ls -ls
+# | echo "c128k [0,3996) md5 $(head -c 3996 /boot/home/c128k | md5sum)  [3996,end) md5 $(tail -c +3997 /boot/home/c128k | md5sum)"
+# | cat /boot/home/c128k >> tb; echo "tb append rc=$?"
+# | sync; cd /; unmount /he4k; echo "unmount rc=$?"
+# | echo "lock-memory failures during this step (#1069): $(( $(grep -c 'failed to lock memory' /var/log/syslog) - lockbefore ))"
+# ---- raw output ----
+Haiku ip-10-128-7-128.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+8f74dd8b89a4a24b3613b0e16d5fb7ee77f3e11d35fa3d1580166226d50eb0ef  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 2 raw 
+Haiku ip-10-128-7-128.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+8f74dd8b89a4a24b3613b0e16d5fb7ee77f3e11d35fa3d1580166226d50eb0ef  /boot/system/add-ons/kernel/file_systems/ext2
+c256k md5 b3f31e8b30adb743c7c8f5359e2ef046  -
+c128k md5 40b7bb6fc66668e586eac5281bf126e2  -
+c64k md5 43cd2dc46419115e065d06642e16496b  -
+c1k md5 5bb6fa87190bfdfc1925f7cf84f4cc4d  -
+total 6456
+  16 drw-rw-rw- 2 baron root    16384 Nov  4 09:06 lost+found
+6284 -rw-rw-rw- 1 baron root  8388608 Nov  4 10:14 pi
+   0 -rw-rw-rw- 1 baron root      100 Nov  4 09:14 tb
+ 156 -rw-rw-rw- 1 baron root 41943040 Nov  4 10:14 ti
+c128k [0,3996) md5 7582712825d1f706e30ff73b095d27cc  -  [3996,end) md5 b3f39e57a7ee9c87960f556c4d642384  -
+tb append rc=0
+unmount rc=0
+lock-memory failures during this step (#1069): 1
++ set -x
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 2 raw '
++ mkdir -p /ex4k /ex1k
++ uname -a
++ sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/2 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
++ mkdir -p /hx4k /he4k /hx1k
++ '[' -f /boot/home/c256k ']'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c256k md5 b3f31e8b30adb743c7c8f5359e2ef046  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c128k md5 40b7bb6fc66668e586eac5281bf126e2  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c64k md5 43cd2dc46419115e065d06642e16496b  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c1k md5 5bb6fa87190bfdfc1925f7cf84f4cc4d  -'
+++ grep -c 'failed to lock memory' /var/log/syslog
++ lockbefore=2
++ mount -t ext2 /dev/disk/nvme/1/1 /he4k
++ cd /he4k
++ ls -ls
+++ head -c 3996 /boot/home/c128k
+++ md5sum
+++ tail -c +3997 /boot/home/c128k
+++ md5sum
++ echo 'c128k [0,3996) md5 7582712825d1f706e30ff73b095d27cc  -  [3996,end) md5 b3f39e57a7ee9c87960f556c4d642384  -'
++ cat /boot/home/c128k
++ echo 'tb append rc=0'
++ sync
++ cd /
++ unmount /he4k
++ echo 'unmount rc=0'
+++ grep -c 'failed to lock memory' /var/log/syslog
++ echo 'lock-memory failures during this step (#1069): 1'

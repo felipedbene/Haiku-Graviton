@@ -1,0 +1,217 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed4
+# instance: i-047625f9a42853a06   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: partition the seed EBS volume for #1105 and make Linux sparse files
+# start: 20261104T090613Z   end: 20261104T090625Z   rc: 0
+# script sha256: 330d55c353eb1b17aab5108a103bbe8e73a5b8c14e30318ca474fc3217919bad
+# ---- script ----
+# | # Seed volume for #1105: one 1 GiB EBS volume, GPT, three file systems made by Ubuntu mke2fs,
+# | # with sparse files made by Linux (holes inside the size):
+# | #  p1 x4k  ext4 (extents, no journal/orphan_file/metadata_csum), 4 KiB, 400 MiB:
+# | #     th  truncate -s 8M; 1 MiB of data at 0 and at 6 MiB          (hole 1..6 MiB)
+# | #     ph  8 MiB of data; fallocate --punch-hole -o 2M -l 2M        (hole 2..4 MiB)
+# | #     tf  truncate -s 8M; 64 KiB at 0, 2, 4, 6 MiB: 4 extents, a full root in the inode
+# | #  p2 e4k  ext2 (indirect), 4 KiB, 200 MiB:
+# | #     ti  truncate -s 40M; 4 KiB at 0 and at 39 MiB (holes in the direct, indirect and double
+# | #         indirect ranges, with the indirect block and double indirect leaves missing)
+# | #     pi  8 MiB of data; fallocate --punch-hole -o 2M -l 2M (if the ext4 driver allows it here)
+# | #  p3 x1k  ext4, 1 KiB blocks, 100 MiB:
+# | #     tk  truncate -s 4M; 64 KiB of data at 0                       (partial-page writes)
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol06b2aa1b035811f44 '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "seed device $D"; lsblk $D || exit 1
+# | sgdisk -Z $D > /dev/null; sgdisk -n1:0:+400M -n2:0:+200M -n3:0:+100M $D || exit 1
+# | partprobe $D; sleep 2; P=${D}p
+# | X="-O ^has_journal,^orphan_file,^metadata_csum"
+# | mkfs.ext4 -q -F $X -L x4k ${P}1 && mkfs.ext2 -q -F -b 4096 -L e4k ${P}2 && mkfs.ext4 -q -F -b 1024 $X -L x1k ${P}3 || exit 1
+# | mkdir -p /opt/seed4/m && cd /opt/seed4
+# | w() { dd if=/dev/urandom of=$1 bs=$2 count=$3 seek=$4 conv=notrunc status=none; }
+# | mount ${P}1 m && (cd m && chmod 777 .
+# |  truncate -s 8M th; w th 1M 1 0; w th 1M 1 6
+# |  head -c 8M /dev/urandom > ph; fallocate --punch-hole -o 2M -l 2M ph; echo "punch ph rc=$?"
+# |  truncate -s 8M tf; for o in 0 32 64 96; do w tf 64K 1 $o; done
+# |  sync; chmod 666 *; for f in th ph tf; do echo "== $f $(stat -c '%s %b' $f) md5 $(md5sum < $f | cut -d' ' -f1)"; filefrag -v $f | sed -n '4,9p'; done); umount m
+# | mount ${P}2 m && (cd m && chmod 777 .
+# |  truncate -s 40M ti; w ti 4K 1 0; w ti 4K 1 9984
+# |  head -c 8M /dev/urandom > pi; fallocate --punch-hole -o 2M -l 2M pi; echo "punch pi rc=$?"
+# |  sync; chmod 666 *; for f in ti pi; do echo "== $f $(stat -c '%s %b' $f) md5 $(md5sum < $f | cut -d' ' -f1)"; done); umount m
+# | mount ${P}3 m && (cd m && chmod 777 .
+# |  truncate -s 4M tk; w tk 64K 1 0
+# |  sync; chmod 666 *; echo "== tk $(stat -c '%s %b' tk) md5 $(md5sum < tk | cut -d' ' -f1)"); umount m
+# | for n in 1 2 3; do echo "== p$n"; e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck p$n rc=$?"; tail -1 /tmp/f.out; done
+# | # keep copies of the Linux-made files, to compute the expected contents after Haiku's writes
+# | mkdir -p /opt/seed4/orig && for n in 1 2 3; do mount -o ro ${P}$n m && cp m/* /opt/seed4/orig/ 2>/dev/null; umount m; done; ls -l /opt/seed4/orig
+# ---- raw output ----
+seed device /dev/nvme1n1
+NAME    MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+nvme1n1 259:4    0   1G  0 disk 
+Creating new GPT entries in memory.
+The operation has completed successfully.
+punch ph rc=0
+== th 8388608 4096 md5 b5b0147c2dc082158f2cb4002b687feb
+   0:        0..     255:      33792..     34047:    256:            
+   1:     1536..    1791:      35328..     35583:    256:             last
+th: 1 extent found
+== ph 8388608 12288 md5 d90707303ab5b40b7bf213e9ee3e41ec
+   0:        0..     511:       6465..      6976:    512:            
+   1:     1024..    2047:      16384..     17407:   1024:       7489: last,eof
+ph: 2 extents found
+== tf 8388608 512 md5 50c4ef2889c3ec44714649d4b52441b3
+   0:        0..      15:      35840..     35855:     16:            
+   1:      512..     527:      36352..     36367:     16:            
+   2:     1024..    1039:      36864..     36879:     16:            
+   3:     1536..    1551:      37376..     37391:     16:             last
+tf: 1 extent found
+punch pi rc=0
+== ti 41943040 32 md5 a4d30bf770fd21d7ecee009bd287d87e
+== pi 8388608 12312 md5 61489b32c78be4cb737fbf6c3a980a4e
+== tk 4194304 128 md5 6ca4c5fb68d3590a15bbe8871bf59d13
+== p1
+e2fsck p1 rc=0
+x4k: 14/102400 files (21.4% non-contiguous), 8679/102400 blocks
+== p2
+e2fsck p2 rc=0
+e4k: 13/51200 files (15.4% non-contiguous), 4781/51200 blocks
+== p3
+e2fsck p3 rc=0
+x1k: 12/25584 files (0.0% non-contiguous), 8049/102400 blocks
+total 14664
+-rw-r--r-- 1 root root  8388608 Nov  4 09:06 ph
+-rw-r--r-- 1 root root  8388608 Nov  4 09:06 pi
+-rw-r--r-- 1 root root  8388608 Nov  4 09:06 tf
+-rw-r--r-- 1 root root  8388608 Nov  4 09:06 th
+-rw-r--r-- 1 root root 41943040 Nov  4 09:06 ti
+-rw-r--r-- 1 root root  4194304 Nov  4 09:06 tk
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol06b2aa1b035811f44 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ D=/dev/nvme1n1
++ echo 'seed device /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ sgdisk -Z /dev/nvme1n1
++ sgdisk -n1:0:+400M -n2:0:+200M -n3:0:+100M /dev/nvme1n1
++ partprobe /dev/nvme1n1
++ sleep 2
++ P=/dev/nvme1n1p
++ X='-O ^has_journal,^orphan_file,^metadata_csum'
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L x4k /dev/nvme1n1p1
++ mkfs.ext2 -q -F -b 4096 -L e4k /dev/nvme1n1p2
++ mkfs.ext4 -q -F -b 1024 -O '^has_journal,^orphan_file,^metadata_csum' -L x1k /dev/nvme1n1p3
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkdir -p /opt/seed4/m
++ cd /opt/seed4
++ mount /dev/nvme1n1p1 m
++ cd m
++ chmod 777 .
++ truncate -s 8M th
++ w th 1M 1 0
++ dd if=/dev/urandom of=th bs=1M count=1 seek=0 conv=notrunc status=none
++ w th 1M 1 6
++ dd if=/dev/urandom of=th bs=1M count=1 seek=6 conv=notrunc status=none
++ head -c 8M /dev/urandom
++ fallocate --punch-hole -o 2M -l 2M ph
++ echo 'punch ph rc=0'
++ truncate -s 8M tf
++ for o in 0 32 64 96
++ w tf 64K 1 0
++ dd if=/dev/urandom of=tf bs=64K count=1 seek=0 conv=notrunc status=none
++ for o in 0 32 64 96
++ w tf 64K 1 32
++ dd if=/dev/urandom of=tf bs=64K count=1 seek=32 conv=notrunc status=none
++ for o in 0 32 64 96
++ w tf 64K 1 64
++ dd if=/dev/urandom of=tf bs=64K count=1 seek=64 conv=notrunc status=none
++ for o in 0 32 64 96
++ w tf 64K 1 96
++ dd if=/dev/urandom of=tf bs=64K count=1 seek=96 conv=notrunc status=none
++ sync
++ chmod 666 lost+found ph tf th
++ for f in th ph tf
+++ stat -c '%s %b' th
+++ md5sum
+++ cut '-d ' -f1
++ echo '== th 8388608 4096 md5 b5b0147c2dc082158f2cb4002b687feb'
++ filefrag -v th
++ sed -n 4,9p
++ for f in th ph tf
+++ stat -c '%s %b' ph
+++ md5sum
+++ cut '-d ' -f1
++ echo '== ph 8388608 12288 md5 d90707303ab5b40b7bf213e9ee3e41ec'
++ filefrag -v ph
++ sed -n 4,9p
++ for f in th ph tf
+++ stat -c '%s %b' tf
+++ md5sum
+++ cut '-d ' -f1
++ echo '== tf 8388608 512 md5 50c4ef2889c3ec44714649d4b52441b3'
++ filefrag -v tf
++ sed -n 4,9p
++ umount m
++ mount /dev/nvme1n1p2 m
++ cd m
++ chmod 777 .
++ truncate -s 40M ti
++ w ti 4K 1 0
++ dd if=/dev/urandom of=ti bs=4K count=1 seek=0 conv=notrunc status=none
++ w ti 4K 1 9984
++ dd if=/dev/urandom of=ti bs=4K count=1 seek=9984 conv=notrunc status=none
++ head -c 8M /dev/urandom
++ fallocate --punch-hole -o 2M -l 2M pi
++ echo 'punch pi rc=0'
++ sync
++ chmod 666 lost+found pi ti
++ for f in ti pi
+++ stat -c '%s %b' ti
+++ md5sum
+++ cut '-d ' -f1
++ echo '== ti 41943040 32 md5 a4d30bf770fd21d7ecee009bd287d87e'
++ for f in ti pi
+++ stat -c '%s %b' pi
+++ md5sum
+++ cut '-d ' -f1
++ echo '== pi 8388608 12312 md5 61489b32c78be4cb737fbf6c3a980a4e'
++ umount m
++ mount /dev/nvme1n1p3 m
++ cd m
++ chmod 777 .
++ truncate -s 4M tk
++ w tk 64K 1 0
++ dd if=/dev/urandom of=tk bs=64K count=1 seek=0 conv=notrunc status=none
++ sync
++ chmod 666 lost+found tk
+++ stat -c '%s %b' tk
+++ md5sum
+++ cut '-d ' -f1
++ echo '== tk 4194304 128 md5 6ca4c5fb68d3590a15bbe8871bf59d13'
++ umount m
++ for n in 1 2 3
++ echo '== p1'
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck p1 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3
++ echo '== p2'
++ e2fsck -fn /dev/nvme1n1p2
++ echo 'e2fsck p2 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3
++ echo '== p3'
++ e2fsck -fn /dev/nvme1n1p3
++ echo 'e2fsck p3 rc=0'
++ tail -1 /tmp/f.out
++ mkdir -p /opt/seed4/orig
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p1 m
++ cp m/lost+found m/ph m/tf m/th /opt/seed4/orig/
++ umount m
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p2 m
++ cp m/lost+found m/pi m/ti /opt/seed4/orig/
++ umount m
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p3 m
++ cp m/lost+found m/tk /opt/seed4/orig/
++ umount m
++ ls -l /opt/seed4/orig
