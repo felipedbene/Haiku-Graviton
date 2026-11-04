@@ -1,0 +1,25 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 payloads elided
+# evidence: linux-reference
+# instance: i-09468fba34e4f2239   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux 7.0 reference for #1098: timeexceeded1098 + tcpdump on lo
+# start: 20261104T075613Z   end: 20261104T075737Z   rc: 0
+# script sha256: a0abb2f55eab356e2eb04a4defd7e7f8bf81d321d39802d6dc075ab1bc0639e2
+# ---- script ----
+# | # Linux reference for #1098: the reassembly-timeout Time Exceeded conformance row (75 s), with tcpdump on lo.
+# | mkdir -p /opt/t/l1098 && cd /opt/t/l1098
+# | echo '<base64 elided: the file named after the pipe, whose sha256 the log prints>' | base64 -d > timeexceeded1098.c
+# | sha256sum timeexceeded1098.c; uname -r; sysctl net.ipv6.ip6frag_time
+# | gcc -O2 -Wall -o timeexceeded1098 timeexceeded1098.c || exit 3
+# | ( timeout 80 tcpdump -l -c 1 -n -v -i lo 'icmp6 and ip6[40] == 3' > td.txt 2>&1 & )
+# | ./timeexceeded1098; echo "rc=$?"
+# | sleep 2; echo "== tcpdump"; cat td.txt
+# ---- raw output ----
+bb3a7f993bc8fb65e4daa9c70ba58781cf49b8f9a1831d6a1ac9e4942ce4d8a3  timeexceeded1098.c
+7.0.0-1014-aws
+net.ipv6.ip6frag_time = 60
+t=0s sent [0,1000) of ident 0x7b86b96f and [1000,2000) of ident 0x7b86b970; waiting 75 s
+first fragment only: one Time Exceeded, code 1   PASS  1 after 60 s: code 1, 1056 bytes; quote: nxt 44, plen 1008, frag nxt 17 offlg 0x0001, 1000 data bytes, intact
+later fragment only: no Time Exceeded            PASS  0 in 75 s
+FAILURES 0
+rc=0
+== tcpdump

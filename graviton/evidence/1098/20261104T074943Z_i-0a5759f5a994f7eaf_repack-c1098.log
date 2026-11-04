@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>, inline base64 payloads elided
+# evidence: repack-c1098
+# instance: i-0a5759f5a994f7eaf   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack #1098 candidate: canonical + icmp6/ipv6 of fix/1098
+# start: 20261104T074943Z   end: 20261104T075043Z   rc: 0
+# script sha256: 5a94b3898e420c7ca6e54cbe22af8079efdef1b62a550cefd0084b0a07761564
+# ---- script ----
+# | # Repack arm "c1098": canonical haiku.hpkg with icmp6.c1098 and ipv6.c1098 (everything else is
+# | # canonical's), so a fresh launch of an image of this box runs them. Method of #898/#933/#1011.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O icmp6.c1098 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/T/r2/out/icmp6.c1098?<PRESIGNED>'
+# | wget -q -O ipv6.c1098 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/T/r2/out/ipv6.c1098?<PRESIGNED>'
+# | cat > sums <<'SUMS'
+# | 6d166f9091041fd9b1385620debedcd21e0700ee991140991578bbed56104b7a  icmp6.c1098
+# | 6236b335183e3db3867c411580f75782f6ebd2eeb7a53bd09418a65f8265bc25  ipv6.c1098
+# | SUMS
+# | sha256sum -c sums
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | N=x/add-ons/kernel/network/protocols
+# | sha256sum $N/icmp6 $N/ipv6
+# | cat icmp6.c1098 > $N/icmp6; cat ipv6.c1098 > $N/ipv6
+# | sha256sum $N/icmp6 $N/ipv6
+# | package create -C x ../haiku-new.hpkg > /dev/null && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+icmp6.c1098: OK
+ipv6.c1098: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  x/add-ons/kernel/network/protocols/icmp6
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  x/add-ons/kernel/network/protocols/ipv6
+6d166f9091041fd9b1385620debedcd21e0700ee991140991578bbed56104b7a  x/add-ons/kernel/network/protocols/icmp6
+6236b335183e3db3867c411580f75782f6ebd2eeb7a53bd09418a65f8265bc25  x/add-ons/kernel/network/protocols/ipv6
+-rw-r--r-- 1 baron root 20516919 Nov  4 07:50 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+a994d2f8d7b02c2c078cdb61c3eff6c6d58673cadfbdf68fb1018c0630d0812b  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
