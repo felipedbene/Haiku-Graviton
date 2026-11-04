@@ -27,11 +27,16 @@
  *   x88b5             a frame of an unclaimed type; seen leaving.
  *   bind-by-name+mac  (Haiku) a send-only socket bound by name and address,
  *                     whose address follows the name, frames with it.
+ *   foreign-mac-bind* (Haiku) an address naming the device but carrying
+ *                     another MAC is refused, so no frame leaves with it.
  *   bound-capture-close (Haiku) a typed socket that also captured releases
  *                     its frame type on close.
  *   bad-*             (Haiku) malformed destinations are refused with EINVAL:
  *                     no frame type, no address, a name that pushes the
  *                     address out of the sockaddr, not AF_LINK, too short.
+ *   bad-dst-short-bcast, bad-bind-short (Haiku) a short sendto() address under
+ *                     MSG_BCAST, a short bind address that claims a MAC:
+ *                     EINVAL.
  *   nonroot-*         (Haiku) a non-root process may neither bind nor send.
  *   burst             N ARP requests and N ICMP echoes back to back.
  *
@@ -492,6 +497,50 @@ haiku_rows()
 		close(fd);
 	}
 
+	/* A bound address naming the device but carrying another MAC: the
+	 * frames would go out with that MAC as their source. The MAC starts with
+	 * 0, so the name test in get_interface_for_link() matches it. */
+	{
+		static const uint8_t foreign[6] = {0x00, 0x10, 0x37, 0x10, 0x37, 0x01};
+		for (int typed = 1; typed >= 0; typed--) {
+			int fd = socket(AF_LINK, SOCK_DGRAM, 0);
+			struct sockaddr_dl b;
+			make_link_addr(&b, 1);
+			memcpy(LLADDR(&b), foreign, 6);
+			if (typed) {
+				b.sdl_type = IFT_ETHER;
+				b.sdl_e_type = htons(0x88b5);
+			}
+			int r = bind(fd, (struct sockaddr*)&b, sizeof(b));
+			int bindErrno = errno;
+			size_t len = build_x88b5(f);
+			f[14 + strlen(MARKER) + 4] = typed ? 'F' : 'f';
+			while (watch_frame(buf, sizeof(buf)) > 0)
+				;
+			ssize_t n = r == 0 ? send_frame_on(fd, f, len) : -1;
+			int seen = 0;
+			uint8_t src[6] = {0};
+			double end = now() + 1.0;
+			while (n > 0 && !seen && now() < end) {
+				ssize_t got = watch_frame(buf, sizeof(buf));
+				if (got <= 0) {
+					usleep(1000);
+					continue;
+				}
+				if (got >= (ssize_t)len
+					&& memcmp(buf + 12, f + 12, len - 12) == 0) {
+					seen = 1;
+					memcpy(src, buf + 6, 6);
+				}
+			}
+			row(typed ? "foreign-mac-bind-typed" : "foreign-mac-bind", r != 0,
+				"bind(name + MAC %s) = %d (%s); expected refused; sendto = %zd,"
+				" seen leaving = %d, source %s", mac_str(foreign), r,
+				r ? strerror(bindErrno) : "ok", n, seen, mac_str(src));
+			close(fd);
+		}
+	}
+
 	/* Malformed destinations on a send-only socket. */
 	{
 		const char* names[] = {"bad-dst-no-type", "bad-dst-no-addr",
@@ -524,6 +573,36 @@ haiku_rows()
 			row(names[k], n < 0, "sendto = %zd (%s); expected refused", n,
 				n < 0 ? strerror(errno) : "ok");
 		}
+	}
+
+	/* A 2-byte destination under MSG_BCAST: the frame type would come from
+	 * whatever an earlier buffer left behind. */
+	{
+		struct sockaddr_dl d;
+		memset(&d, 0, sizeof(d));
+		d.sdl_len = 2;
+		d.sdl_family = AF_LINK;
+		ssize_t n = sendto(sSendFd, "x", 1, MSG_BCAST, (struct sockaddr*)&d,
+			2);
+		row("bad-dst-short-bcast", n < 0 && errno == EINVAL,
+			"sendto(2-byte address, MSG_BCAST) = %zd (%s); expected EINVAL", n,
+			n < 0 ? strerror(errno) : "ok");
+	}
+
+	/* A bind address with the device's name that claims a MAC but ends
+	 * before it: the rest of the kernel's copy is zeroes, which would become
+	 * the frames' source. */
+	{
+		int fd = socket(AF_LINK, SOCK_DGRAM, 0);
+		struct sockaddr_dl b;
+		make_link_addr(&b, 1);
+		socklen_t length = offsetof(struct sockaddr_dl, sdl_data) + b.sdl_nlen;
+		b.sdl_len = length;
+		int r = bind(fd, (struct sockaddr*)&b, length);
+		row("bad-bind-short", r != 0 && errno == EINVAL, "bind(name, alen 6,"
+			" %u-byte address) = %d (%s); expected EINVAL", (unsigned)length, r,
+			r ? strerror(errno) : "ok");
+		close(fd);
 	}
 
 	/* A non-root process may neither bind nor send. */
