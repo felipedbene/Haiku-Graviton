@@ -3204,6 +3204,10 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 	fReceiveWindow = max_c(_ReceiveFree(), fReceiveWindow);
 		// the window must not shrink
 
+	// SEG.SEQ as sent, for the window update rule below: trimming moves
+	// segment.sequence up to RCV.NXT.
+	const tcp_sequence untrimmedSequence = segment.sequence;
+
 	// trim buffer to be within the receive window
 	int32 drop = (int32)(fReceiveNext - segment.sequence).Number();
 	if (drop > 0) {
@@ -3267,11 +3271,17 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 	// the persist timer until a probe found it open. A segment without ACK
 	// (the peer's SYN) is taken as it was. Treating the rest as leaving the
 	// window unchanged keeps every test below consistent with that.
+	//
+	// Like Linux's tcp_may_update_window(), one that acknowledges new data is
+	// taken whatever its sequence number: it cannot be older than the last
+	// one, and a peer that has rewound SND.NXT would otherwise have its
+	// reopened window ignored until a probe asked again.
 	if ((segment.flags & TCP_FLAG_ACKNOWLEDGE) != 0) {
-		const tcp_sequence sequence = segment.sequence;
+		const tcp_sequence sequence = untrimmedSequence;
 		const tcp_sequence acknowledge = segment.acknowledge;
 		if (fSendUnacknowledged <= acknowledge && acknowledge <= fSendMax
-			&& (fSendWindowSequence < sequence
+			&& (fSendUnacknowledged < acknowledge
+				|| fSendWindowSequence < sequence
 				|| (fSendWindowSequence == sequence
 					&& fSendWindowAcknowledge <= acknowledge))) {
 			fSendWindowSequence = sequence;
