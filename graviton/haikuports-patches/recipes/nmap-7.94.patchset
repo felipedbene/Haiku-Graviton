@@ -616,7 +616,7 @@ index 0000000..b63721d
 2.54.0 (Apple Git-157)
 
 
-From 5862e58c1e7c00bb6f90eaf28dbc9b3328c25df7 Mon Sep 17 00:00:00 2001
+From 0247821099ec6bdb095528916c8d741675a50bce Mon Sep 17 00:00:00 2001
 From: Felipe De Bene <benfelip@amazon.com>
 Date: Tue, 3 Nov 2026 21:08:56 -0600
 Subject: [PATCH 3/4] libdnet: add a Haiku Ethernet backend
@@ -631,10 +631,10 @@ device's own address.
 The stack refuses that bind for a frame type it handles itself (IPv4, ARP,
 IPv6), so those frames still cannot be sent.
 ---
- libdnet-stripped/configure       |   8 ++
+ libdnet-stripped/configure       |   8 +
  libdnet-stripped/configure.in    |   3 +
- libdnet-stripped/src/eth-haiku.c | 225 +++++++++++++++++++++++++++++++
- 3 files changed, 236 insertions(+)
+ libdnet-stripped/src/eth-haiku.c | 243 +++++++++++++++++++++++++++++++
+ 3 files changed, 254 insertions(+)
  create mode 100644 libdnet-stripped/src/eth-haiku.c
 
 diff --git a/libdnet-stripped/configure b/libdnet-stripped/configure
@@ -672,16 +672,16 @@ index 9e50809..2aeffd5 100644
  elif test "$ac_cv_dnet_bsd_bpf" = yes ; then
 diff --git a/libdnet-stripped/src/eth-haiku.c b/libdnet-stripped/src/eth-haiku.c
 new file mode 100644
-index 0000000..f0f046d
+index 0000000..298a187
 --- /dev/null
 +++ b/libdnet-stripped/src/eth-haiku.c
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,243 @@
 +/*
 + * eth-haiku.c
 + *
 + * Haiku Ethernet access through AF_LINK datagram sockets, the interface
 + * libpcap's Haiku backend uses. The link address comes from SIOCGIFADDR on
-+ * an AF_LINK socket, as ifconfig(8) reads it.
++ * an AF_LINK socket, as libpcap's backend and BNetworkDevice read it.
 + *
 + * Sending: a link socket bound to an interface with sdl_type IFT_ETHER and a
 + * frame type has the stack's ethernet_frame module build the header from
@@ -731,19 +731,37 @@ index 0000000..f0f046d
 +	int			 next;	/* sender slot to recycle */
 +};
 +
++/* Reads the device's link address. The stack writes a whole sockaddr_dl,
++ * sdl_len bytes holding the device path as its name and then the address
++ * (get_device_interface_address()), so it can run past ifr_addr: read it
++ * into room for a full sockaddr_dl and copy sdl_len bytes, not
++ * sizeof(struct sockaddr). */
 +static int
 +_link_addr(int fd, const char *name, struct sockaddr_dl *sdl)
 +{
-+	struct ifreq ifr;
++	union {
++		struct ifreq	ifr;
++		u_char		room[offsetof(struct ifreq, ifr_addr) +
++				    sizeof(struct sockaddr_dl)];
++	} req;
++	const struct sockaddr_dl *got;
++	size_t len;
 +
-+	memset(&ifr, 0, sizeof(ifr));
-+	strlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
-+	if (ioctl(fd, SIOCGIFADDR, &ifr, sizeof(ifr)) < 0)
++	memset(&req, 0, sizeof(req));
++	strlcpy(req.ifr.ifr_name, name, sizeof(req.ifr.ifr_name));
++	if (ioctl(fd, SIOCGIFADDR, &req, sizeof(req)) < 0)
 +		return (-1);
-+	memcpy(sdl, &ifr.ifr_addr, sizeof(*sdl) < sizeof(ifr.ifr_addr) ?
-+	    sizeof(*sdl) : sizeof(ifr.ifr_addr));
++
++	got = (const struct sockaddr_dl *)&req.ifr.ifr_addr;
++	len = got->sdl_len;
++	if (len > sizeof(*sdl))
++		len = sizeof(*sdl);
++	memset(sdl, 0, sizeof(*sdl));
++	memcpy(sdl, got, len);
 +	if (sdl->sdl_family != AF_LINK || sdl->sdl_type != IFT_ETHER ||
-+	    sdl->sdl_alen != ETH_ADDR_LEN) {
++	    sdl->sdl_alen != ETH_ADDR_LEN ||
++	    offsetof(struct sockaddr_dl, sdl_data) + sdl->sdl_nlen +
++	    sdl->sdl_alen > len) {
 +		errno = ENODEV;
 +		return (-1);
 +	}
@@ -905,7 +923,7 @@ index 0000000..f0f046d
 2.54.0 (Apple Git-157)
 
 
-From eb6f1cecadf2da01780b6672c8302f11320f6cf1 Mon Sep 17 00:00:00 2001
+From 6bb8074235add94298af6fe347ebf0e931f41193 Mon Sep 17 00:00:00 2001
 From: Felipe De Bene <benfelip@amazon.com>
 Date: Tue, 3 Nov 2026 20:50:11 -0600
 Subject: [PATCH 4/4] nmap: send at the IP layer by default on Haiku
@@ -915,9 +933,14 @@ so libdnet's eth_send() cannot send any frame nmap builds. With the default
 PACKET_SEND_IP_WEAK, a directly connected Ethernet target still gets an
 implicit ARP ping and next-hop MAC lookup, and the scan quits. Default to
 --send-ip instead; --send-eth still selects the link layer explicitly.
+
+--spoof-mac is refused outright: it could only work through link-layer
+sends from another source address, which the stack never makes, and with
+the new default it would otherwise print a spoofed MAC and send the real one.
 ---
  NmapOps.cc | 6 ++++++
- 1 file changed, 6 insertions(+)
+ nmap.cc    | 6 ++++++
+ 2 files changed, 12 insertions(+)
 
 diff --git a/NmapOps.cc b/NmapOps.cc
 index 612b6e4..b8cf2db 100644
@@ -936,6 +959,23 @@ index 612b6e4..b8cf2db 100644
  #else
     sendpref = PACKET_SEND_IP_WEAK;
  #endif
+diff --git a/nmap.cc b/nmap.cc
+index e4c65e7..1041d0e 100644
+--- a/nmap.cc
++++ b/nmap.cc
+@@ -1623,6 +1623,12 @@ void  apply_delayed_options() {
+   }
+ #endif
+   if (delayed_options.spoofmac) {
++#ifdef __HAIKU__
++    /* Haiku's stack frames link-layer sends with the device's own address
++       only, and does not send IPv4/ARP/IPv6 frames from userland at all
++       (see libdnet's eth-haiku.c), so a spoofed MAC can never take effect. */
++    fatal("--spoof-mac is not supported on Haiku");
++#endif
+     u8 mac_data[6];
+     int pos = 0; /* Next index of mac_data to fill in */
+     char tmphex[3];
 -- 
 2.54.0 (Apple Git-157)
 
