@@ -123,6 +123,7 @@ private:
 			void				_Stored(uint16 end, bool lastFragment,
 									uint8** _headers, uint32 headersLength,
 									uint32 nextHeaderField);
+			void				_SendTimeExceeded();
 
 			FragmentPacket*		fNext;
 			struct ipv6_packet_key fKey;
@@ -767,13 +768,65 @@ FragmentPacket::StaleTimer(struct net_timer* timer, void* data)
 	sFragmentPackets.Remove(packet);
 	locker.Unlock();
 
-	if (!packet->fFragments.IsEmpty()) {
-		// Send error: fragment reassembly time exceeded
-		sDomain->module->error_reply(NULL, packet->fFragments.First(),
+	packet->_SendTimeExceeded();
+
+	delete packet;
+}
+
+
+/*!	Reports the timeout to the sender with a Time Exceeded, which RFC 8200 4.5
+	asks for only once the first fragment has arrived. The fragments hold only
+	their data, and the first one's headers were kept without its fragment
+	header, so the invoking packet the error quotes is put back together:
+	those headers, a fragment header for offset 0, and the data from offset 0.
+	Must be called with the packet out of the hash, which makes it this
+	caller's alone.
+*/
+void
+FragmentPacket::_SendTimeExceeded()
+{
+	net_buffer* first = fFragments.First();
+	if (fHeaders == NULL || first == NULL || first->fragment.start != 0)
+		return;
+
+	ip6_frag fragmentHeader;
+	fragmentHeader.ip6f_nxt = fKey.protocol;
+	fragmentHeader.ip6f_reserved = 0;
+	fragmentHeader.ip6f_offlg = IP6F_MORE_FRAG;
+		// offset 0; had the first fragment been the last one as well, the
+		// datagram would have been complete
+	fragmentHeader.ip6f_ident = fKey.id;
+
+	net_buffer* invoking = gBufferModule->create(0);
+	if (invoking == NULL)
+		return;
+
+	// The error quotes no more than fits the minimum MTU, so neither is more
+	// of the data needed.
+	status_t status = gBufferModule->append(invoking, fHeaders,
+		fHeadersLength);
+	if (status == B_OK) {
+		status = gBufferModule->append(invoking, &fragmentHeader,
+			sizeof(fragmentHeader));
+	}
+	if (status == B_OK) {
+		status = gBufferModule->append_cloned(invoking, first, 0,
+			min_c(first->size, (uint32)IPV6_MMTU));
+	}
+	if (status == B_OK) {
+		// The addresses ipv6_receive_data() recorded from the fragments' real
+		// headers before reassembly; the error is addressed by them.
+		memcpy(invoking->source, first->source, first->source->sa_len);
+		memcpy(invoking->destination, first->destination,
+			first->destination->sa_len);
+		invoking->msg_flags = first->msg_flags & (MSG_BCAST | MSG_MCAST);
+		invoking->index = fIndex;
+
+		sDomain->module->error_reply(NULL, invoking,
 			B_NET_ERROR_REASSEMBLY_TIME_EXCEEDED, NULL);
 	}
 
-	delete packet;
+	gBufferModule->free(invoking);
 }
 
 
