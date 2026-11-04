@@ -1,0 +1,85 @@
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type regular ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+AddHaikuImagePackages: package bzip2 not available! 
+AddHaikuImagePackages: package ffmpeg6 not available! 
+AddHaikuImagePackages: package glu not available! 
+AddHaikuImagePackages: package gutenprint9 not available! 
+AddHaikuImagePackages: package lame not available! 
+AddHaikuImagePackages: package mesa not available! 
+AddHaikuImagePackages: package mesa_devel not available! 
+AddHaikuImagePackages: package mesa_swpipe not available! 
+AddHaikuImagePackages: package netcat not available! 
+AddHaikuImagePackages: package sharutils not available! 
+AddHaikuImagePackages: package unzip not available! 
+AddHaikuImagePackages: package which not available! 
+AddHaikuImagePackages: package zip not available! 
+AddHaikuImagePackages: package diffutils not available! 
+AddHaikuImagePackages: package gzip not available! 
+AddHaikuImagePackages: package tar not available! 
+AddHaikuImagePackages: package tcpdump not available! 
+...patience...
+...found 8823 target(s)...
+...updating 22 target(s)...
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/KPPPManager.o 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/kernel_cpp.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPConfigurePacket.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPDevice.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPInterface.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPLayer.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPLCP.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPLCPExtension.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPOptionHandler.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPProtocol.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPReportManager.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPUtils.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/settings_tools.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/_KPPPMRUHandler.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/_KPPPAuthenticationHandler.o 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/_KPPPPFCHandler.o 
+In file included from ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/TemplateList.h:15,
+                 from ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPLCP.h:9,
+                 from ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers/KPPPInterface.h:20,
+                 from ../src/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.cpp:16:
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.cpp: In member function 'bool KPPPStateMachine::SendEchoRequest()':
+../headers/private/kernel/string.h:14:49: warning: 'void* __builtin_memcpy(void*, const void*, long unsigned int)' offset [4, 7] is out of the bounds [0, 4] of object 'request' with type 'ppp_lcp_packet' [-Warray-bounds=]
+   14 | #define memcpy(DEST, SRC, LEN)  __builtin_memcpy((DEST), (SRC), (LEN))
+      |                                 ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.cpp:200:9: note: in expansion of macro 'memcpy'
+  200 |         memcpy(request.data, &fMagicNumber, sizeof(fMagicNumber));
+      |         ^~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.cpp:193:24: note: 'request' declared here
+  193 |         ppp_lcp_packet request;
+      |                        ^~~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.cpp: In member function 'bool KPPPStateMachine::SendDiscardRequest()':
+../headers/private/kernel/string.h:14:49: warning: 'void* __builtin_memcpy(void*, const void*, long unsigned int)' offset [4, 7] is out of the bounds [0, 4] of object 'request' with type 'ppp_lcp_packet' [-Warray-bounds=]
+   14 | #define memcpy(DEST, SRC, LEN)  __builtin_memcpy((DEST), (SRC), (LEN))
+      |                                 ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.cpp:238:9: note: in expansion of macro 'memcpy'
+  238 |         memcpy(request.data, &fMagicNumber, sizeof(fMagicNumber));
+      |         ^~~~~~
+../src/add-ons/kernel/network/ppp/shared/libkernelppp/KPPPStateMachine.cpp:231:24: note: 'request' declared here
+  231 |         ppp_lcp_packet request;
+      |                        ^~~~~~~
+Archive objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/libkernelppp.a 
+Ranlib objects/haiku/arm64/release/add-ons/kernel/network/ppp/shared/libkernelppp/libkernelppp.a 
+Link objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/ppp_manager 
+SetType1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/ppp_manager 
+MimeSet1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/ppp_manager 
+SetVersion1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/ppp_manager 
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp_manager/ppp_manager 
+...updated 22 target(s)...

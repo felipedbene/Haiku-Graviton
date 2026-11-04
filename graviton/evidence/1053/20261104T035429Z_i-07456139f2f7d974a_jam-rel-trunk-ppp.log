@@ -1,0 +1,50 @@
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type regular ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+AddHaikuImagePackages: package bzip2 not available! 
+AddHaikuImagePackages: package ffmpeg6 not available! 
+AddHaikuImagePackages: package glu not available! 
+AddHaikuImagePackages: package gutenprint9 not available! 
+AddHaikuImagePackages: package lame not available! 
+AddHaikuImagePackages: package mesa not available! 
+AddHaikuImagePackages: package mesa_devel not available! 
+AddHaikuImagePackages: package mesa_swpipe not available! 
+AddHaikuImagePackages: package netcat not available! 
+AddHaikuImagePackages: package sharutils not available! 
+AddHaikuImagePackages: package unzip not available! 
+AddHaikuImagePackages: package which not available! 
+AddHaikuImagePackages: package zip not available! 
+AddHaikuImagePackages: package diffutils not available! 
+AddHaikuImagePackages: package gzip not available! 
+AddHaikuImagePackages: package tar not available! 
+AddHaikuImagePackages: package tcpdump not available! 
+...patience...
+...found 8688 target(s)...
+...updating 4 target(s)...
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/ppp 
+MkDir1 objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp 
+C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp.o 
+../src/add-ons/kernel/network/ppp/ppp/ppp.cpp: In function 'status_t ppp_send_data(net_device*, net_buffer*)':
+../src/add-ons/kernel/network/ppp/ppp/ppp.cpp:205:16: error: unused variable 'net_buffer_size' [-Werror=unused-variable]
+  205 |         size_t net_buffer_size = buffer->size;
+      |                ^~~~~~~~~~~~~~~
+cc1plus: all warnings being treated as errors
+
+/opt/src/haiku/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc -c "../src/add-ons/kernel/network/ppp/ppp/ppp.cpp" -O2 -Wall -Wno-multichar -Wpointer-arith -Wsign-compare -Wno-ctor-dtor-privacy -Woverloaded-virtual -Werror -Wno-error=unused-but-set-variable -Wno-error=cpp -Wno-error=register -Wno-error=address-of-packed-member -Wno-error=stringop-overread -Wno-error=array-bounds -Wno-error=cast-align -Wno-error=format-truncation -fno-rtti -pipe -fno-strict-aliasing -fno-delete-null-pointer-checks -mcpu=neoverse-n1+crypto -nostdinc -ffreestanding -finline -fno-semantic-interposition -fno-tree-vectorize -fno-exceptions -fno-use-cxa-atexit -fno-omit-frame-pointer -D_KERNEL_MODE -DARCH_arm64 -D__HAIKU_PRIMARY_PACKAGING_ARCH=\"arm64\" -DHAIKU_DISTRO_COMPATIBILITY_DEFAULT -DHAIKU_TARGET_PLATFORM_HAIKU -DHAIKU_REGULAR_BUILD -iquote ../build/user_config_headers -iquote ../build/config_headers -iquote ../src/add-ons/kernel/network/ppp/ppp -iquote objects/common/add-ons/kernel/network/ppp/ppp -iquote objects/linux/arm64/common/add-ons/kernel/network/ppp/ppp -iquote objects/haiku/arm64/common/add-ons/kernel/network/ppp/ppp -I ../headers/private/. -I ../headers/private/kernel -I ../headers/private/libroot -I ../headers/private/shared -I ../headers/private/kernel/boot/platform/efi -I ../headers/private/kernel/arch/arm64 -I objects/haiku/arm64/common/system/kernel -I ../headers/private/. -I ../headers/private/system -I ../headers/private/system/arch/arm64 -I ../headers/private/net -I ../headers/private/kernel/util -I ../src/add-ons/kernel/network/ppp/shared/libkernelppp/headers -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++ -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/aarch64-unknown-haiku -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/backward -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/c++/ext -I ../headers/glibc -I ../headers/posix -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include -I build_packages/gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64/develop/headers/gcc/include-fixed -I ../headers -I ../headers/os -I ../headers/os/add-ons -I ../headers/os/add-ons/file_system -I ../headers/os/add-ons/graphics -I ../headers/os/add-ons/input_server -I ../headers/os/add-ons/registrar -I ../headers/os/add-ons/screen_saver -I ../headers/os/add-ons/tracker -I ../headers/os/app -I ../headers/os/device -I ../headers/os/drivers -I ../headers/os/game -I ../headers/os/interface -I ../headers/os/kernel -I ../headers/os/locale -I ../headers/os/media -I ../headers/os/mail -I ../headers/os/midi -I ../headers/os/midi2 -I ../headers/os/net -I ../headers/os/storage -I ../headers/os/support -I ../headers/os/translation -I ../headers/private/. -o "objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp.o"
+
+...failed C++ objects/haiku/arm64/release/add-ons/kernel/network/ppp/ppp/ppp.o ...
+
+BUILD FAILURE:
+...failed updating 1 target(s)...
+...skipped 1 target(s)...
+...updated 2 target(s)...

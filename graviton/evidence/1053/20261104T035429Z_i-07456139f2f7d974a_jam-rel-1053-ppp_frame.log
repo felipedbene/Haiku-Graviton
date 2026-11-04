@@ -1,0 +1,32 @@
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type regular ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+AddHaikuImagePackages: package bzip2 not available! 
+AddHaikuImagePackages: package ffmpeg6 not available! 
+AddHaikuImagePackages: package glu not available! 
+AddHaikuImagePackages: package gutenprint9 not available! 
+AddHaikuImagePackages: package lame not available! 
+AddHaikuImagePackages: package mesa not available! 
+AddHaikuImagePackages: package mesa_devel not available! 
+AddHaikuImagePackages: package mesa_swpipe not available! 
+AddHaikuImagePackages: package netcat not available! 
+AddHaikuImagePackages: package sharutils not available! 
+AddHaikuImagePackages: package unzip not available! 
+AddHaikuImagePackages: package which not available! 
+AddHaikuImagePackages: package zip not available! 
+AddHaikuImagePackages: package diffutils not available! 
+AddHaikuImagePackages: package gzip not available! 
+AddHaikuImagePackages: package tar not available! 
+AddHaikuImagePackages: package tcpdump not available! 
+...patience...
+...found 8685 target(s)...
