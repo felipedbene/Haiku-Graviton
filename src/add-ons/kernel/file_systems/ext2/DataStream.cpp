@@ -185,15 +185,35 @@ DataStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 		B_PRIdOFF "\n", fNumBlocks, numBlocks);
 
 	off_t targetBlocks = numBlocks;
+	off_t oldNumBlocks = fNumBlocks;
 	fWaiting = _BlocksNeeded(numBlocks);
 	fAddedBlocks = 0;
+	fFreedBlocks = 0;
 
 	status_t status = _Enlarge(transaction, targetBlocks);
+	if (status != B_OK) {
+		// Undo what was done, so that the file keeps exactly the blocks it
+		// had and the caller can fail the resize (a full volume, mostly).
+		// Everything this call mapped, data or indirect blocks, lies below
+		// targetBlocks and at or above oldNumBlocks, and the pointers
+		// past what it got to are still 0, which _Shrink() skips.
+		fNumBlocks = targetBlocks;
+		fFreeStart = 0;
+		fFreeCount = 0;
+		fRemovedBlocks = 0;
+		if (_Shrink(transaction, oldNumBlocks) != B_OK)
+			_PerformFree(transaction);
+		fNumBlocks = oldNumBlocks;
+	}
+	if (fAllocated != 0) {
+		// allocated in one go but not handed out
+		fVolume->FreeBlocks(transaction, fAllocatedPos, fAllocated);
+		fAllocated = 0;
+	}
 
-	// The caller charges the inode's i_blocks with what was really mapped,
-	// indirect blocks included, also when only part of the range could be
-	// allocated.
-	numBlocks = fAddedBlocks;
+	// The caller charges the inode's i_blocks with what is mapped now,
+	// indirect blocks included.
+	numBlocks = fAddedBlocks - fFreedBlocks;
 	return status;
 }
 
@@ -276,6 +296,10 @@ DataStream::Shrink(Transaction& transaction, off_t& numBlocks)
 	fFreedBlocks = 0;
 
 	status_t status = _Shrink(transaction, numBlocks);
+	if (status != B_OK) {
+		// the pointers of the pending run are cleared already
+		_PerformFree(transaction);
+	}
 
 	// As in Enlarge(): report the blocks really released, indirect blocks
 	// included, so that the caller can take them off i_blocks.
@@ -403,8 +427,12 @@ DataStream::_GetBlock(Transaction& transaction, uint32& blockNum)
 		uint32 blockGroup = (fAllocatedPos - fFirstBlock)
 			/ fVolume->BlocksPerGroup();
 		
-		status_t status = fVolume->AllocateBlocks(transaction, 1, fWaiting,
-			blockGroup, fAllocatedPos, fAllocated);
+		// fWaiting is an estimate, which can run out on a sparse file made
+		// elsewhere; asking for at most 0 blocks would get 0, and the
+		// fAllocated-- below would then hand out a block never allocated.
+		status_t status = fVolume->AllocateBlocks(transaction, 1,
+			fWaiting > 0 ? fWaiting : 1, blockGroup, fAllocatedPos,
+			fAllocated);
 		if (status != B_OK) {
 			ERROR("DataStream::_GetBlock(): AllocateBlocks() failed()\n");
 			return status;
@@ -412,7 +440,7 @@ DataStream::_GetBlock(Transaction& transaction, uint32& blockNum)
 		if (fAllocatedPos > UINT_MAX)
 			return B_FILE_TOO_LARGE;
 
-		fWaiting -= fAllocated;
+		fWaiting -= min_c(fWaiting, fAllocated);
 
 		TRACE("DataStream::_GetBlock(): newAllocated: %" B_PRIu32 ", newpos: %"
 			B_PRIu64 ", newwaiting: %" B_PRIu32 "\n", fAllocated,
@@ -488,8 +516,16 @@ DataStream::_AddBlocks(Transaction& transaction, uint32* block, off_t start,
 	CachedBlock cached(fVolume);	
 	uint32* childBlock = (uint32*)cached.SetToWritable(transaction, blockNum,
 		clear);
-	if (childBlock == NULL)
+	if (childBlock == NULL) {
+		if (clear) {
+			// Never zeroed: don't leave it linked, or undoing this Enlarge()
+			// would read its old contents as block numbers.
+			*block = 0;
+			fVolume->FreeBlocks(transaction, blockNum, 1);
+			fAddedBlocks--;
+		}
 		return B_IO_ERROR;
+	}
 
 	if (recursion == 0)
 		return _AddBlocks(transaction, &childBlock[start], end - start);

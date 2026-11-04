@@ -78,7 +78,8 @@ Volume::Volume(fs_volume* volume)
 	fJournalInode(NULL),
 	fFlags(0),
 	fGroupBlocks(NULL),
-	fRootNode(NULL)
+	fRootNode(NULL),
+	fSuperBlockTransaction(-1)
 {
 	mutex_init(&fLock, "ext2 volume");
 }
@@ -688,6 +689,14 @@ status_t
 Volume::WriteSuperBlock(Transaction& transaction)
 {
 	TRACE("Volume::WriteSuperBlock()\n");
+	if (transaction.IsStarted()
+		&& transaction.ID() != fSuperBlockTransaction) {
+		// The free counts kept here change with every allocation; when the
+		// transaction is aborted, TransactionDone() reloads them from the
+		// superblock the block cache has rolled back.
+		fSuperBlockTransaction = transaction.ID();
+		transaction.AddListener(this);
+	}
 	fSuperBlock.SetFreeBlocks(fFreeBlocks, Has64bitFeature());
 	fSuperBlock.SetFreeInodes(fFreeInodes);
 	// TODO: Rest of fields that can be modified
@@ -801,5 +810,5 @@ Volume::TransactionDone(bool success)
 void
 Volume::RemovedFromTransaction()
 {
-	// TODO: Does it make a difference?
+	fSuperBlockTransaction = -1;
 }

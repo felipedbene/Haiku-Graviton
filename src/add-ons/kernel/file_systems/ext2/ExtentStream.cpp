@@ -36,6 +36,7 @@ ExtentStream::ExtentStream(Volume* volume, Inode* inode,
 	fStream(stream),
 	fFirstBlock(volume->FirstDataBlock()),
 	fAllocatedPos(fFirstBlock),
+	fPending(0),
 	fSize(size)
 {
 	fNumBlocks = size == 0 ? 0 : ((size - 1) >> fVolume->BlockShift()) + 1;
@@ -156,22 +157,45 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 {
 	TRACE("Enlarge(): current size: %" B_PRIdOFF ", target size: %" B_PRIdOFF
 		"\n", fNumBlocks, numBlocks);
-	
-	off_t targetBlocks = numBlocks;
-	numBlocks = 0;
-		// Counts the blocks really mapped, data and tree blocks, for the
-		// caller's i_blocks; on a failure, it still covers what was mapped.
-	uint32 allocated = 0;
 
+	off_t targetBlocks = numBlocks;
+	off_t oldNumBlocks = fNumBlocks;
+	fPending = 0;
+	numBlocks = 0;
+		// Counts the blocks mapped, data and tree blocks, for the caller's
+		// i_blocks.
+
+	status_t status = _Enlarge(transaction, targetBlocks, numBlocks);
+	if (status != B_OK) {
+		// Undo what was done, so that the file keeps exactly the blocks it
+		// had and the caller can fail the resize (a full volume, mostly).
+		// Data blocks already allocated but not yet in an extent go back
+		// first, then Shrink() frees what made it into the tree.
+		if (fPending != 0) {
+			fVolume->FreeBlocks(transaction, fAllocatedPos, fPending);
+			fPending = 0;
+		}
+		off_t freed = oldNumBlocks;
+		Shrink(transaction, freed);
+		numBlocks -= freed;
+	}
+	return status;
+}
+
+
+status_t
+ExtentStream::_Enlarge(Transaction& transaction, off_t targetBlocks,
+	off_t& numBlocks)
+{
 	while (fNumBlocks < targetBlocks) {
 		// allocate new blocks
 		uint32 blockGroup = (fAllocatedPos - fFirstBlock)
 				/ fVolume->BlocksPerGroup();
 		
-		if (allocated == 0) {
+		if (fPending == 0) {
 			status_t status = fVolume->AllocateBlocks(transaction, 1,
 				targetBlocks - fNumBlocks, blockGroup, fAllocatedPos,
-				allocated);
+				fPending);
 			if (status != B_OK) {
 				ERROR("Enlarge(): AllocateBlocks() failed()\n");
 				return status;
@@ -212,7 +236,7 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 			if (last.PhysicalBlock() + last.Length() == fAllocatedPos
 				&& last.LogicalBlock() + last.Length() == fNumBlocks
 				&& !last.IsUninitialized()
-				&& (last.Length() + allocated) <= EXT2_EXTENT_MAX_LENGTH) {
+				&& (last.Length() + fPending) <= EXT2_EXTENT_MAX_LENGTH) {
 				if (stream != fStream) {
 					stream = (ext2_extent_stream *)cached.SetToWritable(
 						transaction, cached.BlockNumber());
@@ -220,11 +244,11 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 						return B_IO_ERROR;
 				}
 				stream->extent_entries[stream->extent_header.NumEntries() - 1]
-					.SetLength(last.Length() + allocated);
+					.SetLength(last.Length() + fPending);
 				fInode->SetExtentChecksum(stream);
-				fNumBlocks += allocated;
-				numBlocks += allocated;
-				allocated = 0;
+				fNumBlocks += fPending;
+				numBlocks += fPending;
+				fPending = 0;
 				TRACE("Enlarge() entry extended\n");
 				continue;
 			}
@@ -285,87 +309,78 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 
 			if (level < 0)
 				stream = fStream;
+			else {
+				// the new index entry goes into this block
+				stream = (ext2_extent_stream *)cached.SetToWritable(
+					transaction, path[level]);
+				if (stream == NULL)
+					return B_IO_ERROR;
+			}
 
+			// A node at depth d needs d new blocks below it: d - 1 index
+			// blocks and a leaf. Get them all first, set them up as a chain
+			// of nodes with one entry each, and only then link the chain
+			// into the tree: running out of space (or an I/O error) on the
+			// way can't leave an empty index block in the tree, which
+			// Shrink() and the next Enlarge() could not walk.
 			uint16 depth = stream->extent_header.Depth();
-			while (depth > 1) {
-				TRACE("Enlarge() adding an index block at depth %d\n", depth);
-				fsblock_t newBlock = path[level];
+			fsblock_t newBlocks[kMaxTreeDepth];
+			if (depth == 0 || depth > kMaxTreeDepth)
+				return B_BAD_DATA;
+			for (uint16 i = 0; i < depth; i++) {
+				newBlocks[i] = level >= 0 ? path[level]
+					: fStream->extent_index[0].PhysicalBlock();
 				uint32 _allocated;
 				status_t status = fVolume->AllocateBlocks(transaction, 1, 1,
-					blockGroup, newBlock, _allocated);
+					blockGroup, newBlocks[i], _allocated);
 				if (status != B_OK) {
 					ERROR("Enlarge(): AllocateBlocks() failed()\n");
+					while (i-- > 0)
+						fVolume->FreeBlocks(transaction, newBlocks[i], 1);
 					return status;
 				}
-				ASSERT(_CheckBlock(fStream, newBlock) == B_OK);
-				numBlocks++;
-				int32 index = stream->extent_header.NumEntries();
-				stream->extent_index[index].SetLogicalBlock(fNumBlocks);
-				stream->extent_index[index].SetPhysicalBlock(newBlock);
-				stream->extent_header.SetNumEntries(index + 1);
-				fInode->SetExtentChecksum(stream);
-				path[level++] = newBlock;
-
-				depth = stream->extent_header.Depth() - 1;
-				TRACE("Enlarge() init index block %" B_PRIu64 " at depth %d\n",
-					newBlock, depth);
-				stream = (ext2_extent_stream *)cached.SetToWritable(
-					transaction, newBlock);
-				if (stream == NULL)
-					return B_IO_ERROR;
-				stream->extent_header.magic = EXT2_EXTENT_MAGIC;
-				stream->extent_header.SetNumEntries(0);
-				stream->extent_header.SetMaxEntries((fVolume->BlockSize()
-					- sizeof(ext2_extent_header)) / sizeof(ext2_extent_index));
-				stream->extent_header.SetDepth(depth);
-				stream->extent_header.SetGeneration(0);
-				fInode->SetExtentChecksum(stream);
-
-				ASSERT(Check());
+				ASSERT(_CheckBlock(fStream, newBlocks[i]) == B_OK);
 			}
-
-			TRACE("Enlarge() depth %d level %" B_PRId32 "\n", 
-				stream->extent_header.Depth(), level);
-
-			if (stream->extent_header.Depth() == 1) {
-				TRACE("Enlarge() adding an entry block at depth %d level %"
-					B_PRId32 "\n", depth, level);
-				fsblock_t newBlock;
-				if (level >= 0)
-					newBlock = path[level];
-				else
-					newBlock = fStream->extent_index[0].PhysicalBlock();
-				uint32 _allocated;
-				status_t status = fVolume->AllocateBlocks(transaction, 1, 1,
-					blockGroup, newBlock, _allocated);
-				if (status != B_OK) {
-					ERROR("Enlarge(): AllocateBlocks() failed()\n");
-					return status;
+			for (uint16 i = 0; i < depth; i++) {
+				CachedBlock nodeCached(fVolume);
+				ext2_extent_stream* node = (ext2_extent_stream*)
+					nodeCached.SetToWritable(transaction, newBlocks[i], true);
+				if (node == NULL) {
+					for (uint16 j = 0; j < depth; j++)
+						fVolume->FreeBlocks(transaction, newBlocks[j], 1);
+					return B_IO_ERROR;
 				}
-
-				ASSERT(_CheckBlock(fStream, newBlock) == B_OK);
-				numBlocks++;
-				int32 index = stream->extent_header.NumEntries();
-				stream->extent_index[index].SetLogicalBlock(fNumBlocks);
-				stream->extent_index[index].SetPhysicalBlock(newBlock);
-				stream->extent_header.SetNumEntries(index + 1);
-				fInode->SetExtentChecksum(stream);
-
-				TRACE("Enlarge() init entry block %" B_PRIu64
-					" at depth %d\n", newBlock, depth);
-				stream = (ext2_extent_stream *)cached.SetToWritable(
-					transaction, newBlock);
-				if (stream == NULL)
-					return B_IO_ERROR;
-				stream->extent_header.magic = EXT2_EXTENT_MAGIC;
-				stream->extent_header.SetNumEntries(0);
-				stream->extent_header.SetMaxEntries((fVolume->BlockSize()
-					- sizeof(ext2_extent_header)) / sizeof(ext2_extent_entry));
-				stream->extent_header.SetDepth(0);
-				stream->extent_header.SetGeneration(0);
-				fInode->SetExtentChecksum(stream);
-				ASSERT(Check());
+				uint16 nodeDepth = depth - 1 - i;
+				node->extent_header.magic = EXT2_EXTENT_MAGIC;
+				node->extent_header.SetMaxEntries((fVolume->BlockSize()
+					- sizeof(ext2_extent_header)) / (nodeDepth > 0
+						? sizeof(ext2_extent_index) : sizeof(ext2_extent_entry)));
+				node->extent_header.SetDepth(nodeDepth);
+				node->extent_header.SetGeneration(0);
+				if (nodeDepth > 0) {
+					node->extent_index[0].SetLogicalBlock(fNumBlocks);
+					node->extent_index[0].SetPhysicalBlock(newBlocks[i + 1]);
+					node->extent_header.SetNumEntries(1);
+				} else
+					node->extent_header.SetNumEntries(0);
+				fInode->SetExtentChecksum(node);
 			}
+
+			TRACE("Enlarge() linking %d new tree blocks at depth %d level %"
+				B_PRId32 "\n", depth, depth, level);
+			int32 index = stream->extent_header.NumEntries();
+			stream->extent_index[index].SetLogicalBlock(fNumBlocks);
+			stream->extent_index[index].SetPhysicalBlock(newBlocks[0]);
+			stream->extent_header.SetNumEntries(index + 1);
+			fInode->SetExtentChecksum(stream);
+			numBlocks += depth;
+
+			// the new entry goes into the new leaf
+			stream = (ext2_extent_stream *)cached.SetToWritable(transaction,
+				newBlocks[depth - 1]);
+			if (stream == NULL)
+				return B_IO_ERROR;
+			ASSERT(Check());
 		}
 		
 		// add a new entry
@@ -378,16 +393,16 @@ ExtentStream::Enlarge(Transaction& transaction, off_t& numBlocks)
 		}
 		int32 index = stream->extent_header.NumEntries();
 		stream->extent_entries[index].SetLogicalBlock(fNumBlocks);
-		stream->extent_entries[index].SetLength(allocated);
+		stream->extent_entries[index].SetLength(fPending);
 		stream->extent_entries[index].SetPhysicalBlock(fAllocatedPos);
 		stream->extent_header.SetNumEntries(index + 1);
 		fInode->SetExtentChecksum(stream);
 		TRACE("Enlarge() entry added at index %" B_PRId32 "\n", index);
 		ASSERT(stream->extent_header.IsValid());
 
-		fNumBlocks += allocated;
-		numBlocks += allocated;
-		allocated = 0;
+		fNumBlocks += fPending;
+		numBlocks += fPending;
+		fPending = 0;
 	}
 	
 	return B_OK;

@@ -33,6 +33,11 @@ public:
 	bool			Check();
 
 private:
+	static const uint16	kMaxTreeDepth = 8;
+		// ext4 itself builds at most 5 levels
+
+	status_t		_Enlarge(Transaction& transaction, off_t targetBlocks,
+						off_t& numBlocks);
 	status_t		_Check(ext2_extent_stream *stream, fileblock_t &block);
 	status_t		_CheckBlock(ext2_extent_stream *stream, fsblock_t block);
 
@@ -42,6 +47,8 @@ private:
 	fsblock_t		fFirstBlock;
 
 	fsblock_t		fAllocatedPos;
+	uint32			fPending;
+		// blocks at fAllocatedPos that Enlarge() allocated, not yet mapped
 
 	off_t			fNumBlocks;
 	off_t			fSize;
