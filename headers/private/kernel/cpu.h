@@ -59,8 +59,9 @@ typedef struct CACHE_LINE_ALIGN cpu_ent {
 	timer			quantum_timer;
 
 	// keeping track of CPU activity
-	seqlock			active_time_lock;
-	bigtime_t		active_time;
+	int64			active_time_state;
+		// time spent running non-idle threads, in one word so that it can be
+		// read without a lock; see cpu_active_time_state_*() below
 	bigtime_t		irq_time;
 	bigtime_t		interrupt_time;
 	bigtime_t		last_kernel_time;
@@ -94,6 +95,35 @@ typedef struct CACHE_LINE_ALIGN cpu_ent {
 extern cpu_ent gCPU[];
 extern uint32 gCPUCacheLevelCount;
 extern CPUSet gCPUEnabled;
+
+
+/*!	cpu_ent::active_time_state encoding. While the CPU runs its idle thread
+	the word holds the active time times two, so bit 0 is clear. While it runs
+	any other thread the word holds (active time at the switch-in minus the
+	switch-in time) times two plus one, so that the active time is the decoded
+	value plus the current time. Only the scheduler on the owning CPU writes
+	it, and only when the CPU goes from idle to busy or back.
+*/
+static inline bool
+cpu_active_time_state_running(int64 state)
+{
+	return (state & 1) != 0;
+}
+
+
+static inline bigtime_t
+cpu_active_time_state_value(int64 state)
+{
+	// An arithmetic shift, so that a negative running base decodes too.
+	return state >> 1;
+}
+
+
+static inline int64
+cpu_active_time_state_make(bigtime_t value, bool running)
+{
+	return (int64)((uint64)value << 1) | (running ? 1 : 0);
+}
 
 
 #ifdef __cplusplus

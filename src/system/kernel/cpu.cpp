@@ -38,6 +38,11 @@ static cpuidle_module_info* sCPUIdleModule;
 
 static spinlock sSetCpuLock;
 
+// The largest active time cpu_get_active_time() has returned per CPU. Kept
+// apart from cpu_ent so that readers never write the scheduler's per-CPU
+// cache line.
+static int64 sReportedActiveTime[SMP_MAX_CPUS];
+
 
 status_t
 cpu_init(kernel_args *args)
@@ -158,21 +163,47 @@ cpu_preboot_init_percpu(kernel_args *args, int curr_cpu)
 }
 
 
+/*!	Returns the time \a cpu has spent running non-idle threads, including the
+	run in progress. Without that run the value lagged by up to a quantum, so
+	anything deriving idle time as uptime minus active time saw idle step
+	backwards. Never returns less than an earlier call did for the same CPU.
+*/
 bigtime_t
 cpu_get_active_time(int32 cpu)
 {
-	if (cpu < 0 || cpu > smp_get_num_cpus())
+	if (cpu < 0 || cpu >= smp_get_num_cpus())
 		return 0;
 
-	bigtime_t activeTime;
-	uint32 count;
+	int64* stateAddress = &gCPU[cpu].active_time_state;
+	int64 state = atomic_get64(stateAddress);
+	bigtime_t activeTime = cpu_active_time_state_value(state);
+	while (cpu_active_time_state_running(state)) {
+		// The clock read has to fall inside the run the word describes:
+		// a read taken after the CPU went idle would credit it with idle
+		// time, which the next caller would then see taken away again.
+		bigtime_t now = system_time();
+		int64 check = atomic_get64(stateAddress);
+		if (check == state) {
+			activeTime += now;
+			break;
+		}
+		state = check;
+		activeTime = cpu_active_time_state_value(state);
+	}
 
-	do {
-		count = acquire_read_seqlock(&gCPU[cpu].active_time_lock);
-		activeTime = gCPU[cpu].active_time;
-	} while (!release_read_seqlock(&gCPU[cpu].active_time_lock, count));
+	// Counter reads on two CPUs are not ordered against the word, so a
+	// projection can still overshoot by a fraction of a microsecond. Keep
+	// what callers see monotonic regardless.
+	int64* reported = &sReportedActiveTime[cpu];
+	int64 previous = atomic_get64(reported);
+	while (activeTime > previous) {
+		int64 seen = atomic_test_and_set64(reported, activeTime, previous);
+		if (seen == previous)
+			return activeTime;
+		previous = seen;
+	}
 
-	return activeTime;
+	return previous;
 }
 
 
