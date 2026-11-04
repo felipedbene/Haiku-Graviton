@@ -1,0 +1,47 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-short
+# instance: i-0dbf592190f200c19   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T055447Z   end: 20261104T055505Z   rc: 0
+# script sha256: 8dd4ab2f2b3d72362c544762b1831e890e19ca2f2d2a1479d6d4c01c7eb63cd4
+# ---- script ----
+# | set -u
+# | P=10.128.5.103
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | [ -d /boot/system ] && { find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'; }
+# | sha256sum tcp975
+# | for m in dupack3 winupd3 stale; do
+# | 	echo "=== $m"
+# | 	./tcp975 $P 9751 9752 $m 60 2>&1 | grep -v 'control: COUNT'
+# | done
+# ---- raw output ----
+Linux ip-10-128-7-233 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+3a192eb6ebcb9c3b346af5a3c3a895740eb8ace1fd9605c3a1010930b3f23bf1  tcp975
+=== dupack3
+  [05:54:50Z dupack3] connected from port 
+  local port 46892
+  [05:54:51Z dupack3] control: DROP 46892
+  [05:54:51Z dupack3] control: INJECT 46892 dup3
+INJECTED 05:54:51 after 3145728 bytes queued: OK seq 3260854464 ack 3091532658 win 503,503,503
+RESULT dupack3 DONE see the capture for segments after the injection
+=== winupd3
+  [05:54:53Z winupd3] connected from port 
+  local port 47172
+  [05:54:54Z winupd3] control: DROP 47172
+  [05:54:54Z winupd3] control: INJECT 47172 win3
+INJECTED 05:54:54 after 3145728 bytes queued: OK seq 1955036250 ack 2869055683 win 506,507,508
+RESULT winupd3 DONE see the capture for segments after the injection
+=== stale
+  [05:54:56Z stale] connected from port 
+  local port 47180
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  [05:54:57Z stale] control: INJECT 47180 stalezero
+  inject: OK seq 3874900833 ack 1431694149 win 0
+  after: 1 KiB arrived in 0.002 s
+  after: 1 KiB arrived in 0.002 s
+  after: 1 KiB arrived in 0.000 s
+RESULT stale PASS the old zero-window ACK was ignored: worst delivery 0.002 s after it (0.002 s before)

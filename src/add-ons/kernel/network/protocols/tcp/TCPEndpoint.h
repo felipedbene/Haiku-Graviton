@@ -219,6 +219,11 @@ private:
 	tcp_sequence	fSendUrgentOffset;
 	uint32			fSendWindow;
 	uint32			fSendMaxWindow;
+	tcp_sequence	fSendWindowSequence;
+	tcp_sequence	fSendWindowAcknowledge;
+		// SND.WL1 and SND.WL2 of RFC 9293: the sequence and acknowledgement
+		// numbers of the segment fSendWindow was last taken from. See
+		// _Receive().
 	uint32			fSendMaxSegmentSize;
 	uint32			fSendMaxSegments;
 	BufferQueue		fSendQueue;

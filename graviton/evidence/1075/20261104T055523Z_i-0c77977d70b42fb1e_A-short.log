@@ -1,0 +1,50 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: A-short
+# instance: i-0c77977d70b42fb1e   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T055523Z   end: 20261104T055541Z   rc: 1
+# script sha256: 8dd4ab2f2b3d72362c544762b1831e890e19ca2f2d2a1479d6d4c01c7eb63cd4
+# ---- script ----
+# | set -u
+# | P=10.128.5.103
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | [ -d /boot/system ] && { find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'; }
+# | sha256sum tcp975
+# | for m in dupack3 winupd3 stale; do
+# | 	echo "=== $m"
+# | 	./tcp975 $P 9751 9752 $m 60 2>&1 | grep -v 'control: COUNT'
+# | done
+# ---- raw output ----
+Haiku ip-10-128-6-231.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+6646f52d3b22444df21304e2cd4c2d1fd3f8c726377b3b7f76c883b37208b4e2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2087 0xffff0000022ef000 0xffff000002302000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+f87f37ece92e8e44368be645a4ee85e80b7799639cfffeb6257841e037e8cb7d  tcp975
+=== dupack3
+  [05:55:25Z dupack3] connected from port 
+  local port 43985
+  [05:55:26Z dupack3] control: DROP 43985
+  [05:55:26Z dupack3] control: INJECT 43985 dup3
+INJECTED 05:55:26 after 3145728 bytes queued: OK seq 1555942455 ack 121321817 win 200,200,200
+RESULT dupack3 DONE see the capture for segments after the injection
+=== winupd3
+  [05:55:28Z winupd3] connected from port 
+  local port 44017
+  [05:55:29Z winupd3] control: DROP 44017
+  [05:55:29Z winupd3] control: INJECT 44017 win3
+INJECTED 05:55:29 after 3145728 bytes queued: OK seq 1875583068 ack 121520790 win 316,317,318
+RESULT winupd3 DONE see the capture for segments after the injection
+=== stale
+  [05:55:31Z stale] connected from port 
+  local port 44043
+  before: 1 KiB arrived in 0.000 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  before: 1 KiB arrived in 0.002 s
+  [05:55:32Z stale] control: INJECT 44043 stalezero
+  inject: OK seq 2832223417 ack 118447352 win 0
+  after: 1 KiB arrived in 1.002 s
+  after: 1 KiB arrived in 0.002 s
+  after: 1 KiB arrived in 0.002 s
+RESULT stale FAIL the old zero-window ACK closed the window: worst delivery 1.002 s after it (0.002 s before)
+failed to run commands: exit status 1

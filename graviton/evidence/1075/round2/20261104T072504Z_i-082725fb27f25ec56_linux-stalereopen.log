@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-stalereopen
+# instance: i-082725fb27f25ec56   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T072504Z   end: 20261104T072541Z   rc: 0
+# script sha256: 1603f607256bc4d78bf7502d28bbd7f8cc4f82eb446c37420bcbd537ac772f6d
+# ---- script ----
+# | set -u
+# | P=10.128.5.159
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'; else sysctl net.ipv4.tcp_retries2; fi
+# | sha256sum tcp975
+# | for m in stalereopen; do
+# | 	echo "=== $m"
+# | 	./tcp975 $P 9751 9752 $m 120 2>&1 | grep -v 'control: COUNT\|control: INQ'
+# | done
+# ---- raw output ----
+Linux ip-10-128-6-45 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+net.ipv4.tcp_retries2 = 15
+a92cbd706d0c23bb460fedc4b2a96b4ba3fc7ebd46595337544ce99aad8cfd24  tcp975
+=== stalereopen
+  [07:25:08Z stalereopen] connected from port 
+  local port 48688
+  [07:25:08Z stalereopen] control: STOPREAD 48688 100000
+  [07:25:18Z stalereopen] control: MUTE 48688
+  [07:25:18Z stalereopen] control: INJECT 48688 staleopen
+  inject: OK seq 3034430773 ack 817770529 win 255
+  [07:25:21Z stalereopen] control: STOPREAD 48688 0
+  [07:25:26Z stalereopen] control: UNMUTE 48688
+RESULT stalereopen PASS all 655360 bytes arrived 8.7 s after the peer could be heard again
