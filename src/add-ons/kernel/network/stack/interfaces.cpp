@@ -1500,8 +1500,12 @@ get_interface_for_link(net_domain* domain, const sockaddr* _linkAddress)
 		if (interface->IsBusy())
 			continue;
 		// Test if the hardware address matches, or if the given interface
-		// matches, or if at least the index matches.
-		if ((linkAddress.sdl_alen == interface->device->address.length
+		// matches, or if at least the index matches. An address without a
+		// hardware address names no device by it: compared with one that
+		// has none either (loopback), it would match whatever name or index
+		// it gives.
+		if ((linkAddress.sdl_alen != 0
+				&& linkAddress.sdl_alen == interface->device->address.length
 				&& memcmp(LLADDR(&linkAddress), interface->device->address.data,
 					linkAddress.sdl_alen) == 0)
 			|| (linkAddress.sdl_nlen > 0
