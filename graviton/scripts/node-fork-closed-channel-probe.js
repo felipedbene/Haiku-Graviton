@@ -9,8 +9,9 @@
 //
 // usage: node node-fork-closed-channel-probe.js [watchdogMs]
 // exit: 0 = the primary saw the worker's 'close' and finished
-//       3 = watchdog fired (the issue-978 hang); state is printed first
+//       3 = watchdog fired: any hang, such as the one in issue 978; state is printed first
 //       4 = the loop drained without the child's 'close' (would be a mustCall failure)
+//       5 = it drained without listen, online or a successful first send (likewise)
 //       other = a real failure of the test's own assertions
 
 const assert = require('assert');
@@ -111,7 +112,15 @@ setTimeout(() => {
 }, WATCHDOG_MS).unref();
 
 process.on('exit', (code) => {
-  if (code === 0 && !events.some((e) => e.endsWith("child 'close'"))) {
+  // The upstream test wraps listen, online and close in common.mustCall and
+  // send1's callback in common.mustSucceed; check the same things here.
+  const seen = (tail) => events.some((e) => e.endsWith(tail));
+  if (code === 0 && !(seen('server: listening') && seen('worker online') &&
+                      seen('send1: send callback ok'))) {
+    console.log('EXITED without listen, online or a successful first send');
+    for (const e of events) console.log(`  ev ${e}`);
+    process.exitCode = 5;
+  } else if (code === 0 && !seen("child 'close'")) {
     console.log("EXITED without the child's 'close'");
     for (const e of events) console.log(`  ev ${e}`);
     process.exitCode = 4;

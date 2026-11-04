@@ -1,0 +1,31 @@
+#!/bin/sh
+# node-fork-closed-channel-rate -- issue 978: hang rate of the fork closed-channel test.
+# Runs node-fork-closed-channel-probe.js (expected at /tmp) in <rounds> rounds of <conc>
+# concurrent copies, then the original test under tools/test.py -j <conc> --repeat
+# <rounds*conc>. Args: <node> <node-24.x source dir> <label> <rounds> [conc=16]
+set -u
+NODE=$1; SRC=$2; LABEL=$3; R=$4; C=${5:-16}
+T=parallel/test-child-process-fork-closed-channel-segfault
+P=/tmp/node-fork-closed-channel-probe.js
+cd $SRC || exit 1
+echo "## host: $(uname -a)"; echo "## node: $NODE -> $(readlink -f $NODE 2>/dev/null) $($NODE --version) label=$LABEL rounds=$R conc=$C"
+[ -d /packages ] && ls /packages | grep -E "^(nodejs24|libuv|nghttp2|haiku-)"
+sha256sum test/$T.js $P
+echo "######## probe: $R rounds of $C concurrent copies (watchdog 30 s)"
+tot=0; hung=0; other=0; r=0
+mkdir -p /tmp/p978; : > /tmp/p978-send2.txt
+while [ $r -lt $R ]; do r=$((r+1)); j=0
+  while [ $j -lt $C ]; do j=$((j+1)); ( : | timeout 90 $NODE $P 30000 > /tmp/p978/$j.out 2>&1; echo $? > /tmp/p978/$j.rc ) & done
+  wait
+  j=0; while [ $j -lt $C ]; do j=$((j+1)); tot=$((tot+1)); rc=$(cat /tmp/p978/$j.rc)
+    grep -ho "send2=.*" /tmp/p978/$j.out >> /tmp/p978-send2.txt
+    case $rc in 0) ;; 3) hung=$((hung+1)); [ $hung -le 4 ] && { echo "--- hung run (round $r copy $j)"; cat /tmp/p978/$j.out; } ;; *) other=$((other+1)); [ $other -le 3 ] && { echo "--- rc=$rc (round $r copy $j)"; tail -15 /tmp/p978/$j.out; } ;; esac
+  done
+done
+echo "RESULT probe: runs=$tot hung=$hung other_fail=$other"
+echo "  send2 outcomes: $(sort /tmp/p978-send2.txt | uniq -c | tr "\n" " ")"
+echo "######## original test: tools/test.py -j $C --repeat $((R*C)) --timeout 120"
+: | python3 tools/test.py --shell=$NODE -j $C -p tap --timeout 120 --repeat $((R*C)) $T > /tmp/rep978.tap 2>&1
+echo "RESULT test.py: ok=$(grep -c '^ok ' /tmp/rep978.tap) notok=$(grep -c '^not ok ' /tmp/rep978.tap) timeout=$(grep -c '^    timeout$' /tmp/rep978.tap)"
+awk '/^not ok/{p=1;n++} p&&n<=1' /tmp/rep978.tap | head -20
+echo M978_DONE
