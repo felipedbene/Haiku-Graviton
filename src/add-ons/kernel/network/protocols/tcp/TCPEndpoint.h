@@ -172,6 +172,7 @@ private:
 			status_t	_PrepareSendPath(const sockaddr* peer);
 			void		_Acknowledged(tcp_segment_header& segment);
 			bool		_Retransmit();
+			bigtime_t	_RetransmitTimerDelay() const;
 			void		_UpdateRoundTripTime(int32 roundTripTime, int32 expectedSamples);
 			void		_ResetSlowStart();
 			void		_ReceivedCongestionNotification(
@@ -269,6 +270,10 @@ private:
 	tcp_sequence	fRoundTripStartSequence;
 	bigtime_t		fRetransmitTimeout;
 	uint32			fRetransmitInitialCount;
+	bigtime_t		fRetransmitStartTime;
+		// When the retransmit timer first fired on the data still outstanding,
+		// or 0 while nothing has timed out since SND.UNA last moved. What the
+		// R2 give-up is measured from -- see _Retransmit().
 
 	uint32			fReceivedTimestamp;
 

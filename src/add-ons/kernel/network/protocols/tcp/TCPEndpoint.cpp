@@ -588,6 +588,7 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fRoundTripStartSequence(0),
 	fRetransmitTimeout(TCP_SYN_RETRANSMIT_TIMEOUT),
 	fRetransmitInitialCount(0),
+	fRetransmitStartTime(0),
 	fReceivedTimestamp(0),
 	fCongestionWindow(0),
 	fSlowStartThreshold(0),
@@ -895,6 +896,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 	}
 
 	fRetransmitInitialCount = 0;
+	fRetransmitStartTime = 0;
 	gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
 
 	// wait until 3-way handshake is complete (if needed)
@@ -2710,6 +2712,7 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 	// rather than ours, and a peer with a shorter connect timeout than our
 	// silence took the connection with it.
 	fRetransmitInitialCount = 0;
+	fRetransmitStartTime = 0;
 	gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
 	T(TimerSet(this, "retransmit", fRetransmitTimeout));
 
@@ -4180,10 +4183,11 @@ TCPEndpoint::_SendQueued(bool force)
 			return _SendRefused(status);
 
 		if (shouldStartRetransmitTimer) {
+			const bigtime_t delay = _RetransmitTimerDelay();
 			TRACE("starting initial retransmit timer of: %" B_PRIdBIGTIME,
-				fRetransmitTimeout);
-			gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
-			T(TimerSet(this, "retransmit", fRetransmitTimeout));
+				delay);
+			gStackModule->set_timer(&fRetransmitTimer, delay);
+			T(TimerSet(this, "retransmit", delay));
 			shouldStartRetransmitTimer = false;
 		}
 
@@ -4233,8 +4237,9 @@ TCPEndpoint::_SendRefused(status_t status)
 	}
 
 	if (!gStackModule->is_timer_active(&fRetransmitTimer)) {
-		gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
-		T(TimerSet(this, "retransmit", fRetransmitTimeout));
+		const bigtime_t delay = _RetransmitTimerDelay();
+		gStackModule->set_timer(&fRetransmitTimer, delay);
+		T(TimerSet(this, "retransmit", delay));
 	}
 
 	return status;
@@ -4325,6 +4330,10 @@ TCPEndpoint::_Acknowledged(tcp_segment_header& segment)
 		fSendUnacknowledged = segment.acknowledge;
 		_UpdateSendBuffer();
 
+		// The peer is alive and taking our data: whatever was timing out has
+		// been answered, so the R2 give-up starts over.
+		fRetransmitStartTime = 0;
+
 		// RFC 3168 6.1.2 once-per-RTT: re-arm the ECE reaction once a full
 		// window (the data outstanding at reaction time) has been acknowledged.
 		if ((fFlags & FLAG_ECN_CWND_REDUCED) != 0
@@ -4411,14 +4420,65 @@ TCPEndpoint::_Acknowledged(tcp_segment_header& segment)
 
 	Returns whether the caller has inherited a socket reference that it must
 	release once fLock is dropped: a half-open connection that has run out of
-	SYN-ACK retransmissions is given up on here, and the teardown that follows
-	cannot be allowed to delete the endpoint from inside its own timer handler.
-	See the give-up arm below and _RetransmitTimer().
+	SYN-ACK retransmissions, and a synchronized one that has run out of time
+	(R2), are given up on here, and the teardown that follows cannot be
+	allowed to delete the endpoint from inside its own timer handler. See the
+	give-up arms below and _RetransmitTimer().
 */
 bool
 TCPEndpoint::_Retransmit()
 {
 	TRACE("Retransmit()");
+
+	if (fState >= ESTABLISHED) {
+		// R2 (RFC 9293 3.8.3): a connection whose peer has stopped answering
+		// -- powered off, partitioned, behind a route that now drops
+		// everything -- used to back off to one retransmission a minute and
+		// keep at it for as long as the socket lived, with a blocked send()
+		// or recv() never told. Give up once nothing has been acknowledged
+		// for TCP_RETRANSMIT_GIVE_UP_TIMEOUT since the first timeout, and
+		// fail the connection with ETIMEDOUT, as Linux's tcp_write_timeout()
+		// does. Like Linux, no reset is sent: there is nobody to receive it.
+		//
+		// Checked before anything is retransmitted or backed off, so that
+		// this firing -- which _RetransmitTimerDelay() clamped to the
+		// deadline -- ends the connection rather than sending once more.
+		const bigtime_t now = system_time();
+		if (fSendWindow == 0
+			|| (fSendQueue.Used() == 0 && !state_needs_finish(fState))) {
+			// Neither firing tells us anything about the peer, so neither
+			// may run the clock -- it would keep running, with no
+			// acknowledgement to come and stop it, against whatever is sent
+			// next.
+			//
+			// With the window closed, the peer is holding our data back on
+			// purpose (its reader has stopped), and what this firing sends is
+			// a window probe: a zero-length segment at SND.NXT, which a peer
+			// has no reason to answer -- Linux does not. Counting that
+			// silence gave up on a live connection whose reader paused for
+			// longer than the R2 timeout.
+			//
+			// With nothing owed, this firing timed nothing out.
+			fRetransmitStartTime = 0;
+		} else if (fRetransmitStartTime == 0)
+			fRetransmitStartTime = now;
+		else if (now - fRetransmitStartTime >= TCP_RETRANSMIT_GIVE_UP_TIMEOUT) {
+			T(Error(this, "retransmission timed out", __LINE__));
+
+			// The same reference as for the SYN-ACK give-up below, for the
+			// same reason: whatever reference holds the endpoint up -- the
+			// application's, the 2MSL wait's that Free() took, or a parent's
+			// for a connection not yet accepted -- may go away as soon as
+			// fLock does, and the teardown must not leave this handler
+			// running on a deleted endpoint. Not needed in every case, but
+			// taking it in all of them keeps this arm free of the question.
+			if (!gSocketModule->acquire_socket(socket))
+				return false;
+
+			_HandleReset(ETIMEDOUT);
+			return true;
+		}
+	}
 
 	if (fState < ESTABLISHED && fRetransmitInitialCount < 4) {
 		fRetransmitTimeout = TCP_SYN_RETRANSMIT_TIMEOUT;
@@ -4482,6 +4542,26 @@ TCPEndpoint::_Retransmit()
 		fFlags &= ~FLAG_RECOVERY;
 
 	return false;
+}
+
+
+/*!	The delay to arm the retransmit timer with: fRetransmitTimeout, but never
+	past the R2 deadline once the connection has started timing out. With a
+	backed-off timeout of up to TCP_MAX_RETRANSMIT_TIMEOUT, the firing that
+	finds the deadline passed could otherwise come almost a minute after it.
+*/
+bigtime_t
+TCPEndpoint::_RetransmitTimerDelay() const
+{
+	if (fRetransmitStartTime == 0)
+		return fRetransmitTimeout;
+
+	bigtime_t remaining = fRetransmitStartTime
+		+ TCP_RETRANSMIT_GIVE_UP_TIMEOUT - system_time();
+	if (remaining < 0)
+		remaining = 0;
+
+	return min_c(fRetransmitTimeout, remaining);
 }
 
 
@@ -4736,6 +4816,10 @@ TCPEndpoint::Dump() const
 	kprintf("  smoothed round trip time: %" B_PRId32 " (deviation %" B_PRId32 ")\n",
 		fSmoothedRoundTripTime, fRoundTripVariation);
 	kprintf("  retransmit timeout: %" B_PRId64 "\n", fRetransmitTimeout);
+	if (fRetransmitStartTime != 0) {
+		kprintf("  retransmitting for: %" B_PRId64 " us\n",
+			system_time() - fRetransmitStartTime);
+	}
 	kprintf("  congestion window: %" B_PRIu32 "\n", fCongestionWindow);
 	kprintf("  slow start threshold: %" B_PRIu32 "\n", fSlowStartThreshold);
 	kprintf("  ecn: %s%s%s%s%s\n",

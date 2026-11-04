@@ -212,6 +212,19 @@ operator==(tcp_sequence a, tcp_sequence b)
 // connection is given up at 35 -- the same order as the ~31 seconds of Linux's
 // tcp_synack_retries default of 5, which backs off from the first attempt.
 #define TCP_MAX_SYN_ACKNOWLEDGE_RETRANSMITS	8
+// How long a connection from ESTABLISHED on keeps retransmitting without any
+// of its outstanding data being acknowledged before it is given up with
+// ETIMEDOUT: the R2 threshold of RFC 9293 3.8.3 (RFC 1122 4.2.3.5). Linux's
+// default, which is what peers and applications have come to expect: it turns
+// tcp_retries2 (15) into the time those retransmissions take when they back
+// off from TCP_RTO_MIN (200 ms) to TCP_RTO_MAX (120 s), whatever the
+// connection's real RTO (tcp_model_timeout()) -- ten timeouts doubling from
+// 200 ms, then six of 120 s: (2^10 - 1) * 0.2 + 6 * 120 = 924.6 s. We measure
+// it from the first timeout. A time rather than a count of attempts because
+// our ceiling is 60 s, not 120 s, so fifteen of ours would give up in half
+// that, and because not every firing is an attempt that backed off (see
+// _SendRefused()).
+#define TCP_RETRANSMIT_GIVE_UP_TIMEOUT	924600000LL	// 924.6 secs
 
 struct tcp_sack {
 	uint32 left_edge;
