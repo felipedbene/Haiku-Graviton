@@ -861,7 +861,9 @@ BlockAllocator::Free(Transaction& transaction, fsblock_t start, uint32 length)
 
 	TRACE("BlockAllocator::Free(): Freeing from group %" B_PRIu32 ": 0-%"
 		B_PRIu64 " \n", group, end % fBlocksPerGroup);
-	return fGroups[group].Free(transaction, 0, (end + 1) % fBlocksPerGroup);
+	// end is the last block freed; when it is the last block of its group,
+	// (end + 1) % fBlocksPerGroup would be 0 and free nothing
+	return fGroups[group].Free(transaction, 0, end % fBlocksPerGroup + 1);
 }
 
 
