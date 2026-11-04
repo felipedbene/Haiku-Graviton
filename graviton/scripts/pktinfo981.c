@@ -10,7 +10,8 @@
  *   pktinfo981 send <peer> <port> <source> [ifindex or name]
  *       One datagram "pktinfo981 from <source>" to <peer>:<port> with
  *       <source> (and ifindex) in the control message, or with none
- *       (a plain sendto()) for a <source> of "-". Prints the call's result.
+ *       (a plain sendto()) for a <source> of "-". The socket has
+ *       SO_BROADCAST. Prints the call's result.
  *       For a tcpdump on the peer.
  *   pktinfo981 recv <port> [count]
  *       Prints the source of each datagram that reaches <port> (IPv6 socket,
@@ -492,6 +493,41 @@ run_ipv4(const char* enaAddress)
 		want);
 	row("ipv4 recv IP_RECVDSTADDR + IP_PKTINFO cmsgs", received == 10
 		&& strcmp(info, want) == 0, detail);
+
+	/* a control buffer too small for in_pktinfo: the datagram is still
+	   returned, with MSG_CTRUNC; with room for IP_RECVDSTADDR only, that one
+	   is returned */
+	size_t sizes[2] = { CMSG_SPACE(sizeof(struct in_addr)) - 1,
+		CMSG_SPACE(sizeof(struct in_addr)) };
+	for (int k = 0; k < 2; k++) {
+		union {
+			struct cmsghdr align;
+			char buffer[128];
+		} small;
+		char data[32];
+		struct iovec vector = { data, sizeof(data) };
+		struct msghdr header;
+		memset(&header, 0, sizeof(header));
+		header.msg_iov = &vector;
+		header.msg_iovlen = 1;
+		header.msg_control = small.buffer;
+		header.msg_controllen = sizes[k];
+		sendto(fd1, "pktinfo981", 10, 0, (struct sockaddr*)&a2,
+			sizeof(struct sockaddr_in));
+		received = recvmsg(fd2, &header, 0);
+		int firstType = header.msg_controllen >= sizeof(struct cmsghdr)
+			? CMSG_FIRSTHDR(&header)->cmsg_type : -1;
+		snprintf(detail, sizeof(detail),
+			"recvmsg=%zd controllen=%u flags=0x%x first cmsg type %d",
+			received, (unsigned)header.msg_controllen, header.msg_flags,
+			firstType);
+		row(k == 0 ? "ipv4 recv both options, no room: MSG_CTRUNC"
+				: "ipv4 recv both options, room for one: MSG_CTRUNC",
+			received == 10 && (header.msg_flags & MSG_CTRUNC) != 0
+				&& (k == 0 ? header.msg_controllen == 0
+					: firstType == IP_RECVDSTADDR),
+			detail);
+	}
 #endif
 #else
 	row("ipv4 IP_PKTINFO setsockopt/getsockopt", 0,
@@ -565,6 +601,10 @@ do_send(const char* peer, int port, const char* source, unsigned ifindex)
 		return 2;
 	}
 	int fd = socket(af, SOCK_DGRAM, IPPROTO_UDP);
+	/* so that a broadcast destination is refused for its source, not for
+	   want of SO_BROADCAST */
+	int one = 1;
+	setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &one, sizeof(one));
 	char data[128];
 	snprintf(data, sizeof(data), "pktinfo981 from %s", source);
 	errno = 0;
