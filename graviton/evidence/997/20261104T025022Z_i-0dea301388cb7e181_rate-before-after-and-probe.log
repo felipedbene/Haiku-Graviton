@@ -1,0 +1,79 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: rate-before-after-and-probe
+# instance: i-0dea301388cb7e181   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T025022Z   end: 20261104T025026Z   rc: 0
+# script sha256: 0a5132f527a04c6551ef8f7ddd903271a4aed8ad1aa6f15f19183bef8ff12f76
+# ---- script ----
+# | echo "== measurement script /tmp/m997.sh"; cat /tmp/m997.sh; echo "== log /boot/home/m997.log"; cat /boot/home/m997.log
+# ---- raw output ----
+== measurement script /tmp/m997.sh
+# m997.sh <node> <srcdir> <label> <N>   -- issue 997 before/after rates
+set -u
+NODE=$1; SRC=$2; LABEL=$3; N=$4
+T=parallel/test-perf-hooks-sliding-window-histogram
+P=/tmp/node-sliding-window-phase.js
+cd $SRC || exit 1
+echo "## host: $(uname -a)"; echo "## node: $($NODE --version)  label=$LABEL N=$N"
+sha256sum test/$T.js
+run_variant() {  # $1 = variant name (file already in place)
+  v=$1
+  echo "######## [$v] alone, sequential x$N"
+  ok=0; bad=0; i=0
+  while [ $i -lt $N ]; do i=$((i+1))
+    if : | timeout 60 $NODE test/$T.js > /tmp/o997.txt 2>&1; then ok=$((ok+1)); else bad=$((bad+1)); [ $bad -le 2 ] && grep -m3 -E "Assertion|!==|at " /tmp/o997.txt; fi
+  done
+  echo "RESULT [$v] alone: pass=$ok fail=$bad of $N"
+  echo "######## [$v] tools/test.py -j 16 --repeat $N"
+  : | python3 tools/test.py --shell=$NODE -j 16 -p tap --repeat $N $T > /tmp/rep997.tap 2>&1
+  echo "RESULT [$v] -j16: ok=$(grep -c '^ok ' /tmp/rep997.tap) notok=$(grep -c '^not ok ' /tmp/rep997.tap) timeout=$(grep -c '^    timeout$' /tmp/rep997.tap)"
+  awk '/^not ok/{p=1;n++} p&&n<=1' /tmp/rep997.tap | grep -m4 -E "not ok|!==|Assertion"
+}
+cp test/$T.js /tmp/orig997.js
+run_variant before-24.22.2
+cp /tmp/deflaked997.js test/$T.js; sha256sum test/$T.js
+run_variant after-upstream-147ade5ff9
+cp /tmp/orig997.js test/$T.js
+for args in "200 1" "250 2"; do
+  echo "######## probe ($args) x$N, one process per trial"
+  i=0; : > /tmp/probe997.txt
+  while [ $i -lt $N ]; do i=$((i+1)); timeout 60 $NODE $P $args >> /tmp/probe997.txt 2>&1; done
+  echo "RESULT probe ($args): pass=$(grep -c PASS /tmp/probe997.txt) fail=$(grep -c FAIL /tmp/probe997.txt) of $N"
+  grep FAIL /tmp/probe997.txt | head -5
+  # wake phase histogram: wake_ms - delay, bucketed to 0.25 ms
+  awk -v d=${args% *} '{split($1,a,"="); x=a[2]-d; b=sprintf("%.2f", int(x*4)/4); if (x<0 && x*4!=int(x*4)) b=sprintf("%.2f",(int(x*4)-1)/4); c[b]++} END{for (k in c) print "  wake-delay " k " ms: " c[k]}' /tmp/probe997.txt | sort -t' ' -k3 -g | head -40
+  awk '{split($2,a,"="); s+=a[2]; n++} END{printf "  mean pair_us=%.1f over %d\n", s/n, n}' /tmp/probe997.txt
+done
+echo M997_DONE
+== log /boot/home/m997.log
+## host: Haiku ip-10-128-13-169.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+## node: v24.22.2  label=haiku-t1 N=320
+f8f2962bd2e0aa0d1c4645b88674382b867488b0ebd820940f615327394586fd  test/parallel/test-perf-hooks-sliding-window-histogram.js
+######## [before-24.22.2] alone, sequential x320
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+0 !== 1
+    at /boot/home/node-src/node-v24.22.2/test/parallel/test-perf-hooks-sliding-window-histogram.js:193:10 {
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+0 !== 1
+    at /boot/home/node-src/node-v24.22.2/test/parallel/test-perf-hooks-sliding-window-histogram.js:193:10 {
+RESULT [before-24.22.2] alone: pass=317 fail=3 of 320
+######## [before-24.22.2] tools/test.py -j 16 --repeat 320
+RESULT [before-24.22.2] -j16: ok=302 notok=18 timeout=0
+not ok 30 parallel/test-perf-hooks-sliding-window-histogram
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    0 !== 1
+a298650527984c12383c71c7d9f3187de6bed1726b745639f1e873774a5fc6dc  test/parallel/test-perf-hooks-sliding-window-histogram.js
+######## [after-upstream-147ade5ff9] alone, sequential x320
+RESULT [after-upstream-147ade5ff9] alone: pass=320 fail=0 of 320
+######## [after-upstream-147ade5ff9] tools/test.py -j 16 --repeat 320
+RESULT [after-upstream-147ade5ff9] -j16: ok=320 notok=0 timeout=0
+######## probe (200 1) x320, one process per trial
+RESULT probe (200 1): pass=320 fail=0 of 320
+  wake-delay -0.75 ms: 24
+  wake-delay 0.25 ms: 296
+  mean pair_us=7.9 over 320
+######## probe (250 2) x320, one process per trial
+RESULT probe (250 2): pass=320 fail=0 of 320
+  wake-delay -0.75 ms: 26
+  wake-delay 0.25 ms: 294
+  mean pair_us=7.8 over 320
+M997_DONE

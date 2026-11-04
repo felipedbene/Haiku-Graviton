@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-patchset-rate
+# instance: i-0dea301388cb7e181   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T025506Z   end: 20261104T025809Z   rc: 1
+# script sha256: b20ccd7ebc3abd8aeb9e644e174f802aee0f5957ef2561ffbe83fb38072e2b22
+# ---- script ----
+# | # issue 997 after: a fresh 24.22.2 tree with BOTH patchsets as committed, the test as patched
+# | set -u
+# | export PATH=/boot/home/config/non-packaged/bin:$PATH
+# | S=/boot/home/node-src-after; rm -rf $S; mkdir -p $S; cd $S || exit 1
+# | tar xzf /boot/home/node-src/node-v24.22.2.tar.gz && cd node-v24.22.2 || exit 1
+# | sha256sum /boot/home/stage/nodejs-24.22.2.patchset /boot/home/stage/nodejs-24.22.2-debeos.patchset.new
+# | for p in /boot/home/stage/nodejs-24.22.2.patchset /boot/home/stage/nodejs-24.22.2-debeos.patchset.new; do patch -p1 --batch --forward < $p > /tmp/pa.out 2>&1; echo "$(basename $p): rc=$? files=$(grep -c '^patching file' /tmp/pa.out) $(grep -ciE 'fuzz|offset|reject|fail' /tmp/pa.out) fuzz/offset/reject lines"; done
+# | T=parallel/test-perf-hooks-sliding-window-histogram
+# | sha256sum test/$T.js /tmp/deflaked997.js
+# | node --version
+# | ok=0; bad=0; i=0; while [ $i -lt 320 ]; do i=$((i+1)); if : | timeout 60 node test/$T.js > /tmp/o.txt 2>&1; then ok=$((ok+1)); else bad=$((bad+1)); grep -m2 -E "!==|Assert" /tmp/o.txt; fi; done
+# | echo "RESULT after (patchset) alone: pass=$ok fail=$bad of 320"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap --repeat 320 $T > /tmp/r.tap 2>&1
+# | echo "RESULT after (patchset) -j16: ok=$(grep -c '^ok ' /tmp/r.tap) notok=$(grep -c '^not ok ' /tmp/r.tap) timeout=$(grep -c '^    timeout$' /tmp/r.tap)"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap parallel/test-perf-hooks-* > /tmp/ph.tap 2>&1
+# | echo "RESULT regression parallel/test-perf-hooks-*: ok=$(grep -c '^ok ' /tmp/ph.tap) notok=$(grep -c '^not ok ' /tmp/ph.tap)"; grep '^not ok' /tmp/ph.tap
+# ---- raw output ----
+fa8a7c08310955a945407b9516650998ddb25b3e4de51e3a6f48cd32cedf1968  /boot/home/stage/nodejs-24.22.2.patchset
+0e31250bf15c78cbf4b6fd332dee375e1e6eeef4136800d5eea410b5725d8a99  /boot/home/stage/nodejs-24.22.2-debeos.patchset.new
+nodejs-24.22.2.patchset: rc=0 files=30 0 fuzz/offset/reject lines
+nodejs-24.22.2-debeos.patchset.new: rc=0 files=5 0 fuzz/offset/reject lines
+a298650527984c12383c71c7d9f3187de6bed1726b745639f1e873774a5fc6dc  test/parallel/test-perf-hooks-sliding-window-histogram.js
+a298650527984c12383c71c7d9f3187de6bed1726b745639f1e873774a5fc6dc  /tmp/deflaked997.js
+v24.22.2
+RESULT after (patchset) alone: pass=320 fail=0 of 320
+RESULT after (patchset) -j16: ok=320 notok=0 timeout=0
+RESULT regression parallel/test-perf-hooks-*: ok=24 notok=0

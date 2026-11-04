@@ -1,0 +1,84 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-wake-phase-committed-script (Linux control: Ubuntu 24.04 arm64, c8g.4xlarge, official node-v24.22.2-linux-arm64)
+# instance: i-0f1c6489ec848075a   region: us-west-2   transport: ssm (graviton/scripts/ssm-run)
+# start: 20261104T032102Z   rc: 0
+# ---- script ----
+# | echo "== measurement script /tmp/node-sliding-window-wake-phase"; cat /tmp/node-sliding-window-wake-phase; echo "== log /root/wp.log"; cat /root/wp.log
+# ---- raw output ----
+== measurement script /tmp/node-sliding-window-wake-phase
+#!/bin/sh
+# node-sliding-window-wake-phase -- issue 997: where the REAL test's wakeup lands.
+#
+# Makes an instrumented copy of Node 24.22.x's
+# test/parallel/test-perf-hooks-sliding-window-histogram.js and runs it N times
+# sequentially and N times 16-way, then prints the distribution of
+# (wakeup - origin) - 200 ms and the failing runs. Instrumentation is two lines:
+# an hrtime stamp just before the time-based block creates its histogram (its
+# origin_, to within a microsecond), and one right after `await delay(200)`,
+# printed from an 'exit' handler so failing runs report too.
+#
+# node-sliding-window-phase.js is a standalone replay of the same block, but it
+# starts a few ms after process start instead of ~35 ms, lands its wakeup in a
+# different place in the millisecond, and so rarely fails. This one measures the
+# test as tools/test.py runs it.
+#
+# usage: node-sliding-window-wake-phase <node> <node-24.22.x source dir> [N]
+#   N defaults to 320. The test file is restored on exit.
+
+set -u
+NODE=$1; SRC=$2; N=${3:-320}
+T=$SRC/test/parallel/test-perf-hooks-sliding-window-histogram.js
+I=$SRC/test/parallel/test-perf-hooks-sliding-window-histogram-wakephase.js
+[ -f "$T" ] || { echo "no $T" >&2; exit 2; }
+trap 'rm -f "$I"' EXIT
+
+# Insert the two stamps with node itself, failing loudly if the anchors moved.
+"$NODE" -e '
+const fs = require("fs");
+let s = fs.readFileSync(process.argv[1], "utf8");
+const a = "(async () => {\n  const histogram = createSlidingWindowHistogram({\n    chunks: 1,";
+const b = "  await delay(common.platformTimeout(200));\n";
+if (!s.includes(a) || !s.includes(b)) { console.error("anchors not found: not the 24.22.x test"); process.exit(2); }
+s = s.replace(a, a.replace("(async () => {\n", "(async () => {\n  const __o = process.hrtime.bigint(); const __po = performance.now();\n"));
+s = s.replace(b, b + "  const __w = process.hrtime.bigint();\n" +
+  "  process.on(\"exit\", (c) => console.log(`PHASE wake_ms=${(Number(__w - __o) / 1e6).toFixed(3)} origin_at_ms=${__po.toFixed(1)} code=${c}`));\n");
+fs.writeFileSync(process.argv[2], s);
+' "$T" "$I" || exit 2
+
+echo "## host: $(uname -a)"; echo "## node: $("$NODE" --version) N=$N"
+sha256sum "$T" "$I"
+
+summ() {
+	echo "RESULT $2: fail=$(grep -c 'code=[1-9]' $1) of $(grep -c PHASE $1)"
+	sed -n 's/.*wake_ms=\([0-9.]*\).*/\1/p' $1 | awk '{print $1-200}' | sort -g > /tmp/wp-w.txt
+	awk '{a[NR]=$1} END{n=NR; printf "  wake - 200 ms: min=%.3f p5=%.3f p25=%.3f p50=%.3f p75=%.3f p95=%.3f max=%.3f (n=%d)\n", a[1], a[int(n*.05)+1], a[int(n*.25)+1], a[int(n*.5)+1], a[int(n*.75)+1], a[int(n*.95)+1], a[n], n}' /tmp/wp-w.txt
+	awk '{if ($1>=-0.05 && $1<0.05) near++; if ($1<0) neg++} END{printf "  wakeups before origin+200: %d; within 50 us of origin+200: %d\n", neg, near}' /tmp/wp-w.txt
+	sed -n 's/.*origin_at_ms=\([0-9.]*\).*/\1/p' $1 | sort -g | awk '{a[NR]=$1} END{printf "  block start, ms after process start: p50=%.1f p95=%.1f\n", a[int(NR*.5)+1], a[int(NR*.95)+1]}'
+	echo "  failing runs:"; grep 'code=[1-9]' $1 | head -8
+}
+
+: > /tmp/wp-s.txt; i=0
+while [ $i -lt $N ]; do i=$((i+1)); timeout 60 "$NODE" "$I" 2>/dev/null | grep PHASE >> /tmp/wp-s.txt; done
+summ /tmp/wp-s.txt "instrumented sequential"
+
+: > /tmp/wp-l.txt; r=0
+while [ $r -lt $((N/16)) ]; do r=$((r+1)); j=0
+	while [ $j -lt 16 ]; do j=$((j+1)); ( timeout 60 "$NODE" "$I" 2>/dev/null | grep PHASE > /tmp/wp-l.$j ) & done
+	wait; cat /tmp/wp-l.[0-9]* >> /tmp/wp-l.txt; rm -f /tmp/wp-l.[0-9]*
+done
+summ /tmp/wp-l.txt "instrumented 16-way"
+== log /root/wp.log
+## host: Linux ip-10-128-14-203 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+## node: v24.22.2 N=320
+f8f2962bd2e0aa0d1c4645b88674382b867488b0ebd820940f615327394586fd  /root/node-v24.22.2/test/parallel/test-perf-hooks-sliding-window-histogram.js
+0f07e03e3c9fc4089429b2ad67eb0675ef641d608af171ff51e6fc29008889b5  /root/node-v24.22.2/test/parallel/test-perf-hooks-sliding-window-histogram-wakephase.js
+RESULT instrumented sequential: fail=0 of 320
+  wake - 200 ms: min=-0.451 p5=-0.364 p25=0.555 p50=0.581 p75=0.605 p95=0.650 max=0.722 (n=320)
+  wakeups before origin+200: 21; within 50 us of origin+200: 0
+  block start, ms after process start: p50=27.6 p95=29.7
+  failing runs:
+RESULT instrumented 16-way: fail=0 of 320
+  wake - 200 ms: min=-0.365 p5=-0.133 p25=0.217 p50=0.676 p75=0.877 p95=1.047 max=1.671 (n=320)
+  wakeups before origin+200: 66; within 50 us of origin+200: 10
+  block start, ms after process start: p50=31.1 p95=44.8
+  failing runs:

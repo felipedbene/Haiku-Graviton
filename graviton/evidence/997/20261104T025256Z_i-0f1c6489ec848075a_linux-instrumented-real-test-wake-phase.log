@@ -1,0 +1,44 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-instrumented-real-test-wake-phase (Linux control: Ubuntu 24.04 arm64, c8g.4xlarge, official node-v24.22.2-linux-arm64)
+# instance: i-0f1c6489ec848075a   region: us-west-2   transport: ssm (graviton/scripts/ssm-run)
+# start: 20261104T025256Z   rc: 0
+# ---- script ----
+# | echo "== measurement script /tmp/m997i.sh"; cat /tmp/m997i.sh; echo "== log /root/m997i.log"; cat /root/m997i.log
+# ---- raw output ----
+== measurement script /tmp/m997i.sh
+# m997i.sh <node> <srcdir> <label> <N> -- issue 997: the real test, instrumented to print its wakeup phase
+set -u
+NODE=$1; SRC=$2; LABEL=$3; N=$4
+T=test/parallel/test-perf-hooks-sliding-window-histogram.js
+cd $SRC || exit 1; cp $T /tmp/orig997.js; cp /tmp/instrumented997.js $T
+echo "## host: $(uname -a)"; echo "## node: $($NODE --version) label=$LABEL N=$N"; sha256sum $T
+summ() {
+  echo "RESULT $2: fail=$(grep -c 'code=[1-9]' $1) of $(grep -c PHASE $1)"
+  sed -n 's/.*wake_ms=\([0-9.]*\).*/\1/p' $1 | awk '{print $1-200}' | sort -g > /tmp/w.txt
+  awk '{a[NR]=$1} END{n=NR; printf "  wake - 200 ms: min=%.3f p5=%.3f p25=%.3f p50=%.3f p75=%.3f p95=%.3f max=%.3f (n=%d)\n", a[1], a[int(n*.05)+1], a[int(n*.25)+1], a[int(n*.5)+1], a[int(n*.75)+1], a[int(n*.95)+1], a[n], n}' /tmp/w.txt
+  awk '{if ($1>=-0.05 && $1<0.05) near++; if ($1<0) neg++} END{printf "  wakeups before origin+200: %d; within 50 us of origin+200: %d\n", neg, near}' /tmp/w.txt
+  sed -n 's/.*origin_at_ms=\([0-9.]*\).*/\1/p' $1 | sort -g | awk '{a[NR]=$1} END{printf "  block start, ms after process start: p50=%.1f p95=%.1f\n", a[int(NR*.5)+1], a[int(NR*.95)+1]}'
+  echo "  failing runs:"; grep 'code=[1-9]' $1 | head -8
+}
+: > /tmp/is.txt; i=0; while [ $i -lt $N ]; do i=$((i+1)); timeout 60 $NODE $T 2>/dev/null | grep PHASE >> /tmp/is.txt; done
+summ /tmp/is.txt "instrumented sequential"
+: > /tmp/il.txt; r=0; while [ $r -lt $((N/16)) ]; do r=$((r+1)); j=0
+  while [ $j -lt 16 ]; do j=$((j+1)); ( timeout 60 $NODE $T 2>/dev/null | grep PHASE > /tmp/il.$j ) & done; wait; cat /tmp/il.[0-9]* >> /tmp/il.txt; rm -f /tmp/il.[0-9]*; done
+summ /tmp/il.txt "instrumented 16-way"
+cp /tmp/orig997.js $T
+echo M997I_DONE
+== log /root/m997i.log
+## host: Linux ip-10-128-14-203 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+## node: v24.22.2 label=linux-c8g4xl N=320
+280e181b6e684bb2a23191cd5eda348b52d28d35978cd67e81178d2cb6290fcd  test/parallel/test-perf-hooks-sliding-window-histogram.js
+RESULT instrumented sequential: fail=0 of 320
+  wake - 200 ms: min=-0.452 p5=-0.356 p25=0.553 p50=0.579 p75=0.605 p95=0.663 max=1.574 (n=320)
+  wakeups before origin+200: 21; within 50 us of origin+200: 0
+  block start, ms after process start: p50=27.7 p95=29.5
+  failing runs:
+RESULT instrumented 16-way: fail=0 of 320
+  wake - 200 ms: min=-0.408 p5=-0.137 p25=0.083 p50=0.663 p75=0.891 p95=1.051 max=1.318 (n=320)
+  wakeups before origin+200: 75; within 50 us of origin+200: 8
+  block start, ms after process start: p50=31.4 p95=42.1
+  failing runs:
+M997I_DONE
