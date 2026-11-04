@@ -1,0 +1,61 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-crafted
+# instance: i-03c908c88493ed515   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T025347Z   end: 20261104T025411Z   rc: 0
+# script sha256: 6cc68b5ceb0bb747670e6becd1c4d23d35a6862047179f432c19fc5758123490
+# ---- script ----
+# | set -u
+# | mkdir -p /boot/home/wD && cd /boot/home/wD
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | curl -sSf -o ipv6frag965.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/ipv6frag965.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/tcp900.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o hoplimit958.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/hoplimit958.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/udp947.c?<PRESIGNED>' || exit 4
+# | sha256sum *.c
+# | for p in ipv6frag965 tcp900 hoplimit958 udp947; do gcc -O2 -Wall -o $p $p.c -lnetwork || exit 2; done
+# | consumer() { ps -a | grep -E "loop consumer" | grep -v grep; }
+# | echo "=== $(ifconfig loop | grep -o 'MTU: [0-9]*')"
+# | ./ipv6frag965 -c; rc=$?; echo "rc=$rc"
+# | if [ $rc -ge 100 ]; then consumer; sleep 2; consumer; exit $rc; fi
+# ---- raw output ----
+Haiku ip-10-128-10-21.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2279 0xffff000002489000 0xffff0000024ab000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2301 0xffff0000022c4000 0xffff0000022cc000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2302 0xffff0000022cd000 0xffff0000022d8000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2306 0xffff0000024ad000 0xffff0000024b8000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2371 0xffff0000024ce000 0xffff0000024e0000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2372 0xffff0000024e1000 0xffff0000024ef000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+101eddf2f54010d6157bf7a45dcada0ecfe6d3d7e837e99325fad5223cc6e1fc  hoplimit958.c
+1a327f64dcc2b02db81e360e9a3c5d7e4c2ad0d5b41bb452c01d28e157473d13  ipv6frag965.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+=== MTU: 65536
+  loopback alive
+crafted 3 fragments, in order                              FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+  loopback alive
+crafted 3 fragments, in reverse                            FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+  loopback alive
+crafted 3 fragments, middle first                          FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+  loopback alive
+crafted 3 fragments, one sent twice                        FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+  loopback alive
+crafted atomic fragment (RFC 6946)                         FAIL  received -1 of 992 (NOT DELIVERED within 1 s)
+  loopback alive
+crafted non-last fragment of 1001 bytes                    PASS  dropped, as it must be
+  loopback alive
+5 FAIL(s)
+rc=5

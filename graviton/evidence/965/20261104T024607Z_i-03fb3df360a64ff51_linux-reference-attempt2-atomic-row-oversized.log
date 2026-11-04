@@ -1,0 +1,179 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-03fb3df360a64ff51   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T024607Z   end: 20261104T024624Z   rc: 0
+# script sha256: b718cb636805ccbd6b7eb174991921dab6e675a45827382d820dd1354d75c8f5
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | OUT=s3://haiku-graviton-$ACCT-us-west-2/bugfix/D
+# | mkdir -p /opt/wD/ref && cd /opt/wD/ref
+# | for f in ipv6frag965.c hoplimit958.c udp947.c; do aws s3 cp --quiet $OUT/src/$f $f; done
+# | sha256sum *.c
+# | uname -a; cat /etc/os-release | grep PRETTY
+# | TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60'); echo "instance type: $(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-type)"
+# | for p in ipv6frag965 hoplimit958 udp947; do gcc -O2 -Wall -o $p $p.c || exit 2; done
+# | for mtu in 9001 1280; do
+# | 	ip link set lo mtu $mtu; echo "=== lo mtu $(cat /sys/class/net/lo/mtu)"
+# | 	./ipv6frag965; echo "rc=$?"
+# | done
+# | ip link set lo mtu 65536; echo "=== lo mtu $(cat /sys/class/net/lo/mtu)"
+# | echo "=== hoplimit958"; ./hoplimit958; echo "rc=$?"
+# | echo "=== udp947"; ./udp947 | tail -25; echo "rc=$?"
+# | echo "=== udp947 -t"; ./udp947 -t; echo "rc=$?"
+# ---- raw output ----
+101eddf2f54010d6157bf7a45dcada0ecfe6d3d7e837e99325fad5223cc6e1fc  hoplimit958.c
+e14a4f4a63f65a8efab64fed0bf649a801c7391da0d5a7b5d9afb84f4c959eed  ipv6frag965.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+Linux ip-10-128-5-37 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+instance type: c7g.8xlarge
+=== lo mtu 9001
+  loopback alive
+send udp 127.0.0.1    100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp ::1          100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp 127.0.0.1   1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp ::1         1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp 127.0.0.1   8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp ::1         8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp 127.0.0.1   9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp ::1         9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp 127.0.0.1  20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp ::1        20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp 127.0.0.1  60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp ::1        60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp 127.0.0.1  65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp ::1        65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp 127.0.0.1  65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65527 bytes                            PASS  sent 65527, received 65527, intact
+  loopback alive
+crafted 3 fragments, in order                              PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, in reverse                            PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, middle first                          PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, one sent twice                        PASS  received 2992 of 2992, intact
+  loopback alive
+crafted atomic fragment (RFC 6946)                         PASS  received 2992 of 2992, intact
+  loopback alive
+crafted non-last fragment of 1001 bytes                    PASS  dropped, as it must be
+  loopback alive
+crafted fragment header naming itself as next              PASS  raw send ok
+  loopback alive
+crafted ... and with more fragments to come                PASS  raw send ok
+  loopback alive
+crafted destination options chain off the end              PASS  raw send ok
+  loopback alive
+0 FAIL(s)
+rc=0
+=== lo mtu 1280
+  loopback alive
+send udp 127.0.0.1    100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp ::1          100 bytes                            PASS  sent 100, received 100, intact
+  loopback alive
+send udp 127.0.0.1   1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp ::1         1200 bytes                            PASS  sent 1200, received 1200, intact
+  loopback alive
+send udp 127.0.0.1   8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp ::1         8900 bytes                            PASS  sent 8900, received 8900, intact
+  loopback alive
+send udp 127.0.0.1   9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp ::1         9000 bytes                            PASS  sent 9000, received 9000, intact
+  loopback alive
+send udp 127.0.0.1  20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp ::1        20000 bytes                            PASS  sent 20000, received 20000, intact
+  loopback alive
+send udp 127.0.0.1  60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp ::1        60000 bytes                            PASS  sent 60000, received 60000, intact
+  loopback alive
+send udp 127.0.0.1  65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp ::1        65000 bytes                            PASS  sent 65000, received 65000, intact
+  loopback alive
+send udp 127.0.0.1  65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65507 bytes                            PASS  sent 65507, received 65507, intact
+  loopback alive
+send udp ::1        65527 bytes                            PASS  sent 65527, received 65527, intact
+  loopback alive
+crafted 3 fragments, in order                              PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, in reverse                            PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, middle first                          PASS  received 2992 of 2992, intact
+  loopback alive
+crafted 3 fragments, one sent twice                        PASS  received 2992 of 2992, intact
+  loopback alive
+crafted atomic fragment (RFC 6946)                         FAIL  received -1 of 2992 (NOT DELIVERED within 1 s)
+  loopback alive
+crafted non-last fragment of 1001 bytes                    PASS  dropped, as it must be
+  loopback alive
+crafted fragment header naming itself as next              PASS  raw send ok
+  loopback alive
+crafted ... and with more fragments to come                PASS  raw send ok
+  loopback alive
+crafted destination options chain off the end              PASS  raw send ok
+  loopback alive
+1 FAIL(s)
+rc=1
+=== lo mtu 65536
+=== hoplimit958
+udp ::1, sender hops 1                               PASS  recvmsg=3 [IPV6_HOPLIMIT 1]
+udp ::1, sender hops 7                               PASS  recvmsg=3 [IPV6_HOPLIMIT 7]
+udp ::1, sender hops 200                             PASS  recvmsg=3 [IPV6_HOPLIMIT 200]
+udp ::1, MSG_PEEK then read, sender hops 9           PASS  peek=3 [IPV6_HOPLIMIT 9], then recvmsg=3 [IPV6_HOPLIMIT 9]
+raw IPPROTO_UDP socket, sender hops 11               PASS  raw recvmsg=11 [IPV6_HOPLIMIT 11]
+v4-to-dual 127.0.0.1 -> ::, no IPV6_HOPLIMIT         PASS  recvmsg=3 [IPV6_HOPLIMIT -1]
+0 FAIL(s)
+rc=0
+=== udp947
+ipv4 none                                                  PASS  controllen=0 flags=0x0
+ipv4 IP_PKTINFO                                            PASS  controllen=32 flags=0x0 [IP_PKTINFO 127.0.0.1]
+ipv4 IP_PKTINFO set+cleared                                PASS  controllen=0 flags=0x0
+ipv4 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+ipv6 none                                                  PASS  controllen=0 flags=0x0
+ipv6 IPV6_RECVPKTINFO                                      PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::1 if 1]
+ipv6 IPV6_RECVHOPLIMIT                                     PASS  controllen=24 flags=0x0 [IPV6_HOPLIMIT 7]
+ipv6 IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT                    PASS  controllen=64 flags=0x0 [IPV6_PKTINFO ::1 if 1] [IPV6_HOPLIMIT 7]
+ipv6 IPV6_RECVPKTINFO set+cleared                          PASS  controllen=0 flags=0x0
+ipv6 both set+cleared                                      PASS  controllen=0 flags=0x0
+ipv6 none, 4-byte control buffer                           PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+v4-to-dual none                                            PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO                                PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVHOPLIMIT                               PASS  controllen=0 flags=0x0
+v4-to-dual IPV6_RECVPKTINFO+IPV6_RECVHOPLIMIT              PASS  controllen=40 flags=0x0 [IPV6_PKTINFO ::ffff:127.0.0.1 if 1]
+v4-to-dual IPV6_RECVPKTINFO set+cleared                    PASS  controllen=0 flags=0x0
+v4-to-dual both set+cleared                                PASS  controllen=0 flags=0x0
+v4-to-dual none, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x0; next recv=3 "2nd"
+udp947: 18 passed, 0 failed
+rc=0
+=== udp947 -t
+ipv4 IP_PKTINFO, 4-byte control buffer                     PASS  recvmsg=3 data="947" controllen=0 flags=0x8; next recv=3 "2nd"
+ipv6 IPV6_RECVPKTINFO, 4-byte control buffer               PASS  recvmsg=3 data="947" controllen=0 flags=0x8; next recv=3 "2nd"
+v4-to-dual IPV6_RECVPKTINFO, 4-byte control buffer         PASS  recvmsg=3 data="947" controllen=0 flags=0x8; next recv=3 "2nd"
+udp947 -t: 3 passed, 0 failed
+rc=0

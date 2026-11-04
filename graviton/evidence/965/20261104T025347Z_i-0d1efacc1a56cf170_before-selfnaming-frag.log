@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-selfnaming-frag
+# instance: i-0d1efacc1a56cf170   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261104T025347Z   end: 20261104T025405Z   rc: 100
+# script sha256: 4bccfa28009d5977e0f3e282d95accf787e5dfca4a216965e65856407a74387f
+# ---- script ----
+# | set -u
+# | mkdir -p /boot/home/wD && cd /boot/home/wD
+# | uname -a
+# | echo "--- non-packaged overrides"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | echo "--- loaded network images"
+# | listimage 1 | grep -E 'network/(stack|protocols)'
+# | curl -sSf -o ipv6frag965.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/ipv6frag965.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o tcp900.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/tcp900.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o hoplimit958.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/hoplimit958.c?<PRESIGNED>' || exit 4
+# | curl -sSf -o udp947.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/D/src/udp947.c?<PRESIGNED>' || exit 4
+# | sha256sum *.c
+# | for p in ipv6frag965 tcp900 hoplimit958 udp947; do gcc -O2 -Wall -o $p $p.c -lnetwork || exit 2; done
+# | consumer() { ps -a | grep -E "loop consumer" | grep -v grep; }
+# | echo "=== $(ifconfig loop | grep -o 'MTU: [0-9]*')"
+# | ./ipv6frag965 -f; rc=$?; echo "rc=$rc"
+# | if [ $rc -ge 100 ]; then consumer; sleep 2; consumer; exit $rc; fi
+# ---- raw output ----
+Haiku ip-10-128-8-171.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+c8954fd9a851b2cbe5f604ea06f3f6de4263afb08caa7bbca73ede18cb0996e7  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp
+4b73558ff6cef9853d3d789ccc76fcda7de35dbf870dade13ee898c117f2d6c2  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/icmp6
+095588a07fd59046b96757ff355bfa9d83fe4ed8ca000d7cfb0d1f3942c8fea0  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+3a73ea45664d864f68aa3b05a9162dfd1501b28ed4a1dbf45b6a7298f36be192  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+6a332dffda0683d48ebf4cd0f68693167df5660c0eac111c96be6c46890bfdb5  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+883cb3b3978b6b373d4fb2a4827fbe7cb3c712edd8c57c41530eb88d6b0fc200  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+4fdbd04b7156b8dfea26b57c56fd1a22926d51a10cd372810987ca0756285633  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+--- loaded network images
+ 2278 0xffff000002506000 0xffff000002528000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/stack
+ 2299 0xffff00000252a000 0xffff000002532000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/udp
+ 2300 0xffff0000020f1000 0xffff0000020fc000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv4
+ 2304 0xffff0000020fe000 0xffff000002109000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/ipv6
+ 2381 0xffff0000023c4000 0xffff0000023d6000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2382 0xffff000002547000 0xffff000002555000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/unix
+101eddf2f54010d6157bf7a45dcada0ecfe6d3d7e837e99325fad5223cc6e1fc  hoplimit958.c
+1a327f64dcc2b02db81e360e9a3c5d7e4c2ad0d5b41bb452c01d28e157473d13  ipv6frag965.c
+b7547bf89f1675f44d6c67803b5c8e0303e9a6d7a6db52113bed9ca6d2bd07f9  tcp900.c
+549585d7c5e6b4122d59e906ea0794afaa4c822333974605a7d3dcfc8eb1a831  udp947.c
+=== MTU: 65536
+  loopback alive
+crafted fragment header naming itself as next              PASS  raw send ok
+  LOOPBACK DEAD after: self-naming fragment header
+rc=100
+loop consumer                            94      run   15        0     1003 
+loop consumer                            94      run   15        0     3009 
+failed to run commands: exit status 100
