@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: peer-start
+# instance: i-0c60589bf149eddd8   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T072219Z   end: 20261104T072229Z   rc: 0
+# script sha256: ef8ca19f7e360e1b681a33ab3fb43e36647e1e00b41329549dad31492c797c00
+# ---- script ----
+# | export HOME=/root
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | B=s3://haiku-graviton-$ACCT-us-west-2/bugfix/C/rv2
+# | mkdir -p /opt/t975 && cd /opt/t975
+# | for f in tcp975-peer.py nettput-peer.py; do aws s3 cp --quiet $B/src/$f $f; done
+# | sha256sum tcp975-peer.py nettput-peer.py
+# | python3 -c 'import scapy; print("scapy", scapy.VERSION)'
+# | # this builder's own tcpdump profile denies signals and inherited fds from the SSM agent
+# | apparmor_parser -R /etc/apparmor.d/usr.bin.tcpdump 2>/dev/null; echo "apparmor unload rc=$?"
+# | nohup python3 -I /opt/t975/tcp975-peer.py 9751 9752 > /opt/t975/peer.log 2>&1 &
+# | nohup python3 -I /opt/t975/nettput-peer.py -p 9753 > /opt/t975/nettput-peer.log 2>&1 &
+# | nohup tcpdump -i any -nn -s 128 -B 32768 -U -w /opt/t975/rv.pcap "tcp port 9751 or tcp port 9754" > /opt/t975/tcpdump.log 2>&1 &
+# | sleep 3; ss -ltnp | grep -E '975[123]'; cat peer.log; ps aux | grep -c '[t]cpdump'
+# ---- raw output ----
+87ba401d14861389cb275f9f964564a5520bc869061ddf34542597cbe9d9e437  tcp975-peer.py
+aabbc0fcfe26216f89ad7f9a36e42986d1e56bccbdbfb4e1f2bc494652bdaf62  nettput-peer.py
+scapy 2.5.0
+apparmor unload rc=254
+LISTEN 0      64           0.0.0.0:9751      0.0.0.0:*    users:(("python3",pid=8785,fd=3))        
+LISTEN 0      64           0.0.0.0:9752      0.0.0.0:*    users:(("python3",pid=8785,fd=7))        
+LISTEN 0      64           0.0.0.0:9753      0.0.0.0:*    users:(("python3",pid=8786,fd=3))        
+2026-11-04T07:22:24Z listening: data 9751, control 9752
+2
