@@ -58,12 +58,23 @@ public:
 			void		RemovedFromTransaction();
 
 private:
+			struct MetadataRange {
+				uint32	start;
+				uint32	length;
+			};
+			enum {
+				kMaxMetadataRanges = 4
+					// the superblock and descriptor backups, the two
+					// bitmaps and the inode table
+			};
+
 			status_t	_ScanFreeRanges(bool verify = false);
 			void		_AddFreeRange(uint32 start, uint32 length);
 			void		_LockInTransaction(Transaction& transaction);
 			status_t	_InitGroup(Transaction& transaction);
-			bool		_IsSparse();
-			uint32		_FirstFreeBlock();
+			bool		_HasSuperBlock();
+			uint32		_NumBaseMetadataBlocks();
+			int32		_MetadataRanges(MetadataRange* ranges);
 			void		_SetBlockBitmapChecksum(BitmapBlock& block);
 			bool		_VerifyBlockBitmapChecksum(BitmapBlock& block);
 
@@ -145,9 +156,33 @@ AllocationBlockGroup::Initialize(Volume* volume, uint32 blockGroup,
 	}
 
 	if (fGroupDescriptor->Flags() & EXT2_BLOCK_GROUP_BLOCK_UNINIT) {
-		fFreeBits = fGroupDescriptor->FreeBlocks(fVolume->Has64bitFeature());
-		fLargestLength = fFreeBits;
-		fLargestStart = _FirstFreeBlock();
+		// The bitmap of this group has never been written: the blocks in use
+		// are its own metadata, which _InitGroup() will mark. The free ranges
+		// are the gaps between them.
+		MetadataRange ranges[kMaxMetadataRanges];
+		int32 count = _MetadataRanges(ranges);
+		fFreeBits = 0;
+		fFirstFree = fNumBits;
+		fLargestStart = 0;
+		fLargestLength = 0;
+		uint32 start = 0;
+		for (int32 i = 0; i <= count; i++) {
+			uint32 end = i < count ? ranges[i].start : fNumBits;
+			if (end > start)
+				_AddFreeRange(start, end - start);
+			if (i < count)
+				start = ranges[i].start + ranges[i].length;
+		}
+
+		if (fGroupDescriptor->FreeBlocks(fVolume->Has64bitFeature())
+				!= fFreeBits) {
+			ERROR("AllocationBlockGroup(%" B_PRIu32 ")::Initialize(): "
+				"uninitialized group has %" B_PRIu32 "/%" B_PRIu32 " blocks "
+				"free after its metadata, but the group descriptor says %"
+				B_PRIu32 "\n", fBlockGroup, fFreeBits, fNumBits,
+				fGroupDescriptor->FreeBlocks(fVolume->Has64bitFeature()));
+			return B_BAD_DATA;
+		}
 		TRACE("Group %" B_PRIu32 " is uninit\n", fBlockGroup);
 		// An aborted transaction restores these: left at zero, the first
 		// abort in this group would make it look full until the next mount.
@@ -240,7 +275,9 @@ AllocationBlockGroup::Allocate(Transaction& transaction, fsblock_t _start,
 		return B_BAD_VALUE;
 
 	_LockInTransaction(transaction);
-	_InitGroup(transaction);
+	status_t status = _InitGroup(transaction);
+	if (status != B_OK)
+		return status;
 
 	BitmapBlock block(fVolume, fNumBits);
 
@@ -476,16 +513,26 @@ AllocationBlockGroup::_InitGroup(Transaction& transaction)
 
 	TRACE("AllocationBlockGroup::_InitGroup() initing\n");
 
-	BitmapBlock blockBitmap(fVolume, fNumBits);
+	// As ext4_init_block_bitmap(): whatever the block holds is not a bitmap
+	// yet. Mark the group's own metadata, and, like ext4, the bits past the
+	// end of a group shorter than the bitmap block.
+	uint32 bitmapBits = fVolume->BlockSize() * 8;
+	BitmapBlock blockBitmap(fVolume, bitmapBits);
 	if (!blockBitmap.SetToWritable(transaction, fBitmapBlock))
 		return B_ERROR;
 
-	blockBitmap.Mark(0, _FirstFreeBlock(), true);
-	blockBitmap.Unmark(0, fNumBits, true);
-	
-	fGroupDescriptor->SetFlags(flags & ~EXT2_BLOCK_GROUP_BLOCK_UNINIT);
-	_SetBlockBitmapChecksum(blockBitmap);
-	fVolume->WriteBlockGroup(transaction, fBlockGroup);
+	blockBitmap.Unmark(0, bitmapBits, true);
+
+	MetadataRange ranges[kMaxMetadataRanges];
+	int32 count = _MetadataRanges(ranges);
+	for (int32 i = 0; i < count; i++) {
+		if (!blockBitmap.Mark(ranges[i].start, ranges[i].length))
+			return B_ERROR;
+	}
+	if (fNumBits < bitmapBits
+		&& !blockBitmap.Mark(fNumBits, bitmapBits - fNumBits)) {
+		return B_ERROR;
+	}
 
 	status_t status = _ScanFreeRanges();
 	if (status != B_OK)
@@ -501,18 +548,44 @@ AllocationBlockGroup::_InitGroup(Transaction& transaction)
 		return B_BAD_DATA;
 	}
 
+	// Only now that the bitmap is right: a group left uninitialized
+	// ignores it.
+	fGroupDescriptor->SetFlags(flags & ~EXT2_BLOCK_GROUP_BLOCK_UNINIT);
+	_SetBlockBitmapChecksum(blockBitmap);
+	fVolume->WriteBlockGroup(transaction, fBlockGroup);
+
 	TRACE("AllocationBlockGroup::_InitGroup() init OK\n");
 
 	return B_OK;
 }
 
 
+static_assert(offsetof(ext2_super_block, backup_block_groups) == 0x24c,
+	"s_backup_bgs is at 0x24c in the ext4 superblock");
+
+
+/*!	Whether this group holds a backup of the superblock (group 0 holds the
+	superblock itself), as ext4_bg_has_super().
+*/
 bool
-AllocationBlockGroup::_IsSparse()
+AllocationBlockGroup::_HasSuperBlock()
 {
-	if (fBlockGroup <= 1)
+	if (fBlockGroup == 0)
 		return true;
-	if (fBlockGroup & 0x1)
+
+	ext2_super_block& superBlock = fVolume->SuperBlock();
+	if ((superBlock.CompatibleFeatures() & EXT2_FEATURE_SPARSESUPER2) != 0) {
+		return fBlockGroup == superBlock.BackupBlockGroup(0)
+			|| fBlockGroup == superBlock.BackupBlockGroup(1);
+	}
+	if (fBlockGroup == 1 || (superBlock.ReadOnlyFeatures()
+			& EXT2_READ_ONLY_FEATURE_SPARSE_SUPER) == 0) {
+		return true;
+	}
+
+	// With sparse_super, the other backups are in the groups that are a
+	// power of 3, 5 or 7: all odd.
+	if ((fBlockGroup & 0x1) == 0)
 		return false;
 
 	uint32 i = fBlockGroup;
@@ -537,17 +610,106 @@ AllocationBlockGroup::_IsSparse()
 }
 
 
+/*!	The number of blocks at the start of this group taken by the superblock
+	(or its backup) and the group descriptor table that goes with it, as
+	ext4_num_base_meta_blocks().
+*/
 uint32
-AllocationBlockGroup::_FirstFreeBlock()
+AllocationBlockGroup::_NumBaseMetadataBlocks()
 {
-	uint32 first = 1;
-	if (_IsSparse())
-		first = 0;
-	else if (!fVolume->HasMetaGroupFeature()) {
-		first += fVolume->SuperBlock().ReservedGDTBlocks();
-		first += fVolume->NumGroups();
+	ext2_super_block& superBlock = fVolume->SuperBlock();
+	uint32 descriptorsPerBlock = fVolume->BlockSize()
+		/ fVolume->GroupDescriptorSize();
+	uint32 count = _HasSuperBlock() ? 1 : 0;
+
+	if (!fVolume->HasMetaGroupFeature()
+		|| fBlockGroup < superBlock.FirstMetaBlockGroup()
+			* descriptorsPerBlock) {
+		if (count != 0) {
+			if (fVolume->HasMetaGroupFeature())
+				count += superBlock.FirstMetaBlockGroup();
+			else {
+				count += (fVolume->NumGroups() + descriptorsPerBlock - 1)
+					/ descriptorsPerBlock;
+			}
+			count += superBlock.ReservedGDTBlocks();
+		}
+	} else {
+		// With meta_bg, a descriptor block is kept in the first, second and
+		// last group of the groups it describes.
+		uint32 first = fBlockGroup / descriptorsPerBlock * descriptorsPerBlock;
+		if (fBlockGroup == first || fBlockGroup == first + 1
+			|| fBlockGroup == first + descriptorsPerBlock - 1) {
+			count++;
+		}
 	}
-	return first;
+
+	return count;
+}
+
+
+/*!	Fills \a ranges with the blocks of this group its metadata uses, as
+	ext4_init_block_bitmap() marks them: sorted, joined where they touch, and
+	relative to the start of the group. Returns how many there are.
+	The bitmaps and the inode table only count when they lie in this group,
+	which with flex_bg is usually not the case. The metadata of other groups
+	is not looked for: mke2fs and ext4 never leave a group that holds any
+	uninitialized.
+*/
+int32
+AllocationBlockGroup::_MetadataRanges(MetadataRange* ranges)
+{
+	bool has64bits = fVolume->Has64bitFeature();
+	uint32 inodeTableBlocks = ((uint64)fVolume->InodesPerGroup()
+		* fVolume->InodeSize() + fVolume->BlockSize() - 1)
+		/ fVolume->BlockSize();
+
+	struct {
+		fsblock_t	start;
+		uint32		length;
+	} candidates[kMaxMetadataRanges] = {
+		{ fStart, _NumBaseMetadataBlocks() },
+		{ fGroupDescriptor->BlockBitmap(has64bits), 1 },
+		{ fGroupDescriptor->InodeBitmap(has64bits), 1 },
+		{ fGroupDescriptor->InodeTable(has64bits), inodeTableBlocks }
+	};
+
+	int32 count = 0;
+	for (int32 i = 0; i < kMaxMetadataRanges; i++) {
+		// Keep the part inside this group
+		fsblock_t start = max_c(candidates[i].start, fStart);
+		fsblock_t end = min_c(candidates[i].start + candidates[i].length,
+			fStart + fNumBits);
+		if (start >= end)
+			continue;
+
+		MetadataRange range = { (uint32)(start - fStart),
+			(uint32)(end - start) };
+
+		// Insert it in order
+		int32 j = count;
+		while (j > 0 && ranges[j - 1].start > range.start) {
+			ranges[j] = ranges[j - 1];
+			j--;
+		}
+		ranges[j] = range;
+		count++;
+	}
+
+	// Join the ranges that overlap or touch
+	int32 joined = 0;
+	for (int32 i = 0; i < count; i++) {
+		if (joined > 0 && ranges[i].start
+				<= ranges[joined - 1].start + ranges[joined - 1].length) {
+			uint32 end = max_c(ranges[joined - 1].start
+				+ ranges[joined - 1].length, ranges[i].start
+				+ ranges[i].length);
+			ranges[joined - 1].length = end - ranges[joined - 1].start;
+		} else
+			ranges[joined++] = ranges[i];
+	}
+
+	return joined;
 }
 
 
