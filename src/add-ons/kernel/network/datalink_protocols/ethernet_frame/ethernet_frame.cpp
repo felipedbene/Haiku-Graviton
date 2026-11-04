@@ -21,6 +21,7 @@
 #include <net/if_types.h>
 #include <net/if_dl.h>
 #include <new>
+#include <stddef.h>
 #include <string.h>
 
 
@@ -137,14 +138,56 @@ ethernet_frame_uninit(net_datalink_protocol* protocol)
 }
 
 
+/*!	Returns whether \a address carries an Ethernet address within its own
+	length. The address follows the interface name, and both lengths come
+	from whoever filled in the address -- for an AF_LINK socket, userland,
+	whose sendto() address may also be shorter than a sockaddr_dl.
+*/
+static bool
+has_ether_address(const sockaddr_dl& address)
+{
+	size_t length = min_c(address.sdl_len, sizeof(sockaddr_storage));
+	return address.sdl_alen == ETHER_ADDRESS_LENGTH
+		&& offsetof(sockaddr_dl, sdl_data) + address.sdl_nlen
+			+ ETHER_ADDRESS_LENGTH <= length;
+}
+
+
 status_t
 ethernet_frame_send_data(net_datalink_protocol* protocol, net_buffer* buffer)
 {
 	struct sockaddr_dl& source = *(struct sockaddr_dl*)buffer->source;
 	struct sockaddr_dl& destination = *(struct sockaddr_dl*)buffer->destination;
 
-	if (source.sdl_family != AF_LINK || source.sdl_type != IFT_ETHER)
+	if (source.sdl_family != AF_LINK)
 		return B_ERROR;
+
+	uint16 type;
+	if (source.sdl_type == IFT_ETHER) {
+		// The sender owns a frame type: the stack's own protocols, or an
+		// AF_LINK socket bound to one (which also receives that type).
+		type = source.sdl_e_type;
+	} else if (source.sdl_type == 0) {
+		// An AF_LINK socket bound to the device without a frame type. It
+		// receives nothing, so it may send any type, including those the
+		// stack itself receives (IPv4, ARP, IPv6); binding to one of those
+		// is refused, as only one receiver can own a type. The type comes
+		// with each frame's destination, as the sockaddr_dl given to
+		// sendto().
+		if (destination.sdl_family != AF_LINK
+			|| destination.sdl_type != IFT_ETHER)
+			return B_BAD_VALUE;
+		type = destination.sdl_e_type;
+	} else
+		return B_ERROR;
+
+	if ((buffer->msg_flags & MSG_BCAST) == 0 && !has_ether_address(destination))
+		return B_BAD_VALUE;
+
+	// A socket bound by interface name or index has no link address of its
+	// own; it sends from the device's.
+	const uint8* sourceAddress = has_ether_address(source)
+		? LLADDR(&source) : protocol->interface->device->address.data;
 
 	NetBufferPrepend<ether_header> bufferHeader(buffer);
 	if (bufferHeader.Status() != B_OK)
@@ -152,8 +195,8 @@ ethernet_frame_send_data(net_datalink_protocol* protocol, net_buffer* buffer)
 
 	ether_header &header = bufferHeader.Data();
 
-	header.type = source.sdl_e_type;
-	memcpy(header.source, LLADDR(&source), ETHER_ADDRESS_LENGTH);
+	header.type = type;
+	memcpy(header.source, sourceAddress, ETHER_ADDRESS_LENGTH);
 	if ((buffer->msg_flags & MSG_BCAST) != 0)
 		memcpy(header.destination, kBroadcastAddress, ETHER_ADDRESS_LENGTH);
 	else

@@ -178,8 +178,13 @@ LinkProtocol::Bind(const sockaddr* address)
 			put_device_interface(boundTo);
 			return status;
 		}
-	} else
+	} else {
+		// Bound to the device only: the socket receives nothing, and sends
+		// frames of the type each destination address names (see
+		// ethernet_frame_send_data()). This is how to send a type the stack
+		// already receives itself, such as IPv4, ARP or IPv6.
 		fBoundType = 0;
+	}
 
 	fBoundToDevice = boundTo;
 	socket->bound_to_device = boundTo->device->index;
