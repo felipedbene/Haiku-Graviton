@@ -515,12 +515,17 @@ ramfs_unlink(fs_volume* _volume, fs_vnode* _dir, const char *name)
 		Entry *entry = NULL;
 		if (dir->FindAndGetNode(name, &node, &entry) == B_OK) {
 			nodeID = node->GetID();
-			// unlink the entry, if it isn't a non-empty directory
-			if (node->IsDirectory()
-				&& !dynamic_cast<Directory*>(node)->IsEmpty()) {
-				SET_ERROR(error, B_DIRECTORY_NOT_EMPTY);
-			} else
-				error = dir->DeleteEntry(entry);
+			// the volume is write locked, so this is the entry that goes
+			error = check_sticky_permissions(dir->GetMode(), dir->GetUID(),
+				node->GetUID());
+			if (error == B_OK) {
+				// unlink the entry, if it isn't a non-empty directory
+				if (node->IsDirectory()
+					&& !dynamic_cast<Directory*>(node)->IsEmpty()) {
+					SET_ERROR(error, B_DIRECTORY_NOT_EMPTY);
+				} else
+					error = dir->DeleteEntry(entry);
+			}
 			volume->PutVNode(node);
 		} else
 			SET_ERROR(error, B_ENTRY_NOT_FOUND);
@@ -574,7 +579,10 @@ ramfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char *oldName,
 		if (oldDir->FindAndGetNode(oldName, &node, &entry) != B_OK) {
 			SET_ERROR(error, B_ENTRY_NOT_FOUND);
 		} else {
-			if (oldDir != newDir) {
+			// moving an entry out of a sticky directory removes it there
+			error = check_sticky_permissions(oldDir->GetMode(),
+				oldDir->GetUID(), node->GetUID());
+			if (error == B_OK && oldDir != newDir) {
 				// check whether the entry is a descendent of the target
 				// directory
 				for (Directory *parent = newDir; parent != NULL;
@@ -594,7 +602,10 @@ ramfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char *oldName,
 		if (error == B_OK) {
 			if (newDir->FindAndGetNode(newName, &clobberNode,
 					&clobberEntry) == B_OK) {
-				if (clobberNode->IsDirectory()
+				// replacing an entry removes it, too
+				error = check_sticky_permissions(newDir->GetMode(),
+					newDir->GetUID(), clobberNode->GetUID());
+				if (error == B_OK && clobberNode->IsDirectory()
 						&& !dynamic_cast<Directory*>(clobberNode)->IsEmpty()) {
 					SET_ERROR(error, B_NAME_IN_USE);
 				}
@@ -1254,12 +1265,16 @@ ramfs_remove_dir(fs_volume* _volume, fs_vnode* _dir, const char *name)
 		Entry *entry = NULL;
 		if (dir->FindAndGetNode(name, &node, &entry) == B_OK) {
 			nodeID = node->GetID();
-			if (!node->IsDirectory()) {
-				SET_ERROR(error, B_NOT_A_DIRECTORY);
-			} else if (!dynamic_cast<Directory*>(node)->IsEmpty()) {
-				SET_ERROR(error, B_DIRECTORY_NOT_EMPTY);
-			} else
-				error = dir->DeleteEntry(entry);
+			error = check_sticky_permissions(dir->GetMode(), dir->GetUID(),
+				node->GetUID());
+			if (error == B_OK) {
+				if (!node->IsDirectory()) {
+					SET_ERROR(error, B_NOT_A_DIRECTORY);
+				} else if (!dynamic_cast<Directory*>(node)->IsEmpty()) {
+					SET_ERROR(error, B_DIRECTORY_NOT_EMPTY);
+				} else
+					error = dir->DeleteEntry(entry);
+			}
 			volume->PutVNode(node);
 		} else
 			SET_ERROR(error, B_ENTRY_NOT_FOUND);

@@ -887,6 +887,12 @@ ext2_unlink(fs_volume* _volume, fs_vnode* _directory, const char* name)
 
 		inode->WriteLockInTransaction(transaction);
 
+		// with the directory write locked, this is the entry that goes
+		status = check_sticky_permissions(directory->Mode(),
+			(uid_t)directory->Node().UserID(), (uid_t)inode->Node().UserID());
+		if (status != B_OK)
+			return status;
+
 		status = inode->Unlink(transaction);
 		if (status != B_OK)
 			return status;
@@ -995,6 +1001,12 @@ ext2_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 	if (status != B_OK)
 		return status;
 
+	// moving an entry out of a sticky directory removes it there
+	status = check_sticky_permissions(oldDirectory->Mode(),
+		(uid_t)oldDirectory->Node().UserID(), (uid_t)inode->Node().UserID());
+	if (status != B_OK)
+		return status;
+
 	uint8 fileType;
 
 	// TODO: Support all file types?
@@ -1021,6 +1033,13 @@ ext2_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 
 		if (vnodeExistent.Get(&existent) != B_OK)
 			return B_NAME_IN_USE;
+
+		// replacing an entry removes it, too
+		status = check_sticky_permissions(newDirectory->Mode(),
+			(uid_t)newDirectory->Node().UserID(),
+			(uid_t)existent->Node().UserID());
+		if (status != B_OK)
+			return status;
 
 		if (existent->IsDirectory() != inode->IsDirectory()) {
 			return existent->IsDirectory() ? B_IS_A_DIRECTORY
@@ -1387,6 +1406,11 @@ ext2_remove_dir(fs_volume* _volume, fs_vnode* _directory, const char* name)
 		return status;
 
 	inode->WriteLockInTransaction(transaction);
+
+	status = check_sticky_permissions(directory->Mode(),
+		(uid_t)directory->Node().UserID(), (uid_t)inode->Node().UserID());
+	if (status != B_OK)
+		return status;
 
 	status = inode->Unlink(transaction);
 	if (status != B_OK)

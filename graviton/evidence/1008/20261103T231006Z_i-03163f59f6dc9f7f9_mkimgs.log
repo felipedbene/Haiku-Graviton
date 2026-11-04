@@ -1,0 +1,22 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: mkimgs
+# instance: i-03163f59f6dc9f7f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: make fresh ext2/btrfs test images for the Haiku arms
+# start: 20261103T231006Z   end: 20261103T231016Z   rc: 0
+# script sha256: 22b0e0d81307a5c2a0e45c7b4eed0b05f20c17eae8ecfc31f58a2f0a480d3334
+# ---- script ----
+# | # Fresh, unused ext2 and btrfs images (256 MiB, made by Ubuntu's mkfs) for the Haiku arms,
+# | # gzipped and staged in S3.
+# | set -euo pipefail
+# | cd /opt/ref
+# | for fs in ext2 btrfs; do
+# | 	rm -f $fs-h.img $fs-h.img.gz; truncate -s 256M $fs-h.img
+# | 	if [ $fs = ext2 ]; then mkfs.ext2 -q -F $fs-h.img; else mkfs.btrfs -q $fs-h.img; fi
+# | 	gzip -1 $fs-h.img; sha256sum $fs-h.img.gz; ls -l $fs-h.img.gz
+# | 	aws s3 cp --quiet $fs-h.img.gz s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/s1008/$fs-h.img.gz
+# | done
+# ---- raw output ----
+a387d0da8e69a7af6bdbb00f1134e01c3380848afa24f4f61a88b43b70231432  ext2-h.img.gz
+-rw-r--r-- 1 root root 1171714 Nov  3 23:10 ext2-h.img.gz
+28ee839612c6c504d4154e5b2599a676055da448bf56b503fab41a61a3ba1b56  btrfs-h.img.gz
+-rw-r--r-- 1 root root 1179304 Nov  3 23:10 btrfs-h.img.gz

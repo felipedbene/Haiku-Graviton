@@ -1,0 +1,31 @@
+# evidence: ramfs-unmount-bare-stock-console-kdl
+# instance: i-03ae76584724039bc (stock canonical ami-010361cfdaa9d22e1, c7g.2xlarge; the before box, last use)   region: us-west-2   source: ec2 get-console-output --latest, fetched 20261103T2345Z
+# what: ramfs-unmount-bare-stock (20261103T234259Z): a fresh 'mount -t ramfs /ramu2; unmount /ramu2' with no activity on it KDLs the stock kernel: ASSERT vnodes.IsEmpty() in ~fs_mount (vfs.cpp:148). Box terminated (no reboot).
+# ---- console tail ----
+PANIC: ASSERT FAILED (../src/system/kernel/fs/vfs.cpp:148): vnodes.IsEmpty()
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 6409 "unmount" running on CPU 0
+iframe 0xffff000001af1cc7 (end = 0xffff000001af1fff)
+stack trace for thread 0x1909 "unmount"
+    kernel stack: 0xffff000001aed000 to 0xffff000001af2000
+      user stack: 0x000000ada99ad000 to 0x000000adad9ad000
+frame            caller     <image>:function + offset
+ 0 ffff000001af1810 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff000001af1860 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff000001af18d0[0m [36m"��"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff000001af18d0 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff000001af1990[0m [36m"��"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�2C���"[0m, std::__va_list: [34m0x1a7920[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff000001af1990 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff000001af1ab0 (+ 288) ffff000000136dac   <kernel_arm64> fs_unmount(char*: [34m0xffff000001af1b40[0m, int32: [34m1301280[0m, uint32: [34m0xffff0000[0m, [34mfalse[0m) + 0x28c
+ 5 ffff000001af1b40 (+ 144) ffff00000013db20   <kernel_arm64> _user_unmount + 0xa0
+ 6 ffff000001af1ba0 (+  96) ffff0000000a71e8   <kernel_arm64> syscall_dispatcher + 0x1318
+ 7 ffff000001af1bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+ 8 ffff000001af1cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff000001af1cc7
+ELR=000001e82dc09530 SPSR=0000000020000000
+LR =0000000bac8c4198 SP  =000000adad9acef0 FP =000000adad9acef0
+ESR=000000005600006a FAR =0000000bac8d40b8
+ 9 000000adad9acef0 (+   0) 000001e82dc09530   </boot/system/lib/libroot.so> _kern_unmount (nearest) + 0x04
+10 000000adad9acfa0 (+ 176) 0000000bac8c4310   </boot/system/bin/unmount> _start + 0x50
+11 000000adad9acfd0 (+  48) 000000912bf6b348   </boot/system/runtime_loader> runtime_loader + 0x128
+12 0000000000000000 (+   0) 0000071bd0a84208   <commpage> commpage_thread_exit + 0x00
+

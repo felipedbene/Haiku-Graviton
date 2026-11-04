@@ -1,0 +1,69 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-artifacts
+# instance: i-03163f59f6dc9f7f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: locate, prove, hash and stage the fix build's kernel/libroot/bfs/ramfs/ext2/btrfs/launch_daemon
+# start: 20261103T225252Z   end: 20261103T225309Z   rc: 0
+# script sha256: e79ee3c31c89ba65ceca7b67d09c43b9614eb43fa597cfca169a841b9f81b672
+# ---- script ----
+# | # Locate the cross-built kernel, libroot, the four file systems and launch_daemon of
+# | # fix/1008-sticky-tmp; prove they carry the change (symbol / string); hash them; stage
+# | # them in S3 for the repack. Also hash the haiku package the image was built with.
+# | set -euo pipefail
+# | G=/opt/src/haiku/generated.arm64
+# | git -C /opt/src/haiku log --oneline -1
+# | O=$G/objects/haiku/arm64/release
+# | K=$(find $O/system/kernel -maxdepth 1 -name kernel_arm64 -type f)
+# | LR=$(find $O/system/libroot -name libroot.so -type f | head -1)
+# | BFS=$(find $O/add-ons/kernel/file_systems/bfs -maxdepth 1 -name bfs -type f)
+# | RAM=$(find $O/add-ons/kernel/file_systems/ramfs -maxdepth 1 -name ramfs -type f)
+# | EXT=$(find $O/add-ons/kernel/file_systems/ext2 -maxdepth 1 -name ext2 -type f)
+# | BTR=$(find $O/add-ons/kernel/file_systems/btrfs -maxdepth 1 -name btrfs -type f)
+# | LD=$(find $O/servers/launch -maxdepth 1 -name launch_daemon -type f)
+# | ls -l $K $LR $BFS $RAM $EXT $BTR $LD
+# | NM=$G/cross-tools-arm64/bin/aarch64-unknown-haiku-nm
+# | [ -x $NM ] || NM=$(ls /opt/src/haiku/generated.arm64/cross-tools-arm64/bin/*-nm | head -1)
+# | echo "kernel defines:"; $NM -D $K | grep check_sticky_permissions
+# | for m in $BFS $RAM $EXT $BTR; do echo "$(basename $m) imports:"; $NM -D $m | grep check_sticky_permissions; done
+# | echo "launch_daemon string:"; strings $LD | grep "Cannot make"
+# | sha256sum $K $LR $BFS $RAM $EXT $BTR $LD
+# | P=$(ls $G/objects/haiku/arm64/packaging/packages/haiku.hpkg 2>/dev/null || find $G -name 'haiku.hpkg' | head -1); ls -l $P; sha256sum $P
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/s1008
+# | for f in $K $LR $BFS $RAM $EXT $BTR $LD; do aws s3 cp --quiet $f $B/$(basename $f).fix; done
+# | aws s3 ls $B/
+# ---- raw output ----
+e04f15ac7e graviton: add the sticky1008 two-user repro for /tmp deletion rules
+-rwxr-xr-x 1 root root  276931 Nov  3 22:39 /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
+-rwxr-xr-x 1 root root  220603 Nov  3 22:39 /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/btrfs/btrfs
+-rwxr-xr-x 1 root root  194883 Nov  3 22:39 /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2
+-rwxr-xr-x 1 root root  279155 Nov  3 22:39 /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs/ramfs
+-rwxr-xr-x 1 root root  409904 Nov  3 22:39 /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/servers/launch/launch_daemon
+-rwxr-xr-x 1 root root 2551417 Nov  3 22:39 /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/system/kernel/kernel_arm64
+-rwxr-xr-x 1 root root 1366771 Nov  3 22:39 /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/system/libroot/revisioned/libroot.so
+kernel defines:
+ffff0000001390c0 T check_sticky_permissions@@KERNEL_BASE
+bfs imports:
+                 U check_sticky_permissions@KERNEL_BASE
+ramfs imports:
+                 U check_sticky_permissions@KERNEL_BASE
+ext2 imports:
+                 U check_sticky_permissions@KERNEL_BASE
+btrfs imports:
+                 U check_sticky_permissions@KERNEL_BASE
+launch_daemon string:
+Cannot make "%s" sticky: %s
+fbfdb66581737752b74bd3e5ca6e13f0068e5702df0bf6069e3afe5dae814a56  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/system/kernel/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/system/libroot/revisioned/libroot.so
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/bfs/bfs
+d6acb3318a46c7fbe0a6330a4575769cd3c263d2301c547c35a54ecc8577dc40  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/ramfs/ramfs
+d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2
+28d2d8d20d54afe2f221dd323ad2e15095a5840a6d049dada04ccf035b97b2e7  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/add-ons/kernel/file_systems/btrfs/btrfs
+9f90da5b3cfddc53a4b00c172749dae3a68ef18bc213b4dbf5331cfd5806db91  /opt/src/haiku/generated.arm64/objects/haiku/arm64/release/servers/launch/launch_daemon
+-rw-r--r-- 1 root root 20667490 Nov  3 22:42 /opt/src/haiku/generated.arm64/objects/haiku/arm64/packaging/packages/haiku.hpkg
+09c15347b28bcdeff7ca01e870d4c5cf149a325217060406006e6ce99dd917d5  /opt/src/haiku/generated.arm64/objects/haiku/arm64/packaging/packages/haiku.hpkg
+2026-11-03 22:52:58     276931 bfs.fix
+2026-11-03 22:53:00     220603 btrfs.fix
+2026-11-03 22:52:59     194883 ext2.fix
+2026-11-03 22:52:56    2551417 kernel_arm64.fix
+2026-11-03 22:53:01     409904 launch_daemon.fix
+2026-11-03 22:52:57    1366771 libroot.so.fix
+2026-11-03 22:52:59     279155 ramfs.fix

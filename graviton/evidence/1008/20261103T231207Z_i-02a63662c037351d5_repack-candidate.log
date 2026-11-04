@@ -1,0 +1,70 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-candidate
+# instance: i-02a63662c037351d5   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack canonical haiku.hpkg with the fix kernel/libroot/bfs/ramfs/ext2/btrfs for the candidate AMI (second attempt; the first lacked wget)
+# start: 20261103T231207Z   end: 20261103T231312Z   rc: 0
+# script sha256: 9ba156ac0a5c4e911ae600b10ace09d6d552ec9e35ad7b1ee259c773c8a4e715
+# ---- script ----
+# | # Repack the "candidate" arm: canonical haiku.hpkg with fix/1008-sticky-tmp's kernel_arm64 +
+# | # libroot.so (#937 rule: the two together) and bfs/ramfs/ext2/btrfs, so a fresh launch of an
+# | # image of this box boots them (the boot loader preloads system/add-ons/kernel/file_systems).
+# | # launch_daemon stays canonical: this arm isolates the kernel/fs change. Method of #898/#933.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O 'kernel_arm64.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/kernel_arm64.fix?<PRESIGNED>'
+# | wget -q -O 'libroot.so.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/libroot.so.fix?<PRESIGNED>'
+# | wget -q -O 'bfs.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/bfs.fix?<PRESIGNED>'
+# | wget -q -O 'ramfs.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/ramfs.fix?<PRESIGNED>'
+# | wget -q -O 'ext2.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/ext2.fix?<PRESIGNED>'
+# | wget -q -O 'btrfs.fix' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/btrfs.fix?<PRESIGNED>'
+# | cat > sums <<'SUMS'
+# | fbfdb66581737752b74bd3e5ca6e13f0068e5702df0bf6069e3afe5dae814a56  kernel_arm64.fix
+# | 2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.fix
+# | 5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  bfs.fix
+# | d6acb3318a46c7fbe0a6330a4575769cd3c263d2301c547c35a54ecc8577dc40  ramfs.fix
+# | d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  ext2.fix
+# | 28d2d8d20d54afe2f221dd323ad2e15095a5840a6d049dada04ccf035b97b2e7  btrfs.fix
+# | SUMS
+# | sha256sum -c sums
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/bfs $A/ramfs $A/ext2 $A/btrfs
+# | cat kernel_arm64.fix > x/kernel_arm64; cat libroot.so.fix > x/lib/libroot.so
+# | for m in bfs ramfs ext2 btrfs; do cat $m.fix > $A/$m; done
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/bfs $A/ramfs $A/ext2 $A/btrfs
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+kernel_arm64.fix: OK
+libroot.so.fix: OK
+bfs.fix: OK
+ramfs.fix: OK
+ext2.fix: OK
+btrfs.fix: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+f0c0104e431c8b25c87d07d623f019a42b4c8bc52ab2aba3fc28b56c2776c605  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+dd61af737970d2db549aa897f6fe9f9f8ccb32daeb5d7fcf713f8293b42a32c2  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+fb217722bd181913a0aeca4c5f2eef1f4d3ae43bd7e95baf931205eb4d551d5b  x/add-ons/kernel/file_systems/bfs
+2b3f84c187b37e50b89f356f97b24ee302390b1314c1903bdbd86acdaae7bb50  x/add-ons/kernel/file_systems/ramfs
+4f5f80cef34a666779289850c293e608b228f1639cf9823d17a8c7c404355e29  x/add-ons/kernel/file_systems/ext2
+dbf04867923594bce0e62a7d3074bae42c501fab0d14a38763eb13ccc03afbf0  x/add-ons/kernel/file_systems/btrfs
+fbfdb66581737752b74bd3e5ca6e13f0068e5702df0bf6069e3afe5dae814a56  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  x/add-ons/kernel/file_systems/bfs
+d6acb3318a46c7fbe0a6330a4575769cd3c263d2301c547c35a54ecc8577dc40  x/add-ons/kernel/file_systems/ramfs
+d210dd4b4f51429ebfa07a67123913a7f17cec84019f08ce3f08a9f47d9005d9  x/add-ons/kernel/file_systems/ext2
+28d2d8d20d54afe2f221dd323ad2e15095a5840a6d049dada04ccf035b97b2e7  x/add-ons/kernel/file_systems/btrfs
+----- Package Info ----------------
+header size:                     80
+heap size:                 20510269
+TOC size:                    324054
+package attributes size:       1100
+total size:                20510349
+-----------------------------------
+-rw-r--r-- 1 baron root 20510349 Nov  3 23:13 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20645042 Nov  3 15:11 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+3a082e4d686f618a855d5b24f6b3e280239209c7c263ea141a5cc6a1e0b5a552  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

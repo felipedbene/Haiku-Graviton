@@ -1212,6 +1212,14 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 	if (vnode.Get(&inode) != B_OK)
 		return B_IO_ERROR;
 
+	// Moving an entry out of a sticky directory removes it from there, so
+	// the same restriction applies as for unlink(); replacing an existing
+	// target is covered by Inode::Remove() below.
+	status = check_sticky_permissions(oldDirectory->Mode(),
+		(uid_t)oldDirectory->Node().UserID(), (uid_t)inode->Node().UserID());
+	if (status != B_OK)
+		return status;
+
 	// Don't move a directory into one of its children - we soar up
 	// from the newDirectory to either the root node or the old
 	// directory, whichever comes first.
@@ -1681,10 +1689,16 @@ bfs_remove_dir(fs_volume* _volume, fs_vnode* _directory, const char* name)
 	Volume* volume = (Volume*)_volume->private_volume;
 	Inode* directory = (Inode*)_directory->private_node;
 
+	// Like bfs_unlink(), removing an entry needs write access to the
+	// directory it is in.
+	status_t status = directory->CheckPermissions(W_OK);
+	if (status != B_OK)
+		return status;
+
 	Transaction transaction(volume, directory->BlockNumber());
 
 	off_t id;
-	status_t status = directory->Remove(transaction, name, &id, true);
+	status = directory->Remove(transaction, name, &id, true);
 	if (status == B_OK) {
 		// Remove the cache entry for the directory and potentially also
 		// the parent entry still belonging to the directory

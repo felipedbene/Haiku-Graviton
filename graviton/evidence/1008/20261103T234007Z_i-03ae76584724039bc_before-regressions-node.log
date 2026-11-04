@@ -1,0 +1,54 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-regressions-node
+# instance: i-03ae76584724039bc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm: Node 24.22.2 parallel/test-fs-* slice
+# start: 20261103T234007Z   end: 20261103T234213Z   rc: 0
+# script sha256: 7aa015d3c6c71846a966ab37a3419a23f8ef1992520f958fd56ac45b529e13b6
+# ---- script ----
+# | # Issue 1008 regressions, part 4 again (regressions-2 stopped at tar: no gzip on the image):
+# | # Node 24.22.2 parallel/test-fs-* slice; tar and patch were installed by regressions-2, gzip here.
+# | uname -a; ls -ld /boot/system/cache/tmp
+# | echo "=== 4. Node parallel/test-fs-* ==="
+# | command -v gzip > /dev/null || pkgman install -y gzip 2>&1 | tail -1
+# | command -v node tar patch gzip python3.12 || exit 1; node --version
+# | N=/boot/home/node-src; rm -rf $N; mkdir -p $N; cd $N || exit 1
+# | curl -sSfo node-v24.22.2.tar.gz https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz || exit 1
+# | echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz' | sha256sum -c - || exit 1
+# | curl -sSfo nodejs-24.22.2.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/node2422-build/nodejs-24.22.2.patchset?<PRESIGNED>' || exit 1
+# | curl -sSfo nodejs-24.22.2-debeos.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/node2422-build/nodejs-24.22.2-debeos.patchset?<PRESIGNED>' || exit 1
+# | echo 'fa8a7c08310955a945407b9516650998ddb25b3e4de51e3a6f48cd32cedf1968  nodejs-24.22.2.patchset' | sha256sum -c - || exit 1
+# | echo '3cadf3994deaad92aac8011074c0eb4a90bc918a4a4620ac34afe7181257a995  nodejs-24.22.2-debeos.patchset' | sha256sum -c - || exit 1
+# | tar xzf node-v24.22.2.tar.gz && cd node-v24.22.2 || exit 1
+# | for p in nodejs-24.22.2.patchset nodejs-24.22.2-debeos.patchset; do patch -p1 --batch --forward < ../$p > ../$p.out 2>&1 || { echo "patch $p failed"; cat ../$p.out; exit 1; }; echo "$p: $(grep -c '^patching file' ../$p.out) files"; done
+# | echo "test-fs files: $(ls test/parallel | grep -c '^test-fs-')"
+# | date -u +"start %H:%M:%S"
+# | : | python3.12 tools/test.py --shell=/boot/system/bin/node -j 8 -p tap 'parallel/test-fs-*' > ../fs.tap 2>&1; echo "test.py rc=$?"
+# | date -u +"end %H:%M:%S"
+# | grep -E "^1\.\." ../fs.tap; echo "ok: $(grep -c '^ok ' ../fs.tap)  skip: $(grep -c '^ok .*# [Ss][Kk][Ii][Pp]' ../fs.tap)  not ok: $(grep -c '^not ok' ../fs.tap)"
+# | grep '^not ok' ../fs.tap
+# ---- raw output ----
+Haiku ip-10-128-15-47.us-west-2.compu R1~beta6+development hrev59996 Nov  3 2026 15:08:39 arm64 arm64 Haiku
+drwxrwxrwx 1 baron root 2048 Nov  3 23:40 /boot/system/cache/tmp
+=== 4. Node parallel/test-fs-* ===
+[system] Done.
+/boot/system/bin/node
+/boot/system/bin/tar
+/boot/system/bin/patch
+/boot/system/bin/gzip
+/boot/system/bin/python3.12
+v24.22.2
+node-v24.22.2.tar.gz: OK
+nodejs-24.22.2.patchset: OK
+nodejs-24.22.2-debeos.patchset: OK
+nodejs-24.22.2.patchset: 30 files
+nodejs-24.22.2-debeos.patchset: 4 files
+test-fs files: 371
+start 23:41:11
+test.py rc=1
+end 23:42:09
+1..371
+ok: 367  skip: 17  not ok: 4
+not ok 119 parallel/test-fs-link
+not ok 140 parallel/test-fs-promises
+not ok 245 parallel/test-fs-rmSync-special-char-additional-error
+not ok 258 parallel/test-fs-stat-date

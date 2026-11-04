@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: raw-to-volume
+# instance: i-03163f59f6dc9f7f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: dd of haiku-ec2.raw onto the instance's 20 GiB gp3 data volume, cmp
+# start: 20261103T225322Z   end: 20261103T225918Z   rc: 0
+# script sha256: 8bcf73eeb597f21ca8e2ab5d65ef880fce8f8396f36fe7227ac9e7ee941b062d
+# ---- script ----
+# | # dd haiku-ec2.raw (fix/1008-sticky-tmp oven-equivalent build) onto the blank 20 GiB gp3
+# | # volume attached at launch, drop caches, cmp. Method of #986's raw-to-volume.
+# | set -euo pipefail
+# | RAW=/opt/src/haiku/haiku-ec2.raw
+# | DEV=$(lsblk -dbno NAME,SIZE | awk '$2==21474836480{print "/dev/"$1}')
+# | echo "target device: $DEV"; [ -b "$DEV" ]
+# | lsblk -no MOUNTPOINT "$DEV" | grep -q . && { echo "device mounted"; exit 1; } || true
+# | ls -l "$RAW"; sha256sum "$RAW"
+# | dd if="$RAW" of="$DEV" bs=16M oflag=direct status=none; echo "dd=$?"
+# | sync; echo 3 > /proc/sys/vm/drop_caches
+# | cmp "$RAW" "$DEV"; echo "cmp=$?"
+# ---- raw output ----
+target device: /dev/nvme1n1
+-rw-r--r-- 1 root root 21474836480 Nov  3 22:42 /opt/src/haiku/haiku-ec2.raw
+7f58a0c6797237dee0ef359b26c1ecb9354da3b6c3f8916569b86b0af28187a7  /opt/src/haiku/haiku-ec2.raw
+dd=0
+cmp=0

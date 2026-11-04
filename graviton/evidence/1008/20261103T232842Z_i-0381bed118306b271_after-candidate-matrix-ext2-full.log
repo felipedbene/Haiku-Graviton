@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-matrix-ext2-full
+# instance: i-0381bed118306b271   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: after-candidate arm: ext2 full matrix (no skip) on the fresh image registered earlier
+# start: 20261103T232842Z   end: 20261103T232854Z   rc: 0
+# script sha256: 476dae4c23518636293afb2387c4b42fb3665ad87a82e4cb397e95a6715ba79c
+# ---- script ----
+# | # Issue 1008: ext2 FULL matrix (no -x) on the ext2-full.img the matrix command registered.
+# | # The device is derived from diskimage list's ID column (a long path overflows into the
+# | # Device column, which broke mountrun.sh's lookup for this image).
+# | D=$(ls -d /boot/home/t1008-* | sort | tail -1); cd $D || exit 1; echo "dir $D"
+# | sha256sum sticky1008
+# | id=$(diskimage list | awk -v f="$D/ext2-full.img" 'index($2, f) == 1 { print $1 }' | tail -1)
+# | dev=/dev/disk/virtual/files/$id/raw; echo "ext2-full.img -> $dev"; ls -l $dev || exit 1
+# | mkdir -p $D/m-ext2-full && mount -t ext2 $dev $D/m-ext2-full && df $D/m-ext2-full | tail -2
+# | echo "=== ext2 full matrix ==="; ./sticky1008 $D/m-ext2-full; echo "rc=$?"
+# ---- raw output ----
+dir /boot/home/t1008-232704
+1583d9aa628a101086b5754ba0c87cd0d74ba651b3f44df3ca930bc1f2d33bcd  sticky1008
+ext2-full.img -> /dev/disk/virtual/files/3/raw
+crw-r--r-- 1 baron root      0 Nov  3 23:27 /dev/disk/virtual/files/3/raw
+   Free Nodes: 0
+   Root Inode: 2
+=== ext2 full matrix ===
+base /boot/home/t1008-232704/m-ext2-full: mode 0755 owner 0:0
+dir S: mode 1777 owner 2003
+PASS dir=S actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+FAIL dir=S actor=A(entry-owner)  op=rmdir-nonempty-dn  got=OK        expected=ENOTEMPTY
+rc=2
+setup: open(/boot/home/t1008-232704/m-ext2-full/sticky1008.731/S/dn/inner): File or Directory already exists

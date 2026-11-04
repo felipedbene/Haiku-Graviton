@@ -4062,6 +4062,33 @@ check_access_permissions(int accessMode, mode_t mode, gid_t nodeGroupID,
 }
 
 
+/*!	Enforces the POSIX restricted-deletion ("sticky") rule: in a directory
+	with S_ISVTX set, an entry may only be unlinked, removed, renamed away, or
+	replaced by a rename by the owner of the entry, the owner of the directory,
+	or root. This is in addition to, not instead of, write permission on the
+	directory, which the caller checks separately.
+	The file system must call this while it holds the directory locked, with
+	the entry it is actually about to remove; checking earlier, from the VFS,
+	would let the entry be swapped for someone else's in between.
+	\a nodeUserID may be \c (uid_t)-1 if the entry's owner cannot be read; in
+	a sticky directory, only the directory owner and root may then remove it.
+*/
+extern "C" status_t
+check_sticky_permissions(mode_t directoryMode, uid_t directoryUserID,
+	uid_t nodeUserID)
+{
+	if ((directoryMode & S_ISVTX) == 0)
+		return B_OK;
+
+	uid_t uid = geteuid();
+	if (uid == 0 || uid == directoryUserID || uid == nodeUserID)
+		return B_OK;
+
+	// Linux and the BSDs fail this with EPERM, not EACCES
+	return B_NOT_ALLOWED;
+}
+
+
 extern "C" status_t
 check_write_stat_permissions(gid_t nodeGroupID, uid_t nodeUserID, mode_t nodeMode,
 	uint32 mask, const struct stat* stat)

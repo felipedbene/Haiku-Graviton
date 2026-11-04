@@ -1,0 +1,65 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-xbuild-regressions-2
+# instance: i-061c3d99fd9c5d7f9   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: (log rebuilt from the ssm-run S3 output: the first write was cut by a sed byte-sequence error) after-xbuild arm: regressions parts 2 (pkgman) and 4 (Node parallel/test-fs-*)
+# start: 20261103T233849Z   end: 20261103T233907Z   rc: 1
+# script sha256: dd92023b3337c1bd6e629e258ae3a5e488d32c0a2b662de8a6312a4570dc4580
+# ---- script ----
+# | # Issue 1008 regressions, parts 2 and 4 again (the first regressions run used a package not
+# | # in the repo, htop, and the image has no tar/patch): pkgman install + uninstall of
+# | # nanosvgtranslator and pkgman update; then the Node 24.22.2 parallel/test-fs-* slice, with
+# | # tar and patch installed from the repo, python3.12 as python3.
+# | uname -a; ls -ld /boot/system/cache/tmp
+# | echo "=== 2. pkgman ==="
+# | pkgman install -y nanosvgtranslator 2>&1 | tail -2; ls /boot/system/add-ons/Translators/ | grep -i svg && echo "installed ok"
+# | pkgman uninstall -y nanosvgtranslator 2>&1 | tail -2; ls /boot/system/add-ons/Translators/ | grep -i svg || echo "uninstalled ok"
+# | pkgman update -y 2>&1 | tail -3; echo "update rc=$?"
+# | echo "=== 4. Node parallel/test-fs-* ==="
+# | command -v tar patch > /dev/null || pkgman install -y tar patch 2>&1 | tail -1
+# | command -v node tar patch python3.12 || exit 1; node --version
+# | N=/boot/home/node-src; rm -rf $N; mkdir -p $N; cd $N || exit 1
+# | curl -sSfo node-v24.22.2.tar.gz https://nodejs.org/dist/v24.22.2/node-v24.22.2.tar.gz || exit 1
+# | echo 'b2f5443a34a38d863e87c0f5f80c03630fc16917dfe16f26c1cec44c0b542959  node-v24.22.2.tar.gz' | sha256sum -c - || exit 1
+# | curl -sSfo nodejs-24.22.2.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/node2422-build/nodejs-24.22.2.patchset?<PRESIGNED>' || exit 1
+# | curl -sSfo nodejs-24.22.2-debeos.patchset 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/node2422-build/nodejs-24.22.2-debeos.patchset?<PRESIGNED>' || exit 1
+# | echo 'fa8a7c08310955a945407b9516650998ddb25b3e4de51e3a6f48cd32cedf1968  nodejs-24.22.2.patchset' | sha256sum -c - || exit 1
+# | echo '3cadf3994deaad92aac8011074c0eb4a90bc918a4a4620ac34afe7181257a995  nodejs-24.22.2-debeos.patchset' | sha256sum -c - || exit 1
+# | tar xzf node-v24.22.2.tar.gz && cd node-v24.22.2 || exit 1
+# | for p in nodejs-24.22.2.patchset nodejs-24.22.2-debeos.patchset; do patch -p1 --batch --forward < ../$p > ../$p.out 2>&1 || { echo "patch $p failed"; cat ../$p.out; exit 1; }; echo "$p: $(grep -c '^patching file' ../$p.out) files"; done
+# | echo "test-fs files: $(ls test/parallel | grep -c '^test-fs-')"
+# | date -u +"start %H:%M:%S"
+# | : | python3.12 tools/test.py --shell=/boot/system/bin/node -j 8 -p tap 'parallel/test-fs-*' > ../fs.tap 2>&1; echo "test.py rc=$?"
+# | date -u +"end %H:%M:%S"
+# | grep -E "^1\.\." ../fs.tap; echo "ok: $(grep -c '^ok ' ../fs.tap)  skip: $(grep -c '^ok .*# [Ss][Kk][Ii][Pp]' ../fs.tap)  not ok: $(grep -c '^not ok' ../fs.tap)"
+# | grep '^not ok' ../fs.tap
+# ---- raw output ----
+Haiku ip-10-128-14-66.us-west-2.compu R1~beta6+development hrev59996 Nov  3 2026 22:38:57 arm64 arm64 Haiku
+drwxrwxrwt 1 baron root 2048 Nov  3 23:38 /boot/system/cache/tmp
+=== 2. pkgman ===
+[system] Cleaning up ...
+[system] Done.
+NanoSVGTranslator
+installed ok
+[system] Cleaning up ...
+[system] Done.
+uninstalled ok
+¿Ê ] repochecksum-1 []
+Nothing to do.
+Validating checksum for DeBeOS...done.
+update rc=0
+=== 4. Node parallel/test-fs-* ===
+[system] Done.
+/boot/system/bin/node
+/boot/system/bin/tar
+/boot/system/bin/patch
+/boot/system/bin/python3.12
+v24.22.2
+node-v24.22.2.tar.gz: OK
+nodejs-24.22.2.patchset: OK
+nodejs-24.22.2-debeos.patchset: OK
+---- stderr ----
+tar (child): gzip: Cannot exec: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+failed to run commands: exit status 1

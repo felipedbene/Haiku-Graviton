@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-matrix-ext2-btrfs
+# instance: i-03ae76584724039bc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: BEFORE (stock canonical), ext2/btrfs half of the matrix with the mount retry
+# start: 20261103T231445Z   end: 20261103T231549Z   rc: 0
+# script sha256: 3e640142a64e254908b87dc8c9e7fc62eacabe0fc55525fb4c9cfa4707940079
+# ---- script ----
+# | # Issue 1008 BEFORE, ext2/btrfs supplement: the before-matrix run's ext2/btrfs mounts lost a
+# | # race with the diskimage device node (mount ENOENT right after register; it mounts a moment
+# | # later). Same fresh images, downloaded again under new names, mount retried.
+# | cd /boot/home/t1008 || exit 1
+# | wget -q -O ext2-s.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/ext2-h.img?<PRESIGNED>'
+# | wget -q -O btrfs-s.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/s1008/btrfs-h.img?<PRESIGNED>'
+# | sha256sum sticky1008 sticky1008.c ext2-s.img btrfs-s.img
+# | for fs in ext2 btrfs; do
+# | 	echo "=== $fs (diskimage) ==="
+# | 	out=$(diskimage register /boot/home/t1008/$fs-s.img); echo "$out"
+# | 	dev=$(echo "$out" | grep -o '/dev/[^ ]*' | head -1)
+# | 	[ -n "$dev" ] || { echo "no device"; continue; }
+# | 	mkdir -p /mnt2-$fs; m=1
+# | 	for i in 1 2 3 4 5 6 7 8 9 10; do mount -t $fs "$dev" /mnt2-$fs 2>/dev/null && { m=0; break; }; sleep 2; done
+# | 	[ $m = 0 ] || { echo "mount $fs FAILED"; continue; }
+# | 	df /mnt2-$fs | tail -2
+# | 	./sticky1008 /mnt2-$fs; echo "rc=$?"
+# | done
+# ---- raw output ----
+0c0dce3ef0e39698e74b98e70b731da3c182ac8a8b7fef4b095b9a948a55ea31  sticky1008
+24b152e6263c869ea710bbdeb64ce06f294bb3821693225bfbd4f138cad2bdf7  sticky1008.c
+3a959b8e5cf38db28a6248adaffb104ce7b1489a585cc280c666c3dff6d576a8  ext2-s.img
+8a2c912c96ce9309f7bd6f84f4b76bfc184d7fb1a0302300d63537d880650b21  btrfs-s.img
+=== ext2 (diskimage) ===
+Registered file as disk device "/dev/disk/virtual/files/7/raw" with ID 7.
+mount ext2 FAILED
+=== btrfs (diskimage) ===
+Registered file as disk device "/dev/disk/virtual/files/18/raw" with ID 18.
+mount btrfs FAILED

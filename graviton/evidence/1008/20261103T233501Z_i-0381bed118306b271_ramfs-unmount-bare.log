@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: ramfs-unmount-bare
+# instance: i-0381bed118306b271   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: ramfs unmount KDL characterization: bare mount + unmount (candidate arm box, after its matrix)
+# start: 20261103T233501Z   end: 20261103T233710Z   rc: 1
+# script sha256: 77dafc08eadb20c0e237bc5aa73ced9419864c82bec1e1c7a56b9c3b7709121c
+# ---- script ----
+# | # ramfs unmount KDL characterization, step 1: a bare ramfs mount + unmount, no activity.
+# | mkdir -p /ramu1 && mount -t ramfs /ramu1 && echo mounted
+# | unmount /ramu1; echo "unmount rc=$?"
+# ---- raw output ----

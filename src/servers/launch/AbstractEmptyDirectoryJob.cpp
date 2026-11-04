@@ -24,9 +24,9 @@ AbstractEmptyDirectoryJob::CreateAndEmpty(const char* path) const
 {
 	BEntry entry(path);
 	if (!entry.Exists()) {
-		create_directory(path, 0777);
-
-		status_t status = entry.SetTo(path);
+		status_t status = create_directory(path, 0777);
+		if (status == B_OK)
+			status = entry.SetTo(path);
 		if (status != B_OK) {
 			fprintf(stderr, "Cannot create directory \"%s\": %s\n", path,
 				strerror(status));

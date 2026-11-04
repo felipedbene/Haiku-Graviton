@@ -682,6 +682,11 @@ btrfs_unlink(fs_volume* _volume, fs_vnode* _directory, const char* name)
 	if (status != B_OK)
 		return status;
 
+	status = check_sticky_permissions(directory->Mode(), directory->UserID(),
+		inode.UserID());
+	if (status != B_OK)
+		return status;
+
 	status = inode.Remove(transaction, &path);
 	if (status != B_OK)
 		return status;
@@ -756,17 +761,27 @@ btrfs_remove_dir(fs_volume* _volume, fs_vnode* _directory, const char* name)
 	Volume* volume = (Volume*)_volume->private_volume;
 	Inode* directory = (Inode*)_directory->private_node;
 
+	// like btrfs_unlink(), removing an entry needs write access to the
+	// directory it is in
+	status_t status = directory->CheckPermissions(W_OK);
+	if (status < B_OK)
+		return status;
+
 	Transaction transaction(volume);
 	BTree::Path path(volume->FSTree());
 
 	ino_t id;
-	status_t status = DirectoryIterator(directory).Lookup(name, strlen(name),
-		&id);
+	status = DirectoryIterator(directory).Lookup(name, strlen(name), &id);
 	if (status != B_OK)
 		return status;
 
 	Inode inode(volume, id);
 	status = inode.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	status = check_sticky_permissions(directory->Mode(), directory->UserID(),
+		inode.UserID());
 	if (status != B_OK)
 		return status;
 

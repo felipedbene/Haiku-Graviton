@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-matrix-ext2-btrfs-2
+# instance: i-03ae76584724039bc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: BEFORE (stock canonical): matrix on the hand-mounted fresh ext2/btrfs images
+# start: 20261103T231621Z   end: 20261103T231632Z   rc: 0
+# script sha256: 2e8e355d94633814a328c583580ba4af343bc23aebc13490dea0c4dc644ab40f
+# ---- script ----
+# | # Issue 1008 BEFORE, ext2/btrfs: the fresh ext2-s/btrfs-s images (sha256 in the previous
+# | # log) were registered by the previous run and mounted by hand a minute later at /mnt2-*
+# | # (the in-script 20 s mount retry was too short). Run the matrix on them.
+# | cd /boot/home/t1008 || exit 1
+# | sha256sum sticky1008
+# | df /mnt2-ext2 /mnt2-btrfs | grep -A1 mnt
+# | echo "=== ext2 (diskimage) ==="; ./sticky1008 /mnt2-ext2; echo "rc=$?"
+# | echo "=== btrfs (diskimage) ==="; ./sticky1008 /mnt2-btrfs; echo "rc=$?"
+# ---- raw output ----
+0c0dce3ef0e39698e74b98e70b731da3c182ac8a8b7fef4b095b9a948a55ea31  sticky1008
+   Mounted at: /mnt2-ext2
+  Volume Name: "256 MiB ext2 volume"
+=== ext2 (diskimage) ===
+base /mnt2-ext2: mode 0755 owner 0:0
+dir S: mode 1777 owner 2003
+PASS dir=S actor=A(entry-owner)  op=create-own         got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=unlink-f           got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-away      got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-f-out       got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rename-own-over-f  got=OK        expected=OK       
+PASS dir=S actor=A(entry-owner)  op=rmdir-empty-de     got=OK        expected=OK       
+FAIL dir=S actor=A(entry-owner)  op=rmdir-nonempty-dn  got=OK        expected=ENOTEMPTY
+rc=2
+=== btrfs (diskimage) ===
+base /mnt2-btrfs: mode 0755 owner 0:0
+rc=2
+setup: open(/mnt2-ext2/sticky1008.971/S/dn/inner): File or Directory already exists
+setup: mkdir(/mnt2-btrfs/sticky1008.985): Read-only file system

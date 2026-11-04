@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: ramfs-unmount-bare-stock
+# instance: i-03ae76584724039bc   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: ramfs unmount KDL on stock canonical (before box, last use)
+# start: 20261103T234259Z   end: 20261103T234506Z   rc: 1
+# script sha256: ca2d67ca49d3d91a09866e85b750d20ded500ab60d2449021243a99991a71780
+# ---- script ----
+# | # ramfs unmount KDL characterization on the STOCK canonical kernel+ramfs: a fresh, bare ramfs mount + unmount, no activity.
+# | mkdir -p /ramu2 && mount -t ramfs /ramu2 && echo mounted
+# | unmount /ramu2; echo "unmount rc=$?"
+# ---- raw output ----

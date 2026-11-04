@@ -2169,6 +2169,22 @@ fssh_check_access_permissions(int accessMode, fssh_mode_t mode,
 
 
 extern "C" fssh_status_t
+fssh_check_sticky_permissions(fssh_mode_t directoryMode,
+	fssh_uid_t directoryUserID, fssh_uid_t nodeUserID)
+{
+	// see check_sticky_permissions() in the kernel's vfs.cpp
+	if ((directoryMode & FSSH_S_ISVTX) == 0)
+		return FSSH_B_OK;
+
+	fssh_uid_t uid = fssh_geteuid();
+	if (uid == 0 || uid == directoryUserID || uid == nodeUserID)
+		return FSSH_B_OK;
+
+	return FSSH_B_NOT_ALLOWED;
+}
+
+
+extern "C" fssh_status_t
 fssh_check_write_stat_permissions(fssh_gid_t nodeGroupID, fssh_uid_t nodeUserID,
 	fssh_mode_t nodeMode, uint32_t mask, const struct fssh_stat* stat)
 {
