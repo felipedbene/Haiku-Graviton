@@ -1,0 +1,51 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-nghttp2-1.63.0-http2
+# instance: i-01d97a9fa6e0a2193   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T024913Z   end: 20261104T024930Z   rc: 0
+# script sha256: dbf894c1cb19e6ed747a477baa59da31bae1c14ed519f2cdae4c0f2eaccf3dfc
+# ---- script ----
+# | # issue 991: the three nghttp2-sensitive http2 tests, and the whole http2 subset
+# | set -u
+# | export PATH=/boot/home/config/non-packaged/bin:$PATH
+# | cd /boot/home/node-src/node-v24.22.2 || exit 1
+# | uname -a; node --version
+# | node -p '"nghttp2 " + process.versions.nghttp2'
+# | ls /packages | grep -E "^(nghttp2|nodejs24|libuv)"
+# | sha256sum /boot/system/lib/libnghttp2.so.14 $(readlink -f /boot/system/lib/libnghttp2.so.14)
+# | for t in test-http2-sensitive-headers test-http2-misbehaving-flow-control test-http2-misbehaving-flow-control-paused; do
+# |   ok=0; i=0; while [ $i -lt 20 ]; do i=$((i+1)); : | timeout 60 node test/parallel/$t.js > /tmp/o991.txt 2>&1 && ok=$((ok+1)); done
+# |   echo "RESULT $t: $ok/20 pass"; [ $ok -lt 20 ] && grep -m4 -E "Error|assert|at " /tmp/o991.txt
+# | done
+# | echo "######## parallel/test-http2-* under tools/test.py -j 16"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap parallel/test-http2-* > /tmp/h2.tap 2>&1
+# | echo "RESULT http2 subset: ok=$(grep -c '^ok ' /tmp/h2.tap) skip=$(grep -c '^ok .*# skip' /tmp/h2.tap) notok=$(grep -c '^not ok ' /tmp/h2.tap)"
+# | grep '^not ok' /tmp/h2.tap
+# ---- raw output ----
+Haiku ip-10-128-12-42.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+v24.22.2
+nghttp2 1.63.0
+libuv-1.52.1-6
+nghttp2-1.63.0-1
+nodejs24-24.22.2-1
+09feb9da119da6ffd8d1a6ce9ecd6d9d4eaf0f3d1d5ed12bf3a0a5956dbd485b  /boot/system/lib/libnghttp2.so.14
+09feb9da119da6ffd8d1a6ce9ecd6d9d4eaf0f3d1d5ed12bf3a0a5956dbd485b  /boot/system/lib/libnghttp2.so.14.28.2
+RESULT test-http2-sensitive-headers: 0/20 pass
+node:internal/assert:11
+Error [ERR_INTERNAL_ASSERTION]: This is caused by either a bug in Node.js or incorrect usage of Node.js internals.
+Please open an issue with this stack trace at https://github.com/nodejs/node/issues
+    at assert (node:internal/assert:11:11)
+RESULT test-http2-misbehaving-flow-control: 0/20 pass
+node:assert:487
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+    name: 'Error'
+    at ServerHttp2Stream.<anonymous> (/boot/home/node-src/node-v24.22.2/test/common/index.js:714:12)
+RESULT test-http2-misbehaving-flow-control-paused: 0/20 pass
+node:assert:487
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+    name: 'Error'
+    at ServerHttp2Stream.<anonymous> (/boot/home/node-src/node-v24.22.2/test/common/index.js:714:12)
+######## parallel/test-http2-* under tools/test.py -j 16
+RESULT http2 subset: ok=280 skip=2 notok=3
+not ok 137 parallel/test-http2-misbehaving-flow-control-paused
+not ok 138 parallel/test-http2-misbehaving-flow-control
+not ok 204 parallel/test-http2-sensitive-headers

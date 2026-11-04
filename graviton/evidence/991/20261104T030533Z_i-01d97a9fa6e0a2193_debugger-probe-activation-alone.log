@@ -1,0 +1,15 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: debugger-probe-activation-alone
+# instance: i-01d97a9fa6e0a2193   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T030533Z   end: 20261104T030544Z   rc: 1
+# script sha256: c7cf5de6ffa8c1561ad0848b37d1d20ffe9c7f06a0e79e2cd6848adf8a5dcb14
+# ---- script ----
+# | # the one test that failed in the suite-under-probe-load run and not in the 24.22.2 baseline
+# | export PATH=/boot/home/config/non-packaged/bin:$PATH
+# | cd /boot/home/node-src/node-v24.22.2 || exit 1
+# | ls /packages | grep -E "^nghttp2"
+# | ok=0; i=0; while [ $i -lt 10 ]; do i=$((i+1)); : | timeout 120 node test/parallel/test-debugger-probe-activation.js > /tmp/d.txt 2>&1 && ok=$((ok+1)); done
+# | echo "RESULT test-debugger-probe-activation alone: $ok/10"; [ $ok -lt 10 ] && tail -15 /tmp/d.txt
+# ---- raw output ----
+nghttp2-1.70.0-1
+RESULT test-debugger-probe-activation alone: 10/10
