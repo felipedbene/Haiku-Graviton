@@ -1,0 +1,34 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-stock-setup
+# instance: i-08f40aa5f8de513cb   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm (stock canonical ami-00632cb3ccefc53dc): checksums, toolchain, test images, repro build, diskimage register
+# start: 20261104T023437Z   end: 20261104T023449Z   rc: 1
+# script sha256: 1fb847001774700b885c115e8819c969cf76d47f558f5dfec5bed2a8ed88d35e
+# ---- script ----
+# | # Haiku arm setup for #970/#967: module checksums (kernel, libroot, fat, ntfs), toolchain,
+# | # the two test images (made by Ubuntu mkfs.vfat/mkntfs on the builder, sha256 checked), the
+# | # repro sources (inline), compile, and register the images with diskimage (mounted from a
+# | # LATER command: #1013 saw a register + mount in one SSM command fail with ENOENT).
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/system/add-ons/kernel/file_systems/fat /boot/system/add-ons/kernel/file_systems/ntfs
+# | ls /boot/home/config/non-packaged/add-ons/kernel/file_systems /boot/system/non-packaged/add-ons/kernel/file_systems 2>&1
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -1
+# | command -v gcc wget || exit 1
+# | rm -rf /boot/home/t970 && mkdir -p /boot/home/t970 && cd /boot/home/t970
+# | wget -q -O fat.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/fat.img?<PRESIGNED>
+# | wget -q -O ntfs.img 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/E/img/ntfs.img?<PRESIGNED>
+# | printf '%s\n' '49e15b6938f7e81234dbd44880c2442a7a414dd9e49e0344e32e6c56f95b860d  fat.img' 'ce78656d585e8353e015928b4bca1c7d116a68e0d45e33793ae67cd086bf8e68  ntfs.img' | sha256sum -c || exit 1
+# | echo 'LyoKICogY2hvd245NzAgLS0gY2hvd24oKS9jaGdycCgpIG9uIGEgdm9sdW1lIHRoYXQgc3RvcmVzIG5vIG93bmVyIChpc3N1ZSA5NzApLgogKgogKiBGQVQgc3RvcmVzIG5vIG93bmVyOiBIYWlrdSdzIGRyaXZlciBtYWtlcyB0aGUgdm9sdW1lJ3MgdWlkIGFuZCBnaWQgdGhlIG93bmVyCiAqIG9mIGV2ZXJ5IG5vZGUuIExpbnV4IHZmYXQgKHdpdGhvdXQgaXRzICJxdWlldCIgb3B0aW9uKSBsZXRzIGEgY2hvd24oKS9jaGdycCgpCiAqIHRvIHRob3NlIGlkcyB0aHJvdWdoIGFzIGEgbm8tb3AgYW5kIHJlZnVzZXMgYW
+# | echo 'LyoKICogY2htb2Q5NjcgLS0gY2htb2QoKSB0byB0aGUgbW9kZSBhIG5vZGUgYWxyZWFkeSBoYXMgKGlzc3VlIDk2NykuCiAqCiAqIEhhaWt1J3MgTlRGUyBkcml2ZXIgY2Fubm90IHN0b3JlIGEgbW9kZTogZXZlcnkgZmlsZSBpcyAwNjY2LCBldmVyeSBkaXJlY3RvcnkKICogMDc3Ny4gQSBjaG1vZCgpIHRvIHRoYXQgbW9kZSBpcyBhIG5vLW9wIGFuZCBtdXN0IHN1Y2NlZWQsIGFzIGl0IGRvZXMgb24gTGludXgKICogKG50ZnMzKSBhbmQgb24gZXZlcnkgb3RoZXIgSGFpa3UgZmlsZSBzeXN0ZW07IHRvb2xzIHRoYX
+# | echo 'LyoKICogYXRpbWU5MzMgLS0gd2hvIG1heSB0cnVuY2F0ZSBhIGZpbGUgYW5kIHNldCBpdHMgdGltZXMsIG9uIGEgZmlsZSBzeXN0ZW0KICogd2hvc2Ugb3duZXJzaGlwIGFuZCBtb2RlIHRoZSBjYWxsZXIgY2Fubm90IGNob29zZSAoaXNzdWUgOTMzOiBOVEZTKS4KICoKICogVGhpcyBpcyBhdGltZTg5OCdzIG1hdHJpeCBmb3IgYSB2b2x1bWUgd2hlcmUgY2hvd24oKSBhbmQgY2htb2QoKSBjYW5ub3Qgc2V0CiAqIHVwIHRoZSBpZGVudGl0aWVzIGF0aW1lODk4IG5lZWRzLiBIYWlrdSdzIE5URlMgZHJpdmVyIHJlcG
+# | echo 'LyoKICogYXRpbWU5MzQgLS0gd2hvIG1heSB0cnVuY2F0ZSBhIGZpbGUgYW5kIHNldCBpdHMgdGltZXMsIG9uIGEgRkFUIHZvbHVtZQogKiAoaXNzdWUgOTM0KS4KICoKICogVGhpcyBpcyBhdGltZTg5OCdzIG1hdHJpeCBmb3IgYSB2b2x1bWUgd2hlcmUgY2hvd24oKSBhbmQgY2htb2QoKSBjYW5ub3Qgc2V0CiAqIHVwIHRoZSBpZGVudGl0aWVzIGF0aW1lODk4IG5lZWRzLiBGQVQgc3RvcmVzIG5vIG93bmVyOiBIYWlrdSdzIGRyaXZlciBtYWtlcwogKiB0aGUgdWlkIHRoYXQgbW91bnRlZCB0aGUgdm9sdW1lIHRoZS
+# | sha256sum chown970.c chmod967.c atime933.c atime934.c
+# | for p in chown970 chmod967 atime933 atime934; do gcc -O2 -Wall -o $p $p.c || exit 1; done
+# | diskimage register /boot/home/t970/fat.img
+# | diskimage register /boot/home/t970/ntfs.img
+# | diskimage list
+# | date
+# ---- raw output ----
+/var/lib/amazon/ssm/i-08f40aa5f8de513cb/document/orchestration/75cf821f-db53-4dae-ac33-a9db4b2708b0/awsrunShellScript/0.awsrunShellScript/_script.sh: line 1: aws: command not found
+failed to run commands: exit status 1

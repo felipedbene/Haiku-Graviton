@@ -688,8 +688,10 @@ fs_write_stat(fs_volume* _volume, fs_vnode* _node, const struct stat* stat, uint
 	}
 
 	if ((mask & B_STAT_MODE) != 0) {
-		// We don't support this (yet.)
-		if (node->mode != stat->st_mode)
+		// We don't support this (yet.) Only the permission bits are compared:
+		// node->mode carries the file type, while chmod() passes just the bits
+		// it sets, so a chmod() to the current mode is a no-op that succeeds.
+		if ((node->mode & S_IUMSK) != (stat->st_mode & S_IUMSK))
 			return B_UNSUPPORTED;
 	}
 
