@@ -555,6 +555,8 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fSendUrgentOffset(0),
 	fSendWindow(0),
 	fSendMaxWindow(0),
+	fSendWindowSequence(0),
+	fSendWindowAcknowledge(0),
 	fSendMaxSegmentSize(TCP_DEFAULT_MAX_SEGMENT_SIZE),
 	fSendMaxSegments(0),
 	fSendQueue(socket->send.buffer_size),
@@ -2670,6 +2672,10 @@ TCPEndpoint::_PrepareReceivePath(tcp_segment_header& segment)
 {
 	fInitialReceiveSequence = segment.sequence;
 	fFinishReceived = false;
+	// The window may be taken from any segment from here on. Both callers
+	// have chosen the initial send sequence by now.
+	fSendWindowSequence = segment.sequence;
+	fSendWindowAcknowledge = fInitialSendSequence;
 	fReceiveSizingTimestamp = 0;
 	fPushSequence = 0;
 
@@ -3007,6 +3013,10 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			// this is a pure acknowledge segment - we're on the sending end
 			if (fSendUnacknowledged < segment.acknowledge
 				&& fSendMax >= segment.acknowledge) {
+				// The window is unchanged, but the segment is the newest it
+				// was taken from (see the update rule in the slow path).
+				fSendWindowSequence = segment.sequence;
+				fSendWindowAcknowledge = segment.acknowledge;
 				_Acknowledged(segment);
 				return DROP;
 			}
@@ -3016,6 +3026,8 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			&& (fFlags & FLAG_NO_RECEIVE) == 0) {
 			int32 action = KEEP | ((segment.flags & TCP_FLAG_PUSH) != 0
 				? IMMEDIATE_ACKNOWLEDGE : ACKNOWLEDGE);
+			fSendWindowSequence = segment.sequence;
+			fSendWindowAcknowledge = segment.acknowledge;
 			if (_AddData(segment, buffer))
 				action |= NOTIFY_READER;
 
@@ -3246,6 +3258,27 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			fSendWindow, advertisedWindow);
 	}
 #endif
+
+	// RFC 9293 3.10.7.4: take the window only from a segment at least as
+	// new as the one it was last taken from (SND.WL1/SND.WL2), and with an
+	// acknowledgement in SND.UNA..SND.MAX. Any segment used to set it, so a
+	// reordered or duplicated old one -- a "win 0" from before the window
+	// reopened -- closed an open window again, and the connection sat in
+	// the persist timer until a probe found it open. A segment without ACK
+	// (the peer's SYN) is taken as it was. Treating the rest as leaving the
+	// window unchanged keeps every test below consistent with that.
+	if ((segment.flags & TCP_FLAG_ACKNOWLEDGE) != 0) {
+		const tcp_sequence sequence = segment.sequence;
+		const tcp_sequence acknowledge = segment.acknowledge;
+		if (fSendUnacknowledged <= acknowledge && acknowledge <= fSendMax
+			&& (fSendWindowSequence < sequence
+				|| (fSendWindowSequence == sequence
+					&& fSendWindowAcknowledge <= acknowledge))) {
+			fSendWindowSequence = sequence;
+			fSendWindowAcknowledge = acknowledge;
+		} else
+			advertisedWindow = fSendWindow;
+	}
 
 	if (fSendWindow < fSendMaxSegmentSize
 			&& (advertisedWindow >= fSendMaxSegmentSize
