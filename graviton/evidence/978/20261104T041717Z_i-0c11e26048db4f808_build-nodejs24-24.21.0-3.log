@@ -1,0 +1,16 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: build-nodejs24-24.21.0-3
+# instance: i-0c11e26048db4f808   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T041717Z   end: 20261104T041720Z   rc: 0
+# script sha256: 301dbfa79e4e7ad232170ee365d088367cfc377ed770b74ad837171ea3bd32d4
+# ---- script ----
+# | cd /boot/home/haikuports/packages && sha256sum nodejs24-24.21.0-3-arm64.hpkg
+# | grep -E "BUILD_OK|FAILED|attempt" /boot/home/nb-driver-978.log
+# | sha256sum /boot/home/haikuports/net-libs/nodejs/nodejs24-24.21.0.recipe /boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0*.patchset
+# ---- raw output ----
+938fc4c89572466772989cc75aa9bf793baf961eb415a982d89489735647ca07  nodejs24-24.21.0-3-arm64.hpkg
+nodejs24-24.21.0: BUILD_OK (attempt 1)
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  nodejs24-24.21.0 =====
+f72d8ab253c438cdb13ae540f833fc0533848b16766bac174e76225534ea4221  /boot/home/haikuports/net-libs/nodejs/nodejs24-24.21.0.recipe
+c3fcfe0a5bf46a5f1d3bfb97f1f3f30122f5756bd1513b7906897a825f6ff2f9  /boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0-debeos.patchset
+4960b7bed0db2e6f68ebf5b490b08fcecd6e86a21d45e8af73793856f5f8cefd  /boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0.patchset
