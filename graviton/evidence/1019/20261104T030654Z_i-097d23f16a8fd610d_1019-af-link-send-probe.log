@@ -1,0 +1,19 @@
++ uname -a
+Haiku ip-10-128-10-254.us-west-2.comp R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 arm64 Haiku
++ cd /tmp
++ gcc -Wall -o linksend linksend.c -lnetwork
++ ./linksend /dev/net/ena/0
+SIOCGIFADDR(AF_LINK) /dev/net/ena/0: family 4 type 6 alen 6 index 2 mac 02:ff:c2:90:a2:cd
+ethertype 0x88b5: bind=0 (ok)
+ethertype 0x88b5: sendto=64 (ok)
+ethertype 0x0806: bind=-1 (General system error)
+ethertype 0x0806: sendto=-1 (Invalid Argument)
+ethertype 0x0800: bind=-1 (General system error)
+ethertype 0x0800: sendto=-1 (Invalid Argument)
+ethertype 0x0000: bind=0 (ok)
+ethertype 0x0000: sendto=-1 (General system error)
++ ifconfig /dev/net/ena/0
++ head -3
+/dev/net/ena/0
+	Hardware type: Ethernet, Address: 02:ff:c2:90:a2:cd
+	Media type: Auto-select
