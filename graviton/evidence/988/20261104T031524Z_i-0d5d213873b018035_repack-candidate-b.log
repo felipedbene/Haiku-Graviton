@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: repack-candidate-b
+# instance: i-0d5d213873b018035   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: repack the candidate-b arm: canonical + be94c468aa libroot/bfs + kernel_arm64.fix988b
+# start: 20261104T031524Z   end: 20261104T031628Z   rc: 0
+# script sha256: f87fe140aff5dc6a9694c33fc1b604a1ae012bc46c746cccc1a8f191b301fe20
+# ---- script ----
+# | # Repack arm "cand": canonical haiku.hpkg with origin/graviton be94c468aa's libroot.so + bfs and
+# | # kernel_arm64.fix988b (#937: kernel and libroot together), so a fresh launch of an image of this box boots
+# | # them. Everything else stays canonical. Method of #898/#933/#1011.
+# | set -e
+# | pkgman install -y wget 2>&1 | tail -1
+# | cd /boot/home && rm -rf rp && mkdir rp && cd rp
+# | wget -q -O 'kernel_arm64.fix988b' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/B/988/out/kernel_arm64.fix988b?<PRESIGNED>'
+# | wget -q -O 'libroot.so.trunk' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/B/988/out/libroot.so.trunk?<PRESIGNED>'
+# | wget -q -O 'bfs.trunk' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/B/988/out/bfs.trunk?<PRESIGNED>'
+# | cat > sums <<'SUMS'
+# | 917b490df93bdb56e8988319bfe12b09acecabfadcb173bca8e0b95b022bc057  kernel_arm64.fix988b
+# | 2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk
+# | 5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  bfs.trunk
+# | SUMS
+# | sha256sum -c sums
+# | P=$(ls /boot/system/packages/haiku-r1*-arm64.hpkg); echo "package: $P"
+# | sha256sum "$P"; mkdir x && package extract -C x "$P"
+# | A=x/add-ons/kernel/file_systems
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/bfs
+# | cat kernel_arm64.fix988b > x/kernel_arm64; cat libroot.so.trunk > x/lib/libroot.so; cat bfs.trunk > $A/bfs
+# | sha256sum x/kernel_arm64 x/lib/libroot.so $A/bfs
+# | package create -C x ../haiku-new.hpkg && ls -l "$P" ../haiku-new.hpkg
+# | mv ../haiku-new.hpkg "$P"; sync; sha256sum "$P"; cd /boot/home && rm -rf rp; sync
+# ---- raw output ----
+[system] Done.
+kernel_arm64.fix988b: OK
+libroot.so.trunk: OK
+bfs.trunk: OK
+package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+b8781ef68f29e505a887b2d71d4bc8bce39a6b4dba682c09c31a43e53fc96d16  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  x/add-ons/kernel/file_systems/bfs
+917b490df93bdb56e8988319bfe12b09acecabfadcb173bca8e0b95b022bc057  x/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  x/lib/libroot.so
+5079c5a87969523c48b61e6f53e902b576b438545c1c50fcc5fe71b993734c3e  x/add-ons/kernel/file_systems/bfs
+----- Package Info ----------------
+header size:                     80
+heap size:                 20507457
+TOC size:                    324054
+package attributes size:       1100
+total size:                20507537
+-----------------------------------
+-rw-r--r-- 1 baron root 20507537 Nov  4 03:16 ../haiku-new.hpkg
+-rw-r--r-- 1 baron root 20647750 Nov  4 00:14 /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+d9080c7c9e11e77a3fdfb06e2d59c2b9bef33b70761ff3f057aab86fbac20c66  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg

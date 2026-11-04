@@ -58,7 +58,10 @@ dump_info(int argc, char **argv)
 	for (int32 i = 0; i < smp_get_num_cpus(); i++)
 		kprintf("  [%" B_PRId32 "] active time: %10" B_PRId64 ", interrupt"
 			" time: %10" B_PRId64 ", irq time: %10" B_PRId64 "\n", i + 1,
-			gCPU[i].active_time, gCPU[i].interrupt_time, gCPU[i].irq_time);
+			cpu_active_time_state_value(gCPU[i].active_time_state)
+				+ (cpu_active_time_state_running(gCPU[i].active_time_state)
+					? system_time() : 0),
+			gCPU[i].interrupt_time, gCPU[i].irq_time);
 
 	// ToDo: Add page_faults
 	kprintf("pages:\t\t%" B_PRIuPHYSADDR " (%" B_PRIuPHYSADDR " max)\n",

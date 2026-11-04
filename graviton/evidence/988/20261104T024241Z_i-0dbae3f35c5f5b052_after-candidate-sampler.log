@@ -1,0 +1,59 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-sampler
+# instance: i-0dbae3f35c5f5b052   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #988 candidate arm (ami-0941eb6a1a41ce9d0, kernel_arm64.fix988): cpuactive988 under mixed load
+# start: 20261104T024241Z   end: 20261104T024509Z   rc: 0
+# script sha256: 8f11ecbda6e07204b4e458a1117d0bb5536cdfe478aa9728136872d385e81420
+# ---- script ----
+# | # #988 sampler: get_cpu_info() active_time under mixed load, 8 CPUs.
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/lib/libroot.so /boot/home/t988/cpuactive988.c
+# | cd /boot/home/t988
+# | for run in 1 2 3; do echo "== run $run: 4 spinners + 2 spin/nap"; ./cpuactive988 -s 4 -m 2 -t 10; echo "rc=$?"; done
+# | echo "== 6 spinners + 6 spin/nap (oversubscribed)"; ./cpuactive988 -s 6 -m 6 -t 10; echo "rc=$?"
+# | echo "== idle box (0 + 0)"; ./cpuactive988 -s 0 -m 0 -t 5; echo "rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-7-133.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 02:32:23 arm64 other Haiku
+bcdcbb73663a26753cdab9fe5dbea475de2ca6b9ace15635d58b8363e5b342c9  /boot/system/kernel_arm64
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  /boot/system/lib/libroot.so
+fbf55902935961312bc1448e6e7a4cc066a91ee20638017fd2771da9b27bf6fb  /boot/home/t988/cpuactive988.c
+== run 1: 4 spinners + 2 spin/nap
+cpuactive988: 8 CPUs, load 4 spinners + 2 spin/nap, 10 s per phase
+tight: 190340728 per-CPU samples in 10 s, busy went backwards in 0 (max 0 us), busy ran ahead of wall (idle went back) in 0 (max 0 us; slack 0 us)
+every 100 ms: 800 per-CPU samples, idle went back in 82 (max 2 us), busy share outside [0,1] in 82, max busy share 100.0%
+every 1000 ms: 80 per-CPU samples, idle went back in 7 (max 1 us), busy share outside [0,1] in 7, max busy share 100.0%
+100ms phase total busy 55108 ms over 10000 ms wall: 5.51 CPUs busy (4 spinners alone would be 4.00; spin/nap adds less than 2)
+RESULT: FAIL
+rc=1
+== run 2: 4 spinners + 2 spin/nap
+cpuactive988: 8 CPUs, load 4 spinners + 2 spin/nap, 10 s per phase
+tight: 192812064 per-CPU samples in 10 s, busy went backwards in 0 (max 0 us), busy ran ahead of wall (idle went back) in 0 (max 0 us; slack 0 us)
+every 100 ms: 800 per-CPU samples, idle went back in 84 (max 1 us), busy share outside [0,1] in 84, max busy share 100.0%
+every 1000 ms: 80 per-CPU samples, idle went back in 14 (max 1 us), busy share outside [0,1] in 14, max busy share 100.0%
+100ms phase total busy 55103 ms over 10001 ms wall: 5.51 CPUs busy (4 spinners alone would be 4.00; spin/nap adds less than 2)
+RESULT: FAIL
+rc=1
+== run 3: 4 spinners + 2 spin/nap
+cpuactive988: 8 CPUs, load 4 spinners + 2 spin/nap, 10 s per phase
+tight: 190636008 per-CPU samples in 10 s, busy went backwards in 0 (max 0 us), busy ran ahead of wall (idle went back) in 2 (max 1 us; slack 0 us)
+every 100 ms: 800 per-CPU samples, idle went back in 93 (max 1 us), busy share outside [0,1] in 93, max busy share 100.0%
+every 1000 ms: 80 per-CPU samples, idle went back in 13 (max 1 us), busy share outside [0,1] in 13, max busy share 100.0%
+100ms phase total busy 55097 ms over 10000 ms wall: 5.51 CPUs busy (4 spinners alone would be 4.00; spin/nap adds less than 2)
+RESULT: FAIL
+rc=1
+== 6 spinners + 6 spin/nap (oversubscribed)
+cpuactive988: 8 CPUs, load 6 spinners + 6 spin/nap, 10 s per phase
+tight: 181555480 per-CPU samples in 10 s, busy went backwards in 0 (max 0 us), busy ran ahead of wall (idle went back) in 0 (max 0 us; slack 0 us)
+every 100 ms: 800 per-CPU samples, idle went back in 114 (max 3 us), busy share outside [0,1] in 114, max busy share 100.0%
+every 1000 ms: 80 per-CPU samples, idle went back in 10 (max 1 us), busy share outside [0,1] in 10, max busy share 100.0%
+100ms phase total busy 80151 ms over 10147 ms wall: 7.90 CPUs busy (6 spinners alone would be 6.00; spin/nap adds less than 6)
+RESULT: FAIL
+rc=1
+== idle box (0 + 0)
+cpuactive988: 8 CPUs, load 0 spinners + 0 spin/nap, 5 s per phase
+tight: 98416528 per-CPU samples in 5 s, busy went backwards in 0 (max 0 us), busy ran ahead of wall (idle went back) in 0 (max 0 us; slack 0 us)
+every 100 ms: 400 per-CPU samples, idle went back in 0 (max 0 us), busy share outside [0,1] in 0, max busy share 0.5%
+every 1000 ms: 40 per-CPU samples, idle went back in 0 (max 0 us), busy share outside [0,1] in 0, max busy share 0.3%
+100ms phase total busy 40 ms over 5000 ms wall: 0.01 CPUs busy (0 spinners alone would be 0.00; spin/nap adds less than 0)
+RESULT: PASS
+rc=0

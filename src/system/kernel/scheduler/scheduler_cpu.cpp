@@ -263,14 +263,30 @@ CPUEntry::TrackActivity(ThreadData* oldThreadData, ThreadData* nextThreadData)
 	cpu_ent* cpuEntry = &gCPU[fCPUNumber];
 
 	Thread* oldThread = oldThreadData->GetThread();
-	if (!thread_is_idle_thread(oldThread)) {
+	Thread* nextThread = nextThreadData->GetThread();
+	const bool oldThreadActive = !thread_is_idle_thread(oldThread);
+	const bool nextThreadActive = !thread_is_idle_thread(nextThread);
+
+	// The CPU's active time is wall time spent outside the idle thread, kept
+	// so that cpu_get_active_time() can include the current run rather than
+	// lag it by up to a quantum. It only changes form when the CPU goes busy
+	// or idle; a switch between two non-idle threads leaves it alone. The
+	// word's own flag rather than oldThreadActive decides the transition, so a
+	// thread that was running before this CPU was tracked is never charged
+	// the time since boot.
+	int64 state = cpuEntry->active_time_state;
+	if (cpu_active_time_state_running(state) != nextThreadActive) {
+		bigtime_t now = system_time();
+		bigtime_t value = cpu_active_time_state_value(state);
+		atomic_set64(&cpuEntry->active_time_state, nextThreadActive
+			? cpu_active_time_state_make(value - now, true)
+			: cpu_active_time_state_make(value + now, false));
+	}
+
+	if (oldThreadActive) {
 		bigtime_t active
 			= (oldThread->kernel_time - cpuEntry->last_kernel_time)
 				+ (oldThread->user_time - cpuEntry->last_user_time);
-
-		WriteSequentialLocker locker(cpuEntry->active_time_lock);
-		cpuEntry->active_time += active;
-		locker.Unlock();
 
 		fMeasureActiveTime += active;
 		fCore->IncreaseActiveTime(active);
@@ -290,8 +306,7 @@ CPUEntry::TrackActivity(ThreadData* oldThreadData, ThreadData* nextThreadData)
 			_RequestPerformanceLevel(nextThreadData);
 	}
 
-	Thread* nextThread = nextThreadData->GetThread();
-	if (!thread_is_idle_thread(nextThread)) {
+	if (nextThreadActive) {
 		cpuEntry->last_kernel_time = nextThread->kernel_time;
 		cpuEntry->last_user_time = nextThread->user_time;
 

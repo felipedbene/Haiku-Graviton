@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-candidate-ctxsw-repeat
+# instance: i-0dbae3f35c5f5b052   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #988 candidate arm: ctxsw988 repeat
+# start: 20261104T030400Z   end: 20261104T030558Z   rc: 0
+# script sha256: c84374163c96ecb24c26cd288733033185f977eb023c70ff84741b967fdaf8fa
+# ---- script ----
+# | # #988 ctxsw988 repeat on the idle box, to size run-to-run drift before trusting a delta.
+# | sha256sum /boot/system/kernel_arm64
+# | cd /boot/home/t988; ./ctxsw988 -r 9; ./ctxsw988 -r 9
+# ---- raw output ----
+bcdcbb73663a26753cdab9fe5dbea475de2ca6b9ace15635d58b8363e5b342c9  /boot/system/kernel_arm64
+run 1: pingpong 19542 ns/round trip, yield 2149108 /s (16 threads)
+run 2: pingpong 19435 ns/round trip, yield 2129876 /s (16 threads)
+run 3: pingpong 19160 ns/round trip, yield 2170746 /s (16 threads)
+run 4: pingpong 19582 ns/round trip, yield 2161774 /s (16 threads)
+run 5: pingpong 19291 ns/round trip, yield 2067462 /s (16 threads)
+run 6: pingpong 19206 ns/round trip, yield 2074516 /s (16 threads)
+run 7: pingpong 19296 ns/round trip, yield 2097370 /s (16 threads)
+run 8: pingpong 19416 ns/round trip, yield 2156357 /s (16 threads)
+run 9: pingpong 19577 ns/round trip, yield 2181638 /s (16 threads)
+median: pingpong 19416 ns/round trip, yield 2149108 /s
+run 1: pingpong 19170 ns/round trip, yield 2298436 /s (16 threads)
+run 2: pingpong 19123 ns/round trip, yield 2288009 /s (16 threads)
+run 3: pingpong 19065 ns/round trip, yield 2272897 /s (16 threads)
+run 4: pingpong 19614 ns/round trip, yield 2281814 /s (16 threads)
+run 5: pingpong 19537 ns/round trip, yield 2272014 /s (16 threads)
+run 6: pingpong 19200 ns/round trip, yield 2344164 /s (16 threads)
+run 7: pingpong 18963 ns/round trip, yield 2322056 /s (16 threads)
+run 8: pingpong 19599 ns/round trip, yield 2337510 /s (16 threads)
+run 9: pingpong 19348 ns/round trip, yield 2275798 /s (16 threads)
+median: pingpong 19200 ns/round trip, yield 2288009 /s

@@ -1,0 +1,32 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: base-ctxsw-repeat
+# instance: i-0f1887fdce13d41ff   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: #988 base arm: ctxsw988 repeat
+# start: 20261104T030400Z   end: 20261104T030558Z   rc: 0
+# script sha256: c84374163c96ecb24c26cd288733033185f977eb023c70ff84741b967fdaf8fa
+# ---- script ----
+# | # #988 ctxsw988 repeat on the idle box, to size run-to-run drift before trusting a delta.
+# | sha256sum /boot/system/kernel_arm64
+# | cd /boot/home/t988; ./ctxsw988 -r 9; ./ctxsw988 -r 9
+# ---- raw output ----
+7588ab2eb7ef69bd9a25ba226ab66dbab97bcd416400751e55eee28132b6b8b0  /boot/system/kernel_arm64
+run 1: pingpong 18966 ns/round trip, yield 2605092 /s (16 threads)
+run 2: pingpong 18925 ns/round trip, yield 2551513 /s (16 threads)
+run 3: pingpong 18871 ns/round trip, yield 2625954 /s (16 threads)
+run 4: pingpong 18868 ns/round trip, yield 2614382 /s (16 threads)
+run 5: pingpong 19399 ns/round trip, yield 2543200 /s (16 threads)
+run 6: pingpong 18922 ns/round trip, yield 2545368 /s (16 threads)
+run 7: pingpong 18906 ns/round trip, yield 2660731 /s (16 threads)
+run 8: pingpong 19022 ns/round trip, yield 2645916 /s (16 threads)
+run 9: pingpong 19259 ns/round trip, yield 2635900 /s (16 threads)
+median: pingpong 18925 ns/round trip, yield 2614382 /s
+run 1: pingpong 18973 ns/round trip, yield 2417310 /s (16 threads)
+run 2: pingpong 19467 ns/round trip, yield 2537712 /s (16 threads)
+run 3: pingpong 18900 ns/round trip, yield 2430753 /s (16 threads)
+run 4: pingpong 19124 ns/round trip, yield 2482905 /s (16 threads)
+run 5: pingpong 18845 ns/round trip, yield 2452582 /s (16 threads)
+run 6: pingpong 18781 ns/round trip, yield 2562244 /s (16 threads)
+run 7: pingpong 18699 ns/round trip, yield 2387312 /s (16 threads)
+run 8: pingpong 19133 ns/round trip, yield 2493878 /s (16 threads)
+run 9: pingpong 19148 ns/round trip, yield 2400286 /s (16 threads)
+median: pingpong 18973 ns/round trip, yield 2452582 /s
