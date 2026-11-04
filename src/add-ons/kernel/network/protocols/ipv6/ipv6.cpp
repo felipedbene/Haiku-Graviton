@@ -100,9 +100,7 @@ public:
 									uint32 nextHeaderField);
 			status_t			Reassemble(net_buffer* to);
 
-			bool				IsComplete() const
-									{ return fReceivedLastFragment
-										&& fBytesLeft == 0; }
+			bool				IsComplete() const;
 
 			const ipv6_packet_key& Key() const { return fKey; }
 			FragmentPacket*&	HashTableLink() { return fNext; }
@@ -116,7 +114,8 @@ private:
 			FragmentPacket*		fNext;
 			struct ipv6_packet_key fKey;
 			uint32				fIndex;
-			int32				fBytesLeft;
+			uint32				fEnd;
+				// where the last fragment ends, once it has arrived
 			FragmentList		fFragments;
 			net_timer			fTimer;
 			bool				fOrphaned;
@@ -388,7 +387,7 @@ RawSocket::RawSocket(net_socket* socket)
 FragmentPacket::FragmentPacket(const ipv6_packet_key &key)
 	:
 	fKey(key),
-	fBytesLeft(IPV6_MAXPACKET),
+	fEnd(0),
 	fReceivedLastFragment(false),
 	fHeaders(NULL),
 	fHeadersLength(0),
@@ -425,6 +424,23 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		// invalid fragment
 		return B_BAD_DATA;
 	}
+
+	// Once the end of the datagram is known, nothing may lie past it, and the
+	// last fragment may not end before data already received (RFC 8200 4.5,
+	// RFC 791). Such a fragment is dropped; it would otherwise be delivered
+	// with the data around it, or keep the datagram from ever completing.
+	uint16 dataEnd = fFragments.IsEmpty() ? 0 : fFragments.Last()->fragment.end;
+		// the fragments are kept sorted and without overlaps
+	if (lastFragment) {
+		if (fReceivedLastFragment ? end != fEnd : end < dataEnd)
+			return B_BAD_DATA;
+	} else if (fReceivedLastFragment && end > fEnd)
+		return B_BAD_DATA;
+
+	// The end is only recorded once the fragment is stored below: one whose
+	// data is all held already is freed, and would leave a complete-looking
+	// datagram with no buffer of this call to reassemble into.
+	const uint16 datagramEnd = end;
 
 	// Search for a position in the list to insert the fragment
 
@@ -486,16 +502,10 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		}
 
 		fFragments.InsertBefore(next, buffer);
-
-		// cut down existing hole
-		fBytesLeft -= end - start;
-
-		if (lastFragment && !fReceivedLastFragment) {
+		if (lastFragment) {
 			fReceivedLastFragment = true;
-			fBytesLeft -= IPV6_MAXPACKET - end;
+			fEnd = datagramEnd;
 		}
-
-		TRACE("    hole length: %d", (int)fBytesLeft);
 
 		return B_OK;
 	} else if (next != NULL && next->fragment.start == end) {
@@ -514,16 +524,10 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 		}
 
 		fFragments.InsertBefore(afterNext, buffer);
-
-		// cut down existing hole
-		fBytesLeft -= end - start;
-
-		if (lastFragment && !fReceivedLastFragment) {
+		if (lastFragment) {
 			fReceivedLastFragment = true;
-			fBytesLeft -= IPV6_MAXPACKET - end;
+			fEnd = datagramEnd;
 		}
-
-		TRACE("    hole length: %d", (int)fBytesLeft);
 
 		return B_OK;
 	}
@@ -535,16 +539,10 @@ FragmentPacket::AddFragment(uint16 start, uint16 end, net_buffer* buffer,
 	buffer->fragment.start = start;
 	buffer->fragment.end = end;
 	fFragments.InsertBefore(next, buffer);
-
-	// update length of the hole, if any
-	fBytesLeft -= end - start;
-
-	if (lastFragment && !fReceivedLastFragment) {
+	if (lastFragment) {
 		fReceivedLastFragment = true;
-		fBytesLeft -= IPV6_MAXPACKET - end;
+		fEnd = datagramEnd;
 	}
-
-	TRACE("    hole length: %d", (int)fBytesLeft);
 
 	return B_OK;
 }
@@ -568,6 +566,27 @@ FragmentPacket::SetHeaders(uint8* headers, uint32 length,
 	fHeaders = headers;
 	fHeadersLength = length;
 	fNextHeaderField = nextHeaderField;
+}
+
+
+/*!	Returns whether the fragments cover every byte from 0 to the end of the
+	last fragment. Counting the bytes received is not enough: a fragment past
+	the end used to make up for a hole.
+*/
+bool
+FragmentPacket::IsComplete() const
+{
+	if (!fReceivedLastFragment)
+		return false;
+
+	uint32 covered = 0;
+	FragmentList::ConstIterator iterator = fFragments.GetIterator();
+	while (net_buffer* fragment = iterator.Next()) {
+		if (fragment->fragment.start != covered)
+			return false;
+		covered = fragment->fragment.end;
+	}
+	return covered == fEnd;
 }
 
 
@@ -604,6 +623,9 @@ FragmentPacket::Reassemble(net_buffer* to)
 
 	to->index = fIndex;
 		// reset the buffer's device index
+	to->buffer_flags &= ~NET_BUFFER_L4_CHECKSUM_VALID;
+		// That came with the fragment that is now the buffer, and said
+		// nothing about the datagram: the layer-4 checksum has to be checked.
 
 	// The data from offset 0 on is all there, so the first fragment arrived
 	// and its headers were kept.
