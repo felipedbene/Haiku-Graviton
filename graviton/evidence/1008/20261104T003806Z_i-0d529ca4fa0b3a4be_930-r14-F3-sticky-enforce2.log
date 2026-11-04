@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-F3-sticky-enforce2
+# instance: i-0d529ca4fa0b3a4be   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T003806Z   end: 20261104T003815Z   rc: 0
+# script sha256: 9c5c35f7815b7eb823a95b3efda4a355fc6ad05ecbb634e8679cc59e91c00a54
+# ---- script ----
+# | sed -i 's/_exit(0);}/fflush(stdout); _exit(0);}/g' /tmp/s.c && grep -c "fflush" /tmp/s.c
+# | gcc -o /tmp/s /tmp/s.c && rm -f /tmp/stk/a && ls -ld /tmp/stk && /tmp/s
+# ---- raw output ----
+3
+drwxrwxrwt 1 baron root 2048 Nov  4 00:37 /tmp/stk
+uid2001 create rc=1
+uid2002 unlink other's file: Operation not allowed
+uid2001 unlink own file: ok

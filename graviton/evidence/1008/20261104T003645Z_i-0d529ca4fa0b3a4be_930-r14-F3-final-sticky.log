@@ -1,0 +1,54 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: 930-r14-F3-final-sticky
+# instance: i-0d529ca4fa0b3a4be   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T003645Z   end: 20261104T003725Z   rc: 0
+# script sha256: e2e06c5ae72c00ff905ecccc29f8034b3b7e7f5e0352b6b82dd191465d3a195a
+# ---- script ----
+# | feed() { i=0; while [ $i -lt 80 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | echo "== image"; uname -v; ls -ld /boot/system/cache/tmp /tmp; ls /boot/system/packages | grep -E "^(openssh|openssl3)"; openssl version -a | grep -E "platform|options"
+# | echo "== sticky enforced (user nobody-ish: uid 2001 creates, uid 2002 tries to delete)"
+# | mkdir -p /tmp/stk && chmod 1777 /tmp/stk; cat > /tmp/s.c <<'C'
+# | #include <stdio.h>
+# | #include <unistd.h>
+# | #include <errno.h>
+# | #include <string.h>
+# | #include <fcntl.h>
+# | int main(void){ const char*f="/tmp/stk/a"; if(fork()==0){ setgid(2001); setuid(2001); int fd=open(f,O_CREAT|O_WRONLY,0644); printf("uid2001 create rc=%d\n", fd>=0); _exit(0);} sleep(1);
+# |  if(fork()==0){ setgid(2002); setuid(2002); int r=unlink(f); printf("uid2002 unlink other's file: %s\n", r==0?"ALLOWED (bad)":strerror(errno)); _exit(0);} sleep(1);
+# |  if(fork()==0){ setgid(2001); setuid(2001); int r=unlink(f); printf("uid2001 unlink own file: %s\n", r==0?"ok":strerror(errno)); _exit(0);} sleep(1); return 0;}
+# | C
+# | gcc -o /tmp/s /tmp/s.c 2>&1 | tail -1 || { feed | pkgman install gcc 2>&1 | tail -1; gcc -o /tmp/s /tmp/s.c; }; /tmp/s
+# | echo "== claude_code from the live repo"; feed | pkgman install claude_code tmux 2>&1 | grep -E "package (claude_code|nodejs24|tmux)|Done"
+# | claude --version
+# | H=/tmp/h; rm -rf $H; mkdir -p $H/.claude; D=$(cd /tmp && pwd -P)/w; mkdir -p $D
+# | echo '{"theme":"dark"}' > $H/.claude/settings.json; echo "{\"hasCompletedOnboarding\":true,\"theme\":\"dark\",\"projects\":{\"$D\":{\"hasTrustDialogAccepted\":true}}}" > $H/.claude.json
+# | tmux -L c new-session -d -s c -x 120 -y 40 "cd $D && env CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 HOME=$H TERM=xterm-256color claude"; sleep 15
+# | echo "-- TUI start screen (messaging warning?):"; tmux -L c capture-pane -t c -p | grep -iE "messaging|sticky|Claude Code v" ; tmux -L c capture-pane -t c -p | grep -ciE "Cross-session messaging is off"; tmux -L c kill-server
+# | cd /tmp && CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 timeout 180 claude -p "Reply with exactly: pong" < /dev/null; echo "claude -p rc=$?"
+# | echo "== sshd"; catattr SYS:PACKAGE_FILE /boot/system/bin/sshd
+# ---- raw output ----
+== image
+hrev59996 Nov  4 2026 00:11:36
+drwxrwxrwt 1 baron root 2048 Nov  4 00:36 /boot/system/cache/tmp
+lrwxrwxrwx 1 baron root   22 Nov  4 00:36 /tmp -> /boot/system/cache/tmp
+openssh_debeos-10.4p1-1-arm64.hpkg
+openssl3-3.5.9-3-arm64.hpkg
+openssl3_man-3.5.9-3-any.hpkg
+platform: haiku-aarch64
+options:  bn(64,64)
+== sticky enforced (user nobody-ish: uid 2001 creates, uid 2002 tries to delete)
+/tmp/run-F3-final-sticky.sh: line 14: gcc: command not found
+== claude_code from the live repo
+/tmp/run-F3-final-sticky.sh: line 14: /tmp/s: No such file or directory
+    install package tmux-3.7c-1 from repository DeBeOS
+    install package nodejs24-24.22.2-1 from repository DeBeOS
+    install package claude_code-2.1.314-2 from repository DeBeOS
+[system] Done.
+2.1.314 (Claude Code)
+-- TUI start screen (messaging warning?):
+ ▐▛███▛█   Claude Code v2.1.314
+0
+pong
+claude -p rc=0
+== sshd
+/boot/system/bin/sshd : string : openssh_debeos-10.4p1-1-arm64.hpkg
