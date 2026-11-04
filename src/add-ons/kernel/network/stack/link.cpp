@@ -98,8 +98,11 @@ LinkProtocol::~LinkProtocol()
 	if (fMonitoredDevice != NULL) {
 		unregister_device_monitor(fMonitoredDevice->device, &fMonitor);
 		put_device_interface(fMonitoredDevice);
-	} else
-		Unbind();
+	}
+
+	// A bound socket may also have started capturing; its receive handler
+	// must go either way, or the device calls into a deleted protocol.
+	Unbind();
 }
 
 
