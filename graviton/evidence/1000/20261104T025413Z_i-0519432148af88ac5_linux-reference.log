@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-0519432148af88ac5   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux reference (Ubuntu 26.04, c7g.4xlarge): elfmachine1000 on /usr/bin/true + libz, and a real x86_64 static binary
+# start: 20261104T025413Z   end: 20261104T025425Z   rc: 0
+# script sha256: ff85e79ba0453a33575e8d0b4916aa8953a256d0a734c61fbff0eebcc55ed107
+# ---- script ----
+# | # Linux reference: the updated elfmachine1000 (reports a signal death) on the same c7g.4xlarge.
+# | cd /opt/r && ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet s3://haiku-graviton-$ACCT-us-west-2/bugfix/A/in/elfmachine1000.c . && sha256sum elfmachine1000.c
+# | gcc -O2 -Wall -o elfmachine1000 elfmachine1000.c || exit 1
+# | rm -rf e && mkdir e && cd e && ../elfmachine1000 /usr/bin/true /usr/lib/aarch64-linux-gnu/libz.so.1 ../hello.x86_64; echo "rc=$?"
+# | echo '=== the x86_64 binary from bash:'; bash -c ../hello.x86_64; echo "rc=$?"
+# ---- raw output ----
+56aa0e300b20aaffb8e7915e41b589693772779b299577d39b6a9878a959e8a1  elfmachine1000.c
+execve ./exe.native                          ran, exit 0                              ok
+dlopen ./lib.native.so                       loaded                                   ok
+execve ./exe.x86_64                          execve: Exec format error                ok
+    dlerror: ./lib.x86_64.so: cannot open shared object file: No such file or directory
+dlopen ./lib.x86_64.so                       refused                                  ok
+execve ./exe.i386                            execve: Exec format error                ok
+    dlerror: ./lib.i386.so: cannot open shared object file: No such file or directory
+dlopen ./lib.i386.so                         refused                                  ok
+execve ./exe.em7777                          execve: Exec format error                ok
+    dlerror: ./lib.em7777.so: cannot open shared object file: No such file or directory
+dlopen ./lib.em7777.so                       refused                                  ok
+execve ./exe.bigendian                       ran, exit 0                              FAIL
+    dlerror: ./lib.bigendian.so: ELF file data encoding not little-endian
+dlopen ./lib.bigendian.so                    refused                                  ok
+execve ../hello.x86_64                       execve: Exec format error                ok
+failures: 1
+rc=1
+=== the x86_64 binary from bash:
+rc=126
+bash: line 1: ../hello.x86_64: cannot execute binary file: Exec format error

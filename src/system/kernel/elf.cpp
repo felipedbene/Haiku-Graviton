@@ -1121,6 +1121,11 @@ elf_relocate(struct elf_image_info* image, struct elf_image_info* resolveImage)
 }
 
 
+#ifndef ELF_MACHINE
+#	error ELF_MACHINE is not defined for this architecture (elf_private.h)
+#endif
+
+
 static int
 verify_eheader(elf_ehdr *elfHeader)
 {
@@ -1129,6 +1134,16 @@ verify_eheader(elf_ehdr *elfHeader)
 
 	if (elfHeader->e_ident[4] != ELF_CLASS)
 		return B_NOT_AN_EXECUTABLE;
+
+	// Refuse an image for another machine or byte order before any of it is
+	// interpreted; parsed as native, it would fail later and misleadingly.
+	if (!elfHeader->IsHostEndian()
+		|| !ELF_MACHINE_IS_NATIVE(elfHeader->e_machine)) {
+		dprintf("elf: refusing an image for e_machine %u, EI_DATA %u (this "
+			"system: e_machine %u)\n", elfHeader->e_machine,
+			elfHeader->e_ident[EI_DATA], ELF_MACHINE);
+		return B_NOT_AN_EXECUTABLE;
+	}
 
 	if (elfHeader->e_phoff == 0)
 		return B_NOT_AN_EXECUTABLE;

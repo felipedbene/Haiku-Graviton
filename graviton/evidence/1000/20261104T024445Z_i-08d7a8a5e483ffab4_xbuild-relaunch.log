@@ -1,0 +1,98 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-relaunch
+# instance: i-08d7a8a5e483ffab4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: relaunch the detached build with every variant built from emptied kernel/runtime_loader object dirs (the first run's trunk rebuild was not bit-identical: jam's 1 s mtime resolution)
+# start: 20261104T024445Z   end: 20261104T024457Z   rc: 0
+# script sha256: 961453f28408044a43727a5f23ce3d18ed216c44382d1be171026e9b977aa3c2
+# ---- script ----
+# | # Build, from origin/graviton a9954f424a (detached; log /opt/t/out/xb.log, rc /opt/t/out/xb.rc):
+# | #  trunk:   <revisioned>kernel_arm64 + <revisioned>libroot.so + runtime_loader, revision pinned to
+# | #           canonical's hrev59996 (method of #898/#1011)
+# | #  fix979:  trunk + fix/979 commit 993edb401c -> kernel only
+# | #  fix980:  trunk + fix/980 commit 5c63682a55 -> kernel only
+# | #  fix1000: trunk + fix/1000 commit 52d98850e3 -> kernel + runtime_loader
+# | # Every variant is built from emptied kernel/runtime_loader object dirs after a 2 s pause: jam
+# | # compares mtimes at 1 s resolution, so a revert inside the same second as the last build
+# | # would otherwise leave stale objects (the first run's trunk rebuild did not reproduce).
+# | # Patches are fetched from this group's S3 prefix and checked against the sha256s below.
+# | set -x
+# | mkdir -p /opt/t/out && cd /opt/t/out && rm -f xb.rc kernel_arm64.* runtime_loader.* libroot.so.* SHA256SUMS
+# | ACCT=$(aws sts get-caller-identity --query Account --output text)
+# | aws s3 cp --quiet --recursive s3://haiku-graviton-$ACCT-us-west-2/bugfix/A/in/ /opt/t/out/
+# | cat > in.sums <<'SUMS'
+# | d09c1b2a7e61878faec1059243547661f2172c97cb09442231038c0660895a65  fix979.patch
+# | bf513144cffb709e90c6dd781d07bd7295942aecf95a870f9079a3ea4ece7124  fix980.patch
+# | 436eadbdddaa826488da11b635715477998de03b897cdb4a57763889f8212413  fix1000.patch
+# | SUMS
+# | sha256sum -c in.sums || exit 1
+# | cat > /opt/t/xb.sh <<'XB'
+# | set -x
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | REV=hrev59996
+# | TRUNK=a9954f424a
+# | R=objects/haiku/arm64/release/system
+# | git -C .. fetch -q origin graviton
+# | git -C .. checkout -q -f $TRUNK && git -C .. log -1 --format='trunk %H %s' || exit 1
+# | clean() { sleep 2; rm -rf $R/kernel $R/runtime_loader; }
+# | clean
+# | s=$(date +%s)
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" "<revisioned>libroot.so" runtime_loader > $O/jam-trunk.log 2>&1 || { tail -40 $O/jam-trunk.log; exit 1; }
+# | echo "JAM trunk ok wall=$(( $(date +%s) - s ))s"
+# | cp $R/kernel/revisioned/kernel_arm64 $O/kernel_arm64.trunk
+# | cp $R/libroot/revisioned/libroot.so $O/libroot.so.trunk
+# | RL=$(find $R/runtime_loader -maxdepth 1 -type f -name runtime_loader); echo "runtime_loader at $RL"
+# | cp $RL $O/runtime_loader.trunk || exit 1
+# | fixbuild() {	# fixbuild <label> <patch> <targets...>
+# | 	local label=$1 patch=$2; shift 2
+# | 	git -C .. checkout -q -f $TRUNK
+# | 	git -C .. apply --check $O/$patch && git -C .. apply $O/$patch || return 1
+# | 	git -C .. diff --stat
+# | 	clean
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=$REV "$@" > $O/jam-$label.log 2>&1 || { tail -60 $O/jam-$label.log; return 1; }
+# | 	grep -nE "warning:|error:" $O/jam-$label.log | grep -E "arch_cpu|arch_int|elf_load_image|kernel/elf.cpp|elf_private" 
+# | 	for t in "$@"; do
+# | 		case "$t" in
+# | 			"<revisioned>kernel_arm64") cp $R/kernel/revisioned/kernel_arm64 $O/kernel_arm64.$label ;;
+# | 			runtime_loader) cp $RL $O/runtime_loader.$label ;;
+# | 			*) echo "no copy rule for $t"; return 1 ;;
+# | 		esac
+# | 	done
+# | 	git -C .. checkout -q -f $TRUNK
+# | }
+# | fixbuild fix979 fix979.patch "<revisioned>kernel_arm64" || exit 1
+# | fixbuild fix980 fix980.patch "<revisioned>kernel_arm64" || exit 1
+# | fixbuild fix1000 fix1000.patch "<revisioned>kernel_arm64" runtime_loader || exit 1
+# | # rebuild trunk from the reverted tree to show the build reproduces bit for bit
+# | clean
+# | jam -q -j$(nproc) -sHAIKU_REVISION=$REV "<revisioned>kernel_arm64" runtime_loader > $O/jam-trunk2.log 2>&1 || exit 1
+# | cmp $R/kernel/revisioned/kernel_arm64 $O/kernel_arm64.trunk && echo "kernel trunk rebuild identical"
+# | cmp $RL $O/runtime_loader.trunk && echo "runtime_loader trunk rebuild identical"
+# | X=$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-
+# | cd $O
+# | echo "arm64_emulate_id_register in trunk / fix979:"; ${X}nm kernel_arm64.trunk | grep -c arm64_emulate_id_register; ${X}nm kernel_arm64.fix979 | grep arm64_emulate_id_register
+# | echo "fix1000 kernel refuses-string:"; strings kernel_arm64.fix1000 | grep "refusing an image"; strings runtime_loader.fix1000 | grep "ELF image is for"
+# | for a in fix979 fix980 fix1000; do cmp -s kernel_arm64.trunk kernel_arm64.$a && { echo "kernel $a identical to trunk?"; exit 1; }; done
+# | cmp -s runtime_loader.trunk runtime_loader.fix1000 && { echo "runtime_loader fix identical?"; exit 1; }
+# | sha256sum kernel_arm64.* libroot.so.* runtime_loader.* | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include 'libroot.so.*' --include 'runtime_loader.*' --include SHA256SUMS . s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/bugfix/A/out/ && echo uploaded
+# | XB
+# | nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc' > /dev/null 2>&1 &
+# | sleep 3; echo launched
+# ---- raw output ----
+fix979.patch: OK
+fix980.patch: OK
+fix1000.patch: OK
+launched
++ mkdir -p /opt/t/out
++ cd /opt/t/out
++ rm -f xb.rc kernel_arm64.fix1000 kernel_arm64.fix979 kernel_arm64.fix980 kernel_arm64.trunk runtime_loader.fix1000 runtime_loader.trunk libroot.so.trunk SHA256SUMS
+++ aws sts get-caller-identity --query Account --output text
++ ACCT=<ACCOUNT_ID>
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/A/in/ /opt/t/out/
++ cat
++ sha256sum -c in.sums
++ cat
++ sleep 3
++ nohup bash -c 'bash /opt/t/xb.sh > /opt/t/out/xb.log 2>&1; echo $? > /opt/t/out/xb.rc'
++ echo launched
