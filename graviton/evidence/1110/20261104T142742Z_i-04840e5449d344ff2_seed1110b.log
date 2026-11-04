@@ -1,0 +1,132 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed1110b
+# instance: i-04840e5449d344ff2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: seed1110b: seed1110 with p3 x4k re-made without uninit_bg
+# start: 20261104T142742Z   end: 20261104T142753Z   rc: 0
+# script sha256: 48c105d23bc11855697f57adecdeccd6ba1cfa9b7742d2a0deccd3111eb8f893
+# ---- script ----
+# | # Seed seed1110b (vol-02a512f91ba2ffb6e): a copy of seed1110 (snapshot snap-0a39257a4b3f007bb) with p3 x4k made again WITHOUT
+# | # uninit_bg (ext4, 4 KiB blocks, flex_bg), because in round 1 a BLOCK_UNINIT group's first allocation panicked
+# | # both arms (AllocationBlockGroup::_InitGroup()/_FirstFreeBlock(), pre-existing on trunk, filed separately).
+# | # p1, p2 and p4 are seed1110's, unchanged.
+# | set -x
+# | sleep 5
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol02a512f91ba2ffb6e '$9 == v { print $11 }' | sed 's|.*/||'); D=/dev/$D
+# | echo "seed1110b device $D"; lsblk $D || exit 1
+# | mkfs.ext4 -q -F -O ^has_journal,^orphan_file,^metadata_csum -L x4k ${D}p3 || exit 1
+# | for n in 1 2 3 4; do
+# | 	echo "== seed1110b p$n"
+# | 	dumpe2fs -h ${D}p$n 2>/dev/null | grep -E "volume name|features|Block size|Block count|Free blocks|Free inodes"
+# | 	dumpe2fs ${D}p$n 2>/dev/null | grep '^Group '
+# | 	e2fsck -fn ${D}p$n > /tmp/f.out 2>&1; echo "e2fsck seed1110b p$n rc=$?"; tail -1 /tmp/f.out
+# | done
+# | sync
+# ---- raw output ----
+seed1110b device /dev/nvme3n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme3n1     259:14   0    1G  0 disk 
+├─nvme3n1p1 259:15   0   32M  0 part 
+├─nvme3n1p2 259:16   0   64M  0 part 
+├─nvme3n1p3 259:17   0  400M  0 part 
+└─nvme3n1p4 259:18   0   64M  0 part 
+== seed1110b p1
+Filesystem volume name:   e1k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block count:              32768
+Free blocks:              30310
+Free inodes:              8181
+Block size:               1024
+Group 0: (Blocks 1-8192)
+Group 1: (Blocks 8193-16384)
+Group 2: (Blocks 16385-24576)
+Group 3: (Blocks 24577-32767)
+e2fsck seed1110b p1 rc=0
+e1k: 11/8192 files (0.0% non-contiguous), 2458/32768 blocks
+== seed1110b p2
+Filesystem volume name:   x1k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block count:              65536
+Free blocks:              60119
+Free inodes:              16373
+Block size:               1024
+Group descriptor size:    64
+Group 0: (Blocks 1-8192)
+Group 1: (Blocks 8193-16384)
+Group 2: (Blocks 16385-24576)
+Group 3: (Blocks 24577-32768)
+Group 4: (Blocks 32769-40960)
+Group 5: (Blocks 40961-49152)
+Group 6: (Blocks 49153-57344)
+Group 7: (Blocks 57345-65535)
+e2fsck seed1110b p2 rc=0
+x1k: 11/16384 files (0.0% non-contiguous), 5417/65536 blocks
+== seed1110b p3
+Filesystem volume name:   x4k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize
+Block count:              102400
+Free blocks:              95833
+Free inodes:              102389
+Block size:               4096
+Group descriptor size:    64
+Group 0: (Blocks 0-32767)
+Group 1: (Blocks 32768-65535)
+Group 2: (Blocks 65536-98303)
+Group 3: (Blocks 98304-102399)
+e2fsck seed1110b p3 rc=0
+x4k: 11/102400 files (0.0% non-contiguous), 6567/102400 blocks
+== seed1110b p4
+Filesystem volume name:   e4k
+Filesystem features:      ext_attr resize_inode dir_index filetype sparse_super large_file
+Block count:              16384
+Free blocks:              15347
+Free inodes:              16373
+Block size:               4096
+Group 0: (Blocks 0-16383)
+e2fsck seed1110b p4 rc=0
+e4k: 11/16384 files (0.0% non-contiguous), 1037/16384 blocks
++ sleep 5
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol02a512f91ba2ffb6e '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme3n1
++ D=/dev/nvme3n1
++ echo 'seed1110b device /dev/nvme3n1'
++ lsblk /dev/nvme3n1
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L x4k /dev/nvme3n1p3
++ for n in 1 2 3 4
++ echo '== seed1110b p1'
++ dumpe2fs -h /dev/nvme3n1p1
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes'
++ dumpe2fs /dev/nvme3n1p1
++ grep '^Group '
++ e2fsck -fn /dev/nvme3n1p1
++ echo 'e2fsck seed1110b p1 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4
++ echo '== seed1110b p2'
++ dumpe2fs -h /dev/nvme3n1p2
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes'
++ dumpe2fs /dev/nvme3n1p2
++ grep '^Group '
++ e2fsck -fn /dev/nvme3n1p2
++ echo 'e2fsck seed1110b p2 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4
++ echo '== seed1110b p3'
++ dumpe2fs -h /dev/nvme3n1p3
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes'
++ dumpe2fs /dev/nvme3n1p3
++ grep '^Group '
++ e2fsck -fn /dev/nvme3n1p3
++ echo 'e2fsck seed1110b p3 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3 4
++ echo '== seed1110b p4'
++ dumpe2fs -h /dev/nvme3n1p4
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes'
++ dumpe2fs /dev/nvme3n1p4
++ grep '^Group '
++ e2fsck -fn /dev/nvme3n1p4
++ echo 'e2fsck seed1110b p4 rc=0'
++ tail -1 /tmp/f.out
++ sync

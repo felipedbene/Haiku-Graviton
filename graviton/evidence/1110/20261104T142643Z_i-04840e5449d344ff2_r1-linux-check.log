@@ -1,0 +1,291 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r1-linux-check
+# instance: i-04840e5449d344ff2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck -fn of round 1's seed1110 volumes (both arms panicked in p3)
+# start: 20261104T142643Z   end: 20261104T142655Z   rc: 0
+# script sha256: 201e633e5ea9b4a2e4cb79cabbb81bd03c97078d9404868765845fc7a7c00ef7
+# ---- script ----
+# | # Linux check of round 1's seed1110 volumes (vol-0cb69da2a08e011be = arm before, vol-0b9df1b893c4e0478 = arm after).
+# | # Both Haiku boxes panicked ("sparse write attempt") during p3 x4k's fill, after p1 e1k and p2 x1k had each run
+# | # fill -> one-block files -> mkdir on full -> rm -> unmount. So p1/p2 are the state Haiku left at unmount (no remount
+# | # step ran), p3 is what was on disk at the panic, and p4 was never mounted.
+# | set -x
+# | dev() { D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) '$9 == v { print $11 }' | sed 's|.*/||'); echo /dev/$D; }
+# | sleep 5
+# | for v in vol-0cb69da2a08e011be vol-0b9df1b893c4e0478; do
+# | 	D=$(dev $v); echo "######## $v $D"; lsblk $D || continue
+# | 	for n in 1 2 3 4; do
+# | 		echo "== $v p$n $(blkid -o value -s LABEL ${D}p$n)"
+# | 		e2fsck -fn ${D}p$n 2>&1; echo "e2fsck $v p$n rc=$?"
+# | 		dumpe2fs -h ${D}p$n 2>/dev/null | grep -E "Free blocks|Free inodes|Filesystem state"
+# | 	done
+# | 	echo "== $v p3 groups"; dumpe2fs ${D}p3 2>/dev/null | grep -E "^Group |free blocks" | head -20
+# | done
+# ---- raw output ----
+######## vol-0cb69da2a08e011be /dev/nvme1n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme1n1     259:4    0    1G  0 disk 
+├─nvme1n1p1 259:5    0   32M  0 part 
+├─nvme1n1p2 259:6    0   64M  0 part 
+├─nvme1n1p3 259:7    0  400M  0 part 
+└─nvme1n1p4 259:8    0   64M  0 part 
+== vol-0cb69da2a08e011be p1 e1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Free inodes count wrong for group #0 (2035, counted=2037).
+Fix? no
+
+Directories count wrong for group #0 (4, counted=2).
+Fix? no
+
+
+e1k: ********** WARNING: Filesystem still has errors **********
+
+e1k: 11/8192 files (0.0% non-contiguous), 2458/32768 blocks
+e2fsck vol-0cb69da2a08e011be p1 rc=4
+Filesystem state:         clean
+Free blocks:              30310
+Free inodes:              8181
+== vol-0cb69da2a08e011be p2 x1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Free inodes count wrong for group #0 (2035, counted=2037).
+Fix? no
+
+Directories count wrong for group #0 (4, counted=2).
+Fix? no
+
+
+x1k: ********** WARNING: Filesystem still has errors **********
+
+x1k: 11/16384 files (0.0% non-contiguous), 5417/65536 blocks
+e2fsck vol-0cb69da2a08e011be p2 rc=4
+Filesystem state:         clean
+Free blocks:              60119
+Free inodes:              16373
+== vol-0cb69da2a08e011be p3 x4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Inode 12 has zero length extent
+	(invalid logical block 26288, physical block 32768)
+Clear? no
+
+Inode 12, i_blocks is 477056, should be 214912.  Fix? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  -(32819--65535)
+Fix? no
+
+Free blocks count wrong (36201, counted=36252).
+Fix? no
+
+
+x4k: ********** WARNING: Filesystem still has errors **********
+
+x4k: 12/102400 files (8.3% non-contiguous), 66199/102400 blocks
+e2fsck vol-0cb69da2a08e011be p3 rc=4
+Filesystem state:         clean
+Free blocks:              36201
+Free inodes:              102388
+== vol-0cb69da2a08e011be p4 e4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e4k: 11/16384 files (0.0% non-contiguous), 1037/16384 blocks
+e2fsck vol-0cb69da2a08e011be p4 rc=0
+Filesystem state:         clean
+Free blocks:              15347
+Free inodes:              16373
+== vol-0cb69da2a08e011be p3 groups
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0x8355
+  15 free blocks, 25588 free inodes, 2 directories, 25588 unused inodes
+Group 1: (Blocks 32768-65535) csum 0x81dd [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 2: (Blocks 65536-98303) csum 0x7174 [INODE_UNINIT]
+  32192 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 3: (Blocks 98304-102399) csum 0xf40c [INODE_UNINIT]
+  4045 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+######## vol-0b9df1b893c4e0478 /dev/nvme2n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme2n1     259:9    0    1G  0 disk 
+├─nvme2n1p1 259:10   0   32M  0 part 
+├─nvme2n1p2 259:11   0   64M  0 part 
+├─nvme2n1p3 259:12   0  400M  0 part 
+└─nvme2n1p4 259:13   0   64M  0 part 
+== vol-0b9df1b893c4e0478 p1 e1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e1k: 11/8192 files (0.0% non-contiguous), 2458/32768 blocks
+e2fsck vol-0b9df1b893c4e0478 p1 rc=0
+Filesystem state:         clean
+Free blocks:              30310
+Free inodes:              8181
+== vol-0b9df1b893c4e0478 p2 x1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+x1k: 11/16384 files (0.0% non-contiguous), 5417/65536 blocks
+e2fsck vol-0b9df1b893c4e0478 p2 rc=0
+Filesystem state:         clean
+Free blocks:              60119
+Free inodes:              16373
+== vol-0b9df1b893c4e0478 p3 x4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Inode 12 has zero length extent
+	(invalid logical block 26288, physical block 32768)
+Clear? no
+
+Inode 12, i_blocks is 522752, should be 260608.  Fix? no
+
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  -(32819--65535)
+Fix? no
+
+Free blocks count wrong (30489, counted=30540).
+Fix? no
+
+
+x4k: ********** WARNING: Filesystem still has errors **********
+
+x4k: 12/102400 files (8.3% non-contiguous), 71911/102400 blocks
+e2fsck vol-0b9df1b893c4e0478 p3 rc=4
+Filesystem state:         clean
+Free blocks:              30489
+Free inodes:              102388
+== vol-0b9df1b893c4e0478 p4 e4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e4k: 11/16384 files (0.0% non-contiguous), 1037/16384 blocks
+e2fsck vol-0b9df1b893c4e0478 p4 rc=0
+Filesystem state:         clean
+Free blocks:              15347
+Free inodes:              16373
+== vol-0b9df1b893c4e0478 p3 groups
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0x8355
+  15 free blocks, 25588 free inodes, 2 directories, 25588 unused inodes
+Group 1: (Blocks 32768-65535) csum 0x81dd [INODE_UNINIT]
+  0 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 2: (Blocks 65536-98303) csum 0x0572 [INODE_UNINIT]
+  26480 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 3: (Blocks 98304-102399) csum 0xf40c [INODE_UNINIT]
+  4045 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
++ sleep 5
++ for v in vol-0cb69da2a08e011be vol-0b9df1b893c4e0478
+++ dev vol-0cb69da2a08e011be
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-0cb69da2a08e011be
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0cb69da2a08e011be '$9 == v { print $11 }'
+++ D=nvme1n1
+++ echo /dev/nvme1n1
++ D=/dev/nvme1n1
++ echo '######## vol-0cb69da2a08e011be /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme1n1p1
++ echo '== vol-0cb69da2a08e011be p1 e1k'
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck vol-0cb69da2a08e011be p1 rc=4'
++ dumpe2fs -h /dev/nvme1n1p1
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme1n1p2
++ echo '== vol-0cb69da2a08e011be p2 x1k'
++ e2fsck -fn /dev/nvme1n1p2
++ echo 'e2fsck vol-0cb69da2a08e011be p2 rc=4'
++ dumpe2fs -h /dev/nvme1n1p2
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme1n1p3
++ echo '== vol-0cb69da2a08e011be p3 x4k'
++ e2fsck -fn /dev/nvme1n1p3
++ echo 'e2fsck vol-0cb69da2a08e011be p3 rc=4'
++ dumpe2fs -h /dev/nvme1n1p3
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme1n1p4
++ echo '== vol-0cb69da2a08e011be p4 e4k'
++ e2fsck -fn /dev/nvme1n1p4
++ echo 'e2fsck vol-0cb69da2a08e011be p4 rc=0'
++ dumpe2fs -h /dev/nvme1n1p4
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ echo '== vol-0cb69da2a08e011be p3 groups'
++ dumpe2fs /dev/nvme1n1p3
++ grep -E '^Group |free blocks'
++ head -20
++ for v in vol-0cb69da2a08e011be vol-0b9df1b893c4e0478
+++ dev vol-0b9df1b893c4e0478
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-0b9df1b893c4e0478
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0b9df1b893c4e0478 '$9 == v { print $11 }'
+++ D=nvme2n1
+++ echo /dev/nvme2n1
++ D=/dev/nvme2n1
++ echo '######## vol-0b9df1b893c4e0478 /dev/nvme2n1'
++ lsblk /dev/nvme2n1
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme2n1p1
++ echo '== vol-0b9df1b893c4e0478 p1 e1k'
++ e2fsck -fn /dev/nvme2n1p1
++ echo 'e2fsck vol-0b9df1b893c4e0478 p1 rc=0'
++ dumpe2fs -h /dev/nvme2n1p1
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme2n1p2
++ echo '== vol-0b9df1b893c4e0478 p2 x1k'
++ e2fsck -fn /dev/nvme2n1p2
++ echo 'e2fsck vol-0b9df1b893c4e0478 p2 rc=0'
++ dumpe2fs -h /dev/nvme2n1p2
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme2n1p3
++ echo '== vol-0b9df1b893c4e0478 p3 x4k'
++ e2fsck -fn /dev/nvme2n1p3
++ echo 'e2fsck vol-0b9df1b893c4e0478 p3 rc=4'
++ dumpe2fs -h /dev/nvme2n1p3
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme2n1p4
++ echo '== vol-0b9df1b893c4e0478 p4 e4k'
++ e2fsck -fn /dev/nvme2n1p4
++ echo 'e2fsck vol-0b9df1b893c4e0478 p4 rc=0'
++ dumpe2fs -h /dev/nvme2n1p4
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ echo '== vol-0b9df1b893c4e0478 p3 groups'
++ dumpe2fs /dev/nvme2n1p3
++ grep -E '^Group |free blocks'
++ head -20

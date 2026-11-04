@@ -172,14 +172,17 @@ ext2_write_fs_info(fs_volume* _volume, const struct fs_info* info, uint32 mask)
 	if (volume->IsReadOnly())
 		return B_READ_ONLY_DEVICE;
 
-	MutexLocker locker(volume->Lock());
-
 	status_t status = B_BAD_VALUE;
 
 	if (mask & FS_WRITE_FSINFO_NAME) {
+		// The transaction comes first: the volume lock is taken inside
+		// transactions everywhere else, and an aborted transaction reloads
+		// the group descriptors under it.
 		Transaction transaction(volume->GetJournal());
+		MutexLocker locker(volume->Lock());
 		volume->SetName(info->volume_name);
 		status = volume->WriteSuperBlock(transaction);
+		locker.Unlock();
 		transaction.Done();
 	}
 	return status;

@@ -1,0 +1,311 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r2-after-linux-check
+# instance: i-04840e5449d344ff2   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 2, arm after: Linux e2fsck -fn + kept-file md5s of the two data volumes
+# start: 20261104T143410Z   end: 20261104T143429Z   rc: 0
+# script sha256: cbfffcfd0acaf810a80763856245dc4801a1fb1d0539aa28fcc0690b72b6febb
+# ---- script ----
+# | sleep 8
+# | # Linux check of arm "after"'s data volumes after the Haiku runs: e2fsck -fn on every file system of
+# | # vol-07e774c30167eeb28 (seed1110 layout) and vol-0bef8a2b6729767f5 (seed1079 layout), and md5 of the files the regressions kept.
+# | set -x
+# | dev() { D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) '$9 == v { print $11 }' | sed 's|.*/||'); echo /dev/$D; }
+# | mkdir -p /opt/chk/m
+# | D=$(dev vol-07e774c30167eeb28); echo "1110 volume $D"; lsblk $D || exit 1
+# | for n in 1 2 3 4; do
+# | 	echo "== 1110 p$n $(blkid -o value -s LABEL ${D}p$n)"
+# | 	e2fsck -fn ${D}p$n 2>&1; echo "e2fsck 1110 p$n rc=$?"
+# | 	dumpe2fs -h ${D}p$n 2>/dev/null | grep -E "Free blocks|Free inodes|Filesystem state"
+# | done
+# | D=$(dev vol-0bef8a2b6729767f5); echo "1079 volume $D"; lsblk $D || exit 1
+# | for n in 1 2 3 4 5; do
+# | 	echo "== 1079 p$n $(blkid -o value -s LABEL ${D}p$n)"
+# | 	e2fsck -fn ${D}p$n 2>&1; echo "e2fsck 1079 p$n rc=$?"
+# | 	mount -o ro ${D}p$n /opt/chk/m && (cd /opt/chk/m && for f in *; do [ -f "$f" ] && printf '%-8s size=%-9s %s\n' "$f" "$(stat -c %s "$f")" "$(md5sum < "$f" | cut -d' ' -f1)"; done); umount /opt/chk/m
+# | done
+# ---- raw output ----
+1110 volume /dev/nvme3n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme3n1     259:15   0    1G  0 disk 
+├─nvme3n1p1 259:16   0   32M  0 part 
+├─nvme3n1p2 259:17   0   64M  0 part 
+├─nvme3n1p3 259:18   0  400M  0 part 
+└─nvme3n1p4 259:19   0   64M  0 part 
+== 1110 p1 e1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e1k: 11/8192 files (0.0% non-contiguous), 2458/32768 blocks
+e2fsck 1110 p1 rc=0
+Filesystem state:         clean
+Free blocks:              30310
+Free inodes:              8181
+== 1110 p2 x1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+x1k: 11/16384 files (0.0% non-contiguous), 5417/65536 blocks
+e2fsck 1110 p2 rc=0
+Filesystem state:         clean
+Free blocks:              60119
+Free inodes:              16373
+== 1110 p3 x4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+Block bitmap differences:  -(65536--98303)
+Fix? no
+
+
+x4k: ********** WARNING: Filesystem still has errors **********
+
+x4k: 11/102400 files (0.0% non-contiguous), 39335/102400 blocks
+e2fsck 1110 p3 rc=4
+Filesystem state:         clean
+Free blocks:              63065
+Free inodes:              102389
+== 1110 p4 e4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+e4k: 11/16384 files (0.0% non-contiguous), 1037/16384 blocks
+e2fsck 1110 p4 rc=0
+Filesystem state:         clean
+Free blocks:              15347
+Free inodes:              16373
+1079 volume /dev/nvme4n1
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme4n1     259:20   0    1G  0 disk 
+├─nvme4n1p1 259:21   0   32M  0 part 
+├─nvme4n1p2 259:22   0   32M  0 part 
+├─nvme4n1p3 259:23   0   32M  0 part 
+├─nvme4n1p4 259:24   0  128M  0 part 
+└─nvme4n1p5 259:25   0  128M  0 part 
+== 1079 p1 full4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+full4k: 13/8192 files (7.7% non-contiguous), 1293/8192 blocks
+e2fsck 1079 p1 rc=0
+after    size=2097152   a42aaeac85ae54c948c1785d2d3787c2
+lin-1m   size=1048576   e22ee5d0fcbd74f185ab620f669bc66e
+== 1079 p2 full1k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+full1k: 13/8192 files (7.7% non-contiguous), 5544/32768 blocks
+e2fsck 1079 p2 rc=0
+after    size=2097152   a42aaeac85ae54c948c1785d2d3787c2
+lin-1m   size=1048576   e22ee5d0fcbd74f185ab620f669bc66e
+== 1079 p3 fullx
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+fullx: 13/8192 files (7.7% non-contiguous), 1293/8192 blocks
+e2fsck 1079 p3 rc=0
+after    size=2097152   a42aaeac85ae54c948c1785d2d3787c2
+lin-1m   size=1048576   e22ee5d0fcbd74f185ab620f669bc66e
+== 1079 p4 nx4k
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+nx4k: 13/32768 files (0.0% non-contiguous), 4377/32768 blocks
+e2fsck 1079 p4 rc=0
+keep     size=8388608   05d6f294b618b10b30133d6aedd8fc85
+lin-1m   size=1048576   e22ee5d0fcbd74f185ab620f669bc66e
+== 1079 p5 ne2
+e2fsck 1.47.0 (5-Feb-2023)
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+ne2: 13/32768 files (7.7% non-contiguous), 4373/32768 blocks
+e2fsck 1079 p5 rc=0
+keep     size=8388608   05d6f294b618b10b30133d6aedd8fc85
+lin-1m   size=1048576   e22ee5d0fcbd74f185ab620f669bc66e
++ mkdir -p /opt/chk/m
+++ dev vol-07e774c30167eeb28
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-07e774c30167eeb28
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol07e774c30167eeb28 '$9 == v { print $11 }'
+++ D=nvme3n1
+++ echo /dev/nvme3n1
++ D=/dev/nvme3n1
++ echo '1110 volume /dev/nvme3n1'
++ lsblk /dev/nvme3n1
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme3n1p1
++ echo '== 1110 p1 e1k'
++ e2fsck -fn /dev/nvme3n1p1
++ echo 'e2fsck 1110 p1 rc=0'
++ dumpe2fs -h /dev/nvme3n1p1
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme3n1p2
++ echo '== 1110 p2 x1k'
++ e2fsck -fn /dev/nvme3n1p2
++ echo 'e2fsck 1110 p2 rc=0'
++ dumpe2fs -h /dev/nvme3n1p2
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme3n1p3
++ echo '== 1110 p3 x4k'
++ e2fsck -fn /dev/nvme3n1p3
++ echo 'e2fsck 1110 p3 rc=4'
++ dumpe2fs -h /dev/nvme3n1p3
++ grep -E 'Free blocks|Free inodes|Filesystem state'
++ for n in 1 2 3 4
+++ blkid -o value -s LABEL /dev/nvme3n1p4
++ echo '== 1110 p4 e4k'
++ e2fsck -fn /dev/nvme3n1p4
++ echo 'e2fsck 1110 p4 rc=0'
++ dumpe2fs -h /dev/nvme3n1p4
++ grep -E 'Free blocks|Free inodes|Filesystem state'
+++ dev vol-0bef8a2b6729767f5
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-0bef8a2b6729767f5
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0bef8a2b6729767f5 '$9 == v { print $11 }'
+++ D=nvme4n1
+++ echo /dev/nvme4n1
++ D=/dev/nvme4n1
++ echo '1079 volume /dev/nvme4n1'
++ lsblk /dev/nvme4n1
++ for n in 1 2 3 4 5
+++ blkid -o value -s LABEL /dev/nvme4n1p1
++ echo '== 1079 p1 full4k'
++ e2fsck -fn /dev/nvme4n1p1
++ echo 'e2fsck 1079 p1 rc=0'
++ mount -o ro /dev/nvme4n1p1 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f after ']'
+++ stat -c %s after
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' after 2097152 a42aaeac85ae54c948c1785d2d3787c2
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' lin-1m 1048576 e22ee5d0fcbd74f185ab620f669bc66e
++ for f in *
++ '[' -f lost+found ']'
++ umount /opt/chk/m
++ for n in 1 2 3 4 5
+++ blkid -o value -s LABEL /dev/nvme4n1p2
++ echo '== 1079 p2 full1k'
++ e2fsck -fn /dev/nvme4n1p2
++ echo 'e2fsck 1079 p2 rc=0'
++ mount -o ro /dev/nvme4n1p2 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f after ']'
+++ stat -c %s after
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' after 2097152 a42aaeac85ae54c948c1785d2d3787c2
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' lin-1m 1048576 e22ee5d0fcbd74f185ab620f669bc66e
++ for f in *
++ '[' -f lost+found ']'
++ umount /opt/chk/m
++ for n in 1 2 3 4 5
+++ blkid -o value -s LABEL /dev/nvme4n1p3
++ echo '== 1079 p3 fullx'
++ e2fsck -fn /dev/nvme4n1p3
++ echo 'e2fsck 1079 p3 rc=0'
++ mount -o ro /dev/nvme4n1p3 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f after ']'
+++ stat -c %s after
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' after 2097152 a42aaeac85ae54c948c1785d2d3787c2
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' lin-1m 1048576 e22ee5d0fcbd74f185ab620f669bc66e
++ for f in *
++ '[' -f lost+found ']'
++ umount /opt/chk/m
++ for n in 1 2 3 4 5
+++ blkid -o value -s LABEL /dev/nvme4n1p4
++ echo '== 1079 p4 nx4k'
++ e2fsck -fn /dev/nvme4n1p4
++ echo 'e2fsck 1079 p4 rc=0'
++ mount -o ro /dev/nvme4n1p4 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f keep ']'
+++ stat -c %s keep
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' keep 8388608 05d6f294b618b10b30133d6aedd8fc85
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' lin-1m 1048576 e22ee5d0fcbd74f185ab620f669bc66e
++ for f in *
++ '[' -f lost+found ']'
++ umount /opt/chk/m
++ for n in 1 2 3 4 5
+++ blkid -o value -s LABEL /dev/nvme4n1p5
++ echo '== 1079 p5 ne2'
++ e2fsck -fn /dev/nvme4n1p5
++ echo 'e2fsck 1079 p5 rc=0'
++ mount -o ro /dev/nvme4n1p5 /opt/chk/m
++ cd /opt/chk/m
++ for f in *
++ '[' -f keep ']'
+++ stat -c %s keep
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' keep 8388608 05d6f294b618b10b30133d6aedd8fc85
++ for f in *
++ '[' -f lin-1m ']'
+++ stat -c %s lin-1m
+++ md5sum
+++ cut '-d ' -f1
++ printf '%-8s size=%-9s %s\n' lin-1m 1048576 e22ee5d0fcbd74f185ab620f669bc66e
++ for f in *
++ '[' -f lost+found ']'
++ umount /opt/chk/m

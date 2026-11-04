@@ -483,6 +483,55 @@ Volume::_GroupCheckSum(ext2_block_group *group, int32 index)
 }
 
 
+/*!	Makes this volume a listener of \a transaction, once.
+	The free counts and the group descriptors kept in memory are changed in
+	place by every allocation; when the transaction is aborted, the block
+	cache rolls back its copies of the superblock and the descriptor blocks,
+	and TransactionDone() reloads ours from them.
+*/
+void
+Volume::_ListenToTransaction(Transaction& transaction)
+{
+	if (transaction.IsStarted()
+		&& transaction.ID() != fSuperBlockTransaction) {
+		fSuperBlockTransaction = transaction.ID();
+		transaction.AddListener(this);
+	}
+}
+
+
+/*!	Copies every group descriptor block loaded so far back from the block
+	cache, after an aborted transaction has rolled the cache back. Without
+	this, the descriptor changes of the aborted transaction (free blocks and
+	inodes, used directories, flags, bitmap checksums) would stay in memory
+	and be written out with the next change to the same descriptor block.
+	The blocks are overwritten in place: AllocationBlockGroup keeps pointers
+	into them.
+*/
+status_t
+Volume::_ReloadGroupDescriptors()
+{
+	MutexLocker _(fLock);
+
+	status_t status = B_OK;
+	uint32 blockCount = (fNumGroups + fGroupsPerBlock - 1) / fGroupsPerBlock;
+	for (uint32 i = 0; i < blockCount; i++) {
+		if (fGroupBlocks[i] == NULL)
+			continue;
+
+		CachedBlock cached(this);
+		const uint8* block = cached.SetTo(_GroupDescriptorBlock(i));
+		if (block == NULL) {
+			status = B_IO_ERROR;
+			continue;
+		}
+		memcpy(fGroupBlocks[i], block, fBlockSize);
+	}
+
+	return status;
+}
+
+
 /*!	Makes the requested block group available.
 	The block groups are loaded on demand, but are kept in memory until the
 	volume is unmounted; therefore we don't use the block cache.
@@ -540,6 +589,8 @@ Volume::WriteBlockGroup(Transaction& transaction, int32 index)
 
 	if (fGroupBlocks[blockIndex] == NULL)
 		return B_BAD_VALUE;
+
+	_ListenToTransaction(transaction);
 
 	ext2_block_group *group = (ext2_block_group*)(fGroupBlocks[blockIndex]
 		+ blockOffset * fGroupDescriptorSize);
@@ -689,14 +740,7 @@ status_t
 Volume::WriteSuperBlock(Transaction& transaction)
 {
 	TRACE("Volume::WriteSuperBlock()\n");
-	if (transaction.IsStarted()
-		&& transaction.ID() != fSuperBlockTransaction) {
-		// The free counts kept here change with every allocation; when the
-		// transaction is aborted, TransactionDone() reloads them from the
-		// superblock the block cache has rolled back.
-		fSuperBlockTransaction = transaction.ID();
-		transaction.AddListener(this);
-	}
+	_ListenToTransaction(transaction);
 	fSuperBlock.SetFreeBlocks(fFreeBlocks, Has64bitFeature());
 	fSuperBlock.SetFreeInodes(fFreeInodes);
 	// TODO: Rest of fields that can be modified
@@ -803,6 +847,9 @@ Volume::TransactionDone(bool success)
 		status_t status = LoadSuperBlock();
 		if (status != B_OK)
 			panic("Failed to reload ext2 superblock.\n");
+		status = _ReloadGroupDescriptors();
+		if (status != B_OK)
+			panic("Failed to reload ext2 group descriptors.\n");
 	}
 }
 
