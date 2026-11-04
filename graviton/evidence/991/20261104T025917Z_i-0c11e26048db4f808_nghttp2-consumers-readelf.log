@@ -1,0 +1,18 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: nghttp2-consumers-readelf
+# instance: i-0c11e26048db4f808   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T025917Z   end: 20261104T025935Z   rc: 0
+# script sha256: 905cae270956b4835f478717b51fd82564554a67161b94c8e72423458c0d06d1
+# ---- script ----
+# | # which binaries on a canonical-image box link libnghttp2.so.14 (this box has binutils)
+# | for f in /boot/system/lib/*.so.* /boot/system/bin/*; do readelf -d "$f" 2>/dev/null | grep -q "NEEDED.*libnghttp2.so.14" && echo "$f"; done
+# | ls /packages | grep -E "^(nodejs|curl|nghttp2)"
+# ---- raw output ----
+/boot/system/lib/libcurl.so.4
+/boot/system/lib/libcurl.so.4.8.0
+/boot/system/bin/curl
+/boot/system/bin/node20
+curl-8.21.0-1
+nghttp2-1.63.0-1
+nghttp2_devel-1.63.0-1
+nodejs20-20.15.1-4

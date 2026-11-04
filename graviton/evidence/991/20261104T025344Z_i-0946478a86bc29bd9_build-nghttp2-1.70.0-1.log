@@ -1,0 +1,31 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: build-nghttp2-1.70.0-1
+# instance: i-0946478a86bc29bd9   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T025344Z   end: 20261104T025349Z   rc: 0
+# script sha256: 210d30ef6505ff9acc9bf2f8bff6bce2a5e2a9b6a106e4c49e0ca53fd6d123d5
+# ---- script ----
+# | cd /boot/home/haikuports/packages || exit 1
+# | sha256sum nghttp2*-1.70.0-1-arm64.hpkg
+# | package list -i nghttp2-1.70.0-1-arm64.hpkg | grep -E "version|provides|requires"
+# | package list nghttp2-1.70.0-1-arm64.hpkg | grep -E "libnghttp2"
+# | grep -E "BUILD_OK|attempt" /boot/home/nb-nghttp2-1.70.0.log | head; grep -m3 -iE "Library version|nghttp2 1.70|Version:" /boot/home/nb-nghttp2-1.70.0.log
+# | tail -5 /boot/home/nb-driver-991.log
+# ---- raw output ----
+31d620e33339b7c34fea96d50a68d94fbd0fd56ad673d138b6ba3d75827e8ac2  nghttp2-1.70.0-1-arm64.hpkg
+a797375dfbd4acd1618693f468e78fa1eaee7e155e3720d5102e4d39528e135e  nghttp2_debuginfo-1.70.0-1-arm64.hpkg
+85555cb91f2416cc62adb5fffe56dcc654bd7f003e4fab0544bd27124aed5446  nghttp2_devel-1.70.0-1-arm64.hpkg
+	version: 1.70.0-1
+	provides: nghttp2 = 1.70.0
+	provides: lib:libnghttp2 = 14.29.5 (compatible >= 14)
+	requires: haiku>=r1~beta6_hrev59996-1
+	provides: lib:libnghttp2 = 14.29.5 (compatible >= 14)
+  libnghttp2.so.14                       0  2026-11-04 02:52:30  lrwxrwxrwx  -> libnghttp2.so.14.29.5
+  libnghttp2.so.14.29.5             275368  2026-11-04 02:52:30  -rwxr-xr-x
+    Package version: 1.70.0
+    Library version: 43:5:29
+      PYTHON_VERSION: 
+  packages are still in /boot/home/haikuports/packages -- they are NOT in the pool.
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  nghttp2-1.70.0 =====
+      The build results above are valid. Do not re-queue these as failed builds -- fix the upload path and re-harvest from /boot/home/haikuports/packages.
+mirror-store skipped: no S3 client on this image (issue 728)
+===== nativebuild done 2026-11-04T02:52:37Z rc=1 =====

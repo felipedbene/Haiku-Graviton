@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: install-nghttp2-1.70.0-1
+# instance: i-01d97a9fa6e0a2193   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T025405Z   end: 20261104T025408Z   rc: 0
+# script sha256: 160702d4d7b340f1d05fa121ff454cf7feb125181546805ef74d532cc65eb610
+# ---- script ----
+# | cd /boot/home/hpkg991 && sha256sum nghttp2-1.70.0-1-arm64.hpkg
+# | feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+# | feed | pkgman install /boot/home/hpkg991/nghttp2-1.70.0-1-arm64.hpkg 2>&1 | grep -vE "^\s*$" | tail -6
+# | ls /packages | grep -E "^nghttp2"; ls -la /boot/system/lib/libnghttp2*
+# ---- raw output ----
+31d620e33339b7c34fea96d50a68d94fbd0fd56ad673d138b6ba3d75827e8ac2  nghttp2-1.70.0-1-arm64.hpkg
+  in system:
+    upgrade package nghttp2-1.63.0-1 to 1.70.0-1 from local file
+Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : Continue? [yes/no] (yes) : [system] Applying changes ...
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_02:35:43-1"
+[system] Cleaning up ...
+[system] Done.
+nghttp2-1.70.0-1
+lr-xr-xr-x 1 baron root     21 Nov  4 02:52 /boot/system/lib/libnghttp2.so.14 -> libnghttp2.so.14.29.5
+-r-xr-xr-x 1 baron root 275368 Nov  4 02:52 /boot/system/lib/libnghttp2.so.14.29.5

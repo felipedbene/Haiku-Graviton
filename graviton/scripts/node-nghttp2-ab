@@ -1,0 +1,25 @@
+#!/bin/sh
+# node-nghttp2-ab -- issue 991: the three http2 tests that depend on the system nghttp2,
+# 20 runs each, then the whole parallel/test-http2-* subset, then curl over HTTP/2.
+# Run on a Haiku box with nodejs24 installed and a 24.22.2 source tree (both patchsets
+# applied) at /boot/home/node-src/node-v24.22.2. Run it before and after installing
+# nghttp2-1.70.0; process.versions.nghttp2 shows the version node was compiled against,
+# the readlink line shows the library actually loaded.
+set -u
+export PATH=/boot/home/config/non-packaged/bin:$PATH
+cd /boot/home/node-src/node-v24.22.2 || exit 1
+uname -a; node --version
+node -p '"nghttp2 " + process.versions.nghttp2'
+ls /packages | grep -E "^(nghttp2|nodejs24|libuv)"
+sha256sum /boot/system/lib/libnghttp2.so.14 $(readlink -f /boot/system/lib/libnghttp2.so.14)
+for t in test-http2-sensitive-headers test-http2-misbehaving-flow-control test-http2-misbehaving-flow-control-paused; do
+  ok=0; i=0; while [ $i -lt 20 ]; do i=$((i+1)); : | timeout 60 node test/parallel/$t.js > /tmp/o991.txt 2>&1 && ok=$((ok+1)); done
+  echo "RESULT $t: $ok/20 pass"; [ $ok -lt 20 ] && grep -m4 -E "Error|assert|at " /tmp/o991.txt
+done
+echo "######## parallel/test-http2-* under tools/test.py -j 16"
+: | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap parallel/test-http2-* > /tmp/h2.tap 2>&1
+echo "RESULT http2 subset: ok=$(grep -c '^ok ' /tmp/h2.tap) (of which skip=$(grep -c '^ok .*# skip' /tmp/h2.tap)) notok=$(grep -c '^not ok ' /tmp/h2.tap)"
+grep '^not ok' /tmp/h2.tap
+echo "######## other consumer: the system libcurl links libnghttp2.so.14 (no readelf/ldd on the base image)"
+grep -ac "libnghttp2.so.14" /boot/system/lib/libcurl.so.4
+/boot/system/bin/curl -sS -o /dev/null --http2 -w "system curl: http_version=%{http_version} code=%{http_code}\n" https://nodejs.org/dist/index.json
