@@ -1,0 +1,40 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>
+# evidence: after-icu74-checks
+# instance: i-021d23e80bf64c7b9   region: us-west-2   transport: SSM AWS-RunShellScript
+# what: #1041 post-bake checks on a fresh c7g.2xlarge from ami-01fb829240db186f1 (the fix/1121 bake above). Probes: graviton/scripts/{icu-data-probe,posix-locale-probe}.c cross-built with the bake's cross-tools, sha256 icuprobe74 5ecbacb8f2bc4fd98f1811f617386940c56c6d896444a11cfea353493e161a04 posixloc 178579dac2a93d9bb8624b104ad12c851bdda0689a21ad46ece961a3dbf94b54
+# ---- script ----
+# | # issue 1121 / #1041 post-bake checks on a fresh box from the fix/1121 bake
+# | echo "== /packages (icu, ncurses)"; ls /packages | grep -E "^(icu|ncurses|nodejs)"
+# | echo "== pkgman list-installed icu74"; pkgman search -i icu74 2>&1 | tail -5
+# | echo "== package metadata of the activated icu74"; package list -i /boot/system/packages/icu74-*.hpkg 2>/dev/null | grep -E "name:|version:|vendor:" | head -4; ls /boot/system/packages | grep -i icu
+# | echo "== baked data dir vs installed package dir"
+# | grep -ao "/packages/icu74[^ ]*/\.self/data/icu/74\.1" /boot/system/lib/libicuuc.so.74.1 | sort -u
+# | echo "== icu-data-probe"; /boot/home/bin/icuprobe74; echo "rc=$?"
+# | echo "== posix-locale-probe (setlocale de_DE.UTF-8)"; /boot/home/bin/posixloc
+# ---- raw output ----
+== /packages (icu, ncurses)
+icu74-74.1-6
+ncurses6-6.6-1
+== pkgman list-installed icu74
+Status  Name   Description                                   
+-------------------------------------------------------------
+s       icu74  Libraries to support Unicode and globalization
+== package metadata of the activated icu74
+	name: icu74
+* Code Page Conversion: Convert text data to or from Unicode and nearly any other character set or encoding. ICU's conversion tables are based on charset data collected by IBM over the course of many decades, and is the most complete available anywhere.
+	vendor: Haiku Project
+	version: 74.1-6
+icu74-74.1-6-arm64.hpkg
+== baked data dir vs installed package dir
+/packages/icu74-74.1-6/.self/data/icu/74.1
+== icu-data-probe
+data dir: /packages/icu74-74.1-6/.self/data/icu/74.1
+ures_open(de):   U_ZERO_ERROR
+ucol_open(de):   U_USING_DEFAULT_WARNING
+udatpg_open(en_US): U_USING_DEFAULT_WARNING
+rc=0
+== posix-locale-probe (setlocale de_DE.UTF-8)
+de_DE.UTF-8: setlocale=de_DE.UTF-8 strftime="Sonntag 04 Januar 1970" DAY_1="Sonntag" MON_1="Januar" RADIX=","
+fr_FR.UTF-8: setlocale=fr_FR.UTF-8 strftime="dimanche 04 janvier 1970" DAY_1="dimanche" MON_1="janvier" RADIX=","
+
+[status Success]

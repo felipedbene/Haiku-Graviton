@@ -1,0 +1,27 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>
+# evidence: trunk-image-system-packages
+# instance: i-0482d8e1e06bdbc8e   region: us-west-2   transport: SSM AWS-RunShellScript
+# what: systemPackages handed to the image solver on trunk 3dd2150688 (generated.arm64/haiku.image-init-vars): the bootstrap icu74 from the Jamfile's by-name add sits beside the force-added pool file
+# ---- raw output ----
+systemPackages="download/ca_root_certificates-2026_07_16-1-any.hpkg"
+systemPackages="$systemPackages download/gawk-3.1.8_bootstrap-2-arm64.hpkg"
+systemPackages="$systemPackages download/openssl3-3.5.9-3-arm64.hpkg"
+systemPackages="$systemPackages download/openssl3_man-3.5.9-3-any.hpkg"
+systemPackages="$systemPackages download/bash-5.3_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages download/freetype-2.6.3_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages download/zlib-1.3.2-1-arm64.hpkg"
+systemPackages="$systemPackages download/coreutils-9.9_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages download/icu74-74.1_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages download/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages objects/haiku/arm64/packaging/packages/haiku_loader.hpkg"
+systemPackages="$systemPackages objects/haiku/arm64/packaging/packages/haiku.hpkg"
+systemPackages="$systemPackages objects/haiku/arm64/packaging/packages/haiku_datatranslators.hpkg"
+systemPackages="$systemPackages /opt/haiku/ssh/openssh_debeos-10.4p1-1-arm64.hpkg"
+systemPackages="$systemPackages /opt/src/haiku/hpkg-pool/amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg"
+systemPackages="$systemPackages /opt/src/haiku/hpkg-pool/debeos_cloudwatch-0.1.0-1-arm64.hpkg"
+systemPackages="$systemPackages /opt/src/haiku/hpkg-pool/ncurses6-6.6-1-arm64.hpkg"
+systemPackages="$systemPackages /opt/src/haiku/hpkg-pool/icu74-74.1-6-arm64.hpkg"
+systemPackages="$systemPackages download/findutils-4.9.0_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages download/grep-3.11_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages download/less-668_bootstrap-1-arm64.hpkg"
+systemPackages="$systemPackages download/sed-4.9_bootstrap-1-arm64.hpkg"

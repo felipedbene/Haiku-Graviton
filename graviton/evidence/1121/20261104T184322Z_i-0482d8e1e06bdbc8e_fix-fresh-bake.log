@@ -1,0 +1,261 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>
+# evidence: fix-fresh-bake
+# instance: i-0482d8e1e06bdbc8e   region: us-west-2   transport: SSM AWS-RunShellScript
+# what: the same oven-equivalent bake from scratch on fix/1121 b435616d7e; excerpt: jam pass 2 to the end. Same driver as the trunk run.
+# haiku-mmc.image (19960692736 B) c160c0f856e59fb08ef7be577f714ef73dddd4affc234823e889532316e0a7d3
+# haiku-ec2.raw  (21474836480 B) f3ed3ecb52094b92e5b8c5b6167032e8a47ffc326f6b0a715e2336fca7ec4349
+# ---- raw output (excerpt) ----
+start 20261104T184322Z
+b435616d7e bake: stop the Jamfile adding the bootstrap icu74 beside the pinned one
+######## build[21]: echo "== inject UserBuildConfig, jam pass 2 (final image with ssh) =="
+== inject UserBuildConfig, jam pass 2 (final image with ssh) ==
+######## build[22]: cp "$HAIKU_TOP/graviton/ssh/UserBuildConfig" "$GEN/UserBuildConfig"
+######## build[23]: HG_POOL_DIR="${HG_POOL_DIR:-}" HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$
+warning: Invalid jamfile cache: Failed to read file info.
+/opt/src/haiku/src/add-ons/kernel/bus_managers/hyperv/arch/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/add-ons/kernel/debugger/disasm/arm64/Jamfile: No such file or directory
+/opt/src/haiku/src/bin/debug/ltrace/arch/arm64/Jamfile: No such file or directory
+Starting build of type minimum ... 
+Local package ca_root_certificates-2025_12_02-1-any.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package zlib_devel-1.2.13_bootstrap-1-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package haikuwebkit_devel-1.10.0-2-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Local package which-2.21-6-arm64.hpkg not found in download -- packages depending on it will be unavailable. 
+Building Haiku Minimum Target 
+AddHaikuImagePackages: package which not available! 
+build-feature packages unavailable on arm64: giflib glu mesa ffmpeg fontconfig gutenprint webkit libicns libedit qrencode_kdl libdvdread libdvdnav libraw libwebp libavif live555 
+AddHaikuImagePackages: package bc not available! 
+AddHaikuImagePackages: package wget not available! 
+haiku-graviton: adding OpenSSH to the image 
+haiku-graviton: baking official amazon-ssm-agent amazon_ssm_agent-3.3.3270.0-4-arm64.hpkg into system/packages 
+haiku-graviton: baking CloudWatch metrics daemon debeos_cloudwatch-0.1.0-1-arm64.hpkg into system/packages 
+haiku-graviton: baking non-bootstrap ncurses6-6.6-1-arm64.hpkg so terminfo is reachable (issue 784) 
+haiku-graviton: baking non-bootstrap icu74-74.1-6-arm64.hpkg so ICU finds its data (issue 1018) 
+...patience...
+...patience...
+...patience...
+...patience...
+...patience...
+...patience...
+...patience...
+...patience...
+...patience...
+...patience...
+...found 93717 target(s)...
+...updating 599 target(s)...
+C++ objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator.o 
+C++ objects/haiku/arm64/release/add-ons/translators/tiff/TIFFView.o 
+DownloadLocatedFile1 download/findutils-4.9.0_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/grep-3.11_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/less-668_bootstrap-1-arm64.hpkg 
+DownloadLocatedFile1 download/sed-4.9_bootstrap-1-arm64.hpkg 
+BuildHaikuImageHostnameFile objects/common/hostname 
+--2026-11-04 18:47:28--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/findutils-4.9.0_bootstrap-1-arm64.hpkg
+--2026-11-04 18:47:28--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/grep-3.11_bootstrap-1-arm64.hpkg
+--2026-11-04 18:47:28--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/less-668_bootstrap-1-arm64.hpkg
+CreateContainerMakeDirectoriesScript1 objects/haiku/arm64/packaging/packages_build/minimum/hpkg_-haiku_loader.hpkg/scripts/haiku.package-make-dirs 
+--2026-11-04 18:47:28--  https://eu.hpkg.haiku-os.org/haikuports/master/build-packages/e18c479d47b0f43d47865e023b3fc35190dae9e1d3559f60a0cf96f519ba2f42/packages/sed-4.9_bootstrap-1-arm64.hpkg
+CreateContainerMakeDirectoriesScript1 objects/haiku/arm64/packaging/packages_build/minimum/hpkg_-haiku.hpkg/scripts/haiku.package-make-dirs 
+CreateContainerMakeDirectoriesScript1 objects/haiku/arm64/packaging/packages_build/minimum/hpkg_-haiku_datatranslators.hpkg/scripts/haiku.package-make-dirs 
+CreateContainerMakeDirectoriesScript1 objects/haiku/arm64/packaging/packages_build/minimum/hpkg_-haiku_devel.hpkg/scripts/haiku.package-make-dirs 
+CreateContainerMakeDirectoriesScript1 haiku.image-make-dirs 
+...on 100th target...
+BuildHaikuPackage1 objects/haiku/arm64/packaging/packages/haiku_loader.hpkg 
+haiku_loader.hpkg: Removing and re-creating package contents dir ...
+haiku_loader.hpkg: Collecting package contents ...
+haiku_loader.hpkg: mimeset'ing package contents ...
+Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... AddDirectoryToContainerCopyFilesScript <hpkg_-haiku_devel.hpkg>develop/headers/private/-/<copy-directory-to-container>../headers/private 
+Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... Resolving eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)... AddDirectoryToContainerCopyFilesScript <hpkg_-haiku.hpkg>data/mime_db/-/<mimedb-app->beep_mimedb 
+206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... 206.189.242.242
+Connecting to eu.hpkg.haiku-os.org (eu.hpkg.haiku-os.org)|206.189.242.242|:443... AddDirectoryToContainerCopyFilesScript <hpkg_-haiku_devel.hpkg>develop/headers/private/libs/compat/freebsd_wlan/-/<copy-directory-to-container>../src/libs/compat/freebsd_wlan 
+BuildHaikuPackage1 objects/haiku/arm64/packaging/packages/haiku_devel.hpkg 
+haiku_devel.hpkg: Removing and re-creating package contents dir ...
+...on 200th target...
+haiku_loader.hpkg: Creating the package ...
+...on 300th target...
+...on 400th target...
+connected.
+connected.
+connected.
+connected.
+...on 500th target...
+haiku_devel.hpkg: Collecting package contents ...
+BuildHaikuPackage1 objects/haiku/arm64/packaging/packages/haiku.hpkg 
+haiku.hpkg: Removing and re-creating package contents dir ...
+HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... Link objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator 
+haiku_devel.hpkg: mimeset'ing package contents ...
+XRes1 objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator 
+SetType1 objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator 
+MimeSet1 objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator 
+SetVersion1 objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator 
+Chmod1 objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator 
+CreateAppMimeDBEntries1 objects/haiku/arm64/release/add-ons/translators/tiff/TIFFTranslator_mimedb 
+BuildHaikuPackage1 objects/haiku/arm64/packaging/packages/haiku_datatranslators.hpkg 
+haiku_datatranslators.hpkg: Removing and re-creating package contents dir ...
+haiku_datatranslators.hpkg: Collecting package contents ...
+302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/findutils-4.9.0_bootstrap-1-arm64.hpkg [following]
+--2026-11-04 18:47:29--  https://haiku-buildpackages.cdn.haiku-os.org/packages/findutils-4.9.0_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/grep-3.11_bootstrap-1-arm64.hpkg [following]
+--2026-11-04 18:47:29--  https://haiku-buildpackages.cdn.haiku-os.org/packages/grep-3.11_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/sed-4.9_bootstrap-1-arm64.hpkg [following]
+--2026-11-04 18:47:29--  https://haiku-buildpackages.cdn.haiku-os.org/packages/sed-4.9_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... 302 Found
+Location: https://haiku-buildpackages.cdn.haiku-os.org/packages/less-668_bootstrap-1-arm64.hpkg [following]
+--2026-11-04 18:47:29--  https://haiku-buildpackages.cdn.haiku-os.org/packages/less-668_bootstrap-1-arm64.hpkg
+Resolving haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)... 95.217.35.232, 2a01:4f9:2b:2e04::2
+Connecting to haiku-buildpackages.cdn.haiku-os.org (haiku-buildpackages.cdn.haiku-os.org)|95.217.35.232|:443... haiku.hpkg: Collecting package contents ...
+connected.
+connected.
+connected.
+connected.
+haiku_devel.hpkg: Creating the package ...
+HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... HTTP request sent, awaiting response... haiku_datatranslators.hpkg: mimeset'ing package contents ...
+haiku_datatranslators.hpkg: Creating the package ...
+200 OK
+Length: 1010662 (987K) [application/octet-stream]
+Saving to: ‘download/findutils-4.9.0_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 473088 (462K) [application/octet-stream]
+Saving to: ‘download/grep-3.11_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 253912 (248K) [application/octet-stream]
+Saving to: ‘download/sed-4.9_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .200 OK
+Length: 384099 (375K) [application/octet-stream]
+Saving to: ‘download/less-668_bootstrap-1-arm64.hpkg’
+
+     0K .......... .......... .......... .......... ..........  5%  285K 3s
+    50K .......... .......... .......... .......... .............. .......... 10%  284K 1s
+    50K .......... .......... .................. .......... 20%  284K 1s
+    50K .......... .......... .......... .......... ...... .......... .............. .......... 13%  273K 1s
+    50K .......... .......... .......... .......... .......... 10%  285K 3s
+   100K .......... .......... .......... .......... .......... 15% 49.8M 2s
+   150K .......... .......... .......... 21%  285K 1s
+   100K .......... .......... .......... .......... .......... 32% 44.0M 1s
+   150K .............. 40%  285K 1s
+   100K .......... .......... .......... .......... .......... 60% 48.1M 0s
+   150K .............. .......... .. .......... .......... .......... .. .......... .......... 26%  274K 1s
+   100K .......... .......... .......... .......... .......... 39% 44.3M 1s
+   150K .......... .......... .......... .......... ...... .......... .......... 20%  286K 2s
+   200K .......... .......... .......... .......... .......... 25% 52.4M 2s
+   250K .......... .......... .......... .......... .......... 30% 44.4M 1s
+   300K .......... .................. 43%  286K 1s
+   200K .......... .......... .......... .......... .......... 54% 61.4M 0s
+   250K .......... .......... .......... .......... .......... 64% 64.7M 0s
+   300K .......... .................. 80%  286K 0s
+   200K .......... .......... .......... .......... .......   100% 60.3M=0.5s
+
+2026-11-04 18:47:30 (469 KB/s) - ‘download/sed-4.9_bootstrap-1-arm64.hpkg’ saved [253912/253912]
+
+. .......... ...... .......... .............. 53%  275K 0s
+   200K .......... .......... .......... .......... .......... 66% 49.5M 0s
+   250K .......... .......... .......... .......... .......... 79% 36.7M 0s
+   300K .......... .......... .......... .......... .......... 35%  288K 1s
+   350K .......... .......... .......... .......... .......... 40% 37.2M 1s
+   400K .......... .......... .......... .......... .......... 45% 50.9M 1s
+   450K .......... .......... .......... .......... .......... 50% 54.7M 1s
+   500K .......... .......... .......... .......... ........ .......... 75%  288K 0s
+   350K .......... .............. 55% 42.0M 1s
+   550K ............ .......... .... .......... ............ .............. .......... .. 86% 33.8M 0s
+   400K .......... .......... .......... .......... 60% 26.1M 0s
+   600K ................ .......... .......... ...... 97% 21.1M 0s
+   450K .......... ..                                         100% 22.4T=0.7s
+
+2026-11-04 18:47:31 (654 KB/s) - ‘download/grep-3.11_bootstrap-1-arm64.hpkg’ saved [473088/473088]
+
+..... .......... 93%  277K 0s
+   350K .......... .......... .....                           100% 48.7M=0.7s
+
+2026-11-04 18:47:31 (513 KB/s) - ‘download/less-668_bootstrap-1-arm64.hpkg’ saved [384099/384099]
+
+....... .......... .......... 65%  261K 0s
+   650K .......... .......... .......... .......... .......... 70%  423M 0s
+   700K .......... .......... .......... .......... .......... 75%  432M 0s
+   750K .......... .......... .......... .......... .......... 81%  340M 0s
+   800K .......... .......... .......... .......... .......... 86%  469M 0s
+   850K .......... .......... .......... .......... .......... 91%  356M 0s
+   900K .......... .......... .......... .......... .......... 96%  462M 0s
+   950K .......... .......... .......... ......               100%  536M=0.9s
+
+2026-11-04 18:47:31 (1.07 MB/s) - ‘download/findutils-4.9.0_bootstrap-1-arm64.hpkg’ saved [1010662/1010662]
+
+haiku.hpkg: mimeset'ing package contents ...
+haiku.hpkg: Creating the package ...
+HaikuRepository1 objects/haiku/arm64/packaging/repositories/Haiku 
+haiku (r1~beta6_hrev59996-1)
+	checksum: 16e47fae753878bcef443f27cd8c75cb2e9dc6f5c79850f5751bafe2ccd086ca
+haiku_datatranslators (r1~beta6_hrev59996-1)
+	checksum: 7d71a10156145c168f4214d4e0fa0ca41618c58df8cad3e30b5b80afc00d0118
+haiku_devel (r1~beta6_hrev59996-1)
+	checksum: ea915b185174621f7be5ffbe46f0c7d0e2488ec97792187d148899efe7981233
+haiku_loader (r1~beta6_hrev59996-1)
+	checksum: af9472549b26651b7ebdad7c7901a444006e5155a4f127712ec1ec6d1b499f33
+----- Package Repository Info -----
+package count                     4
+-----------------------------------
+header size:                     72
+repository header size:         622
+package attributes size:       2015
+total size:                    1372
+-----------------------------------
+BuildHaikuImage1 haiku-minimum.mmc 
+
+Creating image ...
+Creating filesystem indices...
+Populating image ...
+Resolving package dependencies ...
+Unmounting ...
+BuildEfiSDImage1 haiku-mmc.image 
+36864+0 records in
+36864+0 records out
+37748736 bytes (38 MB, 36 MiB) copied, 0.0539508 s, 700 MB/s
+mbrtool: MBR of image is invalid, creating a fresh one.
+mbrtool: Warning: Partition extends beyond end of file!
+dosfs_initialize(3, , 'Haiku Boot', '(null)', 0)
+dosfs: size = 33554432 bytes (65536 sectors), 32768 KB, 32 MB, 0 GB
+dosfs: sector size = 512 bytes
+dosfs: fatbits = 16, clustersize = 2048
+dosfs: FAT size is 64 sectors
+dosfs: disk label: HAIKU BOOT ���
+dosfs: Writing FAT
+dosfs: Writing boot block
+dosfs: Writing first FAT sector
+dosfs: Writing root directory
+fssh:/> fssh:/> fssh:/> fssh:/> fssh:/> fssh:/> fssh:/> fssh:/> fssh:/> myfs:
+drwxr-xr-x  0  0      16384 1980-01-01 00:00:00 .
+drwxr-xr-x  0  0          0 2026-11-04 18:48:10 ..
+drwxr-xr-x  0  0       2048 2026-11-04 18:48:10 EFI
+-rw-r--r--  0  0         51 2026-11-04 18:48:10 uEnv.txt
+drwxr-xr-x  0  0       2048 2026-11-04 18:48:10 fdt
+fssh:/> ...updated 599 target(s)...
+######## build[24]: echo "== make-gpt-image.sh (MBR -> GPT) =="
+== make-gpt-image.sh (MBR -> GPT) ==
+######## build[25]: MMC="$(ls -1 "$GEN"/haiku-mmc.image "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -
+######## build[26]: [ -n "$MMC" ] || MMC="$(find "$GEN" -maxdepth 2 \( -name 'haiku-mmc.image' -o -name 'haiku-*.mmc' \)
+mmc image: /opt/src/haiku/generated.arm64/haiku-mmc.image
+######## build[27]: bash "$HAIKU_TOP/graviton/builder/make-gpt-image.sh" "$MMC" "$HAIKU_TOP/haiku-ec2.raw" "$ROOT_VOLUME
+==> copying /opt/src/haiku/generated.arm64/haiku-mmc.image -> /opt/src/haiku/haiku-ec2.raw and growing to 21474836480 bytes
+==> converting MBR to GPT
+==> verifying boot partition type GUID
+Total free space is 2965437 sectors (1.4 GiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            8192           73727   32.0 MiB    EF00  EFI system partition
+   2           73728        38985727   18.6 GiB    EB00  Haiku BFS
+==> /opt/src/haiku/haiku-ec2.raw ready
+######## phase build rc=0
+xb rc=0
+end 20261104T185320Z
