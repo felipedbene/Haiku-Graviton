@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1090-step1089
+# instance: i-00d805643c9c4c625   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1090, step 1089
+# start: 20261104T074955Z   end: 20261104T080005Z   rc: 1
+# script sha256: 481a896ab18462ca7c2c35f5d19ee49110d0441b9b2a10bd3c6934d86a3915b1
+# ---- script ----
+# | # step 3 (#1089), arm c1090: on x4k, files with extents preallocated past EOF (fallocate -n):
+# | # append 2 MiB to pn (prealloc right after EOF), remove the empty pz, append 1 MiB to pg
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | # (prealloc after a gap).
+# | dd if=/dev/urandom of=/boot/home/c2m bs=65536 count=32 2>/dev/null
+# | dd if=/dev/urandom of=/boot/home/c1m bs=65536 count=16 2>/dev/null
+# | echo "c2m md5 $(md5sum < /boot/home/c2m)"; echo "c1m md5 $(md5sum < /boot/home/c1m)"
+# | mount -t ext2 $DD/0 /ex4k || exit 1
+# | cd /ex4k && ls -ls pn pz pg
+# | cat /boot/home/c2m >> pn; echo "pn append rc=$?"
+# | rm pz; echo "rm pz rc=$?"
+# | cat /boot/home/c1m >> pg; echo "pg append rc=$?"
+# | sync; ls -ls pn pg; cd /
+# | unmount /ex4k; echo "unmount x4k rc=$?"
+# ---- raw output ----

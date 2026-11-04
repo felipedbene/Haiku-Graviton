@@ -1,0 +1,83 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1089-step1089
+# instance: i-060a2abdb032311ef   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1089, step 1089
+# start: 20261104T080534Z   end: 20261104T080545Z   rc: 0
+# script sha256: 0f995c03cda322a023d733f94886ac97db2c986651c2adb5619dc0783fd94016
+# ---- script ----
+# | # step 3 (#1089), arm c1089: on x4k, files with extents preallocated past EOF (fallocate -n):
+# | # append 2 MiB to pn (prealloc right after EOF), remove the empty pz, append 1 MiB to pg
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | # (prealloc after a gap).
+# | dd if=/dev/urandom of=/boot/home/c2m bs=65536 count=32 2>/dev/null
+# | dd if=/dev/urandom of=/boot/home/c1m bs=65536 count=16 2>/dev/null
+# | echo "c2m md5 $(md5sum < /boot/home/c2m)"; echo "c1m md5 $(md5sum < /boot/home/c1m)"
+# | mount -t ext2 $DD/0 /ex4k || exit 1
+# | cd /ex4k && ls -ls pn pz pg
+# | cat /boot/home/c2m >> pn; echo "pn append rc=$?"
+# | rm pz; echo "rm pz rc=$?"
+# | cat /boot/home/c1m >> pg; echo "pg append rc=$?"
+# | sync; ls -ls pn pg; cd /
+# | unmount /ex4k; echo "unmount x4k rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-5-237.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+2b5c7cecea7f731a3ad47c865bbbf5dbd8f09f2726d8c98aa330376bf884d8d4  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw 
+c2m md5 c19c6d827d91014d61cbdee14b5fba58  -
+c1m md5 30ab9287ed902b80223b1b5a0796f1f5  -
+5120 -rw-rw-rw- 1 baron root 1048576 Nov  4 07:40 pg
+9216 -rw-rw-rw- 1 baron root 1048576 Nov  4 07:40 pn
+8192 -rw-rw-rw- 1 baron root       0 Nov  4 07:40 pz
+pn append rc=0
+rm pz rc=0
+pg append rc=0
+2048 -rw-rw-rw- 1 baron root 2097152 Nov  4 08:05 pg
+3072 -rw-rw-rw- 1 baron root 3145728 Nov  4 08:05 pn
+unmount x4k rc=0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw '
++ mkdir -p /ex4k /ex1k
++ dd if=/dev/urandom of=/boot/home/c2m bs=65536 count=32
++ dd if=/dev/urandom of=/boot/home/c1m bs=65536 count=16
+++ md5sum
++ echo 'c2m md5 c19c6d827d91014d61cbdee14b5fba58  -'
+++ md5sum
++ echo 'c1m md5 30ab9287ed902b80223b1b5a0796f1f5  -'
++ mount -t ext2 /dev/disk/nvme/1/0 /ex4k
++ cd /ex4k
++ ls -ls pn pz pg
++ cat /boot/home/c2m
++ echo 'pn append rc=0'
++ rm pz
++ echo 'rm pz rc=0'
++ cat /boot/home/c1m
++ echo 'pg append rc=0'
++ sync
++ ls -ls pn pg
++ cd /
++ unmount /ex4k
++ echo 'unmount x4k rc=0'
