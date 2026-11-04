@@ -1,0 +1,9 @@
+# evidence: instance inventory for issue 997 (aws ec2 describe-instances, tag bugfix-group=G)
+# start: 20261104T032134Z
+i-0c11e26048db4f808	c8g.8xlarge	ami-00632cb3ccefc53dc	2026-11-04T02:24:38+00:00	running	bf-G-builder
+i-0946478a86bc29bd9	c8g.4xlarge	ami-00632cb3ccefc53dc	2026-11-04T02:40:49+00:00	running	bf-G-builder2
+i-0f1c6489ec848075a	c8g.4xlarge	ami-0dcf79589cb11e193	2026-11-04T02:33:19+00:00	running	bf-G-linux
+i-0dea301388cb7e181	c8g.4xlarge	ami-00632cb3ccefc53dc	2026-11-04T02:32:55+00:00	running	bf-G-t1
+i-01d97a9fa6e0a2193	c8g.4xlarge	ami-00632cb3ccefc53dc	2026-11-04T02:33:05+00:00	running	bf-G-t2
+i-06676c84ad85d6b25	c8g.4xlarge	ami-00632cb3ccefc53dc	2026-11-04T03:12:45+00:00	running	bf-G-t3-1018
+# canonical (tag canonical=true): ami-00632cb3ccefc53dc	haiku-oven-1793751576

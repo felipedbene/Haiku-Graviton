@@ -264,15 +264,17 @@ so those 10 are not attributed one by one; the final run's skip list, each with 
     (`224915Z…linux-two-tests`). Same class as `process-euid-egid`.
   - `perf-hooks-sliding-window-histogram`: intermittent, about 5% (1/1 suite, 1/10 and 2/40 alone,
     2/48 under load). Linux passes 296/296. `uv_hrtime()` is monotonic on Haiku: 0 backward steps in
-    2.4 G reads (`010139Z…hrtime-sliding-window-probe`). The cause is not established; filed as **#997**.
+    2.4 G reads (`010139Z…hrtime-sliding-window-probe`). The cause was not established at the time; filed as **#997**.
     **Resolved as a test race (#997):** generations count from the histogram's creation, and the
-    test's `delay(200)` wakes within about a millisecond of `origin + 200` (p5 −0.30 ms, p95
-    +1.00 ms), so a 100 ms boundary can fall between `record()` and `snapshot()`. All five
-    instrumented failures woke 12–32 µs before the boundary. In sequential runs, 32/320 Haiku
-    wakeups land within 50 µs of it and 0/320 Linux ones do, because the Linux wakeup sits
-    about 0.58 ms past the boundary. The DeBeOS patchset now carries
-    upstream's deflake (nodejs/node 147ade5ff9), which takes it from 3/320 alone and 18/320
-    under `-j 16` to 0/320 and 0/320 (`graviton/evidence/997/`).
+    test's `delay(200)` is armed from libuv's whole-millisecond loop time, so it wakes within
+    about a millisecond of `origin + 200` (p5 −0.30 ms, p95 +1.00 ms), and a 100 ms boundary can
+    fall between `record()` and `snapshot()`. Every instrumented failure (5 in the first
+    640 runs, 16 in a second 640) woke within 50 µs of the boundary. In sequential runs, 32/320
+    and 51/320 Haiku wakeups land that close, against 0/320 on Linux, where the wakeup sits
+    about 0.58 ms past the boundary. The DeBeOS patchset now carries upstream's deflake
+    (nodejs/node 147ade5ff9), which takes it from 3/320 alone and 18/320 under `-j 16` to
+    0/320 and 0/320 (`graviton/evidence/997/`; the phase is measured by
+    `graviton/scripts/node-sliding-window-wake-phase`).
 - **22 still fail, unchanged:** the same list as the rev-3 run.
 - **Baseline (openssl 3.5.9-2) vs staged (3.5.9-3):** the same failures, apart from the
   intermittent `sliding-window-histogram` and the #946 timeout, plus 1 more skip. The baseline's
@@ -434,7 +436,7 @@ ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0`, using instance-pro
 Per-test diff, including skip lists: `20261103T175100Z_workstation_fin-node-suites-vs-node2422.log`.
 - **2 went from fail to pass:**
   - `net-connect-abort-controller` (TIMEOUT -> ok): caused by PR 974, merged after the 4ef344f5fa bake, which fixes #946 (a closing listener now resets un-accepted connections). Under `--repeat 48` at 16-way it gives 48/48, against 4/48 hung on 4ef, and 40/40 alone (`174803Z…fin-residual-changed-tests`).
-  - `perf-hooks-sliding-window-histogram` (FAIL -> ok): **not a fix.** It is still intermittent here: 3/48 fail under 16-way load and 36/40 pass alone. #997 stays as it is.
+  - `perf-hooks-sliding-window-histogram` (FAIL -> ok): **not a fix.** It is still intermittent here: 3/48 fail under 16-way load and 36/40 pass alone. #997 stays as it is. (Later root-caused as a test race; see the #997 note in the 24.22.2-1 section above.)
 - **0 went from pass to fail. No state changes among the rest.**
 - **1 fewer skip:** `parallel/test-fs-read-stream` skipped on node2422 with "mkfifo not available" and runs and passes here. `mkfifo` is `/boot/system/bin/mkfifo` from `coreutils-9.9_bootstrap-1` (`174951Z…fin-mkfifo-probe`). Why `spawnSync('mkfifo')` failed on the node2422 box was not recorded, so this is not attributed.
 - **23 still fail, unchanged:**
