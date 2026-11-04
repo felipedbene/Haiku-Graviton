@@ -1,0 +1,97 @@
+# instance i-0c679bba8a6468cb2 c7g.8xlarge, canonical ami-00632cb3ccefc53dc (debeos-r70781-g79292bc67f)
+# haikuporter --test openssl3 chroot runs: (1) resolver-config A/B (/boot/home/hp2-ab.log, stopped after its cmp_http arm had shown the failures), (2) strace of one CMP exchange + hosts arm + resolv-v4 arm (/boot/home/hp3-strace.log). TEST() bodies are in the recipe-diff section of the PR.
+######## hp2-ab.log
+== issue 993 chroot A/B, Wed Nov  4 05:21:17 GMT 2026
+== arm none: no /boot/system/settings/network (haikuporter default)
+ls: cannot access '/boot/system/settings/network': No such file or directory
+  getaddrinfo(localhost): err=[No address associated with hostname] n=0 28.001s
+  getnameinfo(::1): err=[] host=::1 7.002s
+== arm resolv-v4: resolv.conf = nameserver 127.0.0.1
+  getaddrinfo(localhost): err=[Temporary failure in name resolution] n=0 0.000s
+  getnameinfo(::1): err=[] host=::1 0.000s
+== arm resolv-v6: resolv.conf = nameserver ::1
+  getaddrinfo(localhost): err=[No address associated with hostname] n=0 60.001s
+  getnameinfo(::1): err=[] host=::1 15.000s
+== arm hosts: hosts = 127.0.0.1/::1 localhost, no resolv.conf
+  getaddrinfo(localhost): err=[] n=2 0.000s
+  getnameinfo(::1): err=[] host=localhost 0.000s
+Files=1, Tests=0,  0 wallclock secs ( 0.01 usr  0.00 sys +  0.18 cusr  0.03 csys =  0.23 CPU)
+Result: NOTESTS
+# CMP error: connect timeout
+# CMP error: transfer error:request sent: IR, expected response: IP
+    not ok 11 - msg_timeout 5
+# CMP error: total timeout
+    not ok 15 - total_timeout 10
+not ok 1 - CMP app CLI Mock connection
+######## hp3-strace.log
+== issue 993 chroot run 3, Wed Nov  4 05:42:41 GMT 2026
+== arm none: one Mock CMP exchange over [::1], both sides under strace -e %network
+ls: cannot access '/boot/system/settings/network': No such file or directory
+cmp_main:apps/cmp.c:3695:CMP info: using section(s) 'cmp' of OpenSSL configuration file 'server.cnf'
+ACCEPT [::]:49929 PID=195946
+mock server port=49929
+client rc=0 elapsed=28.319s
+/port.recipe: line 206: kill: `cmp': not a pid or valid job spec
+-- client stderr
+-- client strace: network syscalls (connect/sendto/recvfrom), first 60
+1:[195976] socket(AF_INET, SOCK_DGRAM, 0) = 4 (8 us)
+2:[195976] socket(AF_INET, SOCK_DGRAM, 0) = 4 (3 us)
+3:[195976] socket(AF_INET6, SOCK_DGRAM, 0) = 4 (7 us)
+4:[195976] socket(AF_LINK, SOCK_DGRAM, 0) = 4 (3 us)
+5:[195976] socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, 0) = 4 (3 us)
+6:[195976] connect(4, {AF_INET, 0.0.0.0/53}, 32) = 0 No error (7 us)
+7:[195976] send(4, 0x18ac8b519f0, 21, 0) = 21 (8 us)
+8:[195976] recvfrom(4, 0x579bf06000, 65536, 0, 0x18ac8b516e0, [128]) = 18446744071562096672 Connection refused (1 us)
+9:[195976] socket(AF_INET6, SOCK_DGRAM|SOCK_CLOEXEC, 0) = 4 (6 us)
+-- server strace: network syscalls, first 80
+-- strace lines mentioning port 53
+== arm hosts (hosts file, no resolv.conf): test_ocsp_cert_chain
+Files=1, Tests=0,  1 wallclock secs ( 0.01 usr  0.00 sys +  0.18 cusr  0.03 csys =  0.23 CPU)
+Result: NOTESTS
+ok 1 - ocsp server port check
+ok 2 - s_server port check
+ok 3 - check s_server sent ocsp response82-test_ocsp_cert_chain.t .. ok
+Files=1, Tests=3,  0 wallclock secs ( 0.00 usr  0.00 sys +  0.21 cusr  0.07 csys =  0.28 CPU)
+Result: PASS
+wall=3s
+== arm resolv-v4 (no hosts file, resolv.conf = nameserver 127.0.0.1): test_cmp_http
+Files=1, Tests=0,  0 wallclock secs ( 0.01 usr  0.00 sys +  0.18 cusr  0.03 csys =  0.22 CPU)
+Result: NOTESTS
+ok 1 - CMP app CLI Mock connection
+ok 2 - CMP app CLI Mock verification
+ok 3 - CMP app CLI Mock credentials
+ok 4 - CMP app CLI Mock commands
+ok 5 - CMP app CLI Mock enrollment
+ok 6 - Mock server has terminated80-test_cmp_http.t .. ok
+Files=1, Tests=6, 50 wallclock secs ( 0.13 usr  0.01 sys + 16.38 cusr  7.39 csys = 23.91 CPU)
+Result: PASS
+wall=52s
+waiting for build package openssl3-3.5.9-3 to be deactivated
+waiting for build package openssl3_debuginfo-3.5.9-3 to be deactivated
+waiting for build package openssl3_devel-3.5.9-3 to be deactivated
+waiting for build package openssl3_man-3.5.9-3 to be deactivated
+unmount: unmounting failed: Device/File/Resource busy
+unmounting /boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev failed - wait and retry ...
+unmount: unmounting failed: Device/File/Resource busy
+unmounting /boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev failed - wait and retry ...
+unmount: unmounting failed: Device/File/Resource busy
+unmounting /boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev failed - wait and retry ...
+unmount: unmounting failed: Device/File/Resource busy
+unmounting /boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev failed - wait and retry ...
+unmount: unmounting failed: Device/File/Resource busy
+Unable to unmount /boot/home/haikuports/dev-libs/openssl/work-3.5.9/dev.
+FDs in use by applications:
+195944    0  R    20:154 /boot/system/bin/strace -T -t -i -e %network -o /tmp/srv.st /so
+195946    0  R    20:154 /sources/openssl-3.5.9/apps/openssl cmp -config server.cnf
+Forcing unmount
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+dev-libs::openssl3-3.5.9
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+TESTING dev-libs::openssl3-3.5.9
+----------------------------------------------------------------------
+Command '['bash', '-c', '\n\ncheckedUnmount()\n{\n\tlocal mountPoint="$1"\n\n\tif ! [[ $mountPoint = /* ]]; then\n\t\tmountPoint=$PWD/$mountPoint\n\tfi\n\n\t# retry up to 5 times to unmount the given mountpoint\n\tlocal 
+haikuporter exit 1 wall=119s

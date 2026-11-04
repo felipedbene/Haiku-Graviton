@@ -1,0 +1,16 @@
+# instance i-0433f102950224d87 c7g.8xlarge, ami-038dc6d84d6b731d2 (haiku-builder-canonical-20261030200450, kernel built Oct 19 2026, before #948), openssl 3.5.9 + openssl3-3.5.9.patchset, ./Configure haiku-aarch64 enable-zlib enable-zstd shared -g
+# issue 982 evidence 2026-11-04T03:33:12Z
+Haiku ip-10-128-11-238.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+listener [::]:40347 IPV6_V6ONLY=1
+connect 127.0.0.1 -> [::]:40347  Connection refused
+connect ::1       -> [::]:40347  OK
+FAIL: [::] listener does not take IPv4 connections
+dualstack982 rc=1
+== getent-style lookup of localhost via openssl s_client target
+== last run, 82-test_ocsp_cert_chain output
+82-test_ocsp_cert_chain.t (Wstat: 256 (exited 1) Tests: 3 Failed: 1)
+  Failed test:  3
+  Non-zero exit status: 1
+Files=1, Tests=3,  0 wallclock secs ( 0.00 usr  0.00 sys +  0.19 cusr  0.08 csys =  0.28 CPU)
+Result: FAIL
+make test TESTS=test_ocsp_cert_chain x10: pass=0 fail=10
