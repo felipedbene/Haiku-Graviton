@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-P-close1063-100k
+# instance: i-0b80d72f1873fc47d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3, arm P: close1063, 100000 iterations per phase
+# start: 20261104T053920Z   end: 20261104T054929Z   rc: 137
+# script sha256: 3de8086b9b182d3d0ee159363b323031c9d7658f86622623ea07bdf4b4273047
+# ---- script ----
+# | # Round 3 (100000 iterations per phase): close1063 (bind/close, capture start/stop, and the two-thread start/stop race) with
+# | # 0x88b5 frames written into tap/0 about 20 us apart. A HANG line means the run stopped moving.
+# | cd /boot/home/j
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sha256sum close1063
+# | ifconfig tap/0 up; ifconfig tap/0 | head -1
+# | (./close1063 100000 20 > close.out 2>&1; echo "close1063 exit=$?" >> close.out) &
+# | for i in $(seq 1 40); do sleep 5; grep -q "exit=\|HANG" close.out && break; done
+# | cat close.out
+# | ( ifconfig tap/0 | grep Receive ) & sleep 3; echo "(ifconfig tap/0 above if it returned within 3 s)"
+# ---- raw output ----
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+3a5ed5be02235786d09cb0955ae55d0d2a68d2725744b6070aeb35c027d4cfbb  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+90e782f600224ddcdcc97deb2b876591093684bd6cb9e2a4ae9d239a8813a67a  close1063
+tap/0	Hardware type: Ethernet, Address: 12:cd:b5:7b:5d:8b
+tap/0: mac 12:cd:b5:7b:5d:8b, 100000 iterations per phase
+bind-close       PASS  100000/100000 bound, 100000 received a frame before close, 22.3s, frames written 668374
+capture-stop     PASS  100000/100000 started, 100000 received, 100000 stopped, 22.7s, frames written 1338860
+HANG phase capture-race: no progress for 15 s at iteration 233850 (frames written 1353395)
+(ifconfig tap/0 above if it returned within 3 s)

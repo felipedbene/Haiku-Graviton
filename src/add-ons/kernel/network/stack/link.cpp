@@ -62,8 +62,6 @@ protected:
 			status_t			SocketStatus(bool peek) const;
 
 private:
-			status_t			_Unregister();
-
 	static	status_t			_MonitorData(net_device_monitor* monitor,
 									net_buffer* buffer);
 	static	void				_MonitorEvent(net_device_monitor* monitor,
@@ -77,6 +75,9 @@ private:
 				// never taken by the device's callbacks, always before fLock
 			net_device_monitor	fMonitor;
 			net_device_interface* fMonitoredDevice;
+			int32				fMonitorDown;
+				// the captured device went down; its monitor stays
+				// registered until the capture is stopped or replaced
 			net_device_interface* fBoundToDevice;
 			uint32				fBoundType;
 };
@@ -89,6 +90,7 @@ LinkProtocol::LinkProtocol(net_socket* socket)
 	:
 	LocalDatagramSocket("packet capture", socket),
 	fMonitoredDevice(NULL),
+	fMonitorDown(0),
 	fBoundToDevice(NULL)
 {
 	mutex_init(&fMonitorLock, "link capture");
@@ -119,8 +121,22 @@ LinkProtocol::StartMonitoring(const char* deviceName)
 	MutexLocker monitorLocker(fMonitorLock);
 	MutexLocker locker(fLock);
 
-	if (fMonitoredDevice != NULL)
-		return B_BUSY;
+	if (fMonitoredDevice != NULL) {
+		if (atomic_get(&fMonitorDown) == 0)
+			return B_BUSY;
+
+		// The device went down under the old capture, which still has to be
+		// unregistered (see _MonitorEvent()); do that now, without fLock.
+		net_device_interface* monitored = fMonitoredDevice;
+		fMonitoredDevice = NULL;
+		locker.Unlock();
+
+		unregister_device_monitor(monitored->device, &fMonitor);
+		put_device_interface(monitored);
+
+		locker.Lock();
+	}
+	atomic_set(&fMonitorDown, 0);
 
 	net_device_interface* interface = get_device_interface(deviceName);
 	if (interface == NULL)
@@ -159,6 +175,10 @@ LinkProtocol::StopMonitoring(const char* deviceName)
 
 	status_t status = unregister_device_monitor(monitored->device, &fMonitor);
 	put_device_interface(monitored);
+
+	// Only now: until it was unregistered, an ended capture must not queue
+	// what the device delivered after coming back up.
+	atomic_set(&fMonitorDown, 0);
 	return status;
 }
 
@@ -289,32 +309,22 @@ LinkProtocol::MTU()
 status_t
 LinkProtocol::SocketStatus(bool peek) const
 {
-	if (fMonitoredDevice == NULL && !IsBound())
+	if ((fMonitoredDevice == NULL || atomic_get((int32*)&fMonitorDown) != 0)
+		&& !IsBound())
 		return B_DEVICE_NOT_FOUND;
 
 	return LocalDatagramSocket::SocketStatus(peek);
 }
 
 
-status_t
-LinkProtocol::_Unregister()
-{
-	if (fMonitoredDevice == NULL)
-		return B_BAD_VALUE;
-
-	status_t status = unregister_device_monitor(fMonitoredDevice->device,
-		&fMonitor);
-	put_device_interface(fMonitoredDevice);
-	fMonitoredDevice = NULL;
-
-	return status;
-}
-
-
 /*static*/ status_t
 LinkProtocol::_MonitorData(net_device_monitor* monitor, net_buffer* packet)
 {
-	return ((LinkProtocol*)monitor->cookie)->EnqueueClone(packet);
+	LinkProtocol* protocol = (LinkProtocol*)monitor->cookie;
+	if (atomic_get(&protocol->fMonitorDown) != 0)
+		return B_OK;
+
+	return protocol->EnqueueClone(packet);
 }
 
 
@@ -323,10 +333,21 @@ LinkProtocol::_MonitorEvent(net_device_monitor* monitor, int32 event)
 {
 	LinkProtocol* protocol = (LinkProtocol*)monitor->cookie;
 
-	if (event == B_DEVICE_GOING_DOWN) {
+	if (event == B_DEVICE_GOING_DOWN || event == B_DEVICE_BEING_REMOVED) {
+		// A device being removed takes its monitors off its list after this
+		// event, so the capture ends then too, if it did not already when
+		// the device went down.
+		// This runs with the device's monitor lock held, and unregistering
+		// takes the device list lock, which register_device_monitor() and
+		// unregister_device_monitor() take before the monitor lock: only
+		// mark the capture as ended here. Stopping or replacing it, or
+		// closing the socket, unregisters it.
 		MutexLocker _(protocol->fLock);
 
-		protocol->_Unregister();
+		if (protocol->fMonitoredDevice == NULL)
+			return;
+
+		atomic_set(&protocol->fMonitorDown, 1);
 		if (protocol->IsEmpty()) {
 			protocol->WakeAll();
 			notify_socket(protocol->socket, B_SELECT_READ, B_DEVICE_NOT_FOUND);

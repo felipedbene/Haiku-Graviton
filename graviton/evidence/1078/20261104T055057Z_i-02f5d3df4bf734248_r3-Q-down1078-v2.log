@@ -1,0 +1,26 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r3-Q-down1078-v2
+# instance: i-02f5d3df4bf734248   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 3, arm Q (PR 1063, before #1078): down1078, 2000 cycles
+# start: 20261104T055057Z   end: 20261104T060604Z   rc: 137
+# script sha256: 5004bf5561e6f1329663f87fcef414dee509b8fd5bf664b2c2cda5eaef013edf
+# ---- script ----
+# | cd /boot/home/j && wget -q -O down1078.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src3/down1078.c?<PRESIGNED>' && gcc -O2 -Wall -Wextra -Wno-unused-parameter -o down1078 down1078.c -lnetwork && sha256sum down1078.c down1078
+# | # Round 3: down1078 -- tap/0 down and up 2000 times while one socket captures on it and another
+# | # starts and stops a capture on it (paced). A HANG line means the run stopped moving.
+# | cd /boot/home/j
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum; sha256sum down1078
+# | ifconfig tap/0 up 2>/dev/null; ifconfig tap/0 | head -1
+# | (./down1078 2000 > down.out 2>&1; echo "down1078 exit=$?" >> down.out) &
+# | for i in $(seq 1 100); do sleep 5; grep -q "exit=\|HANG" down.out && break; done
+# | cat down.out
+# | ( ifconfig tap/0 | grep Receive ) & sleep 3; echo "(ifconfig tap/0 above if it returned within 3 s)"
+# ---- raw output ----
+fe211a39ebad17e6e5101c5eb3709059adce071262abf6786971f7f79c5f0b2b  down1078.c
+18b17623181d6c0fcf838235cf56a5fb9f5b5a18a626a69a28a0a4815375bb3f  down1078
+72749230fa6a5bafaaadd05bc89ac4848ecfb2e93f9c438cdfbca72c37cbd5c1  /boot/home/config/non-packaged/add-ons/kernel/network/datalink_protocols/ethernet_frame
+854e4a75a798d6cb339aaec08d8db88bef9c318172fa610b9d5934e856934f2e  /boot/home/config/non-packaged/add-ons/kernel/network/stack
+18b17623181d6c0fcf838235cf56a5fb9f5b5a18a626a69a28a0a4815375bb3f  down1078
+tap/0	Hardware type: Ethernet, Address: 32:18:e9:a7:1e:5e
+HANG at step down: no progress for 15 s (progress 1371, toggler starts 1290, frames written 9663)
+(ifconfig tap/0 above if it returned within 3 s)

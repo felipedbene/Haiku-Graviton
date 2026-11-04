@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: r4-R3-remove
+# instance: i-0cadaddcbd3af524c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: round 4, arm R3: capture vs ifconfig -d tap/0
+# start: 20261104T063820Z   end: 20261104T063836Z   rc: 0
+# script sha256: 05c7c0dc17ac975be5b15bfe0bd82c3fd39d4807c1f78b7c7e83e58c2dda67d0
+# ---- script ----
+# | # Round 4: down1078 remove mode with ifconfig -d (a capture must end when tap/0 is deleted)
+# | cd /boot/home/j && wget -q -O down1078.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/J/src4/down1078.c?<PRESIGNED>' && gcc -O2 -Wall -Wextra -Wno-unused-parameter -o down1078 down1078.c -lnetwork && sha256sum down1078.c down1078
+# | ifconfig tap/0 up 2>/dev/null; ifconfig tap/0 | head -1
+# | (./down1078 remove > remove.out 2>&1; echo "down1078 remove exit=$?" >> remove.out) &
+# | for i in $(seq 1 12); do sleep 2; grep -q "exit=" remove.out && break; done
+# | cat remove.out; ifconfig tap/0 2>&1 | head -1
+# ---- raw output ----
+d7b6a7b01d6e027622469c5ab7a93f2067f014588c88754397fc88cadcf98e0b  down1078.c
+ab28bf4157f9e0d76298fdd860d2494d45fb095c02dd31cd9ae58aa7f0626ab5  down1078
+tap/0	Hardware type: Ethernet, Address: c2:8c:9e:61:4e:66
+remove       PASS  capture = 0, a frame before = 1, ifconfig -d tap/0 = 0, capture ended within 3 s = 1
+RESULT failures=0
+down1078 remove exit=0
+tap/0	Interface not found!
