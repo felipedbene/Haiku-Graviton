@@ -1,0 +1,75 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1089f-step1089m
+# instance: i-0ba9894395cc23534   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1089f, step 1089m
+# start: 20261104T084157Z   end: 20261104T084208Z   rc: 0
+# script sha256: f3e881b0c2dff4b73883f182637729fa063ab3855b76c2aa4f7626efd820e664
+# ---- script ----
+# | # step 3b (#1089, the file-map case from the third review), arm c1089f: pm is a Linux file with
+# | # one preallocated extent across EOF (fallocate -n -l 1M, truncate -s 6K). Read it (so the file
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | # map caches the extent), then write 64 KiB at 512 KiB.
+# | dd if=/dev/urandom of=/boot/home/c64m bs=65536 count=1 2>/dev/null
+# | echo "c64m md5 $(md5sum < /boot/home/c64m)"
+# | mount -t ext2 $DD/0 /ex4k || exit 1
+# | cd /ex4k && ls -ls pm
+# | echo "pm read md5 $(md5sum < pm)  (6 KiB of zeros: $(head -c 6144 /dev/zero | md5sum))"
+# | dd if=/boot/home/c64m of=pm bs=65536 seek=8 conv=notrunc 2>&1 | tail -1; echo "pm write rc=$?"
+# | sync; ls -ls pm; cd /
+# | unmount /ex4k; echo "unmount x4k rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-7-19.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+dda80bad0e4e18f544827ce42611b1d13d9f7983005ce32a8a7440c053af66ee  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw 
+c64m md5 7d6066b76eeb30d5cbc2869d91c8fdb4  -
+1024 -rw-rw-rw- 1 baron root 6144 Nov  4 08:35 pm
+pm read md5 ff1ce2018aa17fe600fca636b126dbe4  -  (6 KiB of zeros: ff1ce2018aa17fe600fca636b126dbe4  -)
+65536 bytes (66 kB, 64 KiB) copied, 0.002233 s, 29.3 MB/s
+pm write rc=0
+576 -rw-rw-rw- 1 baron root 589824 Nov  4 08:41 pm
+unmount x4k rc=0
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 raw '
++ mkdir -p /ex4k /ex1k
++ dd if=/dev/urandom of=/boot/home/c64m bs=65536 count=1
+++ md5sum
++ echo 'c64m md5 7d6066b76eeb30d5cbc2869d91c8fdb4  -'
++ mount -t ext2 /dev/disk/nvme/1/0 /ex4k
++ cd /ex4k
++ ls -ls pm
+++ md5sum
+++ head -c 6144 /dev/zero
+++ md5sum
++ echo 'pm read md5 ff1ce2018aa17fe600fca636b126dbe4  -  (6 KiB of zeros: ff1ce2018aa17fe600fca636b126dbe4  -)'
++ dd if=/boot/home/c64m of=pm bs=65536 seek=8 conv=notrunc
++ tail -1
++ echo 'pm write rc=0'
++ sync
++ ls -ls pm
++ cd /
++ unmount /ex4k
++ echo 'unmount x4k rc=0'

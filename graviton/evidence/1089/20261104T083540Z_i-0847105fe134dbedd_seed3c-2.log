@@ -1,0 +1,49 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed3c-2
+# instance: i-0847105fe134dbedd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: add the pm file (preallocated extent across EOF) to the seed's x4k
+# start: 20261104T083540Z   end: 20261104T083551Z   rc: 0
+# script sha256: 11f63bbde2cdfdeb9782c759977b9f1c393a6c00f1fc6d89897e5e8abd447610
+# ---- script ----
+# | # (second pass: fallocate -n does not create the file) Add to the seed's x4k (p1) one more Linux-made file for #1089's file-map case (third review):
+# | #  pm   fallocate -n -l 1M, then truncate -s 6K: one preallocated extent that crosses EOF
+# | #       -> Haiku reads it, then writes 64 KiB at 512 KiB
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0e298e160ef60b0f1 '$9 == v { print $11 }' | sed 's|.*/||')
+# | P=/dev/${D}p
+# | mkdir -p /opt/seed3/m && mount ${P}1 /opt/seed3/m || exit 1
+# | cd /opt/seed3/m && : > pm && fallocate -n -l 1M pm && truncate -s 6K pm && chmod 666 pm && sync && ls -ls pm && filefrag -v pm | sed -n '4,6p'
+# | cd /; umount /opt/seed3/m
+# | e2fsck -fn ${P}1; echo "e2fsck p1 rc=$?"
+# ---- raw output ----
+1024 -rw-rw-rw- 1 root root 6144 Nov  4 08:35 pm
+   0:        0..     255:       5814..      6069:    256:             last,unwritten,eof
+pm: 1 extent found
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+x4k: 18/89760 files (11.1% non-contiguous), 69926/358400 blocks
+e2fsck p1 rc=0
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0e298e160ef60b0f1 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ P=/dev/nvme1n1p
++ mkdir -p /opt/seed3/m
++ mount /dev/nvme1n1p1 /opt/seed3/m
++ cd /opt/seed3/m
++ :
++ fallocate -n -l 1M pm
++ truncate -s 6K pm
++ chmod 666 pm
++ sync
++ ls -ls pm
++ filefrag -v pm
++ sed -n 4,6p
++ cd /
++ umount /opt/seed3/m
++ e2fsck -fn /dev/nvme1n1p1
+e2fsck 1.47.0 (5-Feb-2023)
++ echo 'e2fsck p1 rc=0'

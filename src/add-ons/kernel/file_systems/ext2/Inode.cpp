@@ -392,8 +392,12 @@ Inode::Resize(Transaction& transaction, off_t size)
 
 	off_t oldSize = Size();
 
-	if (size == oldSize)
+	// Resizing an empty file to 0 still has work to do when Linux
+	// preallocated blocks past its end; remove_vnode() relies on that.
+	if (size == oldSize && (size != 0 || !IsFile()
+			|| (Flags() & EXT2_INODE_EXTENTS) == 0)) {
 		return B_OK;
+	}
 
 	TRACE("Inode::Resize(): old size: %" B_PRIdOFF ", new size: %" B_PRIdOFF
 		"\n", oldSize, size);
@@ -412,6 +416,13 @@ Inode::Resize(Transaction& transaction, off_t size)
 		return status;
 
 	file_cache_set_size(FileCache(), size);
+	if (size > oldSize && (Flags() & EXT2_INODE_EXTENTS) != 0) {
+		// The file map may hold runs that reached past the old end of the
+		// file (an extent, or a hole, up to preallocated blocks there) that
+		// growing it just gave back or remapped.
+		off_t start = oldSize & ~(off_t)(fVolume->BlockSize() - 1);
+		file_map_invalidate(Map(), start, size - start);
+	}
 	file_map_set_size(Map(), size);
 
 	TRACE("Inode::Resize(): Writing back inode changes. Size: %" B_PRIdOFF
@@ -910,8 +921,13 @@ Inode::_EnlargeDataStream(Transaction& transaction, off_t size)
 	// i_blocks counts every block the inode owns, in 512-byte units: data,
 	// indirect or extent tree blocks, and an extended attribute block. It
 	// can't be derived from the size, so it is adjusted by what changed.
-	status_t countStatus = _SetNumBlocks(NumBlocks()
-		+ added * (fVolume->BlockSize() / 512));
+	// "added" can be negative when blocks preallocated past the end of the
+	// file were given back; don't let a count that was already too low
+	// wrap around.
+	uint64 numBlocks = NumBlocks();
+	int64 change = added * (fVolume->BlockSize() / 512);
+	status_t countStatus = _SetNumBlocks(change < 0
+		&& (uint64)-change > numBlocks ? 0 : numBlocks + change);
 	if (status != B_OK) {
 		// The stream has undone its part. Keep the old size: a size past
 		// the mapped blocks would have the page writer look up blocks that

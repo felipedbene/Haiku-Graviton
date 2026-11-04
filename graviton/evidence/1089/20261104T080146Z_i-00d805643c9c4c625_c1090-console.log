@@ -1,0 +1,46 @@
+# evidence: c1090-console (box stopped answering after step 1089)
+# instance: i-00d805643c9c4c625   region: us-west-2   transport: ec2 get-console-output --latest
+# ---- raw output ----
+io-interrupt: vector 1022 assigned to CPU 7
+io-interrupt: vector 1023 assigned to CPU 0
+ena: interrupt moderation feature not advertised
+ena: interrupt delay resolution 0; rx interval 20, tx interval 50
+ena: first management interrupt delivered
+ena: link is up
+ena: creating queue pair: tx depth 512, rx depth 1024, msix vector 1, tx placement device, tx max header 224
+ena: cdesc sizes: tx 8 bytes (2 words), rx 16 bytes (4 words)
+ena: set device MTU 9001 after queue creation (matching what we report to the stack): ok
+ena: device reset completed in 30 ms (reset #1); interrupts since: 13 management, 0 io
+ena: first io interrupt delivered
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+PANIC: sparse write attempt: vnode 0xffff000000e80580
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 496 "sync" running on CPU 7
+iframe 0xffff0000dcb50cc7 (end = 0xffff0000dcb50fff)
+stack trace for thread 0x1f0 "sync"
+    kernel stack: 0xffff0000dcb4c000 to 0xffff0000dcb51000
+      user stack: 0x000001b59f247000 to 0x000001b5a3247000
+frame            caller     <image>:function + offset
+ 0 ffff0000dcb4ff00 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000dcb4ff50 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000dcb4ffc0[0m [36m"�"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000dcb4ffc0 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff0000dcb50080[0m [36m"���"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�@C���"[0m, std::__va_list: [34m0x1b9310[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff0000dcb50080 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000dcb501a0 (+ 288) ffff00000012c894   <kernel_arm64> common_file_io_vec_pages(vnode*: [34m0xffff0000dcb502f0[0m, void*: [34m0xffff000000139378[0m, file_io_vec const*: [34m0xffff0000de3a3bd0[0m, uint64: [34m0xffff0000dcb50400[0m, iovec const*: [34m0x1[0m, uint64: [34m0xffff0000dcb50490[0m, unsigned int*: [34m0xffff0000dcb503f8[0m, unsigned long*: [34m0x1[0m, unsigned long*: [34m0xffff0000dcb503e8[0m, [34mtrue[0m) + 0x4d4
+ 5 ffff0000dcb502f0 (+ 336) ffff000000139378   <kernel_arm64> write_file_io_vec_pages + 0x88
+ 6 ffff0000dcb50350 (+  96) ffff0000023f3b48   <ext2> ext2_write_pages(fs_volume*: [34m0xffff0000dcb50480[0m, fs_vnode*: [34m0xffff000000143acc[0m, void*: [34m0x0[0m, int64: [34m1048576[0m, iovec const*: [34m0xffff0000dcb50550[0m, uint64: [34m0xffff0000dd030f00[0m, unsigned long*: [34m0xffff0000dcb50508[0m) + 0xbc
+ 7 ffff0000dcb50480 (+ 304) ffff000000143acc   <kernel_arm64> VnodeIO<[32m0xdcb504a0[0m>::IO(int64: [34m5291438363312128[0m, void*: [34m0x675000ffff0000[0m, unsigned long*: [34m0x21000ffff0000[0m) + 0x4c
+ 8 ffff0000dcb504a0 (+  32) ffff00000012cc88   <kernel_arm64> synchronous_io(IORequest*: [34m0xffff0000dcb50520[0m, DoIO&: [34m0xffff000000140e48[0m) + 0x60
+ 9 ffff0000dcb50520 (+ 128) ffff000000140e48   <kernel_arm64> vfs_vnode_io.localalias + 0x88
+10 ffff0000dcb50580 (+  96) ffff0000001417b4   <kernel_arm64> vfs_write_pages + 0xac
+11 ffff0000dcb506f0 (+ 368) ffff00000016fefc   <kernel_arm64> PageWriteTransfer<[32m0xdcb50720[0m>::Schedule[clone .localalias] (uint32: [34m0xffff0000[0m) + 0x6c
+12 ffff0000dcb50720 (+  48) ffff000000170960   <kernel_arm64> vm_page_write_modified_page_range.localalias + 0x47c
+13 ffff0000dcb50a30 (+ 784) ffff00000017a9c8   <kernel_arm64> VMCache<[32m0xdcb50a50[0m>::WriteModified() + 0x3c
+14 ffff0000dcb50a50 (+  32) ffff000000131dac   <kernel_arm64> fs_sync(int32: [34m-592114864[0m) + 0x3cc
+15 ffff0000dcb50b50 (+ 256) ffff00000013c808   <kernel_arm64> _kern_sync.localalias + 0x28
+16 ffff0000dcb50ba0 (+  80) ffff0000000a7188   <kernel_arm64> syscall_dispatcher + 0x12b8
+17 ffff0000dcb50bd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+18 ffff0000dcb50cc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff0000dcb50cc7
+ELR=0000008d4adae550 SPSR=0000000060000000
+LR =000000c70339ee0c SP  =000001b5a3246f40 FP =000001b5a3246f40
