@@ -1,0 +1,21 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-rename-setup
+# instance: i-044c57ef03f61211b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: incidental: fresh copies for the rename-over-existing check
+# start: 20261104T152541Z   end: 20261104T152553Z   rc: 0
+# script sha256: cbd75c7335dd4b57b8e50fbfe8e41552c72cdfa187de09cd21b6bb68ec221f8e
+# ---- script ----
+# | # Incidental (found by the after arm's KDL): does a rename over an existing file panic the trunk
+# | # ntfs driver too? Register two fresh copies for the next command.
+# | cd /boot/home/t1115 || exit 1
+# | for x in r3 r4; do cp ntfs.img $x.img && diskimage register /boot/home/t1115/$x.img; done
+# | diskimage list
+# ---- raw output ----
+Registered file as disk device "/dev/disk/virtual/files/5/raw" with ID 5.
+Registered file as disk device "/dev/disk/virtual/files/6/raw" with ID 6.
+    ID  File                               Device
+-------------------------------------------------------------------------------
+     3  /boot/home/t1115/n1.img            /dev/disk/virtual/files/3/raw
+     4  /boot/home/t1115/n2.img            /dev/disk/virtual/files/4/raw
+     5  /boot/home/t1115/r3.img            /dev/disk/virtual/files/5/raw
+     6  /boot/home/t1115/r4.img            /dev/disk/virtual/files/6/raw

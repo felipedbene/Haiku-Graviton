@@ -1,0 +1,205 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-run
+# instance: i-044c57ef03f61211b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: before arm: unmount1115 x2 (5 cycles each), regression matrices, unmount, syslog
+# start: 20261104T145341Z   end: 20261104T145410Z   rc: 0
+# script sha256: d8ed74138e5cf1b1de68eb51036b74e487ae1ebcca0f1782f3e5929348d1e58f
+# ---- script ----
+# | # #1115 run (group W): unmount1115 with 5 cycles on n1, then a second, separate 5-cycle pass on
+# | # the same device (repeat); then the regression matrices on n2 (silent967, chmod967, atime933,
+# | # coreutils967), followed by an unmount of n2 with retries. Syslog "still referenced" lines last.
+# | cd /boot/home/t1115 || exit 1
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ntfs
+# | listimage 1 | grep -E "file_systems/ntfs"
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | echo "=== unmount1115, pass 1"; bash ./unmount1115.sh $(dev n1) /n1 5; echo "unmount1115 pass1 rc=$?"
+# | echo "=== unmount1115, pass 2"; bash ./unmount1115.sh $(dev n1) /n1 5; echo "unmount1115 pass2 rc=$?"
+# | echo "=== regressions on n2"
+# | mkdir -p /n2 && mount -t ntfs $(dev n2) /n2; echo "mount n2 rc=$?"
+# | mkdir /n2/s967 /n2/m967 /n2/a933
+# | ./silent967 /n2/s967 | grep -E "^FAIL|SUMMARY"; echo "silent967 rc=${PIPESTATUS[0]}"
+# | ./chmod967 /n2/m967 | grep -E "^FAIL|SUMMARY"; echo "chmod967 rc=${PIPESTATUS[0]}"
+# | ./atime933 /n2/a933 | grep -E "^FAIL|SUMMARY"; echo "atime933 rc=${PIPESTATUS[0]}"
+# | bash ./coreutils967.sh /n2 2>&1 | grep -E "rc="
+# | cd /; ok=no; for t in 1 2 3 4 5; do unmount /n2 2>/dev/null && { ok=yes; break; }; sleep 2; done; echo "unmount n2 after the regression matrices: $ok (attempt $t)"
+# | echo "=== syslog"; grep -E "still referenced" /var/log/syslog | tail -5; echo "still-referenced lines: $(grep -c 'still referenced' /var/log/syslog)"
+# ---- raw output ----
+1b55370d495b142fcb7d3ab4fdae1f4ca3e4f3ffe99f6e5e087f6fdce6022dca  /boot/system/kernel_arm64
+39cf1fda644339cf89a59756d5aeea075a200817925568b1fc85996192cbdc43  /boot/system/add-ons/kernel/file_systems/ntfs
+ 3795 0xffff0000dcb01000 0xffff0000dcb50000     0          0 /boot/system/add-ons/kernel/file_systems/ntfs
+=== unmount1115, pass 1
+== cycle 1
+     [c1 idle] workload rc=0
+PASS unmount after [c1 idle] (attempt 1)
+     [c1 mkdir] workload rc=0
+FAIL unmount after [c1 mkdir]: still busy after 5 attempts
+FAIL mount for [c1 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c1 create]: mount: Device/File/Resource busy
+FAIL mount for [c1 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c1 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c1 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c1 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c1 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c1 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c1 cp -r tree]: mount: Device/File/Resource busy
+== cycle 2
+FAIL mount for [c2 idle]: mount: Device/File/Resource busy
+FAIL mount for [c2 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c2 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c2 create]: mount: Device/File/Resource busy
+FAIL mount for [c2 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c2 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c2 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c2 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c2 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c2 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c2 cp -r tree]: mount: Device/File/Resource busy
+== cycle 3
+FAIL mount for [c3 idle]: mount: Device/File/Resource busy
+FAIL mount for [c3 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c3 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c3 create]: mount: Device/File/Resource busy
+FAIL mount for [c3 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c3 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c3 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c3 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c3 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c3 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c3 cp -r tree]: mount: Device/File/Resource busy
+== cycle 4
+FAIL mount for [c4 idle]: mount: Device/File/Resource busy
+FAIL mount for [c4 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c4 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c4 create]: mount: Device/File/Resource busy
+FAIL mount for [c4 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c4 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c4 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c4 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c4 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c4 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c4 cp -r tree]: mount: Device/File/Resource busy
+== cycle 5
+FAIL mount for [c5 idle]: mount: Device/File/Resource busy
+FAIL mount for [c5 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c5 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c5 create]: mount: Device/File/Resource busy
+FAIL mount for [c5 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c5 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c5 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c5 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c5 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c5 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c5 cp -r tree]: mount: Device/File/Resource busy
+== final check
+FAIL mount for [final]: mount: Device/File/Resource busy
+SUMMARY rounds=55 failures=55
+unmount1115 pass1 rc=55
+=== unmount1115, pass 2
+== cycle 1
+FAIL mount for [c1 idle]: mount: Device/File/Resource busy
+FAIL mount for [c1 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c1 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c1 create]: mount: Device/File/Resource busy
+FAIL mount for [c1 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c1 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c1 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c1 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c1 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c1 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c1 cp -r tree]: mount: Device/File/Resource busy
+== cycle 2
+FAIL mount for [c2 idle]: mount: Device/File/Resource busy
+FAIL mount for [c2 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c2 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c2 create]: mount: Device/File/Resource busy
+FAIL mount for [c2 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c2 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c2 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c2 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c2 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c2 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c2 cp -r tree]: mount: Device/File/Resource busy
+== cycle 3
+FAIL mount for [c3 idle]: mount: Device/File/Resource busy
+FAIL mount for [c3 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c3 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c3 create]: mount: Device/File/Resource busy
+FAIL mount for [c3 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c3 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c3 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c3 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c3 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c3 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c3 cp -r tree]: mount: Device/File/Resource busy
+== cycle 4
+FAIL mount for [c4 idle]: mount: Device/File/Resource busy
+FAIL mount for [c4 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c4 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c4 create]: mount: Device/File/Resource busy
+FAIL mount for [c4 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c4 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c4 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c4 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c4 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c4 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c4 cp -r tree]: mount: Device/File/Resource busy
+== cycle 5
+FAIL mount for [c5 idle]: mount: Device/File/Resource busy
+FAIL mount for [c5 mkdir]: mount: Device/File/Resource busy
+FAIL mount for [c5 mkdir+rmdir]: mount: Device/File/Resource busy
+FAIL mount for [c5 create]: mount: Device/File/Resource busy
+FAIL mount for [c5 create+unlink]: mount: Device/File/Resource busy
+FAIL mount for [c5 mkdir -p + files]: mount: Device/File/Resource busy
+FAIL mount for [c5 rename file]: mount: Device/File/Resource busy
+FAIL mount for [c5 rename dir]: mount: Device/File/Resource busy
+FAIL mount for [c5 symlink (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c5 hard link (unsupported)]: mount: Device/File/Resource busy
+FAIL mount for [c5 cp -r tree]: mount: Device/File/Resource busy
+== final check
+FAIL mount for [final]: mount: Device/File/Resource busy
+SUMMARY rounds=55 failures=56
+unmount1115 pass2 rc=56
+=== regressions on n2
+mount n2 rc=0
+FAIL root    chmod(same)           -> errno-2147459058 (expect ok    ) asked 000666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    chmod(other)          -> errno-2147459058 (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    chmod(0600)           -> errno-2147459058 (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    fchmod(0600)          -> errno-2147459058 (expect ok    ) asked 000600    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    fchmodat(other)       -> errno-2147459058 (expect ok    ) asked 000664    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    chmod(same|S_ISUID)   -> errno-2147459058 (expect ok    ) asked 004666    mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    dir chmod(same)       -> errno-2147459058 (expect ok    ) asked 000777    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793804035 ctime same
+FAIL root    dir chmod(other)      -> errno-2147459058 (expect ok    ) asked 000775    mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793804035 ctime same
+FAIL root    chown(1002,-1)        -> errno-2147459058 (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    chown(-1,1002)        -> errno-2147459058 (expect ok    ) asked -1:1002   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    chown(1002,1002)      -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    fchown(1002,1002)     -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    lchown(1002,-1)       -> errno-2147459058 (expect ok    ) asked 1002:-1   mode 100666->100666 uid 0->0 gid 0->0 size 1 mtime 1793804035 ctime same
+FAIL root    dir chown(1002,1002)  -> errno-2147459058 (expect ok    ) asked 1002:1002 mode 040777->040777 uid 0->0 gid 0->0 size 0 mtime 1793804035 ctime same
+SUMMARY cases=38 failures=14
+silent967 rc=14
+FAIL root    chmod(same)          -> errno-2147459058 (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793804035
+FAIL root    fchmod(same)         -> errno-2147459058 (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793804035
+FAIL root    fchmodat(same)       -> errno-2147459058 (expect ok    ) mode 100666->100666 (asked 000666) size 1 mtime 1793804035
+FAIL root    dir chmod(same)      -> errno-2147459058 (expect ok    ) mode 040777->040777 (asked 000777) size 0 mtime 1793804035
+SUMMARY cases=16 failures=4 refused-by-fs=3
+chmod967 rc=4
+FAIL root      chmod(same mode)     -> Operation not supported (expect ok    ) atime 1000000000.000000000 mtime 1000000000.000000000 ctime 1793804035 size 1 mode 0666 uid 0
+SUMMARY cases=44 failures=1 errno-notes=0 unsupported=2
+atime933 rc=1
+chmod 0600 rc=1
+chmod 0666 rc=1
+chmod u+x rc=1
+install -m 0644 rc=1
+install -m 0755 rc=1
+install -d -m 0700 rc=1
+mkdir -m 0700 rc=1
+chown 1002 rc=1
+chown 1002:1002 rc=1
+chgrp 1002 rc=1
+chown 0:0 rc=0
+cp -p (0644 source) rc=1
+unmount n2 after the regression matrices: no (attempt 5)
+=== syslog
+KERN: fs_unmount(): inode 64 is still referenced
+KERN: fs_unmount(): inode 64 is still referenced
+still-referenced lines: 2

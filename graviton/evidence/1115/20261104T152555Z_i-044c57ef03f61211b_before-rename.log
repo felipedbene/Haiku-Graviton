@@ -1,0 +1,19 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-rename
+# instance: i-044c57ef03f61211b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: incidental: rename over an existing file on the trunk driver, same mount and after a remount
+# start: 20261104T152555Z   end: 20261104T153103Z   rc: 1
+# script sha256: 762a29f6656f8627dda18302529311f37656acbdf3f44bab9b82c9d912c3b259
+# ---- script ----
+# | # Case A: create a and b, mv a b, in one mount. Case B: create a and b, unmount, remount,
+# | # mv a b (fresh vnode cache). No mkdir anywhere, so the trunk driver can unmount.
+# | set -x
+# | cd /boot/home/t1115 || exit 1
+# | dev() { diskimage list | awk "/$1.img/ {print \$3}"; }
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ntfs
+# | mkdir -p /r3 /r4
+# | mount -t ntfs $(dev r3) /r3 && echo A > /r3/a && echo B > /r3/b && sync && mv /r3/a /r3/b; echo "case A (same mount) mv rc=$?"; cat /r3/b
+# | mount -t ntfs $(dev r4) /r4 && echo A > /r4/a && echo B > /r4/b && sync; cd /; sleep 3; unmount /r4; echo "unmount rc=$?"
+# | mount -t ntfs $(dev r4) /r4; echo "remount rc=$?"
+# | mv /r4/a /r4/b; echo "case B (after remount) mv rc=$?"; cat /r4/b
+# ---- raw output ----
