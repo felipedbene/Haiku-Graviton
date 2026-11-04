@@ -174,7 +174,11 @@ ethernet_frame_send_data(net_datalink_protocol* protocol, net_buffer* buffer)
 		// is refused, as only one receiver can own a type. The type comes
 		// with each frame's destination, as the sockaddr_dl given to
 		// sendto().
-		if (destination.sdl_family != AF_LINK
+		// The destination must reach at least past these fields: what
+		// lies beyond a short sendto() address is left over from an earlier
+		// buffer, and a broadcast send never checks its address below.
+		if (destination.sdl_len < offsetof(sockaddr_dl, sdl_data)
+			|| destination.sdl_family != AF_LINK
 			|| destination.sdl_type != IFT_ETHER)
 			return B_BAD_VALUE;
 		type = destination.sdl_e_type;
