@@ -1,0 +1,60 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stock-dupwin
+# instance: i-05fe5395bb180ec7f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T055823Z   end: 20261104T055841Z   rc: 0
+# script sha256: de149c776b4ff49ef7a308e0c8472002560146ca4d22b6b646a45b69e88cfd84
+# ---- script ----
+# | set -u
+# | P=10.128.5.103
+# | mkdir -p /tmp/t975b && cd /tmp/t975b
+# | if command -v wget >/dev/null; then wget -q -O tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/rv/src/tcp975.c?<PRESIGNED>'; else curl -sSf -o tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/rv/src/tcp975.c?<PRESIGNED>'; fi || exit 4
+# | echo 'de90d3b3511c9ee62a6fe82c0e0563322f80e60aedbda4cd3ef4d1864170d5d3  tcp975.c' | sha256sum -c || exit 5
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	gcc -O2 -Wall -o tcp975 tcp975.c -lnetwork || exit 6
+# | 	find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum; listimage 1 | grep -E 'protocols/tcp'
+# | 	IF=/dev/net/ena/0; setmtu() { ifconfig $IF mtu $1; }
+# | else
+# | 	gcc -O2 -Wall -o tcp975 tcp975.c || exit 6
+# | 	IF=$(ip -o route get $P | awk '{print $3}'); setmtu() { ip link set dev $IF mtu $1; }
+# | fi
+# | sha256sum tcp975
+# | setmtu 1500; sleep 3
+# | for m in dupack3 winupd3 dupack3 winupd3; do
+# | 	echo "=== $m"
+# | 	./tcp975 $P 9761 9762 $m 60 2>&1 | grep -v 'control: COUNT'
+# | done
+# | setmtu 9001
+# ---- raw output ----
+tcp975.c: OK
+Haiku ip-10-128-7-228.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+ 2083 0xffff0000023dc000 0xffff0000023ee000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+2b7f72eb11a7d1b5c91ae95364fb699ffe7b1b2f0e8b0635598020e36e778f7b  tcp975
+=== dupack3
+  [05:58:29Z dupack3] connected from port 
+  local port 45092
+  [05:58:29Z dupack3] control: DROP 45092
+  [05:58:30Z dupack3] control: INJECT 45092 dup3
+INJECTED 05:58:30 after 262144 bytes queued: OK seq 3797170081 ack 159403884 win 62,62,62
+RESULT dupack3 DONE see the capture for segments after the injection
+=== winupd3
+  [05:58:32Z winupd3] connected from port 
+  local port 45133
+  [05:58:32Z winupd3] control: DROP 45133
+  [05:58:32Z winupd3] control: INJECT 45133 win3
+INJECTED 05:58:32 after 262144 bytes queued: OK seq 2948849161 ack 159537485 win 63,64,65
+RESULT winupd3 DONE see the capture for segments after the injection
+=== dupack3
+  [05:58:34Z dupack3] connected from port 
+  local port 45170
+  [05:58:34Z dupack3] control: DROP 45170
+  [05:58:34Z dupack3] control: INJECT 45170 dup3
+INJECTED 05:58:34 after 262144 bytes queued: OK seq 2266298800 ack 159670329 win 62,62,62
+RESULT dupack3 DONE see the capture for segments after the injection
+=== winupd3
+  [05:58:36Z winupd3] connected from port 
+  local port 45212
+  [05:58:36Z winupd3] control: DROP 45212
+  [05:58:36Z winupd3] control: INJECT 45212 win3
+INJECTED 05:58:36 after 262144 bytes queued: OK seq 3486656909 ack 159803164 win 63,64,65
+RESULT winupd3 DONE see the capture for segments after the injection
