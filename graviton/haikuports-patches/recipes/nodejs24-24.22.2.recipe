@@ -19,7 +19,9 @@ SOURCE_DIR="node-v$portVersion"
 # 24.22.2: the same hunks, only line offsets moved (claude-code PATCHES.md).
 # nodejs-$portVersion-debeos.patchset (DeBeOS, on top of HaikuPorts'): V8's CPU-profiler
 # sampler reads Haiku arm64 registers; ResetSignalHandlers keeps SIGPIPE ignored and skips
-# SIGKILLTHR; SIGKILLTHR has a name; os.cpus() returns the CPUs again (issue 917).
+# SIGKILLTHR; SIGKILLTHR has a name; os.cpus() returns the CPUs again (issue 917); and
+# upstream's deflake of test-perf-hooks-sliding-window-histogram (issue 997, test-only,
+# so the built package is unchanged and REVISION stays 1).
 # Root-caused in claude-code RESULTS.md (Node suites) and graviton/evidence/917/.
 PATCHES="nodejs-$portVersion.patchset
 	nodejs-$portVersion-debeos.patchset"
