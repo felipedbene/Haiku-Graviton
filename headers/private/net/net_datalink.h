@@ -115,6 +115,9 @@ struct net_datalink_module_info {
 						net_route_info* info);
 	status_t		(*update_route_info)(net_domain* domain,
 						net_route_info* info);
+
+	net_route*		(*get_route_through_interface)(net_domain* domain,
+						const struct sockaddr* address, uint32 interfaceIndex);
 };
 
 #define NET_ADDRESS_MODULE_FLAG_BROADCAST_ADDRESS		0x01

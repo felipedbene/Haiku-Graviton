@@ -1056,7 +1056,9 @@ net_datalink_module_info gNetDatalinkModule = {
 	put_route,
 	register_route_info,
 	unregister_route_info,
-	update_route_info
+	update_route_info,
+
+	get_route_through_interface
 };
 
 net_datalink_protocol_module_info gDatalinkInterfaceProtocolModule = {
