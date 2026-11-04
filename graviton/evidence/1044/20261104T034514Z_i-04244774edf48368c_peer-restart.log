@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: peer-restart
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T034514Z   end: 20261104T034531Z   rc: 0
+# script sha256: 09f71c23f86cd702f3ef792f3c07cc62526f9163de3babffe17d37a1eb4798e6
+# ---- script ----
+# | export HOME=/root
+# | cd /opt/t975
+# | aws s3 cp --quiet s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/C/975/src/tcp975-peer.py tcp975-peer.py
+# | sha256sum tcp975-peer.py
+# | pkill -TERM -f 'tcp975-peer.py 9751'; sleep 2
+# | echo "DROP rules left: $(iptables -S | grep -c DROP)"
+# | nohup python3 -I /opt/t975/tcp975-peer.py 9751 9752 > /opt/t975/peer2.log 2>&1 &
+# | pkill -INT -f 't975-run2.pcap'; sleep 1
+# | nohup tcpdump -i any -nn -s 96 -B 16384 -U -w /opt/t975/t975-run3.pcap 'tcp port 9751' > /opt/t975/tcpdump3.log 2>&1 &
+# | sleep 2; ss -ltnp | grep -E '975[12]'; ps aux | grep '[t]cpdump' | wc -l
+# | echo PEER-UP
+# ---- raw output ----
+258d53de46c9183c7588c6ccc3ae1ac0d5b72c3177bbff7e1732df6b7893e75a  tcp975-peer.py
+DROP rules left: 0
+LISTEN 0      64           0.0.0.0:9752      0.0.0.0:*    users:(("python3",pid=9856,fd=5))        
+LISTEN 0      64           0.0.0.0:9751      0.0.0.0:*    users:(("python3",pid=9856,fd=3))        
+1
+PEER-UP

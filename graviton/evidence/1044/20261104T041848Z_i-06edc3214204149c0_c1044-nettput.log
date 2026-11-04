@@ -1,0 +1,45 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1044-nettput
+# instance: i-06edc3214204149c0   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T041848Z   end: 20261104T041917Z   rc: 0
+# script sha256: af48faa4be3b6bcf597b4ae2b1735192aa13a6012c26a448c4de1970a9c5c5da
+# ---- script ----
+# | # nettput-run's matrix (MTU 9001 and 1500, transmit and receive, 3 reps, 256M),
+# | # driven over SSM on the Haiku node because nettput-run needs a key on the peer.
+# | set -u
+# | P=10.128.5.190; IF=/dev/net/ena/0
+# | uname -a
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | listimage 1 | grep -E 'protocols/tcp'
+# | for mtu in 9001 1500; do
+# | 	ifconfig $IF mtu $mtu; sleep 3
+# | 	echo "=== MTU $(ifconfig $IF | sed -n 's/.*MTU: *\([0-9]*\).*/\1/p' | head -1)"
+# | 	for rep in 1 2 3; do
+# | 		for dir in transmit receive; do
+# | 			flag=""; [ $dir = receive ] && flag="-r"
+# | 			out=$(nettput -c $P -p 9753 -n 256M $flag -L "mtu $mtu" 2>&1)
+# | 			rate=$(printf '%s' "$out" | sed -n 's/.*throughput *: *\([0-9.]*\) Mbit.*/\1/p' | head -1)
+# | 			echo "CELL $mtu $dir $rep ${rate:-FAILED}"
+# | 			[ -n "$rate" ] || printf '%s\n' "$out" | tail -5
+# | 		done
+# | 	done
+# | done
+# | ifconfig $IF mtu 9001
+# ---- raw output ----
+Haiku ip-10-128-7-122.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+63b4e8ae6fdaf2d343d6d8a26273e2ca8f369962a3475d5cca6c32546612696c  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+ 2061 0xffff0000023bd000 0xffff0000023d0000     0          0 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+=== MTU 9001
+CELL 9001 transmit 1 4959.9
+CELL 9001 receive 1 4788.5
+CELL 9001 transmit 2 4952.9
+CELL 9001 receive 2 4191.1
+CELL 9001 transmit 3 4963.3
+CELL 9001 receive 3 4729.5
+=== MTU 1500
+CELL 1500 transmit 1 3362.8
+CELL 1500 receive 1 660.3
+CELL 1500 transmit 2 3427.5
+CELL 1500 receive 2 663.8
+CELL 1500 transmit 3 3337.7
+CELL 1500 receive 3 651.8

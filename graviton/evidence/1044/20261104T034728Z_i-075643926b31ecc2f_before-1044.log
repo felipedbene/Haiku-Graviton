@@ -1,0 +1,83 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-1044
+# instance: i-075643926b31ecc2f   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T034728Z   end: 20261104T041737Z   rc: 137
+# script sha256: d80fd0587bb327e301243346055880831ead9572b544ff3b1ea1c7be6df49aef
+# ---- script ----
+# | set -u
+# | P=10.128.5.190
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	NS="netstat -n -t"
+# | 	echo "--- non-packaged overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	echo "--- loaded tcp image"; listimage 1 | grep -E 'protocols/tcp'
+# | else
+# | 	NS="ss -tn"
+# | 	sysctl net.ipv4.tcp_retries2
+# | fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 $P 9751 9752 reopen 300 > out.reopen 2>&1 &
+# | ./tcp975 $P 9751 9752 zerodead 1200 > out.zerodead 2>&1 &
+# | sleep 5
+# | while [ -n "$(jobs -r)" ]; do
+# | 	echo "$(date -u +%H:%M:%SZ) $($NS | grep -c ':9751') connections to :9751"
+# | 	$NS | grep ':9751' | sed 's/^/    /'
+# | 	sleep 120
+# | done
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | for m in reopen zerodead; do echo "=== $m"; cat out.$m; done
+# | sleep 5
+# | echo "$($NS | grep -c ':9751') connections to :9751 left"
+# | grep RESULT out.reopen out.zerodead | sed 's/^/SUMMARY /'
+# ---- raw output ----
+Haiku ip-10-128-5-111.us-west-2.compu R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+--- non-packaged overrides
+--- loaded tcp image
+ 2063 0xffff0000022f1000 0xffff000002303000     0          0 /boot/system/add-ons/kernel/network/protocols/tcp
+da700fe02516bb47f5c9f4b0490ddc0f06786889caf76eae3d96f3c4dee2f0ce  tcp975
+start 2026-11-04T03:47:32Z
+03:47:37Z 2 connections to :9751
+    tcp         0 250123 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 208271 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+03:49:37Z 2 connections to :9751
+    tcp         0 250123 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+03:51:37Z 2 connections to :9751
+    tcp         0 250123 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+03:53:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+03:55:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+03:57:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+03:59:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+04:01:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+04:03:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+04:05:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+04:07:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   established  1505/tcp975
+04:09:37Z 2 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+    tcp         0 262144 [10.128.5.111]:47718  [10.128.5.190]:9751   fin-wait1    1505
+04:11:37Z 1 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+04:13:37Z 1 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975
+04:15:37Z 1 connections to :9751
+    tcp         0 262144 [10.128.5.111]:47697  [10.128.5.190]:9751   established  1504/tcp975

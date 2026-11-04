@@ -1,0 +1,79 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-1044
+# instance: i-0326340f34287e009   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T034728Z   end: 20261104T040951Z   rc: 0
+# script sha256: d80fd0587bb327e301243346055880831ead9572b544ff3b1ea1c7be6df49aef
+# ---- script ----
+# | set -u
+# | P=10.128.5.190
+# | cd /boot/home/tw 2>/dev/null || cd /opt/t975 || exit 3
+# | uname -a
+# | if [ -d /boot/system ]; then
+# | 	NS="netstat -n -t"
+# | 	echo "--- non-packaged overrides"; find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs -r sha256sum
+# | 	echo "--- loaded tcp image"; listimage 1 | grep -E 'protocols/tcp'
+# | else
+# | 	NS="ss -tn"
+# | 	sysctl net.ipv4.tcp_retries2
+# | fi
+# | sha256sum tcp975
+# | date -u +"start %Y-%m-%dT%H:%M:%SZ"
+# | ./tcp975 $P 9751 9752 reopen 300 > out.reopen 2>&1 &
+# | ./tcp975 $P 9751 9752 zerodead 1200 > out.zerodead 2>&1 &
+# | sleep 5
+# | while [ -n "$(jobs -r)" ]; do
+# | 	echo "$(date -u +%H:%M:%SZ) $($NS | grep -c ':9751') connections to :9751"
+# | 	$NS | grep ':9751' | sed 's/^/    /'
+# | 	sleep 120
+# | done
+# | wait
+# | date -u +"end %Y-%m-%dT%H:%M:%SZ"
+# | for m in reopen zerodead; do echo "=== $m"; cat out.$m; done
+# | sleep 5
+# | echo "$($NS | grep -c ':9751') connections to :9751 left"
+# | grep RESULT out.reopen out.zerodead | sed 's/^/SUMMARY /'
+# ---- raw output ----
+Linux ip-10-128-5-70 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+net.ipv4.tcp_retries2 = 15
+f62897245e1f962ada60c92c878153b71fa82f4ea06bb8c9ad282163ccd69910  tcp975
+start 2026-11-04T03:47:32Z
+03:47:37Z 2 connections to :9751
+    ESTAB 0      804031   10.128.5.70:57222 10.128.5.190:9751       
+    ESTAB 0      540449   10.128.5.70:57228 10.128.5.190:9751       
+03:49:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228   10.128.5.190:9751       
+03:51:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+03:53:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+03:55:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+03:57:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+03:59:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228   10.128.5.190:9751       
+04:01:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+04:03:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+04:05:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+04:07:37Z 1 connections to :9751
+    ESTAB 0      779989   10.128.5.70:57228 10.128.5.190:9751       
+end 2026-11-04T04:09:37Z
+=== reopen
+  [03:47:32Z reopen] connected from port 
+  local port 57222
+  [03:47:32Z reopen] control: SILENTREOPEN 57222 30 10
+  [03:48:26Z reopen] control: COUNT 57222
+  [03:48:27Z reopen] control: COUNT 57222
+RESULT reopen PASS 64 MiB delivered 14.6 s after the peer could be heard again (54.6 s in all)
+=== zerodead
+  [03:47:32Z zerodead] connected from port 
+  local port 57228
+  [03:47:32Z zerodead] control: STOPREAD 57228 100000
+  [03:47:52Z zerodead] control: DROP 57228
+RESULT zerodead FAIL no error after 1200 s: send() on a closed window still blocked at the cap
+0 connections to :9751 left
+SUMMARY out.reopen:RESULT reopen PASS 64 MiB delivered 14.6 s after the peer could be heard again (54.6 s in all)
+SUMMARY out.zerodead:RESULT zerodead FAIL no error after 1200 s: send() on a closed window still blocked at the cap

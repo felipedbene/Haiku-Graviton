@@ -1,0 +1,38 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-c1044v2
+# instance: i-036a20dfa20bee44d   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T042744Z   end: 20261104T042801Z   rc: 0
+# script sha256: 8ee18d1ab3f08d897fb13ae37e48ceed1dd5d07f41107294587eb20368a0365c
+# ---- script ----
+# | set -u
+# | mkdir -p /boot/home/tw && cd /boot/home/tw
+# | pkgman install -y gcc binutils haiku_devel wget 2>&1 | tail -2
+# | gcc --version | head -1
+# | wget -q -O tcp975.c 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/975/src/tcp975.c?<PRESIGNED>' || exit 4
+# | echo '4f96e9e5b838a36655b6aeeab75d9642027a82b7c1ee26e94dd5fb94296bf71d  tcp975.c' | sha256sum -c || exit 5
+# | gcc -O2 -Wall -o tcp975 tcp975.c -lnetwork || exit 6
+# | sha256sum tcp975.c tcp975
+# | echo "--- packaged tcp"
+# | sha256sum /boot/system/add-ons/kernel/network/protocols/tcp
+# | D=/boot/home/config/non-packaged/add-ons/kernel/network/protocols
+# | mkdir -p $D
+# | wget -q -O tcp.mod 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/C/975/mod/c1044v2/tcp?<PRESIGNED>' || exit 7
+# | echo '9a1a2a9c2647c25f877698eab926f8f32504c6b2c974452898aeb1a6f9fd8141  tcp.mod' | sha256sum -c || exit 8
+# | cp tcp.mod $D/tcp.new && mv $D/tcp.new $D/tcp
+# | echo "--- overrides after"
+# | find /boot/home/config/non-packaged/add-ons/kernel -type f | xargs sha256sum
+# | sync
+# | echo STAGE-DONE
+# ---- raw output ----
+[system] Cleaning up ...
+[system] Done.
+gcc (2026_03_29) 13.3.0
+tcp975.c: OK
+4f96e9e5b838a36655b6aeeab75d9642027a82b7c1ee26e94dd5fb94296bf71d  tcp975.c
+7773dc9a38df4bf7cc7a3c9dde5f2526f1b5d672d11345a1c50117a1a1641bd9  tcp975
+--- packaged tcp
+07a4a4a1b3116c2ea04fcce94950bda8f587512efe8912e1a5c8f7b8d6b32d9c  /boot/system/add-ons/kernel/network/protocols/tcp
+tcp.mod: OK
+--- overrides after
+9a1a2a9c2647c25f877698eab926f8f32504c6b2c974452898aeb1a6f9fd8141  /boot/home/config/non-packaged/add-ons/kernel/network/protocols/tcp
+STAGE-DONE

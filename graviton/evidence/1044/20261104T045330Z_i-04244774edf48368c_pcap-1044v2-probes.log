@@ -1,0 +1,91 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pcap-1044v2-probes
+# instance: i-04244774edf48368c   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# start: 20261104T045330Z   end: 20261104T045341Z   rc: 0
+# script sha256: e9ec7a47dbab25dcc7480815b11eeb7badb7034a62f31b75c2c75b7d77dee39a
+# ---- script ----
+# | cd /opt/t975
+# | H=10.128.4.208
+# | for c in "zerowin 41076" "reopen 40801" "zerodead 40814"; do
+# | 	set -- $c
+# | 	tcpdump -r t975-run3.pcap -nn -tttt "host $H and tcp port $2" 2>/dev/null | cat > v2-$1.txt
+# | 	# probes: zero-length pure ACKs from the client; answers: what the peer sends while win is 0 or reopening
+# | 	probes=$(grep "$H.$2 > " v2-$1.txt | grep -c 'Flags \[\.\], ack 1, .*length 0')
+# | 	echo "=== c1044v2 $1 ($H:$2): $(wc -l < v2-$1.txt) segments; $probes zero-length ACKs from the client"
+# | 	grep "$H.$2 > " v2-$1.txt | grep 'Flags \[\.\], ack 1, .*length 0' | awk '{print $2}' | head -30 | tr '\n' ' '; echo
+# | 	echo "  --- each probe and what follows it (first 24 lines of that view)"
+# | 	grep -A1 "$H.$2 > .*Flags \[\.\], ack 1, .*length 0" v2-$1.txt | grep -v '^--' | head -24 | cut -c12-160
+# | done 2>&1 | head -150
+# ---- raw output ----
+=== c1044v2 zerowin (10.128.4.208:41076): 4569 segments; 23 zero-length ACKs from the client
+04:30:09.338820 04:30:11.431505 04:30:12.431515 04:30:14.431524 04:30:18.431513 04:30:26.431496 04:30:42.431397 04:31:14.431158 04:32:14.430781 04:33:14.430403 04:34:14.429996 04:35:14.429606 04:36:14.429191 04:37:14.428797 04:38:14.428434 04:39:14.428036 04:40:14.427636 04:41:14.427253 04:42:14.426877 04:43:14.426498 04:44:14.426122 04:45:14.425734 04:46:14.425340 
+  --- each probe and what follows it (first 24 lines of that view)
+04:30:09.338820 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 17532 ecr 1808975687], length
+04:30:09.348776 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], seq 1:17899, ack 1, win 255, options [nop,nop,TS val 17542 ecr 180897
+04:30:11.431505 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 19624 ecr 1808975687], length
+04:30:11.431517 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1808977780 ecr 18624], len
+04:30:12.431515 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 20624 ecr 1808975687], length
+04:30:12.431523 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1808978780 ecr 18624], len
+04:30:14.431524 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 22624 ecr 1808975687], length
+04:30:14.431530 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1808980780 ecr 18624], len
+04:30:18.431513 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 26624 ecr 1808975687], length
+04:30:18.431518 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1808984780 ecr 18624], len
+04:30:26.431496 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 34624 ecr 1808975687], length
+04:30:26.431507 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1808992780 ecr 18624], len
+04:30:42.431397 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 50624 ecr 1808975687], length
+04:30:42.431412 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1809008780 ecr 18624], len
+04:31:14.431158 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 82624 ecr 1808975687], length
+04:31:14.431177 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1809040780 ecr 18624], len
+04:32:14.430781 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 142624 ecr 1808975687], lengt
+04:32:14.430801 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1809100779 ecr 18624], len
+04:33:14.430403 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 202625 ecr 1808975687], lengt
+04:33:14.430425 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1809160779 ecr 18624], len
+04:34:14.429996 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 262625 ecr 1808975687], lengt
+04:34:14.430018 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1809220778 ecr 18624], len
+04:35:14.429606 ens5  In  IP 10.128.4.208.41076 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 322625 ecr 1808975687], lengt
+04:35:14.429627 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.41076: Flags [.], ack 135260, win 0, options [nop,nop,TS val 1809280778 ecr 18624], len
+=== c1044v2 reopen (10.128.4.208:40801): 4470 segments; 8 zero-length ACKs from the client
+04:30:06.892008 04:30:08.985394 04:30:09.985383 04:30:11.985392 04:30:15.985453 04:30:23.985350 04:30:39.985304 04:31:11.985037 
+  --- each probe and what follows it (first 24 lines of that view)
+04:30:06.892008 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 15085 ecr 2895865631], length
+04:30:06.903591 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], seq 1:8950, ack 1, win 255, options [nop,nop,TS val 15096 ecr 2895865
+04:30:08.985394 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 17178 ecr 2895865631], length
+04:30:08.985397 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40801: Flags [.], ack 119410, win 0, options [nop,nop,TS val 2895867725 ecr 16178], len
+04:30:09.985383 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 18178 ecr 2895865631], length
+04:30:09.985400 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40801: Flags [.], ack 119410, win 0, options [nop,nop,TS val 2895868725 ecr 16178], len
+04:30:11.985392 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 20178 ecr 2895865631], length
+04:30:11.985398 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40801: Flags [.], ack 119410, win 0, options [nop,nop,TS val 2895870725 ecr 16178], len
+04:30:15.985453 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 24178 ecr 2895865631], length
+04:30:15.985458 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40801: Flags [.], ack 119410, win 0, options [nop,nop,TS val 2895874725 ecr 16178], len
+04:30:23.985350 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 32178 ecr 2895865631], length
+04:30:23.985358 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40801: Flags [.], ack 119410, win 0, options [nop,nop,TS val 2895882725 ecr 16178], len
+04:30:39.985304 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 48178 ecr 2895865631], length
+04:31:11.985037 ens5  In  IP 10.128.4.208.40801 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 80178 ecr 2895865631], length
+04:31:11.985053 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40801: Flags [.], ack 119410, win 97, options [nop,nop,TS val 2895930725 ecr 16178], le
+=== c1044v2 zerodead (10.128.4.208:40814): 47 segments; 22 zero-length ACKs from the client
+04:30:06.892055 04:30:08.985402 04:30:09.985405 04:30:11.985424 04:30:15.985421 04:30:23.985382 04:30:39.985307 04:31:11.985066 04:32:11.984688 04:33:11.984308 04:34:11.983904 04:35:11.983499 04:36:11.983142 04:37:11.982706 04:38:11.982335 04:39:11.981939 04:40:11.981544 04:41:11.981157 04:42:11.980785 04:43:11.980404 04:44:11.980021 04:45:11.979643 
+  --- each probe and what follows it (first 24 lines of that view)
+04:30:06.892055 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 15085 ecr 1822943104], length
+04:30:06.903479 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], seq 1:8950, ack 1, win 255, options [nop,nop,TS val 15096 ecr 1822943
+04:30:08.985402 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 17178 ecr 1822943104], length
+04:30:08.985413 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40814: Flags [.], ack 123506, win 0, options [nop,nop,TS val 1822945198 ecr 16178], len
+04:30:09.985405 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 18178 ecr 1822943104], length
+04:30:09.985408 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40814: Flags [.], ack 123506, win 0, options [nop,nop,TS val 1822946198 ecr 16178], len
+04:30:11.985424 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 20178 ecr 1822943104], length
+04:30:11.985434 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40814: Flags [.], ack 123506, win 0, options [nop,nop,TS val 1822948198 ecr 16178], len
+04:30:15.985421 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 24178 ecr 1822943104], length
+04:30:15.985438 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40814: Flags [.], ack 123506, win 0, options [nop,nop,TS val 1822952198 ecr 16178], len
+04:30:23.985382 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 32178 ecr 1822943104], length
+04:30:23.985392 ens5  Out IP 10.128.5.190.9751 > 10.128.4.208.40814: Flags [.], ack 123506, win 0, options [nop,nop,TS val 1822960198 ecr 16178], len
+04:30:39.985307 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 48178 ecr 1822943104], length
+04:31:11.985066 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 80178 ecr 1822943104], length
+04:32:11.984688 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 140178 ecr 1822943104], lengt
+04:33:11.984308 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 200178 ecr 1822943104], lengt
+04:34:11.983904 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 260178 ecr 1822943104], lengt
+04:35:11.983499 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 320178 ecr 1822943104], lengt
+04:36:11.983142 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 380179 ecr 1822943104], lengt
+04:37:11.982706 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 440179 ecr 1822943104], lengt
+04:38:11.982335 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 500179 ecr 1822943104], lengt
+04:39:11.981939 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 560179 ecr 1822943104], lengt
+04:40:11.981544 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 620179 ecr 1822943104], lengt
+04:41:11.981157 ens5  In  IP 10.128.4.208.40814 > 10.128.5.190.9751: Flags [.], ack 1, win 255, options [nop,nop,TS val 680179 ecr 1822943104], lengt
