@@ -1,0 +1,24 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: swap-pkgman-local-file
+# instance: i-06676c84ad85d6b25   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T031648Z   end: 20261104T031651Z   rc: 0
+# script sha256: 071f7347da97956c2d0f5dd681035a8d60a6e1db5d1c847534dad050bf759a46
+# ---- script ----
+# | # issue 1018: can a running box move from icu74-74.1_bootstrap-1 to icu74-74.1-6?
+# | cd /boot/home/hpkg1018 && sha256sum icu74-74.1-6-arm64.hpkg
+# | echo "== pkgman install <local file>, answering every prompt with its default"
+# | yes '' 2>/dev/null | head -60 | pkgman install /boot/home/hpkg1018/icu74-74.1-6-arm64.hpkg 2>&1 | grep -vE "^\s*$|Continue\?" | tail -15
+# | ls /packages | grep -E "^icu74"
+# ---- raw output ----
+fbab28735fa73d12ce157f5a6886a53e6ed20ee1cc1d13bf609e57f8b2fb2211  icu74-74.1-6-arm64.hpkg
+== pkgman install <local file>, answering every prompt with its default
+# note: the redaction sed stopped at a pkgman progress line carrying binary bytes; the rest of
+# the output below is copied from the same run's terminal capture, with that one line omitted.
+Validating checksum for DeBeOS...done.
+The following changes will be made:
+  in system:
+    upgrade package icu74-74.1_bootstrap-1 to 74.1-6 from local file
+[system] Changes applied. Old activation state backed up in "state_2026-11-04_03:16:33-1"
+[system] Cleaning up ...
+[system] Done.
+icu74-74.1-6

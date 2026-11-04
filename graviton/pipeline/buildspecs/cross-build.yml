@@ -162,6 +162,9 @@ phases:
       # "Haiku Project"-vendored files in hpkg-pool/. (libwebp/libavif are not
       # staged -- see the HaikuPortsLocal/arm64 note: no "Haiku Project"-vendored
       # libwebp_devel and no libavif >= 1.0 exist for arm64 yet.)
+      # icu74 is synced for issue 1018 the same way: UserBuildConfig force-adds
+      # the non-bootstrap icu74-74.1-6 by exact filename. `icu74-*` does not
+      # match icu74_devel-* or icu74_tools-*, which the image does not carry.
       # ncurses6 is synced for issue 784: UserBuildConfig force-adds the
       # non-bootstrap ncurses6-6.6-1 into system/packages so the terminfo lookup
       # path on the image exists. That force-add reads the file out of
@@ -180,7 +183,7 @@ phases:
       # nothing on its own: the file sat in the bucket and never reached
       # $HG_POOL_DIR. Adding a package to a pool is two steps, the upload and
       # the include, and the sync is silent about the half that is missing.
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "ncurses6-*" --include "openssl3-*" --include "openssl3_devel-*" --include "openssl3_man-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "ncurses6-*" --include "icu74-*" --include "openssl3-*" --include "openssl3_devel-*" --include "openssl3_man-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
       - |
         # Must-have packages: the image is WRONG without these, so their
         # absence fails the bake loudly instead of shipping a quiet regression.
@@ -269,6 +272,16 @@ phases:
           exit 1
         fi
         [ -f "$HG_POOL_DIR/$ncursesPin" ] || missing="$missing $ncursesPin"
+        # Same for the icu74 force-add (issue 1018): `icu74-[0-9]*` matches the
+        # bootstrap build, which is the defect.
+        icuPin=$(sed -n 's/^[[:space:]]*local icuFileName = \(icu74-[^ ]*\.hpkg\) ;.*/\1/p' \
+          "$HAIKU_TOP/graviton/ssh/UserBuildConfig" | head -1)
+        if [ -z "$icuPin" ]; then
+          echo "FATAL: could not read the icu74 force-add filename out of graviton/ssh/UserBuildConfig." >&2
+          echo "The 'local icuFileName = ...' line is how this guard knows which build to require (issue 1018)." >&2
+          exit 1
+        fi
+        [ -f "$HG_POOL_DIR/$icuPin" ] || missing="$missing $icuPin"
         if [ -n "$missing" ]; then
           echo "FATAL: hpkg pool s3://$WORK_BUCKET/hpkg-pool/ did not provide required package(s):$missing" >&2
           echo "The pool is stale or mis-seeded, or a pin in build/jam/repositories/HaikuPortsLocal/arm64 moved ahead of it." >&2

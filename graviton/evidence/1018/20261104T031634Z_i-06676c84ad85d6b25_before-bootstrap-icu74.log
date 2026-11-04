@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-bootstrap-icu74
+# instance: i-06676c84ad85d6b25   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T031634Z   end: 20261104T031639Z   rc: 0
+# script sha256: 3c1336609fb6facf511d55b23c10ee77104c109e27c4edb6c9ddae44f428d24f
+# ---- script ----
+# | # issue 1018: does ICU 74 find its data on this box? Three consumers of the image's icu74.
+# | ls /packages | grep -E "^(icu|nodejs20)"
+# | echo "== baked data dir vs installed package dir"
+# | grep -ao "/packages/icu74[^ ]*/\.self/data/icu/74\.1" /boot/system/lib/libicuuc.so.74.1 | sort -u
+# | ls -d /packages/icu74*
+# | echo "== icu-data-probe (graviton/scripts/icu-data-probe.c, built for ICU 74)"; /boot/home/bin/icuprobe74; echo "rc=$?"
+# | echo "== posix-locale-probe (libroot's ICU locale backend)"; /boot/home/bin/posixloc
+# | echo "== nodejs20 20.15.1-4 (links icu74)"
+# | /boot/system/bin/node20 -e 'console.log(new Intl.DateTimeFormat("de-DE",{dateStyle:"full",timeZone:"UTC"}).format(new Date(0)), "|", new Intl.NumberFormat("de-DE").format(1234.5))' 2>&1 | grep -v '^$' | tail -2
+# ---- raw output ----
+icu74-74.1_bootstrap-1
+nodejs20-20.15.1-4
+== baked data dir vs installed package dir
+/packages/icu74_bootstrap-74.1-1/.self/data/icu/74.1
+/packages/icu74-74.1_bootstrap-1
+== icu-data-probe (graviton/scripts/icu-data-probe.c, built for ICU 74)
+data dir: /packages/icu74_bootstrap-74.1-1/.self/data/icu/74.1
+ures_open(de):   U_MISSING_RESOURCE_ERROR
+ucol_open(de):   U_FILE_ACCESS_ERROR
+udatpg_open(en_US): U_MISSING_RESOURCE_ERROR
+rc=1
+== posix-locale-probe (libroot's ICU locale backend)
+de_DE.UTF-8: setlocale=(null) strftime="Sunday 04 January 1970" DAY_1="Sunday" MON_1="January" RADIX="."
+fr_FR.UTF-8: setlocale=(null) strftime="Sunday 04 January 1970" DAY_1="Sunday" MON_1="January" RADIX="."
+== nodejs20 20.15.1-4 (links icu74)
+----- Native stack trace -----
+Abort

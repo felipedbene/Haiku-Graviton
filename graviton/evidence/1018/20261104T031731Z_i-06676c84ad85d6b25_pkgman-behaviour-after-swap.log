@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: pkgman-behaviour-after-swap
+# instance: i-06676c84ad85d6b25   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T031731Z   end: 20261104T031736Z   rc: 0
+# script sha256: d1690840290fb74e55ae2452909e28f4b7eee16da8e7bfc46104714358868ae3
+# ---- script ----
+# | # issue 1018: how pkgman treats the swapped icu74 against the repo (answers "no" to every change)
+# | ls /packages | grep -E "^icu74"
+# | echo "== pkgman update (dry: answer no)"; yes n 2>/dev/null | head -5 | pkgman update 2>&1 | LC_ALL=C tr -cd '\11\12\15\40-\176' | grep -E "icu|Nothing|changes|upgrade|downgrade|install" | head -10
+# | echo "== pkgman install icu74_devel (dry: answer no)"; yes n 2>/dev/null | head -5 | pkgman install icu74_devel 2>&1 | LC_ALL=C tr -cd '\11\12\15\40-\176' | grep -E "icu|Nothing|changes|problem|install" | head -10
+# | echo "== pkgman install /boot/home/hpkg1018/icu74_devel-74.1-6-arm64.hpkg (dry: answer no)"; yes n 2>/dev/null | head -5 | pkgman install /boot/home/hpkg1018/icu74_devel-74.1-6-arm64.hpkg 2>&1 | LC_ALL=C tr -cd '\11\12\15\40-\176' | grep -E "icu|Nothing|changes|problem|install" | head -10
+# | echo "== base-system smoke after the live swap"; locale -l; date -u -d @0 2>/dev/null || date -u; ls /boot/system/lib/libicuuc.so.74*
+# ---- raw output ----
+icu74-74.1-6
+== pkgman update (dry: answer no)
+The following changes will be made:
+    install package bzip2-1.0.8-3 from repository DeBeOS
+    upgrade package gawk-3.1.8_bootstrap-2 to 5.3.0-1 from repository DeBeOS
+    upgrade package coreutils-9.9_bootstrap-1 to 9.11-2 from repository DeBeOS
+    install package graphite2-1.3.14-4 from repository DeBeOS
+    upgrade package freetype-2.6.3_bootstrap-1 to 2.14.3-1 from repository DeBeOS
+    install package harfbuzz-14.2.0-1 from repository DeBeOS
+== pkgman install icu74_devel (dry: answer no)
+The following changes will be made:
+    install package icu74_devel-74.1_bootstrap-1 from repository DeBeOS
+== pkgman install /boot/home/hpkg1018/icu74_devel-74.1-6-arm64.hpkg (dry: answer no)
+The following changes will be made:
+    install package icu74_devel-74.1-6 from local file
+== base-system smoke after the live swap
+en
+Thu Jan  1 00:00:00 GMT 1970
+/boot/system/lib/libicuuc.so.74
+/boot/system/lib/libicuuc.so.74.1

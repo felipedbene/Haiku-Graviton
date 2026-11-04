@@ -1,0 +1,54 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: build-icu74-74.1-6
+# instance: i-0946478a86bc29bd9   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261104T031344Z   end: 20261104T031347Z   rc: 0
+# script sha256: 57418727392357b12ac4fe4c6a22d0f0d1f2233294b2c6b579c973248d370520
+# ---- script ----
+# | cd /boot/home/haikuports/packages || exit 1
+# | sha256sum icu74-74.1-6-arm64.hpkg icu74_devel-74.1-6-arm64.hpkg icu74_tools-74.1-6-arm64.hpkg
+# | package list -i icu74-74.1-6-arm64.hpkg | grep -E "version|provides|requires"
+# | package list icu74-74.1-6-arm64.hpkg | grep -E "libicu|icudt|data/icu" | head
+# | rm -rf /tmp/x74; mkdir /tmp/x74; package extract -C /tmp/x74 icu74-74.1-6-arm64.hpkg
+# | echo "== baked data dir in the built libicuuc:"; grep -ao "/packages/icu74[^ ]*/\.self/data/icu/74\.1" /tmp/x74/lib/libicuuc.so.74.1 | sort -u
+# | echo "== the bootstrap package, for comparison:"; grep -ao "/packages/icu74[^ ]*/\.self/data/icu/74\.1" /boot/system/lib/libicuuc.so.74.1 | sort -u
+# | grep -E "BUILD_OK|FAILED" /boot/home/nb-driver-1018.log /boot/home/nb-driver-1018b.log
+# | echo "== the first attempt's failure (a genrb SIGKILLed mid-build; the retry built clean)"; grep -m1 -B1 "Killed (by death)" /boot/home/nb-driver-1018.log
+# | sha256sum /boot/home/haikuports/dev-libs/icu/icu74-74.1.recipe; cd /boot/home/haikuports && git log --oneline -1
+# ---- raw output ----
+fbab28735fa73d12ce157f5a6886a53e6ed20ee1cc1d13bf609e57f8b2fb2211  icu74-74.1-6-arm64.hpkg
+554c6477df13c7cbc1aa6542ba41b99661bc41d149a465e3b8eca7a85b98d054  icu74_devel-74.1-6-arm64.hpkg
+5de9f48067ea87b672573e615c9819aba2bc0d7ab3abc70b953fd12fd15799f5  icu74_tools-74.1-6-arm64.hpkg
+* Code Page Conversion: Convert text data to or from Unicode and nearly any other character set or encoding. ICU's conversion tables are based on charset data collected by IBM over the course of many decades, and is the most complete available anywhere.
+	version: 74.1-6
+	provides: icu74 = 74.1 (compatible >= 74)
+	provides: lib:libicudata = 74.1 (compatible >= 74)
+	provides: lib:libicui18n = 74.1 (compatible >= 74)
+	provides: lib:libicuio = 74.1 (compatible >= 74)
+	provides: lib:libicutest = 74.1 (compatible >= 74)
+	provides: lib:libicutu = 74.1 (compatible >= 74)
+	provides: lib:libicuuc = 74.1 (compatible >= 74)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libstdc++>=6.0.32
+	provides: lib:libicudata = 74.1 (compatible >= 74)
+	provides: lib:libicui18n = 74.1 (compatible >= 74)
+	provides: lib:libicuio = 74.1 (compatible >= 74)
+	provides: lib:libicutest = 74.1 (compatible >= 74)
+	provides: lib:libicutu = 74.1 (compatible >= 74)
+	provides: lib:libicuuc = 74.1 (compatible >= 74)
+      icudt74l.dat                30783664  2026-11-04 03:06:07  -rwxr-xr-x
+  libicudata.so.74                       0  2026-11-04 03:06:05  lrwxrwxrwx  -> libicudata.so.74.1
+  libicudata.so.74.1                135216  2026-11-04 03:06:05  -rwxr-xr-x
+  libicui18n.so.74                       0  2026-11-04 03:06:06  lrwxrwxrwx  -> libicui18n.so.74.1
+== baked data dir in the built libicuuc:
+/packages/icu74-74.1-6/.self/data/icu/74.1
+== the bootstrap package, for comparison:
+/packages/icu74_bootstrap-74.1-1/.self/data/icu/74.1
+/boot/home/nb-driver-1018.log:icu74-74.1: FAILED, no missing-dep to install -- see /boot/home/nb-icu74-74.1.log
+/boot/home/nb-driver-1018.log:===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool: (none) =====
+/boot/home/nb-driver-1018b.log:icu74-74.1: BUILD_OK (attempt 1)
+/boot/home/nb-driver-1018b.log:===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  icu74-74.1 =====
+== the first attempt's failure (a genrb SIGKILLed mid-build; the retry built clean)
+LIBRARY_PATH=../lib:../stubdata:../tools/ctestfw:$LIBRARY_PATH  ../bin/genrb -s ./lang -d ./out/build/icudt74l/lang/ -i ./out/build/icudt74l --usePoolBundle ./out/build/icudt74l/lang/ -k ti.txt
+make[1]: *** [../data/rules.mk:10994: out/build/icudt74l/lang/th.res] Killed (by death)
+53425c6897bf1f7cd67ca5066a3a207056ee47d820f4e9a6622ccaa78d757b0f  /boot/home/haikuports/dev-libs/icu/icu74-74.1.recipe
+5c4d877 Firefox: bump version
