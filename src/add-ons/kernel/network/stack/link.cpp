@@ -168,7 +168,6 @@ LinkProtocol::StopMonitoring(const char* deviceName)
 
 	net_device_interface* monitored = fMonitoredDevice;
 	fMonitoredDevice = NULL;
-	atomic_set(&fMonitorDown, 0);
 
 	// As in Unbind(): the device holds its monitor lock while it calls
 	// _MonitorData(), which takes fLock, so unregister without fLock.
@@ -176,6 +175,10 @@ LinkProtocol::StopMonitoring(const char* deviceName)
 
 	status_t status = unregister_device_monitor(monitored->device, &fMonitor);
 	put_device_interface(monitored);
+
+	// Only now: until it was unregistered, an ended capture must not queue
+	// what the device delivered after coming back up.
+	atomic_set(&fMonitorDown, 0);
 	return status;
 }
 
