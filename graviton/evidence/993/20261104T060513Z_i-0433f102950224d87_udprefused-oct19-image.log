@@ -1,0 +1,11 @@
+# instance i-0433f102950224d87 c7g.8xlarge, ami-038dc6d84d6b731d2 (haiku-builder-canonical-20261030200450, kernel built Oct 19 2026)
+# issue 993: udprefused993, 2026-11-04T06:05:15Z
+Haiku ip-10-128-11-238.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+udp 127.0.0.1:<unused> recv        PASS  0.000s  recv=-1 Connection refused
+udp 127.0.0.1:<unused> poll        PASS  0.000s  poll=1 revents=0x5 SO_ERROR=Connection refused
+udp ::1:<unused> recv              FAIL  3.000s  recv=-1 Operation timed out
+udp ::1:<unused> poll              FAIL  3.000s  poll=0 revents=0x0 SO_ERROR=0
+udp 0.0.0.0:53 recv (resolver default) PASS  0.000s  recv=-1 Connection refused
+udp [::]:53 recv (resolver default) FAIL  3.000s  recv=-1 Operation timed out
+FAIL: 3/6 refused
+rc=1
