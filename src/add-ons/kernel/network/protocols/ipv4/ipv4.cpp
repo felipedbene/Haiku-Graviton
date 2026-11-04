@@ -2158,8 +2158,10 @@ ipv4_process_ancillary_data_no_container(net_protocol* protocol,
 
 	if ((((ipv4_protocol*)protocol)->flags & IP_FLAG_RECEIVE_PKTINFO) != 0) {
 		if (msgControlLen
-				< (size_t)bytesWritten + CMSG_SPACE(sizeof(in_pktinfo)))
-			return B_NO_MEMORY;
+				< (size_t)bytesWritten + CMSG_SPACE(sizeof(in_pktinfo))) {
+			*_messageFlags |= MSG_CTRUNC;
+			return bytesWritten;
+		}
 
 		// As on Linux, the local address is the destination of a unicast,
 		// and the receiving interface's address for anything else.

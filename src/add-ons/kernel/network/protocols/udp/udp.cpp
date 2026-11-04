@@ -10,6 +10,7 @@
 
 #include <net_buffer.h>
 #include <net_datalink.h>
+#include <net_device.h>
 #include <net_protocol.h>
 #include <net_stack.h>
 
@@ -1362,46 +1363,53 @@ is_loopback_address(const sockaddr* address)
 
 
 /*!	Returns a reference to the route out of interface \a index for a datagram
-	to \a destination, which an IP_PKTINFO or IPV6_PKTINFO interface index
-	asks for. That is the destination's own route if it already leaves through
-	the interface. Otherwise the datagram goes out on-link from the interface,
-	the way a socket bound to a device sends (see datalink_send_data()).
+	to \a destination, which an IP_PKTINFO or IPV6_PKTINFO interface index asks
+	for: the best route through that interface, gateway routes included, else
+	its direct route (see get_route_through_interface()), on which the
+	destination is taken to be on-link. \a _local is set to the address the
+	datagram leaves from, unless its source is already set; it is a reference
+	the caller puts, or \c NULL.
 */
 static status_t
 get_interface_route(net_domain* domain, uint32 index,
-	const sockaddr* destination, net_route** _route)
+	const sockaddr* destination, net_route** _route,
+	net_interface_address** _local)
 {
+	*_local = NULL;
+
 	net_interface* interface = gDatalinkModule->get_interface(domain, index);
 	if (interface == NULL)
 		return ENODEV;
 			// as on Linux
 
-	net_route* route = gDatalinkModule->get_route(domain, destination);
-	if (route != NULL && (route->interface_address == NULL
-			|| route->interface_address->interface->index != index)) {
-		gDatalinkModule->put_route(domain, route);
-		route = NULL;
-	}
-
-	net_interface_address* address = NULL;
-	while (route == NULL
-		&& gDatalinkModule->get_next_interface_address(interface, &address)) {
-		if (address->domain != domain || address->local == NULL)
-			continue;
-
-		route = gDatalinkModule->get_route(domain, address->local);
-		if (route != NULL && (route->interface_address == NULL
-				|| route->interface_address->interface->index != index)) {
-			gDatalinkModule->put_route(domain, route);
-			route = NULL;
-		}
-	}
-	gDatalinkModule->put_interface_address(address);
-	gDatalinkModule->put_interface(interface);
-
-	if (route == NULL)
+	net_route* route = gDatalinkModule->get_route_through_interface(domain,
+		destination, index);
+	if (route == NULL) {
+		gDatalinkModule->put_interface(interface);
 		return ENETUNREACH;
+	}
 
+	if (route->interface_address->local == NULL) {
+		// The direct route: the datagram goes out on-link from one of the
+		// interface's addresses. A loopback interface has no link that could
+		// take a datagram off the host (Linux takes it, and drops it).
+		net_interface_address* address = NULL;
+		if ((interface->device->flags & IFF_LOOPBACK) == 0) {
+			while (gDatalinkModule->get_next_interface_address(interface,
+					&address)) {
+				if (address->domain == domain && address->local != NULL)
+					break;
+			}
+		}
+		if (address == NULL) {
+			gDatalinkModule->put_route(domain, route);
+			gDatalinkModule->put_interface(interface);
+			return ENETUNREACH;
+		}
+		*_local = address;
+	}
+
+	gDatalinkModule->put_interface(interface);
 	*_route = route;
 	return B_OK;
 }
@@ -1518,11 +1526,14 @@ UdpEndpoint::_SourceFromControlData(net_buffer* buffer, net_domain* domain,
 			return EADDRNOTAVAIL;
 
 		// A loopback source must not leave the host: as on Linux, it only
-		// goes to an address of this host.
+		// goes to an address of this host -- not to a broadcast address,
+		// which is_local_address() matches too.
+		uint32 destinationType = 0;
 		if (is_loopback_address((sockaddr*)&source)
 			&& !is_loopback_address(buffer->destination)
-			&& !gDatalinkModule->is_local_address(domain, buffer->destination,
-				NULL, NULL))
+			&& (!gDatalinkModule->is_local_address(domain,
+					buffer->destination, NULL, &destinationType)
+				|| destinationType != 0))
 			return B_BAD_VALUE;
 
 		net_address_module_info* addressModule = domain->address_module;
@@ -1648,18 +1659,21 @@ UdpEndpoint::SendData(net_buffer *buffer)
 		return gDatalinkModule->send_data(this, domain, buffer);
 
 	net_route* route;
-	status = get_interface_route(domain, interfaceIndex, destination, &route);
+	net_interface_address* local;
+	status = get_interface_route(domain, interfaceIndex, destination, &route,
+		&local);
 	if (status != B_OK)
 		return status;
 
 	// what get_buffer_route() does for the route it picks
-	if (route->interface_address->local != NULL) {
-		status = addressModule->update_to(buffer->source,
-			route->interface_address->local);
-	}
+	const sockaddr* localAddress = local != NULL
+		? local->local : route->interface_address->local;
+	if (localAddress != NULL)
+		status = addressModule->update_to(buffer->source, localAddress);
 	if (status == B_OK)
 		status = SendRoutedData(buffer, route);
 
+	gDatalinkModule->put_interface_address(local);
 	gDatalinkModule->put_route(domain, route);
 	return status;
 }
