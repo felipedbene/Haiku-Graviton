@@ -217,17 +217,18 @@ arch_cpu_init_post_modules(kernel_args *args)
 void
 arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
 {
-	// The ID_AA64* feature registers are only readable at EL1, and DeBeOS does
-	// not trap-and-emulate their MRS for EL0, so this runs once in the kernel
-	// and the result is published through the commpage. The bit layout mirrors
-	// Linux's AT_HWCAP so ported crypto/atomics dispatch keeps working.
+	// The ID_AA64* feature registers are only readable at EL1, so this runs
+	// once in the kernel and the result is published through the commpage.
+	// The bit layout mirrors Linux's AT_HWCAP so ported crypto/atomics
+	// dispatch keeps working. EL0 reads of the ID registers themselves are
+	// emulated as well (arm64_emulate_id_register(), hence HWCAP_CPUID).
 	//
 	// Only the current (boot) CPU's registers are read, so a homogeneous ISA
 	// across CPUs is assumed: every core on the supported SoCs advertises the
 	// same feature set. Linux instead sanitises each field across all CPUs
 	// (the safest value any of them reports); doing the same would only matter
 	// on a heterogeneous SoC.
-	uint64 caps = 0;
+	uint64 caps = HWCAP_CPUID;
 	uint64 caps2 = 0;
 
 	const uint64 isar0 = READ_SPECIALREG(ID_AA64ISAR0_EL1);
@@ -323,6 +324,107 @@ arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
 
 	*hwcap = caps;
 	*hwcap2 = caps2;
+}
+
+
+// The ID register fields EL0 sees under HWCAP_CPUID. Linux's ABI for this
+// (arch/arm64/kernel/cpufeature.c) exposes only "visible" fields from the
+// real register and reports every other field as a fixed safe value, so
+// userland can neither learn about features the kernel has not enabled for
+// it nor fingerprint the system configuration. The same rule applies here,
+// with the visible set further narrowed to the fields whose feature DeBeOS
+// actually advertises in AT_HWCAP/AT_HWCAP2: an ID register must never claim
+// more than getauxval() does. So SVE, pointer authentication, BTI, MTE,
+// SSBS, DIT and the like read as absent until their HWCAP bits are turned on.
+static const uint64 kVisiblePFR0
+	= ID_AA64PFR0_FP_MASK | ID_AA64PFR0_ADV_SIMD_MASK;
+// EL0 and EL1 read as "AArch64 only", Linux's safe value for those fields.
+static const uint64 kHiddenPFR0 = 0x11;
+static const uint64 kVisibleISAR0
+	= ID_AA64ISAR0_AES_MASK | ID_AA64ISAR0_SHA1_MASK | ID_AA64ISAR0_SHA2_MASK
+		| ID_AA64ISAR0_CRC32_MASK | ID_AA64ISAR0_ATOMIC_MASK
+		| ID_AA64ISAR0_RDM_MASK | ID_AA64ISAR0_SHA3_MASK
+		| ID_AA64ISAR0_SM3_MASK | ID_AA64ISAR0_SM4_MASK | ID_AA64ISAR0_DP_MASK
+		| ID_AA64ISAR0_FHM_MASK | ID_AA64ISAR0_TS_MASK
+		| ID_AA64ISAR0_RNDR_MASK;
+static const uint64 kVisibleISAR1
+	= ID_AA64ISAR1_DPB_MASK | ID_AA64ISAR1_JSCVT_MASK | ID_AA64ISAR1_FCMA_MASK
+		| ID_AA64ISAR1_LRCPC_MASK | ID_AA64ISAR1_FRINTTS_MASK
+		| ID_AA64ISAR1_SB_MASK | ID_AA64ISAR1_BF16_MASK
+		| ID_AA64ISAR1_I8MM_MASK;
+// Linux's fixed values for registers with no visible field: DebugVer reads
+// as Armv8.0 debug, and every translation granule field of ID_AA64MMFR0_EL1
+// reads as "not implemented", at stage 1 and at stage 2. Userland has no use
+// for the real ones; its page size comes from B_PAGE_SIZE/sysconf().
+static const uint64 kHiddenDFR0 = 0x6;
+static const uint64 kHiddenMMFR0 = 0x00000111ff000000ul;
+
+
+bool
+arm64_emulate_id_register(uint32 op0, uint32 op1, uint32 crn, uint32 crm,
+	uint32 op2, uint64* _value)
+{
+	// The emulated space is Linux's: op0 3, op1 0, CRn 0, CRm 0 and 2-7. CRm 1
+	// holds AArch32 registers Linux does not emulate either, and anything
+	// beyond is not an ID register.
+	if (op0 != 3 || op1 != 0 || crn != 0 || crm == 1 || crm > 7)
+		return false;
+
+	if (crm == 0) {
+		switch (op2) {
+			case 0:
+				// MIDR_EL1, as is: it is what userland wants this for (to
+				// pick a CPU-specific code path), and it says nothing the
+				// topology node does not already publish. It is per CPU, as on
+				// Linux; the supported SoCs are homogeneous.
+				*_value = READ_SPECIALREG(MIDR_EL1);
+				return true;
+			case 5:
+				// MPIDR_EL1 would leak the scheduler's placement and can't
+				// be trusted after a migration anyway; Linux reports only the
+				// RES1 bit.
+				*_value = 1ul << 31;
+				return true;
+			case 6:
+				// REVIDR_EL1 is IMPLEMENTATION DEFINED.
+				*_value = 0;
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	// A homogeneous ISA is assumed, as in arm64_get_hwcap(), so reading the
+	// current CPU's register gives the system-wide value.
+	uint64 value = 0;
+	switch ((crm << 3) | op2) {
+		case (4 << 3) | 0:	// ID_AA64PFR0_EL1
+			value = (READ_SPECIALREG(ID_AA64PFR0_EL1) & kVisiblePFR0)
+				| kHiddenPFR0;
+			break;
+		case (5 << 3) | 0:	// ID_AA64DFR0_EL1
+			value = kHiddenDFR0;
+			break;
+		case (6 << 3) | 0:	// ID_AA64ISAR0_EL1
+			value = READ_SPECIALREG(ID_AA64ISAR0_EL1) & kVisibleISAR0;
+			break;
+		case (6 << 3) | 1:	// ID_AA64ISAR1_EL1
+			value = READ_SPECIALREG(ID_AA64ISAR1_EL1) & kVisibleISAR1;
+			break;
+		case (7 << 3) | 0:	// ID_AA64MMFR0_EL1
+			value = kHiddenMMFR0;
+			break;
+		default:
+			// Everything else reads as zero, as on Linux: the remaining
+			// AArch64 registers have no field DeBeOS exposes (ISAR2/3,
+			// PFR1/2, ZFR0, SMFR0, MMFR1-4, ...), the unallocated encodings
+			// are RAZ, and the AArch32 ones in CRm 2-3 describe an execution
+			// state DeBeOS does not run at EL0.
+			break;
+	}
+
+	*_value = value;
+	return true;
 }
 
 

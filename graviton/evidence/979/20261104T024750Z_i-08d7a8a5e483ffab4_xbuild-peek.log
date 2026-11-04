@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild-peek
+# instance: i-08d7a8a5e483ffab4   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: peek at the relaunched build
+# start: 20261104T024750Z   end: 20261104T024802Z   rc: 0
+# script sha256: fc85b22a4d53f182923e634e40d81afed3aab2e4255b35d4fd821b50be21ff3a
+# ---- script ----
+# | cat /opt/t/out/xb.rc 2>/dev/null || echo running
+# | tail -25 /opt/t/out/xb.log
+# ---- raw output ----
+0
++ grep 'refusing an image'
+elf: refusing an image for e_machine %u, EI_DATA %u (this system: e_machine %u)
++ strings runtime_loader.fix1000
++ grep 'ELF image is for'
+runtime_loader: %s: ELF image is for %s (e_machine %u), but this system is %s
++ for a in fix979 fix980 fix1000
++ cmp -s kernel_arm64.trunk kernel_arm64.fix979
++ for a in fix979 fix980 fix1000
++ cmp -s kernel_arm64.trunk kernel_arm64.fix980
++ for a in fix979 fix980 fix1000
++ cmp -s kernel_arm64.trunk kernel_arm64.fix1000
++ cmp -s runtime_loader.trunk runtime_loader.fix1000
++ sha256sum kernel_arm64.fix1000 kernel_arm64.fix979 kernel_arm64.fix980 kernel_arm64.trunk libroot.so.trunk runtime_loader.fix1000 runtime_loader.trunk
++ tee SHA256SUMS
+b14fb2d6330131b731ecd30d604065993d31e0d2265afc8108bf6f5a313e0504  kernel_arm64.fix1000
+b89d010b6340e79cf91abc0fa53bd414e912c6999bbe9b6c5a2a18afe80ae56f  kernel_arm64.fix979
+ed27d941a1b85333863bc47a004873f607615e4fc44bc3d49b1168545fe69bce  kernel_arm64.fix980
+deb1eeb6fb30ee91b5cd2b994372ef5dbf26e3fd69b3adbc8b10d908c8931ac9  kernel_arm64.trunk
+2d224ec050573adc6e2c6846015306d9cf4b70ba71af3b8f23e1d7a18e98928d  libroot.so.trunk
+ccfed2ec51c3f8da84eb5e1dbcc16cb85bd32bb61fd729e524b7e787b7abd4c0  runtime_loader.fix1000
+7bbaa2bfa5e7476c5b771cdc71d35056385391fb974721467b35fd2545f28dc2  runtime_loader.trunk
+++ aws sts get-caller-identity --query Account --output text
++ aws s3 cp --quiet --recursive --exclude '*' --include 'kernel_arm64.*' --include 'libroot.so.*' --include 'runtime_loader.*' --include SHA256SUMS . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/A/out/
++ echo uploaded
+uploaded
