@@ -1,0 +1,46 @@
+# evidence: bta-console (box stopped answering after step ta)
+# instance: i-08f6136e4df3dcc15   region: us-west-2   transport: ec2 get-console-output --latest
+# ---- raw output ----
+loaded driver /boot/system/add-ons/kernel/drivers/dev/input/usb_hid
+ps2_hid: init_hardware
+ps2_hid: init_driver
+module: Search for bus_managers/ps2/v1 failed.
+devfs: scanned "input": mode 2 -> 2, latched 2, probe No error, legacy No error
+AddOnManager::_RegisterAddOn(): InitCheck() in "/boot/system/add-ons/input_server/devices/virtio" returned No such file or directory
+slab memory manager: created area 0xffff00002a001000 (7717)
+runtime_loader: Cannot open file libscreensaver.so (needed by /boot/system/add-ons/input_server/filters/screen_saver): No such file or directory
+load addon /boot/system/add-ons/input_server/filters/screen_saver failed
+bfs: Could not find value in index "size"!
+bfs: Could not find value in index "last_modified"!
+Launching x-vnd.haiku-cddb_lookup failed: No such file or directory
+PANIC: sparse write attempt: vnode 0xffff000000e80580
+Welcome to Kernel Debugging Land...
+revision: hrev59996
+Thread 365 "sync" running on CPU 5
+iframe 0xffff0000dcb1ecc7 (end = 0xffff0000dcb1efff)
+stack trace for thread 0x16d "sync"
+    kernel stack: 0xffff0000dcb1a000 to 0xffff0000dcb1f000
+      user stack: 0x00000194511d0000 to 0x00000194551d0000
+frame            caller     <image>:function + offset
+ 0 ffff0000dcb1df00 (+ 336) ffff0000000ddd18   <kernel_arm64> debug_call_with_fault_handler.localalias + 0x78
+ 1 ffff0000dcb1df50 (+  80) ffff0000000df580   <kernel_arm64> kernel_debugger_loop(char const*: [34m0xffff0000dcb1dfc0[0m [36m"���"[0m, char const*: [34m0xffff0000000df938[0m [36m"�@�"[0m, std::__va_list: [34m0x2794bc[0m, int32: [34m-65536[0m) + 0x118
+ 2 ffff0000dcb1dfc0 (+ 112) ffff0000000df938   <kernel_arm64> kernel_debugger_internal(char const*: [34m0xffff0000dcb1e080[0m [36m"���"[0m, char const*: [34m0xffff0000000dfdb8[0m [36m"4B��SA��{Ҩ�_�@C���"[0m, std::__va_list: [34m0x1b9310[0m, int32: [34m-65536[0m) + 0x98
+ 3 ffff0000dcb1e080 (+ 192) ffff0000000dfdb8   <kernel_arm64> panic + 0x8c
+ 4 ffff0000dcb1e1a0 (+ 288) ffff00000012c894   <kernel_arm64> common_file_io_vec_pages(vnode*: [34m0xffff0000dcb1e2f0[0m, void*: [34m0xffff000000139378[0m, file_io_vec const*: [34m0xffff000000865ab0[0m, uint64: [34m0xffff0000dcb1e400[0m, iovec const*: [34m0x2[0m, uint64: [34m0xffff0000dcb1e490[0m, unsigned int*: [34m0xffff0000dcb1e3f8[0m, unsigned long*: [34m0x1[0m, unsigned long*: [34m0xffff0000dcb1e3e8[0m, [34mtrue[0m) + 0x4d4
+ 5 ffff0000dcb1e2f0 (+ 336) ffff000000139378   <kernel_arm64> write_file_io_vec_pages + 0x88
+ 6 ffff0000dcb1e350 (+  96) ffff0000023f4cec   <ext2> ext2_write_pages(fs_volume*: [34m0xffff0000dcb1e480[0m, fs_vnode*: [34m0xffff000000143acc[0m, void*: [34m0x0[0m, int64: [34m0[0m, iovec const*: [34m0xffff0000dcb1e550[0m, uint64: [34m0xffff0000294d3990[0m, unsigned long*: [34m0xffff0000dcb1e508[0m) + 0xbc
+ 7 ffff0000dcb1e480 (+ 304) ffff000000143acc   <kernel_arm64> VnodeIO<[32m0xdcb1e4a0[0m>::IO(int64: [34m5291438363312128[0m, void*: [34m0x28134000ffff0000[0m, unsigned long*: [34m0x21000ffff0000[0m) + 0x4c
+ 8 ffff0000dcb1e4a0 (+  32) ffff00000012cc88   <kernel_arm64> synchronous_io(IORequest*: [34m0xffff0000dcb1e520[0m, DoIO&: [34m0xffff000000140e48[0m) + 0x60
+ 9 ffff0000dcb1e520 (+ 128) ffff000000140e48   <kernel_arm64> vfs_vnode_io.localalias + 0x88
+10 ffff0000dcb1e580 (+  96) ffff0000001417b4   <kernel_arm64> vfs_write_pages + 0xac
+11 ffff0000dcb1e6f0 (+ 368) ffff00000016fefc   <kernel_arm64> PageWriteTransfer<[32m0xdcb1e720[0m>::Schedule[clone .localalias] (uint32: [34m0xffff0000[0m) + 0x6c
+12 ffff0000dcb1e720 (+  48) ffff000000170960   <kernel_arm64> vm_page_write_modified_page_range.localalias + 0x47c
+13 ffff0000dcb1ea30 (+ 784) ffff00000017a9c8   <kernel_arm64> VMCache<[32m0xdcb1ea50[0m>::WriteModified() + 0x3c
+14 ffff0000dcb1ea50 (+  32) ffff000000131dac   <kernel_arm64> fs_sync(int32: [34m-592319664[0m) + 0x3cc
+15 ffff0000dcb1eb50 (+ 256) ffff00000013c808   <kernel_arm64> _kern_sync.localalias + 0x28
+16 ffff0000dcb1eba0 (+  80) ffff0000000a7188   <kernel_arm64> syscall_dispatcher + 0x12b8
+17 ffff0000dcb1ebd0 (+  48) ffff000000182ee8   <kernel_arm64> do_sync_handler + 0x568
+18 ffff0000dcb1ecc7 (+ 247) ffff000000189458   <kernel_arm64> handle_el0_sync + 0xa0
+iframe at 0xffff0000dcb1ecc7
+ELR=0000008dbdf0c550 SPSR=0000000060000000
+LR =0000008f4ba9be0c SP  =00000194551cff40 FP =00000194551cff40

@@ -1,0 +1,33 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: bti-stepti
+# instance: i-080275fea9b38d7a6   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm bti, step ti
+# start: 20261104T091721Z   end: 20261104T092731Z   rc: 1
+# script sha256: 0819d0662101faa918134fcbf4aaaa1529db745a27f379d776f8eaa523a944dd
+# ---- script ----
+# | # #1105 step ti, arm bti: ext2 ti (indirect; holes with missing indirect blocks): 64 KiB at 32 KiB (direct into indirect range), 64 KiB at 20 MiB (double indirect range)
+# | set -x
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | uname -a
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/2 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | mkdir -p /hx4k /he4k /hx1k
+# | [ -f /boot/home/c256k ] || { dd if=/dev/urandom of=/boot/home/c256k bs=65536 count=4; dd if=/dev/urandom of=/boot/home/c128k bs=65536 count=2; dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1; dd if=/dev/urandom of=/boot/home/c1k bs=1024 count=1; } 2>/dev/null
+# | for c in c256k c128k c64k c1k; do echo "$c md5 $(md5sum < /boot/home/$c)"; done
+# | mount -t ext2 $DD/1 /he4k || exit 1
+# | cd /he4k && ls -ls
+# | dd if=/boot/home/c64k of=ti bs=4096 seek=8 conv=notrunc 2>&1 | tail -1; echo "ti write1 rc=$?"
+# | dd if=/boot/home/c64k of=ti bs=65536 seek=320 conv=notrunc 2>&1 | tail -1; echo "ti write2 rc=$?"
+# | sync; cd /; unmount /he4k; echo "unmount rc=$?"
+# ---- raw output ----

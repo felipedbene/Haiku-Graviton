@@ -226,12 +226,20 @@ Inode::CheckPermissions(int accessMode) const
 status_t
 Inode::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 {
+	status_t status;
 	if (Flags() & EXT2_INODE_EXTENTS) {
 		ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
-		return stream.FindBlock(offset, block, _count);
+		status = stream.FindBlock(offset, block, _count);
+	} else {
+		DataStream stream(fVolume, &fNode.stream, Size());
+		status = stream.FindBlock(offset, block, _count);
 	}
-	DataStream stream(fVolume, &fNode.stream, Size());
-	return stream.FindBlock(offset, block, _count);
+
+	// A hole is block 0. Only file data goes through the file map, which
+	// knows; anything else (directories) would read or write block 0.
+	if (status == B_OK && block == 0 && !IsFile())
+		return B_BAD_DATA;
+	return status;
 }
 
 
@@ -283,6 +291,20 @@ Inode::WriteAt(Transaction& transaction, off_t pos, const uint8* buffer,
 		", new size: %" B_PRIdOFF ":%" B_PRIdOFF "\n",
 		oldSize >> 32, oldSize & 0xFFFFFFFF,
 		end >> 32, end & 0xFFFFFFFF);
+
+	if (pos < oldSize) {
+		// Holes below the old size; Resize() takes care of the ones from
+		// there on. Done first, so that a failure leaves the file (and the
+		// file cache's idea of its size) as it was.
+		status_t status = _FillHoles(transaction, pos, end, oldSize);
+		if (status == B_OK)
+			status = WriteBack(transaction);
+		if (status != B_OK) {
+			*_length = 0;
+			WriteLockInTransaction(transaction);
+			return status;
+		}
+	}
 
 	if (end > oldSize) {
 		status_t status = Resize(transaction, end);
@@ -407,6 +429,11 @@ Inode::Resize(Transaction& transaction, off_t size)
 		status = _EnlargeDataStream(transaction, size);
 			// on failure, the stream has given back what it allocated, and
 			// the size is still the old one
+		if (status == B_OK) {
+			// the zeros FillGapWithZeros() (or the write) puts from the old
+			// end of the file on must not land in a hole
+			status = _FillHoles(transaction, oldSize, size, oldSize);
+		}
 	} else
 		status = _ShrinkDataStream(transaction, size);
 
@@ -429,6 +456,42 @@ Inode::Resize(Transaction& transaction, off_t size)
 		"\n", Size());
 
 	return WriteBack(transaction);
+}
+
+
+status_t
+Inode::_FillHoles(Transaction& transaction, off_t start, off_t end,
+	off_t oldSize)
+{
+	// A sparse file made elsewhere can have holes below its old size, and
+	// the page writer can't write to a hole: give the ones the pages of
+	// [start, end) land in blocks first. Past the page holding the old end
+	// of the file, Resize() has mapped everything.
+	off_t oldEnd = (oldSize + B_PAGE_SIZE - 1) & ~(off_t)(B_PAGE_SIZE - 1);
+	if (end > oldEnd)
+		end = oldEnd;
+	if (end <= start || !IsFile())
+		return B_OK;
+
+	off_t added = 0;
+	status_t status;
+	if ((Flags() & EXT2_INODE_EXTENTS) != 0) {
+		ExtentStream stream(fVolume, this, &fNode.extent_stream, Size());
+		status = stream.FillHoles(transaction, start, end - start, added);
+	} else {
+		DataStream stream(fVolume, &fNode.stream, Size());
+		status = stream.FillHoles(transaction, start, end - start, added);
+	}
+	if (added != 0) {
+		status_t countStatus = _SetNumBlocks(NumBlocks()
+			+ added * (fVolume->BlockSize() / 512));
+		if (status == B_OK)
+			status = countStatus;
+		// the file map may have cached these blocks as holes
+		off_t mapStart = start & ~(off_t)(B_PAGE_SIZE - 1);
+		file_map_invalidate(Map(), mapStart, end + B_PAGE_SIZE - mapStart);
+	}
+	return status;
 }
 
 
@@ -865,6 +928,9 @@ Inode::TransactionDone(bool success)
 		// Revert any changes to the inode
 		if (UpdateNodeFromDisk() != B_OK)
 			panic("Failed to reload inode from disk!\n");
+		// and forget mappings the aborted transaction may have made
+		if (Map() != NULL)
+			file_map_invalidate(Map(), 0, Size());
 	}
 }
 

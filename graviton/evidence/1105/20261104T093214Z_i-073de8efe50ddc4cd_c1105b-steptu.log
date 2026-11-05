@@ -1,0 +1,112 @@
+# NOTE: arms c1105a/b ran the build after the second review (ext2 269dfc60...); the final build (8f74dd8b..., after the third review) is arms c1105c-c1105i, whose valid Linux checks are c1105g, c1105h and c1105i.
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1105b-steptu
+# instance: i-073de8efe50ddc4cd   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm c1105b, step tu
+# start: 20261104T093214Z   end: 20261104T093225Z   rc: 0
+# script sha256: 40bd5791bda886f1ce5a771299804cfa9bccb868e6e1cbafdeba2fcf9fa000df
+# ---- script ----
+# | # #1105 step tu, arm c1105b: ext4 tu (6000 bytes, all hole): ftruncate to 10000
+# | set -x
+# | set -x
+# | uname -a
+# | sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/1 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | echo "boot $BOOT, data disk $DD: $(ls $DD | tr '\n' ' ')"
+# | mkdir -p /ex4k /ex1k
+# | uname -a
+# | sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+# | BOOT=$(df /boot | awk '/Device:/ { print $2 }')
+# | DD=""
+# | for d in /dev/disk/nvme/*; do case "$BOOT" in $d/*) continue;; esac; [ -e $d/2 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no data disk"; exit 1; }
+# | mkdir -p /hx4k /he4k /hx1k
+# | [ -f /boot/home/c256k ] || { dd if=/dev/urandom of=/boot/home/c256k bs=65536 count=4; dd if=/dev/urandom of=/boot/home/c128k bs=65536 count=2; dd if=/dev/urandom of=/boot/home/c64k bs=65536 count=1; dd if=/dev/urandom of=/boot/home/c1k bs=1024 count=1; } 2>/dev/null
+# | for c in c256k c128k c64k c1k; do echo "$c md5 $(md5sum < /boot/home/$c)"; done
+# | mount -t ext2 $DD/0 /hx4k || exit 1
+# | cd /hx4k && ls -ls
+# | truncate -s 10000 tu; echo "tu truncate rc=$?"; ls -ls tu
+# | sync; cd /; unmount /hx4k; echo "unmount rc=$?"
+# ---- raw output ----
+Haiku ip-10-128-5-31.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+2cfcf4693a78d5cdf92f8784f3886b113f66c150aec2c99a0e0d61ab6aeb13e6  /boot/system/kernel_arm64
+269dfc60d8c29c0344b6779ca14051525f27721108469254ab7316d25220ccf5  /boot/system/add-ons/kernel/file_systems/ext2
+boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 2 raw 
+Haiku ip-10-128-5-31.us-west-2.comput R1~beta6+development hrev59996 Nov  4 2026 00:11:36 arm64 other Haiku
+269dfc60d8c29c0344b6779ca14051525f27721108469254ab7316d25220ccf5  /boot/system/add-ons/kernel/file_systems/ext2
+c256k md5 7b4a98950b6a9d8d3ee51476970e7fed  -
+c128k md5 7827bb77de66d490bd6dc1b8d02833fc  -
+c64k md5 dea190c5128c661ada741de33e1bbe2d  -
+c1k md5 9f82af36e41a770d8d0fba95e5334ac6  -
+total 9204
+  16 drw-rw-rw- 2 baron root   16384 Nov  4 09:06 lost+found
+6272 -rw-rw-rw- 1 baron root 8388608 Nov  4 09:28 ph
+ 132 -rw-rw-rw- 1 baron root  131172 Nov  4 09:30 ta
+ 324 -rw-rw-rw- 1 baron root 8388608 Nov  4 09:29 tf
+2368 -rw-rw-rw- 1 baron root 8388608 Nov  4 09:28 th
+  88 -rw-rw-rw- 1 baron root 8388608 Nov  4 09:31 tl
+   0 -rw-rw-rw- 1 baron root    6000 Nov  4 09:24 tu
+   4 -rw-rw-rw- 1 baron root 1048576 Nov  4 09:31 tz
+tu truncate rc=0
+8 -rw-rw-rw- 1 baron root 10000 Nov  4 09:32 tu
+unmount rc=0
++ set -x
++ uname -a
++ sha256sum /boot/system/kernel_arm64 /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/1 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
+++ ls /dev/disk/nvme/1
+++ tr '\n' ' '
++ echo 'boot /dev/disk/nvme/0/1, data disk /dev/disk/nvme/1: 0 1 2 raw '
++ mkdir -p /ex4k /ex1k
++ uname -a
++ sha256sum /boot/system/add-ons/kernel/file_systems/ext2
+++ df /boot
+++ awk '/Device:/ { print $2 }'
++ BOOT=/dev/disk/nvme/0/1
++ DD=
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ continue
++ for d in /dev/disk/nvme/*
++ case "$BOOT" in
++ '[' -e /dev/disk/nvme/1/2 ']'
++ DD=/dev/disk/nvme/1
++ '[' -n /dev/disk/nvme/1 ']'
++ mkdir -p /hx4k /he4k /hx1k
++ '[' -f /boot/home/c256k ']'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c256k md5 7b4a98950b6a9d8d3ee51476970e7fed  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c128k md5 7827bb77de66d490bd6dc1b8d02833fc  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c64k md5 dea190c5128c661ada741de33e1bbe2d  -'
++ for c in c256k c128k c64k c1k
+++ md5sum
++ echo 'c1k md5 9f82af36e41a770d8d0fba95e5334ac6  -'
++ mount -t ext2 /dev/disk/nvme/1/0 /hx4k
++ cd /hx4k
++ ls -ls
++ truncate -s 10000 tu
++ echo 'tu truncate rc=0'
++ ls -ls tu
++ sync
++ cd /
++ unmount /hx4k
++ echo 'unmount rc=0'

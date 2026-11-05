@@ -9,6 +9,11 @@
 
 #include "DataStream.h"
 
+#include <stdlib.h>
+#include <unistd.h>
+
+#include <Drivers.h>
+
 #include "CachedBlock.h"
 #include "Volume.h"
 
@@ -43,6 +48,7 @@ DataStream::DataStream(Volume* volume, ext2_data_stream* stream,
 	fRemovedBlocks(0),
 	fAddedBlocks(0),
 	fFreedBlocks(0),
+	fZeroBuffer(NULL),
 	fSize(size)
 {
 	fNumBlocks = size == 0 ? 0 : ((size - 1) >> fVolume->BlockShift()) + 1;
@@ -67,11 +73,15 @@ DataStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 	// TODO: we could return the size of the sparse range, as this might be more
 	// than just a block
 
+	// A block of 0 is a hole, which a sparse file made elsewhere can have
+	// anywhere, also where a whole indirect block is missing.
+	if (_count != NULL)
+		*_count = 1;
+
 	if (index < EXT2_DIRECT_BLOCKS) {
 		// direct blocks
 		block = B_LENDIAN_TO_HOST_INT32(fStream->direct[index]);
-		ASSERT(block != 0);
-		if (_count) {
+		if (_count && block != 0) {
 			*_count = 1;
 			uint32 nextBlock = block;
 			while (++index < EXT2_DIRECT_BLOCKS
@@ -81,13 +91,16 @@ DataStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 	} else if ((index -= EXT2_DIRECT_BLOCKS) < kIndirectsPerBlock) {
 		// indirect blocks
 		CachedBlock cached(fVolume);
+		if (fStream->indirect == 0) {
+			block = 0;
+			return B_OK;
+		}
 		uint32* indirectBlocks = (uint32*)cached.SetTo(B_LENDIAN_TO_HOST_INT32(
 			fStream->indirect));
 		if (indirectBlocks == NULL)
 			return B_IO_ERROR;
 
 		block = B_LENDIAN_TO_HOST_INT32(indirectBlocks[index]);
-		ASSERT(block != 0);
 		if (_count) {
 			*_count = 1;
 			uint32 nextBlock = block;
@@ -98,6 +111,10 @@ DataStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 	} else if ((index -= kIndirectsPerBlock) < kIndirectsPerBlock2) {
 		// double indirect blocks
 		CachedBlock cached(fVolume);
+		if (fStream->double_indirect == 0) {
+			block = 0;
+			return B_OK;
+		}
 		uint32* indirectBlocks = (uint32*)cached.SetTo(B_LENDIAN_TO_HOST_INT32(
 			fStream->double_indirect));
 		if (indirectBlocks == NULL)
@@ -124,10 +141,13 @@ DataStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 					(*_count)++;
 			}
 		}
-		ASSERT(block != 0);
 	} else if ((index -= kIndirectsPerBlock2) < kIndirectsPerBlock3) {
 		// triple indirect blocks
 		CachedBlock cached(fVolume);
+		if (fStream->triple_indirect == 0) {
+			block = 0;
+			return B_OK;
+		}
 		uint32* indirectBlocks = (uint32*)cached.SetTo(B_LENDIAN_TO_HOST_INT32(
 			fStream->triple_indirect));
 		if (indirectBlocks == NULL)
@@ -165,7 +185,6 @@ DataStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 				}
 			}
 		}
-		ASSERT(block != 0);
 	} else {
 		// Outside of the possible data stream
 		ERROR("ext2: block outside datastream!\n");
@@ -174,6 +193,159 @@ DataStream::FindBlock(off_t offset, fsblock_t& block, uint32 *_count)
 
 	TRACE("FindBlock(offset %" B_PRIdOFF "): %" B_PRIu64" %" B_PRIu32 "\n", offset,
 		block, _count != NULL ? *_count : 1);
+	return B_OK;
+}
+
+
+status_t
+DataStream::FillHoles(Transaction& transaction, off_t pos, off_t length,
+	off_t& added)
+{
+	// As ExtentStream::FillHoles(): give blocks (and any missing indirect
+	// blocks) to the holes of a sparse file that a write's pages land in,
+	// since the page writer cannot write to a hole.
+	added = 0;
+	if (length <= 0)
+		return B_OK;
+
+	uint32 shift = fVolume->BlockShift();
+	off_t first = (pos & ~(off_t)(B_PAGE_SIZE - 1)) >> shift;
+	off_t end = ((pos + length + B_PAGE_SIZE - 1)
+		& ~(off_t)(B_PAGE_SIZE - 1)) >> shift;
+	if (end > fNumBlocks)
+		end = fNumBlocks;
+
+	fAddedBlocks = 0;
+	fAllocated = 0;
+	fZeroBuffer = NULL;
+	status_t status = B_OK;
+	for (off_t index = first; index < end; index++) {
+		fsblock_t block;
+		status = FindBlock(index << shift, block);
+		if (status != B_OK)
+			break;
+		if (block != 0)
+			continue;
+
+		// at most the rest of the range (what isn't used goes back below)
+		fWaiting = end - index;
+		status = _FillHole(transaction, index);
+		if (status != B_OK)
+			break;
+	}
+	if (fAllocated != 0) {
+		fVolume->FreeBlocks(transaction, fAllocatedPos, fAllocated);
+		fAllocated = 0;
+	}
+	if (fZeroBuffer != NULL) {
+		// the zeros must be on the disk before the new mapping can be
+		ioctl(fVolume->Device(), B_FLUSH_DRIVE_CACHE);
+		free(fZeroBuffer);
+		fZeroBuffer = NULL;
+	}
+
+	added = fAddedBlocks;
+	return status;
+}
+
+
+status_t
+DataStream::_FillHole(Transaction& transaction, off_t index)
+{
+	CachedBlock cached1(fVolume);
+	CachedBlock cached2(fVolume);
+	CachedBlock cached3(fVolume);
+	uint32* level1;
+	uint32* level2;
+	uint32* level3;
+	uint32* slot;
+	status_t status;
+
+	if (index < kMaxDirect)
+		slot = &fStream->direct[index];
+	else if ((index -= kMaxDirect) < kIndirectsPerBlock) {
+		status = _HoleLevel(transaction, &fStream->indirect, cached1, level1);
+		if (status != B_OK)
+			return status;
+		slot = &level1[index];
+	} else if ((index -= kIndirectsPerBlock) < kIndirectsPerBlock2) {
+		status = _HoleLevel(transaction, &fStream->double_indirect, cached1,
+			level1);
+		if (status == B_OK) {
+			status = _HoleLevel(transaction,
+				&level1[index / kIndirectsPerBlock], cached2, level2);
+		}
+		if (status != B_OK)
+			return status;
+		slot = &level2[index % kIndirectsPerBlock];
+	} else {
+		index -= kIndirectsPerBlock2;
+		status = _HoleLevel(transaction, &fStream->triple_indirect, cached1,
+			level1);
+		if (status == B_OK) {
+			status = _HoleLevel(transaction,
+				&level1[index / kIndirectsPerBlock2], cached2, level2);
+		}
+		if (status == B_OK) {
+			status = _HoleLevel(transaction,
+				&level2[(index / kIndirectsPerBlock) % kIndirectsPerBlock],
+				cached3, level3);
+		}
+		if (status != B_OK)
+			return status;
+		slot = &level3[index % kIndirectsPerBlock];
+	}
+
+	if (*slot != 0)
+		return B_OK;
+
+	uint32 blockNum;
+	status = _GetBlock(transaction, blockNum);
+	if (status != B_OK)
+		return status;
+
+	// The block may hold anything, and a partial write of an uncached page
+	// reads it back first: zero it before it is mapped. File data doesn't
+	// go through the block cache, so write to the device directly.
+	if (fZeroBuffer == NULL) {
+		fZeroBuffer = calloc(1, kBlockSize);
+		if (fZeroBuffer == NULL)
+			return B_NO_MEMORY;
+	}
+	if (write_pos(fVolume->Device(), (off_t)blockNum * kBlockSize,
+			fZeroBuffer, kBlockSize) != (ssize_t)kBlockSize) {
+		return B_IO_ERROR;
+	}
+
+	*slot = B_HOST_TO_LENDIAN_INT32(blockNum);
+	return B_OK;
+}
+
+
+status_t
+DataStream::_HoleLevel(Transaction& transaction, uint32* pointer,
+	CachedBlock& cached, uint32*& block)
+{
+	// the indirect block *pointer refers to, made writable; allocated (and
+	// zeroed) first if it is missing
+	uint32 blockNum = B_LENDIAN_TO_HOST_INT32(*pointer);
+	bool clear = false;
+	if (blockNum == 0) {
+		status_t status = _GetBlock(transaction, blockNum);
+		if (status != B_OK)
+			return status;
+		clear = true;
+	}
+	block = (uint32*)cached.SetToWritable(transaction, blockNum, clear);
+	if (block == NULL) {
+		if (clear) {
+			fVolume->FreeBlocks(transaction, blockNum, 1);
+			fAddedBlocks--;
+		}
+		return B_IO_ERROR;
+	}
+	if (clear)
+		*pointer = B_HOST_TO_LENDIAN_INT32(blockNum);
 	return B_OK;
 }
 
@@ -426,7 +598,9 @@ DataStream::_GetBlock(Transaction& transaction, uint32& blockNum)
 	if (fAllocated == 0) {
 		uint32 blockGroup = (fAllocatedPos - fFirstBlock)
 			/ fVolume->BlocksPerGroup();
-		
+		if (blockGroup >= fVolume->NumGroups())
+			blockGroup = 0;
+
 		// fWaiting is an estimate, which can run out on a sparse file made
 		// elsewhere; asking for at most 0 blocks would get 0, and the
 		// fAllocated-- below would then hand out a block never allocated.

@@ -33,6 +33,8 @@ public:
 	status_t		Shrink(Transaction& transaction, off_t& numBlocks);
 	status_t		MarkWritten(Transaction& transaction, off_t pos,
 						off_t length, bool& changed);
+	status_t		FillHoles(Transaction& transaction, off_t pos,
+						off_t length, off_t& added);
 	status_t		ZeroUninitialized(off_t pos, size_t length,
 						const iovec* vecs, size_t count);
 	void			Init();
@@ -49,6 +51,9 @@ private:
 						ext2_extent_stream*& stream, fsblock_t& leafBlock,
 						int32& index, fileblock_t& next);
 	status_t		_ZeroBlocks(fsblock_t start, uint32 count);
+	status_t		_LowerKeys(Transaction& transaction, fileblock_t first);
+	status_t		_FillHoles(Transaction& transaction, fileblock_t first,
+						fileblock_t end, off_t& added, bool& zeroed);
 	static	void	_ZeroVecs(const iovec* vecs, size_t count, off_t offset,
 						off_t length);
 	status_t		_MappedEnd(off_t& end);

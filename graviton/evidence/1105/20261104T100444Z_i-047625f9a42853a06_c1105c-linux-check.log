@@ -1,0 +1,246 @@
+# NOTE: not valid as evidence: the c1105c and c1105d checks ran at the same time on the builder and shared one mount point, so their outputs are mixed. The final arm was rerun (c1105e/c1105f) with a mount point per arm.
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: c1105c-linux-check
+# instance: i-047625f9a42853a06   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: Linux e2fsck + contents of arm c1105c's data volume vol-045cbddf68061fb24
+# start: 20261104T100444Z   end: 20261104T100455Z   rc: 0
+# script sha256: d17e42be5e55cc6e9f77e3d554a741f646628ba7de144d858e7fc0af69807ff3
+# ---- script ----
+# | # Linux check of arm c1105c's data volume vol-045cbddf68061fb24 (seed4 layout) after Haiku's writes into holes:
+# | # e2fsck -fn on the three file systems; then for every written range, its md5 (to compare with
+# | # the chunk Haiku wrote), and whether everything outside the written ranges still equals the
+# | # Linux original (zeros in the holes, the data elsewhere). Whole-file md5s to compare with Haiku's.
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol045cbddf68061fb24 '$9 == v { print $11 }' | sed 's|.*/||')
+# | P=/dev/${D}p; echo "volume /dev/$D"
+# | for n in 1 2 3; do echo "== p$n"; e2fsck -fn ${P}$n > /tmp/fsck.out 2>&1; r=$?; grep -v "^Pass\|^e2fsck 1" /tmp/fsck.out | cut -c1-200 | head -20; echo "e2fsck p$n rc=$r"; done
+# | cat > /tmp/regions.py <<'PY'
+# | import hashlib, sys
+# | path, orig = sys.argv[1], sys.argv[2]
+# | regions = [tuple(int(x) for x in r.split(':')) for r in sys.argv[3:]]
+# | a = open(path, 'rb').read(); b = open(orig, 'rb').read()
+# | print('%s size=%d (orig %d) md5=%s' % (path.split('/')[-1], len(a), len(b), hashlib.md5(a).hexdigest()))
+# | rest_a = bytearray(a); rest_b = bytearray(b)
+# | for off, ln in regions:
+# | 	print('  [%d,+%d) md5 %s' % (off, ln, hashlib.md5(a[off:off + ln]).hexdigest()))
+# | 	rest_a[off:off + ln] = b'\0' * ln; rest_b[off:off + ln] = b'\0' * ln
+# | print('  outside the written ranges: %s' % ('same as the Linux original' if rest_a == rest_b else 'DIFFERS from the Linux original'))
+# | PY
+# | mkdir -p /opt/chk/m
+# | chk() { n=$1; shift; mount -o ro ${P}$n /opt/chk/m || return; ls -ls /opt/chk/m; while [ $# -gt 0 ]; do f=$1; r=$2; shift 2; [ -f /opt/chk/m/$f ] && python3 /tmp/regions.py /opt/chk/m/$f /opt/seed4/orig/$f $r; done; [ -f /opt/chk/m/tf ] && filefrag -v /opt/chk/m/tf | sed -n 4,10p; [ $n = 1 ] && debugfs -R "ex tl" ${P}1 2>/dev/null; umount /opt/chk/m; }
+# | chk 1 th "3145728:262144 6225920:131072" ph "3145728:131072" tf "1048576:65536" ta "100:3996 4096:127076" tl "0:65536" tz "8192:10" tu "6000:4000"
+# | chk 2 ti "32768:65536 20971520:65536" pi "3145728:131072" tb "100:3996 4096:127076"
+# | chk 3 tk "1049088:1024"
+# ---- raw output ----
+volume /dev/nvme2n1
+== p1
+x4k: 18/102400 files (33.3% non-contiguous), 8866/102400 blocks
+e2fsck p1 rc=0
+== p2
+e4k: 14/51200 files (21.4% non-contiguous), 4882/51200 blocks
+e2fsck p2 rc=0
+== p3
+x1k: 12/25584 files (0.0% non-contiguous), 8053/102400 blocks
+e2fsck p3 rc=0
+total 9212
+  16 drw-rw-rw- 2 root root   16384 Nov  4 09:06 lost+found
+6272 -rw-rw-rw- 1 root root 8388608 Nov  4 10:00 ph
+ 132 -rw-rw-rw- 1 root root  131172 Nov  4 10:02 ta
+ 324 -rw-rw-rw- 1 root root 8388608 Nov  4 10:00 tf
+2368 -rw-rw-rw- 1 root root 8388608 Nov  4 10:00 th
+  88 -rw-rw-rw- 1 root root 8388608 Nov  4 10:02 tl
+   8 -rw-rw-rw- 1 root root   10000 Nov  4 10:03 tu
+   4 -rw-rw-rw- 1 root root 1048576 Nov  4 10:03 tz
+ph size=8388608 (orig 8388608) md5=ea9ba8d39db548a4d1d4aeab7ba9f107
+  [3145728,+131072) md5 e59198e1ab8449d90aa6b2f2c16c5bae
+  outside the written ranges: same as the Linux original
+tf size=8388608 (orig 8388608) md5=cc55405e8e77f5946f0ff8775eda6ee1
+  [1048576,+65536) md5 0c458bd962ab7d362842125fa4366f3d
+  outside the written ranges: same as the Linux original
+ta size=131172 (orig 100) md5=fc36228f78ce23d5d24e38650b648979
+  [100,+3996) md5 a923b7690e39134c5aee2dfaedecd6d6
+  [4096,+127076) md5 04173377a0b73ab679fbecd6162c7f46
+  outside the written ranges: same as the Linux original
+tl size=8388608 (orig 8388608) md5=faa51c0a990cc59199df04d1ad1441e3
+  [0,+65536) md5 0c458bd962ab7d362842125fa4366f3d
+  outside the written ranges: same as the Linux original
+tz size=1048576 (orig 1048576) md5=b6d81b360a5672d80c27430f39153e2c
+  [8192,+10) md5 a63c90cc3684ad8b0a2176a6a8fe9005
+  outside the written ranges: same as the Linux original
+tu size=10000 (orig 6000) md5=b85d6fb9ef4260dcf1ce0a1b0bff80d3
+  [6000,+4000) md5 6c1b4100d743a6937ad6c59244d535b3
+  outside the written ranges: same as the Linux original
+   0:        0..      15:      35840..     35855:     16:            
+   1:      256..     271:      37473..     37488:     16:      36096:
+   2:      512..     527:      36352..     36367:     16:      37729:
+   3:     1024..    1039:      36864..     36879:     16:            
+   4:     1536..    1551:      37376..     37391:     16:             last
+/opt/chk/m/tf: 3 extents found
+Level Entries       Logical        Physical Length Flags
+ 0/ 1   1/  1     0 -  2047  32819            2048
+ 1/ 1   1/  6     0 -    15  18242 -  18257     16 
+ 1/ 1   2/  6   256 -   256  17664 -  17664      1 
+ 1/ 1   3/  6   512 -   512  17920 -  17920      1 
+ 1/ 1   4/  6   768 -   768  18176 -  18176      1 
+ 1/ 1   5/  6  1024 -  1024   6977 -   6977      1 
+ 1/ 1   6/  6  1280 -  1280   7233 -   7233      1 
+total 6592
+  16 drw-rw-rw- 2 root root    16384 Nov  4 09:06 lost+found
+6284 -rw-rw-rw- 1 root root  8388608 Nov  4 10:01 pi
+ 136 -rw-rw-rw- 1 root root   131172 Nov  4 10:02 tb
+ 156 -rw-rw-rw- 1 root root 41943040 Nov  4 10:01 ti
+ti size=41943040 (orig 41943040) md5=d0fa49bc16a817b275f99cb7faab0288
+  [32768,+65536) md5 456505f68f6849c8588d4e8c944075d7
+  [20971520,+65536) md5 456505f68f6849c8588d4e8c944075d7
+  outside the written ranges: same as the Linux original
+pi size=8388608 (orig 8388608) md5=6d72114a1143242113f177974f07be3b
+  [3145728,+131072) md5 8bc96efea987dceaf17caf49df19d8ae
+  outside the written ranges: same as the Linux original
+tb size=131172 (orig 100) md5=a78a02e62270822b8afabc88f87b0e7f
+  [100,+3996) md5 a923b7690e39134c5aee2dfaedecd6d6
+  [4096,+127076) md5 ea67ef2528c7d6d38053234bea6ec8d5
+  outside the written ranges: DIFFERS from the Linux original
+total 80
+12 drw-rw-rw- 2 root root   12288 Nov  4 09:06 lost+found
+68 -rw-rw-rw- 1 root root 4194304 Nov  4 10:01 tk
+   0:        0..      15:      35840..     35855:     16:            
+   1:      256..     271:      37473..     37488:     16:      36096:
+   2:      512..     527:      36352..     36367:     16:      37729:
+   3:     1024..    1039:      36864..     36879:     16:            
+   4:     1536..    1551:      37376..     37391:     16:             last
+/opt/chk/m/tf: 3 extents found
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol045cbddf68061fb24 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme2n1
++ P=/dev/nvme2n1p
++ echo 'volume /dev/nvme2n1'
++ for n in 1 2 3
++ echo '== p1'
++ e2fsck -fn /dev/nvme2n1p1
++ r=0
++ grep -v '^Pass\|^e2fsck 1' /tmp/fsck.out
++ cut -c1-200
++ head -20
++ echo 'e2fsck p1 rc=0'
++ for n in 1 2 3
++ echo '== p2'
++ e2fsck -fn /dev/nvme2n1p2
++ r=0
++ grep -v '^Pass\|^e2fsck 1' /tmp/fsck.out
++ cut -c1-200
++ head -20
++ echo 'e2fsck p2 rc=0'
++ for n in 1 2 3
++ echo '== p3'
++ e2fsck -fn /dev/nvme2n1p3
++ r=0
++ grep -v '^Pass\|^e2fsck 1' /tmp/fsck.out
++ cut -c1-200
++ head -20
++ echo 'e2fsck p3 rc=0'
++ cat
++ mkdir -p /opt/chk/m
++ chk 1 th '3145728:262144 6225920:131072' ph 3145728:131072 tf 1048576:65536 ta '100:3996 4096:127076' tl 0:65536 tz 8192:10 tu 6000:4000
++ n=1
++ shift
++ mount -o ro /dev/nvme2n1p1 /opt/chk/m
++ ls -ls /opt/chk/m
++ '[' 14 -gt 0 ']'
++ f=th
++ r='3145728:262144 6225920:131072'
++ shift 2
++ '[' -f /opt/chk/m/th ']'
++ python3 /tmp/regions.py /opt/chk/m/th /opt/seed4/orig/th 3145728:262144 6225920:131072
++ '[' 12 -gt 0 ']'
++ f=ph
++ r=3145728:131072
++ shift 2
++ '[' -f /opt/chk/m/ph ']'
++ python3 /tmp/regions.py /opt/chk/m/ph /opt/seed4/orig/ph 3145728:131072
++ '[' 10 -gt 0 ']'
++ f=tf
++ r=1048576:65536
++ shift 2
++ '[' -f /opt/chk/m/tf ']'
++ python3 /tmp/regions.py /opt/chk/m/tf /opt/seed4/orig/tf 1048576:65536
++ '[' 8 -gt 0 ']'
++ f=ta
++ r='100:3996 4096:127076'
++ shift 2
++ '[' -f /opt/chk/m/ta ']'
++ python3 /tmp/regions.py /opt/chk/m/ta /opt/seed4/orig/ta 100:3996 4096:127076
++ '[' 6 -gt 0 ']'
++ f=tl
++ r=0:65536
++ shift 2
++ '[' -f /opt/chk/m/tl ']'
++ python3 /tmp/regions.py /opt/chk/m/tl /opt/seed4/orig/tl 0:65536
++ '[' 4 -gt 0 ']'
++ f=tz
++ r=8192:10
++ shift 2
++ '[' -f /opt/chk/m/tz ']'
++ python3 /tmp/regions.py /opt/chk/m/tz /opt/seed4/orig/tz 8192:10
++ '[' 2 -gt 0 ']'
++ f=tu
++ r=6000:4000
++ shift 2
++ '[' -f /opt/chk/m/tu ']'
++ python3 /tmp/regions.py /opt/chk/m/tu /opt/seed4/orig/tu 6000:4000
++ '[' 0 -gt 0 ']'
++ '[' -f /opt/chk/m/tf ']'
++ filefrag -v /opt/chk/m/tf
++ sed -n 4,10p
++ '[' 1 = 1 ']'
++ debugfs -R 'ex tl' /dev/nvme2n1p1
++ umount /opt/chk/m
++ chk 2 ti '32768:65536 20971520:65536' pi 3145728:131072 tb '100:3996 4096:127076'
++ n=2
++ shift
++ mount -o ro /dev/nvme2n1p2 /opt/chk/m
++ ls -ls /opt/chk/m
++ '[' 6 -gt 0 ']'
++ f=ti
++ r='32768:65536 20971520:65536'
++ shift 2
++ '[' -f /opt/chk/m/ti ']'
++ python3 /tmp/regions.py /opt/chk/m/ti /opt/seed4/orig/ti 32768:65536 20971520:65536
++ '[' 4 -gt 0 ']'
++ f=pi
++ r=3145728:131072
++ shift 2
++ '[' -f /opt/chk/m/pi ']'
++ python3 /tmp/regions.py /opt/chk/m/pi /opt/seed4/orig/pi 3145728:131072
++ '[' 2 -gt 0 ']'
++ f=tb
++ r='100:3996 4096:127076'
++ shift 2
++ '[' -f /opt/chk/m/tb ']'
++ python3 /tmp/regions.py /opt/chk/m/tb /opt/seed4/orig/tb 100:3996 4096:127076
++ '[' 0 -gt 0 ']'
++ '[' -f /opt/chk/m/tf ']'
++ '[' 2 = 1 ']'
++ umount /opt/chk/m
++ chk 3 tk 1049088:1024
++ n=3
++ shift
++ mount -o ro /dev/nvme2n1p3 /opt/chk/m
++ ls -ls /opt/chk/m
++ '[' 2 -gt 0 ']'
++ f=tk
++ r=1049088:1024
++ shift 2
++ '[' -f /opt/chk/m/tk ']'
++ python3 /tmp/regions.py /opt/chk/m/tk /opt/seed4/orig/tk 1049088:1024
+Traceback (most recent call last):
+  File "/tmp/regions.py", line 4, in <module>
+    a = open(path, 'rb').read(); b = open(orig, 'rb').read()
+        ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/opt/chk/m/tk'
++ '[' 0 -gt 0 ']'
++ '[' -f /opt/chk/m/tf ']'
++ filefrag -v /opt/chk/m/tf
++ sed -n 4,10p
++ '[' 3 = 1 ']'
++ umount /opt/chk/m

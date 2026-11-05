@@ -1,0 +1,41 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed4c
+# instance: i-047625f9a42853a06   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: add the second review's cases (stale free blocks, a partial write into a hole, ftruncate up over a hole) to seed4
+# start: 20261104T092411Z   end: 20261104T092422Z   rc: 0
+# script sha256: c1ba9a8911ea3b9652a5ba029eb89ca8d276d363fd54651ca3555afc008078d5
+# ---- script ----
+# | # Add to seed4's x4k the cases of the second review of #1105, after filling and freeing 64 MiB
+# | # of random data so that free blocks hold stale contents:
+# | #  tz  truncate -s 1M      -> Haiku writes 10 bytes at 8192 into the hole, without reading first
+# | #  tu  truncate -s 6000    -> Haiku ftruncates it to 10000 (zeros into the old EOF page's hole)
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol06b2aa1b035811f44 '$9 == v { print $11 }' | sed 's|.*/||')
+# | P=/dev/${D}p; cd /opt/seed4
+# | mount ${P}1 m && (cd m && head -c 64M /dev/urandom > junk && sync && rm junk && sync && truncate -s 1M tz && truncate -s 6000 tu && chmod 666 tz tu && sync && cp tz tu /opt/seed4/orig/ && ls -ls tz tu); umount m
+# | e2fsck -fn ${P}1 > /tmp/f.out 2>&1; echo "e2fsck p1 rc=$?"
+# ---- raw output ----
+0 -rw-rw-rw- 1 root root    6000 Nov  4 09:24 tu
+0 -rw-rw-rw- 1 root root 1048576 Nov  4 09:24 tz
+e2fsck p1 rc=0
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol06b2aa1b035811f44 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ P=/dev/nvme1n1p
++ cd /opt/seed4
++ mount /dev/nvme1n1p1 m
++ cd m
++ head -c 64M /dev/urandom
++ sync
++ rm junk
++ sync
++ truncate -s 1M tz
++ truncate -s 6000 tu
++ chmod 666 tz tu
++ sync
++ cp tz tu /opt/seed4/orig/
++ ls -ls tz tu
++ umount m
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck p1 rc=0'

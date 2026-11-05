@@ -1,0 +1,86 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed4b
+# instance: i-047625f9a42853a06   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: add the review's cases (holes in the EOF page, a leading hole in a depth-1 tree) to seed4
+# start: 20261104T091443Z   end: 20261104T091453Z   rc: 0
+# script sha256: 47dfe2a83af270f23bac4b4f61e832616e21becf8441b2de57659b8d798b6011
+# ---- script ----
+# | # Add to the seed4 volume the cases the first review of #1105 found:
+# | #  x4k ta   truncate -s 100 (a file whose only block is a hole)       -> Haiku appends 128 KiB
+# | #  e4k tb   the same on ext2 (indirect)                               -> Haiku appends 128 KiB
+# | #  x4k tl   truncate -s 8M; 4 KiB at 1, 2, 3, 4, 5 MiB: 5 extents, so a depth-1 tree whose
+# | #           index key is 256 (the first extent's block)               -> Haiku writes 64 KiB at 0
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol06b2aa1b035811f44 '$9 == v { print $11 }' | sed 's|.*/||')
+# | P=/dev/${D}p; cd /opt/seed4
+# | w() { dd if=/dev/urandom of=$1 bs=$2 count=$3 seek=$4 conv=notrunc status=none; }
+# | mount ${P}1 m && (cd m && truncate -s 100 ta && truncate -s 8M tl && for o in 1 2 3 4 5; do w tl 4K 1 $((o * 256)); done; sync; chmod 666 ta tl; cp ta tl /opt/seed4/orig/; ls -ls ta tl; filefrag -v tl | sed -n '4,10p'); umount m
+# | debugfs -R "ex tl" ${P}1 2>/dev/null
+# | mount ${P}2 m && (cd m && truncate -s 100 tb && sync && chmod 666 tb && cp tb /opt/seed4/orig/ && ls -ls tb); umount m
+# | for n in 1 2; do e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck p$n rc=$?"; done
+# ---- raw output ----
+ 0 -rw-rw-rw- 1 root root     100 Nov  4 09:14 ta
+24 -rw-rw-rw- 1 root root 8388608 Nov  4 09:14 tl
+   0:      256..     256:      17664..     17664:      1:        256:
+   1:      512..     512:      17920..     17920:      1:            
+   2:      768..     768:      18176..     18176:      1:            
+   3:     1024..    1024:       6977..      6977:      1:      18432:
+   4:     1280..    1280:       7233..      7233:      1:             last
+tl: 2 extents found
+Level Entries       Logical        Physical Length Flags
+ 0/ 1   1/  1   256 -  2047  32819            1792
+ 1/ 1   1/  5   256 -   256  17664 -  17664      1 
+ 1/ 1   2/  5   512 -   512  17920 -  17920      1 
+ 1/ 1   3/  5   768 -   768  18176 -  18176      1 
+ 1/ 1   4/  5  1024 -  1024   6977 -   6977      1 
+ 1/ 1   5/  5  1280 -  1280   7233 -   7233      1 
+0 -rw-rw-rw- 1 root root 100 Nov  4 09:14 tb
+e2fsck p1 rc=0
+e2fsck p2 rc=0
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol06b2aa1b035811f44 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ P=/dev/nvme1n1p
++ cd /opt/seed4
++ mount /dev/nvme1n1p1 m
++ cd m
++ truncate -s 100 ta
++ truncate -s 8M tl
++ for o in 1 2 3 4 5
++ w tl 4K 1 256
++ dd if=/dev/urandom of=tl bs=4K count=1 seek=256 conv=notrunc status=none
++ for o in 1 2 3 4 5
++ w tl 4K 1 512
++ dd if=/dev/urandom of=tl bs=4K count=1 seek=512 conv=notrunc status=none
++ for o in 1 2 3 4 5
++ w tl 4K 1 768
++ dd if=/dev/urandom of=tl bs=4K count=1 seek=768 conv=notrunc status=none
++ for o in 1 2 3 4 5
++ w tl 4K 1 1024
++ dd if=/dev/urandom of=tl bs=4K count=1 seek=1024 conv=notrunc status=none
++ for o in 1 2 3 4 5
++ w tl 4K 1 1280
++ dd if=/dev/urandom of=tl bs=4K count=1 seek=1280 conv=notrunc status=none
++ sync
++ chmod 666 ta tl
++ cp ta tl /opt/seed4/orig/
++ ls -ls ta tl
++ filefrag -v tl
++ sed -n 4,10p
++ umount m
++ debugfs -R 'ex tl' /dev/nvme1n1p1
++ mount /dev/nvme1n1p2 m
++ cd m
++ truncate -s 100 tb
++ sync
++ chmod 666 tb
++ cp tb /opt/seed4/orig/
++ ls -ls tb
++ umount m
++ for n in 1 2
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck p1 rc=0'
++ for n in 1 2
++ e2fsck -fn /dev/nvme1n1p2
++ echo 'e2fsck p2 rc=0'
