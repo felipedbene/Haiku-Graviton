@@ -32,7 +32,7 @@ set -uo pipefail
 AMI_ID="${1:-}"
 SUCCEEDING="${2:-0}"
 RESULT_FILE="${3:-/tmp/haiku-perf-gate-result}"
-REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}"
 
 if [ -z "$AMI_ID" ]; then
 	echo "tag-gate-result: no AMI id given; nothing to tag" >&2

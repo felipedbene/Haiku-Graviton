@@ -304,8 +304,10 @@ export function loadSharedConfig(scope: Construct): SharedConfig {
   const repoCloudFrontDistId = process.env.HAIKU_REPO_CF_DIST
     ?? (scope.node.tryGetContext('haiku:repoCloudFrontDistId') as string | undefined);
   // Optional the same way: unset means "read it from SSM in the stack".
+  // An empty env var counts as unset, so it cannot hide a -c value.
   const optional = (key: string, envKey: string): string | undefined => {
-    const v = process.env[envKey] ?? scope.node.tryGetContext(key);
+    const fromEnv = process.env[envKey];
+    const v = fromEnv !== undefined && fromEnv !== '' ? fromEnv : scope.node.tryGetContext(key);
     return v === undefined || v === '' ? undefined : String(v);
   };
   return {

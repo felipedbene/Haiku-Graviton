@@ -4169,6 +4169,11 @@ test('HAIKU_PUBLISH_BUCKET / HAIKU_REPO_REGION reach the shared config; unset me
     delete process.env.HAIKU_PUBLISH_BUCKET;
     expect(loadSharedConfig(new cdk.App({ context: { 'haiku:publishBucketName': 'ctx-bucket' } }))
       .publishBucketName).toBe('ctx-bucket');
+    // A set-but-empty env var is unset: it must not hide the -c value.
+    process.env.HAIKU_PUBLISH_BUCKET = '';
+    expect(loadSharedConfig(new cdk.App({ context: { 'haiku:publishBucketName': 'ctx-bucket' } }))
+      .publishBucketName).toBe('ctx-bucket');
+    expect(loadSharedConfig(new cdk.App()).publishBucketName).toBeUndefined();
   } finally {
     process.env = saved;
   }

@@ -178,9 +178,13 @@ at boot, baked key as fallback).
    the `debeosops` qualifier, so a bootstrap run here targets `CDKToolkit-DeBeOSOps`
    only when you also pass `--toolkit-stack-name CDKToolkit-DeBeOSOps`.
 
+   **Every region, us-west-2 included,** needs the two `/debeos/repo/{bucket,region}`
+   parameters before its next `DebeosOpsStack` deploy: they name the ONE repo
+   (`haiku-graviton-hpkg-<account>-us-east-2`, `us-east-2`) wherever the stack
+   runs, and a deploy without them fails rather than publishing elsewhere.
+
    **A second region** additionally needs, before `DebeosOpsStack` deploys there:
-   the three `/debeos/onprem/*` parameters; the two `/debeos/repo/{bucket,region}`
-   parameters (every region names the same repo); `/debeos/bake/workbucket-arn` (written
+   the three `/debeos/onprem/*` parameters; `/debeos/bake/workbucket-arn` (written
    by that region's trunk bake pipeline, or a placeholder until one exists);
    `/haiku-graviton/{canonical,builder}-ami-id` and the AMIs behind them; the
    `haiku-uaf-ed25519` key pair and the `haiku-graviton/baron-ssh-key` secret the

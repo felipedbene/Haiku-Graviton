@@ -20,7 +20,7 @@
 
     "//": "------------------------------------------------------------------",
     "//comment": "Deployment parameters. Override on the CLI with -c key=value, or edit here. This is a public repository, so no account id is written down: haiku:account is intentionally ABSENT and defaults to CDK_DEFAULT_ACCOUNT, i.e. whichever account your credentials point at. Use -c haiku:account=<id> or HAIKU_ACCOUNT to target a different one. Do NOT add the key back with an empty string: an empty context value still counts as set and would win over the default, synthesizing an account-less stack.",
-    "//region": "haiku:region is intentionally ABSENT: the region comes from HAIKU_REGION, then -c haiku:region=<r>, then AWS_REGION / AWS_DEFAULT_REGION, and defaults to us-west-2 (lib/config.ts resolveRegion). Writing it here would pin every deploy and make AWS_REGION a no-op.",
+    "//region": "haiku:region is intentionally ABSENT: the region comes from HAIKU_REGION, then -c haiku:region=<r>, then AWS_REGION / AWS_DEFAULT_REGION, and defaults to us-east-2 (DEFAULT_REGION in lib/config.ts resolveRegion); us-west-2 stays HOME_REGION, the region whose IAM names are unsuffixed. Writing it here would pin every deploy and make AWS_REGION a no-op.",
 
     "//source": "Where the Haiku fork/branch lives. A CodeConnections (formerly CodeStar) connection ARN is required for GitHub sources; create it once in the console, then pass -c haiku:connectionArn=arn:aws:codeconnections:<region>:<account>:connection/<uuid> at deploy time. It is not stored here because the ARN embeds the account id.",
     "haiku:repoOwner": "felipedbene",
