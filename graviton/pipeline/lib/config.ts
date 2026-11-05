@@ -34,7 +34,10 @@ export interface HaikuPipelineConfig {
    * deploying credentials belong to — so the id is never written down here.
    */
   readonly account: string;
-  /** Target region (us-west-2). */
+  /**
+   * Target region. Defaults to {@link HOME_REGION}; see {@link resolveRegion} for
+   * how AWS_REGION / AWS_DEFAULT_REGION and the context key feed it.
+   */
   readonly region: string;
 
   /** GitHub owner/org of the Haiku fork. */
@@ -182,6 +185,53 @@ export interface HaikuPipelineConfig {
   readonly minTransmitMbps: string;
 }
 
+/**
+ * The region DeBeOS has always run in, and the default when nothing names
+ * another. Also the region whose resource names are left unsuffixed by
+ * {@link regionalName}, so every name that exists today stays exactly as it is.
+ */
+export const HOME_REGION = 'us-west-2';
+
+/**
+ * Region resolution, most specific first: HAIKU_REGION, then `-c haiku:region`,
+ * then the standard AWS_REGION / AWS_DEFAULT_REGION (only if it is one of
+ * {@link DEBEOS_REGIONS}), then {@link HOME_REGION}.
+ * CDK_DEFAULT_REGION is deliberately NOT consulted: it is whatever the deploying
+ * profile's config says (us-east-1 on a stock workstation), and a stack must not
+ * silently move region because of a laptop's ~/.aws/config.
+ */
+export function resolveRegion(scope: Construct): string {
+  const fromCtx = scope.node.tryGetContext('haiku:region') as string | undefined;
+  const explicit = process.env.HAIKU_REGION || fromCtx;
+  if (explicit) return explicit;
+  const ambient = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  if (!ambient) return HOME_REGION;
+  // A region picked up from the ambient AWS variables -- which a shell may carry
+  // for unrelated work -- must be one DeBeOS already runs in. Anything else would
+  // quietly stand up whole new pipelines there; name it explicitly instead.
+  if (!DEBEOS_REGIONS.includes(ambient)) {
+    throw new Error(
+      `AWS_REGION/AWS_DEFAULT_REGION is ${ambient}, which is not a DeBeOS region ` +
+      `(${DEBEOS_REGIONS.join(', ')}). To deploy there on purpose, set HAIKU_REGION ` +
+      `or -c haiku:region=${ambient}.`);
+  }
+  return ambient;
+}
+
+/** Regions DeBeOS runs in; an ambient AWS_REGION outside this list is refused. */
+export const DEBEOS_REGIONS: readonly string[] = ['us-west-2', 'us-east-2'];
+
+/**
+ * Name for a resource whose namespace is account-GLOBAL (IAM roles and instance
+ * profiles) but which every regional copy of a stack creates. In the home region
+ * the name is unchanged -- renaming a live role is a replacement -- and anywhere
+ * else it gains a `-<region>` suffix so a second region's deploy does not collide
+ * with the first one's role.
+ */
+export function regionalName(base: string, region: string): string {
+  return region === HOME_REGION ? base : `${base}-${region}`;
+}
+
 function ctx(scope: Construct, key: string, envKey: string, fallback?: string): string {
   const fromCtx = scope.node.tryGetContext(key);
   const value = process.env[envKey] ?? fromCtx ?? fallback;
@@ -203,7 +253,7 @@ export type SharedConfig = Pick<HaikuPipelineConfig,
 
 export function loadSharedConfig(scope: Construct): SharedConfig {
   const account = ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', process.env.CDK_DEFAULT_ACCOUNT);
-  const region = ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2');
+  const region = resolveRegion(scope);
   // Optional: no ctx() (which throws when absent) -- an unset CDN id is valid
   // (the publish just skips invalidation), so read it directly and leave it
   // undefined when neither env nor context supplies it.

@@ -7,9 +7,12 @@ import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { HaikuGravitonPipelineStack } from '../lib/haiku-graviton-pipeline-stack';
 import {
-  BROKER_PORT, OpsStack, parseBrokerEndpointAllowList, readNativebuildVersion,
+  BROKER_PORT, BUILD_VPC_CIDRS, ONPREM_PARAMS, OpsStack, buildVpcCidr,
+  parseBrokerEndpointAllowList, readNativebuildVersion,
 } from '../lib/ops-stack';
-import { HaikuPipelineConfig, loadConfig } from '../lib/config';
+import {
+  HOME_REGION, HaikuPipelineConfig, loadConfig, loadSharedConfig, regionalName,
+} from '../lib/config';
 
 // Obviously-synthetic values throughout -- all-zero ids in the same style as the
 // subnet/SG/instance placeholders below. The real account id is not in this tree
@@ -3949,4 +3952,139 @@ test('845: an ABSENT published driver is a mismatch, not an unreadable deploymen
   expect(r.error).toBeNull();
   expect(r.expected).toBe('2026-10-17.1');
   expect(r.found).toBeNull();
+});
+
+// ---- region parametrisation + SSM-sourced on-prem VPN ------------------------
+
+function opsTemplate(region: string, context: Record<string, unknown> = {}): Template {
+  const app = new cdk.App({ context });
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region },
+    config: { ...config, region },
+  });
+  return Template.fromStack(stack);
+}
+
+test('region: HAIKU_REGION, then context, then AWS_REGION/AWS_DEFAULT_REGION, then us-west-2', () => {
+  const saved = { ...process.env };
+  try {
+    for (const k of ['HAIKU_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION', 'HAIKU_GRAVITON_BUCKET']) {
+      delete process.env[k];
+    }
+    process.env.HAIKU_ACCOUNT = ACCOUNT;
+    expect(loadSharedConfig(new cdk.App()).region).toBe('us-west-2');
+    process.env.AWS_DEFAULT_REGION = 'us-east-2';
+    expect(loadSharedConfig(new cdk.App()).region).toBe('us-east-2');
+    // An ambient region DeBeOS does not run in is refused, not silently adopted.
+    process.env.AWS_DEFAULT_REGION = 'eu-west-1';
+    expect(() => loadSharedConfig(new cdk.App())).toThrow(/not a DeBeOS region/);
+    process.env.AWS_REGION = 'us-east-2';
+    expect(loadSharedConfig(new cdk.App()).region).toBe('us-east-2');
+    expect(loadSharedConfig(new cdk.App({ context: { 'haiku:region': 'ap-south-1' } })).region)
+      .toBe('ap-south-1');
+    process.env.HAIKU_REGION = 'ca-central-1';
+    expect(loadSharedConfig(new cdk.App({ context: { 'haiku:region': 'ap-south-1' } })).region)
+      .toBe('ca-central-1');
+    // The per-region work bucket follows the region.
+    expect(loadSharedConfig(new cdk.App()).ssmOutBucketName)
+      .toBe(`haiku-graviton-${ACCOUNT}-ca-central-1`);
+  } finally {
+    process.env = saved;
+  }
+});
+
+test('regionalName leaves home-region names untouched and suffixes every other region', () => {
+  expect(HOME_REGION).toBe('us-west-2');
+  expect(regionalName('debeos-operator', 'us-west-2')).toBe('debeos-operator');
+  expect(regionalName('debeos-operator', 'us-east-2')).toBe('debeos-operator-us-east-2');
+});
+
+test('home region: operator role, table and BuildVpc range are exactly as before', () => {
+  const t = opsTemplate('us-west-2');
+  t.hasResourceProperties('AWS::IAM::Role', { RoleName: 'debeos-operator' });
+  t.hasResourceProperties('AWS::DynamoDB::Table', { TableName: 'debeos-package-state' });
+  t.hasResourceProperties('AWS::EC2::VPC', { CidrBlock: '10.128.0.0/16' });
+});
+
+test('second region: suffixed IAM names, no second state table, its own BuildVpc range', () => {
+  const t = opsTemplate('us-east-2');
+  t.hasResourceProperties('AWS::IAM::Role', { RoleName: 'debeos-operator-us-east-2' });
+  // References the (global-table replica) board, never creates a second one.
+  t.resourceCountIs('AWS::DynamoDB::Table', 0);
+  t.hasResourceProperties('AWS::EC2::VPC', { CidrBlock: '10.129.0.0/16' });
+  // ...and the explicit override still lets the home region import, or another create.
+  opsTemplate('us-west-2', { importPackageStateTable: 'true' })
+    .resourceCountIs('AWS::DynamoDB::Table', 0);
+  opsTemplate('us-east-2', { importPackageStateTable: 'false' })
+    .resourceCountIs('AWS::DynamoDB::Table', 1);
+});
+
+test('BuildVpc ranges are distinct per region, avoid on-prem, and an unknown region fails synth', () => {
+  const cidrs = Object.values(BUILD_VPC_CIDRS);
+  expect(new Set(cidrs).size).toBe(cidrs.length);
+  expect(cidrs).not.toContain('10.0.0.0/16');
+  expect(buildVpcCidr('us-east-2', '10.200.0.0/16')).toBe('10.200.0.0/16');
+  expect(() => buildVpcCidr('eu-west-1')).toThrow(/no BuildVpc CIDR/);
+});
+
+test('second-region pipeline: perf-gate peer role and profile do not collide in global IAM', () => {
+  const app = new cdk.App();
+  const east = { ...config, region: 'us-east-2' };
+  const stack = new HaikuGravitonPipelineStack(app, 'EastPipeline', {
+    env: { account: east.account, region: east.region }, config: east,
+  });
+  const t = Template.fromStack(stack);
+  t.hasResourceProperties('AWS::IAM::Role',
+    { RoleName: `${config.amiNamePrefix}-perf-gate-peer-us-east-2` });
+  t.hasResourceProperties('AWS::IAM::InstanceProfile',
+    { InstanceProfileName: `${config.amiNamePrefix}-perf-gate-peer-us-east-2` });
+});
+
+test('the VPN is always synthesized, from SSM parameters, when no -c flag is given', () => {
+  const t = opsTemplate('us-west-2');
+  const params = t.toJSON().Parameters as Record<string, any>;
+  const refFor = (name: string) => {
+    const id = Object.keys(params).find((k) => params[k].Default === name);
+    expect(id).toBeDefined();
+    expect(params[id!].Type).toBe('AWS::SSM::Parameter::Value<String>');
+    return { Ref: id };
+  };
+  t.hasResourceProperties('AWS::EC2::CustomerGateway', {
+    IpAddress: refFor(ONPREM_PARAMS.publicIp), BgpAsn: 65000, Type: 'ipsec.1',
+  });
+  t.hasResourceProperties('AWS::EC2::VPNConnection', { StaticRoutesOnly: true });
+  t.hasResourceProperties('AWS::EC2::VPNConnectionRoute',
+    { DestinationCidrBlock: refFor(ONPREM_PARAMS.cidr) });
+  t.hasResourceProperties('AWS::EC2::SecurityGroup', {
+    SecurityGroupIngress: Match.arrayWith([
+      Match.objectLike({ CidrIp: refFor(ONPREM_PARAMS.sgCidr), FromPort: 22 }),
+    ]),
+  });
+});
+
+test('VPN logical ids are the ones the live stack was deployed with (no replacement)', () => {
+  // The L2 construct used to name the route after the CIDR's digits; it is now
+  // pinned by hand, and must stay exactly this id or the live route is replaced.
+  for (const ctx of [{}, { onPremPublicIp: '192.0.2.10', onPremCidr: '10.0.0.0/16' }]) {
+    const t = opsTemplate('us-west-2', ctx);
+    const ids = (type: string) => Object.keys(t.findResources(type));
+    // Exact ids, copied from the deployed us-west-2 template.
+    expect(ids('AWS::EC2::CustomerGateway')).toEqual(['BuildVpcOnPremSiteToSiteCustomerGateway3CDD947B']);
+    expect(ids('AWS::EC2::VPNConnectionRoute')).toEqual(['BuildVpcOnPremSiteToSiteRoute1000016B15B740D']);
+    expect(ids('AWS::EC2::VPNConnection')).toEqual(['BuildVpcOnPremSiteToSite32467355']);
+    expect(ids('AWS::EC2::VPNGateway')).toEqual(['BuildVpcVpnGateway38383509']);
+  }
+});
+
+test('-c values override the SSM parameters; -c noVpn=true is the only way to drop the VPN', () => {
+  const t = opsTemplate('us-west-2', { onPremPublicIp: '192.0.2.10', onPremSgCidr: '10.0.0.0/16' });
+  t.hasResourceProperties('AWS::EC2::CustomerGateway', { IpAddress: '192.0.2.10' });
+  t.hasResourceProperties('AWS::EC2::SecurityGroup', {
+    SecurityGroupIngress: Match.arrayWith([Match.objectLike({ CidrIp: '10.0.0.0/16', FromPort: 22 })]),
+  });
+  const none = opsTemplate('us-west-2', { noVpn: 'true' });
+  none.resourceCountIs('AWS::EC2::CustomerGateway', 0);
+  none.resourceCountIs('AWS::EC2::VPNConnection', 0);
+  expect(Object.values(none.toJSON().Parameters ?? {})
+    .map((p: any) => p.Default)).not.toContain(ONPREM_PARAMS.publicIp);
 });

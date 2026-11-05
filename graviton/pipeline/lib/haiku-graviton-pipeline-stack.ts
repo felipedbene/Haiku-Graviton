@@ -8,7 +8,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import { HaikuPipelineConfig } from './config';
+import { HaikuPipelineConfig, regionalName } from './config';
 
 export interface HaikuGravitonPipelineStackProps extends cdk.StackProps {
   readonly config: HaikuPipelineConfig;
@@ -287,7 +287,9 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     // The gate resolves the peer's Ubuntu AMI from a public SSM parameter, so no
     // AMI read grant is needed here.
     const peerRole = new iam.Role(this, 'PerfGatePeerRole', {
-      roleName: `${cfg.amiNamePrefix}-perf-gate-peer`,
+      // IAM names are account-global: suffixed outside the home region so a
+      // second region's copy of this pipeline does not collide with the first.
+      roleName: regionalName(`${cfg.amiNamePrefix}-perf-gate-peer`, cfg.region),
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
@@ -316,7 +318,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         resources: [`arn:aws:s3:::${cfg.ssmOutBucketName}/ssm-out/*`],
       }),
     );
-    const peerProfileName = `${cfg.amiNamePrefix}-perf-gate-peer`;
+    const peerProfileName = regionalName(`${cfg.amiNamePrefix}-perf-gate-peer`, cfg.region);
     const peerProfile = new iam.CfnInstanceProfile(this, 'PerfGatePeerProfile', {
       instanceProfileName: peerProfileName,
       roles: [peerRole.roleName],

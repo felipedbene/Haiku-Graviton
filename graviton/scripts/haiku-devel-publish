@@ -45,6 +45,7 @@
 #                        forwarded to haiku-repo-publish-ephemeral (see it)
 #   ARCH                 packaging arch (default arm64)
 #   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#   HAIKU_REPO_REGION    region of the HG_REPO_S3 bucket (default us-west-2)
 #
 # Usage:
 #   haiku-devel-publish <ami-id>            resolve hrev from the AMI tag
@@ -55,7 +56,8 @@
 #
 set -euo pipefail
 
-region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+region="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+repo_region="${HAIKU_REPO_REGION:-us-west-2}"
 ARCH="${ARCH:-arm64}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -90,7 +92,7 @@ log "target base revision: $HREV"
 # ---- idempotency: does the repo already serve a matching haiku_devel? ----
 # The published filename embeds the full version (r1~beta6_hrevNNNNN-R), which
 # contains the hrev, so a substring match on the S3 listing is sufficient.
-if aws s3 ls "${HG_REPO_S3%/}/packages/" --region "$region" 2>/dev/null \
+if aws s3 ls "${HG_REPO_S3%/}/packages/" --region "$repo_region" 2>/dev/null \
 		| grep -E "haiku_devel-.*${HREV}[^0-9]" >/dev/null; then
 	log "repo already serves haiku_devel for ${HREV}; nothing to do (no metal spin-up)"
 	exit 0

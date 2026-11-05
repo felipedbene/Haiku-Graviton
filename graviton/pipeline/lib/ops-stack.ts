@@ -14,7 +14,7 @@ import * as s3assets from 'aws-cdk-lib/aws-s3-assets';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { SharedConfig, DEBEOS_TAGS } from './config';
+import { SharedConfig, DEBEOS_TAGS, HOME_REGION, regionalName } from './config';
 
 /**
  * #506: extract the NATIVEBUILD_VERSION marker from the tree's build driver at synth
@@ -103,6 +103,63 @@ export function parseBrokerEndpointAllowList(
   return out;
 }
 
+/**
+ * BuildVpc's range, per region. Committed rather than passed on the command line
+ * because the CIDR is replacement-triggering: a forgotten flag on some later
+ * deploy would rebuild the VPC. Every region's range must be distinct, since all
+ * the VPNs land on ONE on-prem router, and it cannot route a prefix down two
+ * tunnels to two different VPCs. `-c buildVpcCidr=` overrides; a region with no
+ * entry and no override is a synth error, never a silent reuse of 10.128/16.
+ */
+export const BUILD_VPC_CIDRS: Record<string, string> = {
+  'us-west-2': '10.128.0.0/16',
+  'us-east-2': '10.129.0.0/16',
+};
+
+export function buildVpcCidr(region: string, override?: unknown): string {
+  if (typeof override === 'string' && override !== '') return override;
+  const cidr = BUILD_VPC_CIDRS[region];
+  if (!cidr) {
+    throw new Error(
+      `no BuildVpc CIDR for region ${region}: add it to BUILD_VPC_CIDRS (distinct ` +
+      `from every other region's and from on-prem) or pass -c buildVpcCidr=<cidr>`);
+  }
+  return cidr;
+}
+
+/**
+ * SSM String parameters holding the on-prem side of the Site-to-Site VPN, one set
+ * per region (create them with `aws ssm put-parameter --type String`). The public
+ * IP is the customer gateway's address -- getting it wrong REPLACES the customer
+ * gateway, which issues new tunnel outside IPs and PSKs and leaves the on-prem
+ * router reconfigured by hand -- so it comes from one recorded place instead of
+ * from whoever typed the deploy command.
+ */
+export const ONPREM_PARAMS = {
+  publicIp: '/debeos/onprem/public-ip',
+  cidr: '/debeos/onprem/cidr',
+  sgCidr: '/debeos/onprem/sg-cidr',
+} as const;
+
+/**
+ * The on-prem settings for this deploy: an explicit `-c` value wins, otherwise a
+ * reference to the SSM parameter, which CloudFormation resolves at deploy time.
+ * Deliberately NOT `valueFromLookup`: that caches the value into cdk.context.json
+ * at synth, so a changed parameter would never reach the stack.
+ */
+export function resolveOnPrem(scope: Construct): { publicIp: string; cidr: string; sgCidr: string } {
+  const pick = (key: string, param: string): string => {
+    const v = scope.node.tryGetContext(key);
+    return (typeof v === 'string' && v !== '')
+      ? v : ssm.StringParameter.valueForStringParameter(scope, param);
+  };
+  return {
+    publicIp: pick('onPremPublicIp', ONPREM_PARAMS.publicIp),
+    cidr: pick('onPremCidr', ONPREM_PARAMS.cidr),
+    sgCidr: pick('onPremSgCidr', ONPREM_PARAMS.sgCidr),
+  };
+}
+
 export interface OpsStackProps extends cdk.StackProps {
   /** Shared DeBeOS config (buckets, SSM params) -- single source with the bake. */
   readonly config: SharedConfig;
@@ -127,7 +184,7 @@ export interface OpsStackProps extends cdk.StackProps {
  * lock so two incremental publishes never race the shared index.
  */
 export class OpsStack extends cdk.Stack {
-  public readonly table: dynamodb.Table;
+  public readonly table: dynamodb.ITable;
   public readonly stateMachine: sfn.StateMachine;
 
   constructor(scope: Construct, id: string, props: OpsStackProps) {
@@ -147,19 +204,38 @@ export class OpsStack extends cdk.Stack {
     const builderAmiParam = props.config.builderAmiParam;
 
     // ---- Phase 1: state/backlog table ------------------------------------
-    this.table = new dynamodb.Table(this, 'PackageState', {
-      tableName: props.tableName ?? 'debeos-package-state',
-      partitionKey: { name: 'pkg', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
-    });
-    this.table.addGlobalSecondaryIndex({
-      indexName: 'by-build-state',
-      partitionKey: { name: 'build_state', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'queued_at', type: dynamodb.AttributeType.NUMBER },
-      projectionType: dynamodb.ProjectionType.ALL,
-    });
+    // There is ONE package-state board. The home region's stack owns the table;
+    // a stack in any other region REFERENCES a same-named table in its own
+    // region -- a global-table replica added from the home table -- and never
+    // creates one. Creating it would split the board in two, and would also make
+    // the replica impossible to add later (a replica cannot be created over an
+    // existing table). Override with -c importPackageStateTable=true|false.
+    const tableName = props.tableName ?? 'debeos-package-state';
+    const rawImport = this.node.tryGetContext('importPackageStateTable');
+    const importTable = rawImport === undefined
+      ? props.config.region !== HOME_REGION
+      : (rawImport === true || rawImport === 'true');
+    if (importTable) {
+      this.table = dynamodb.Table.fromTableAttributes(this, 'PackageState', {
+        tableName,
+        globalIndexes: ['by-build-state'],
+      });
+    } else {
+      const table = new dynamodb.Table(this, 'PackageState', {
+        tableName,
+        partitionKey: { name: 'pkg', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+      table.addGlobalSecondaryIndex({
+        indexName: 'by-build-state',
+        partitionKey: { name: 'build_state', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'queued_at', type: dynamodb.AttributeType.NUMBER },
+        projectionType: dynamodb.ProjectionType.ALL,
+      });
+      this.table = table;
+    }
 
     // ---- transient builder identity --------------------------------------
     // Role the launched Graviton Haiku builder assumes: SSM-managed + read deps
@@ -228,9 +304,11 @@ export class OpsStack extends cdk.Stack {
       // 3 AZs so spot builders diversify across capacity pools (one instance per
       // launch, but the launcher picks a subnet per instance -> concurrent
       // builders spread across AZs, cutting spot-interruption correlation).
-      // Pin BuildVpc to 10.128.0.0/16 so it does not overlap on-prem
-      // (10.0.0.0/16) reached over the Site-to-Site VPN below.
-      ipAddresses: ec2.IpAddresses.cidr('10.128.0.0/16'),
+      // Pin BuildVpc per region (BUILD_VPC_CIDRS) so it overlaps neither on-prem
+      // (10.0.0.0/16, reached over the Site-to-Site VPN below) nor another
+      // region's BuildVpc.
+      ipAddresses: ec2.IpAddresses.cidr(buildVpcCidr(
+        props.config.region, this.node.tryGetContext('buildVpcCidr'))),
       maxAzs: 3,
       natGateways: 1,
       subnetConfiguration: [
@@ -239,34 +317,52 @@ export class OpsStack extends cdk.Stack {
       ],
     });
 
-    // Site-to-Site VPN to on-prem. GATED on deploy-time context — the on-prem
-    // public IP is non-public and this repo is public, so it is NEVER committed;
-    // pass it at deploy:  -c onPremPublicIp=<ip> [-c onPremCidr=10.0.0.0/16]
-    //                     [-c onPremSgCidr=10.0.0.0/8].
+    // Site-to-Site VPN to on-prem. ALWAYS synthesized: the stack used to build it
+    // only when -c onPremPublicIp was passed, so a deploy that forgot the flag
+    // silently deleted the VPN (and the BuilderSg on-prem rules with it). The
+    // on-prem settings now live in SSM String parameters, read by CloudFormation
+    // at deploy time (resolveOnPrem / ONPREM_PARAMS), so nothing has to be
+    // remembered and nothing non-public is committed to this public repo. A
+    // missing parameter FAILS the deploy instead of dropping the VPN. -c
+    // onPremPublicIp / onPremCidr / onPremSgCidr still override when given; the
+    // one deliberate way to deploy without a VPN is -c noVpn=true.
     // Enables a VGW on BuildVpc, propagates its learned routes into the builder
     // (private) subnets so instances can reach on-prem, and brings up a
-    // static-routed connection. BuildVpc is 10.128.0.0/16, non-overlapping with
-    // the on-prem 10.0.0.0/16 range, so routing is unambiguous.
-    const onPremPublicIp = this.node.tryGetContext('onPremPublicIp');
-    const onPremCidr = this.node.tryGetContext('onPremCidr') ?? '10.0.0.0/16';
-    // The builder SG's on-prem ingress (below) is a separate knob from this
-    // static route, because the two want different ranges: the SG has to cover
-    // peered VPCs as well as on-prem, while the route must stay specific.
-    // Widening onPremCidr itself to do both would put a 10.0.0.0/8 static route
-    // on the VPN -- a supernet of BuildVpc's own 10.128.0.0/16 -- and propagate
-    // that ambiguity into the builder subnets' route tables. Defaults to
-    // onPremCidr, so passing only -c onPremCidr behaves as it always did.
-    const onPremSgCidr = this.node.tryGetContext('onPremSgCidr') ?? onPremCidr;
-    if (onPremPublicIp) {
+    // static-routed connection. BuildVpc never overlaps the on-prem 10.0.0.0/16
+    // range (BUILD_VPC_CIDRS), so routing is unambiguous.
+    //
+    // The builder SG's on-prem ingress (below) is a separate knob (sg-cidr) from
+    // the static route (cidr), because the two want different ranges: the SG has
+    // to cover peered VPCs as well as on-prem, while the route must stay
+    // specific. Widening the route to do both would put a 10.0.0.0/8 static
+    // route on the VPN -- a supernet of BuildVpc's own range -- and propagate that
+    // ambiguity into the builder subnets' route tables.
+    const rawNoVpn = this.node.tryGetContext('noVpn');
+    const noVpn = rawNoVpn === true || rawNoVpn === 'true';
+    const onPrem = noVpn ? undefined : resolveOnPrem(this);
+    if (onPrem) {
       vpc.enableVpnGateway({
         type: 'ipsec.1',
         vpnRoutePropagation: [
           { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
         ],
       });
+      // staticRoutes is EMPTY on purpose, and the route is added by hand below.
+      // The L2 construct names each route `Route<digits of the CIDR>`; with the
+      // CIDR now a deploy-time token those digits would come from the token
+      // string, renaming the logical id and so REPLACING the live route. The
+      // empty array still sets StaticRoutesOnly=true (`!!props.staticRoutes`),
+      // which must not flip: it is a replacement-triggering property of the VPN
+      // connection itself.
       const vpn = vpc.addVpnConnection('OnPremSiteToSite', {
-        ip: onPremPublicIp,
-        staticRoutes: [onPremCidr],
+        ip: onPrem.publicIp,
+        staticRoutes: [],
+      });
+      // `Route1000016` is the id the L2 construct gave the live 10.0.0.0/16 route;
+      // pinning it keeps that resource's logical id, so a deploy updates in place.
+      new ec2.CfnVPNConnectionRoute(vpn, 'Route1000016', {
+        destinationCidrBlock: onPrem.cidr,
+        vpnConnectionId: vpn.vpnId,
       });
       // Harden both tunnels off AWS's weak defaults (AES128/SHA1/DH2, IKEv1):
       // IKEv2 only, AES-256, SHA2-256/384/512, DH group 14-24. The L2
@@ -341,18 +437,17 @@ export class OpsStack extends cdk.Stack {
     // against a canonical peer). Scoped to members of the group, not to a CIDR.
     builderSg.addIngressRule(builderSg, ec2.Port.allTraffic(), 'builder to builder (cross-instance tests)');
 
-    // On-prem reach over the Site-to-Site VPN (gated on the VPN being
-    // configured): SSH, the remote-desktop ports (app_server :10900 + the
+    // On-prem reach over the Site-to-Site VPN (absent only under -c noVpn): SSH, the remote-desktop ports (app_server :10900 + the
     // remote_broker front door :10902), and ping -- all from the on-prem range,
     // which is only routable once the tunnel is up. Codifies the rules that
     // were otherwise added to the builder SG by hand -- including the widening
     // to cover peered VPCs, which is what onPremSgCidr is for.
-    if (onPremPublicIp) {
-      const onPrem = ec2.Peer.ipv4(onPremSgCidr);
-      builderSg.addIngressRule(onPrem, ec2.Port.tcp(22), 'SSH from on-prem over VPN');
-      builderSg.addIngressRule(onPrem, ec2.Port.tcpRange(10900, 10902),
+    if (onPrem) {
+      const onPremPeer = ec2.Peer.ipv4(onPrem.sgCidr);
+      builderSg.addIngressRule(onPremPeer, ec2.Port.tcp(22), 'SSH from on-prem over VPN');
+      builderSg.addIngressRule(onPremPeer, ec2.Port.tcpRange(10900, 10902),
         'remote desktop (app_server + broker) from on-prem over VPN');
-      builderSg.addIngressRule(onPrem, ec2.Port.allIcmp(), 'ping from on-prem over VPN');
+      builderSg.addIngressRule(onPremPeer, ec2.Port.allIcmp(), 'ping from on-prem over VPN');
     }
     const eice = new ec2.CfnInstanceConnectEndpoint(this, 'Eice', {
       subnetId: builderSubnetIds[0],
@@ -1413,7 +1508,8 @@ export class OpsStack extends cdk.Stack {
     // exfiltrate, launch/terminate instances, or touch anything else. Overlay
     // recipe commits go through git CR (human review), not this role.
     const operatorRole = new iam.Role(this, 'OperatorRole', {
-      roleName: 'debeos-operator',
+      // IAM is account-global: suffixed outside the home region (regionalName).
+      roleName: regionalName('debeos-operator', props.config.region),
       assumedBy: new iam.AccountPrincipal(this.account),
       description: 'Least-priv identity for the debeos-devops agent (no Admin).',
     });

@@ -498,7 +498,7 @@ def drive_wave(sfn, sm_arn, label, chains, run_id, budget, publish, disk_gib,
 def main():
     ap = argparse.ArgumentParser(description="Drive the DeBeOS missing-ports build wave (issue #136).")
     ap.add_argument("--table", default=TABLE_DEFAULT)
-    ap.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
+    ap.add_argument("--region", default=(os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"))
     ap.add_argument("--plan-file", help="read waves from a JSON artifact instead of DDB")
     ap.add_argument("--plan-out", help="write the computed wave plan to this JSON path")
     ap.add_argument("--no-live-filter", action="store_true",

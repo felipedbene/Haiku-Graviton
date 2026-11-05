@@ -19,7 +19,7 @@
 
 set -uo pipefail
 
-REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
 # Directory holding this script, so sibling helpers (haiku-canonical) can be
 # invoked no matter what cwd a hook runs us from.
 HERE="$(cd -- "$(dirname -- "$0")" && pwd)"

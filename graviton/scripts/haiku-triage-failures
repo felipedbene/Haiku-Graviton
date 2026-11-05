@@ -1145,7 +1145,7 @@ def main():
         description="Triage the DeBeOS build-wave failure backlog against the arm64 "
                     "porting playbook (#90/#136). Dry-run by default.")
     ap.add_argument("--table", default=TABLE_DEFAULT)
-    ap.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
+    ap.add_argument("--region", default=(os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"))
     ap.add_argument("--limit", type=int, default=0,
                     help="classify only the first N items (smoke test). 0 = all.")
     ap.add_argument("--workers", type=int, default=16,

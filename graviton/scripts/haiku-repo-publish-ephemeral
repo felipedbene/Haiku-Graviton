@@ -69,7 +69,7 @@
 #
 set -euo pipefail
 
-region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+region="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
 ARCH="${ARCH:-arm64}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SSM_RUN="$HERE/ssm-run"
@@ -317,7 +317,7 @@ export HG_INCOMING_S3='$HG_INCOMING_S3'
 export HG_CF_DIST='${HG_CF_DIST:-}'
 export HG_REPO_URL='${HG_REPO_URL:-}'
 export ARCH='$ARCH'
-export AWS_DEFAULT_REGION='$region'
+export AWS_DEFAULT_REGION='$region' AWS_REGION='$region' HAIKU_REPO_REGION='${HAIKU_REPO_REGION:-us-west-2}'
 export PKG_TOOL=/opt/haiku-tools/package
 export PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo
 export LD_LIBRARY_PATH=/opt/haiku-tools/lib

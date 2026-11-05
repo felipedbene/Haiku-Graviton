@@ -62,7 +62,7 @@ AGENT=""
 for _c in /boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent; do
 	[ -x "$_c" ] && { AGENT="$_c"; break; }
 done
-BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-us-west-2}"
+BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
 S3="s3://$BUCKET/hpkg/arm64"
 # DeBeOS-owned HaikuPorts source mirror prefix (issue #172). After a port builds
 # OK we promote its fetched source archives here, laid out as <recipeDir>/<file>

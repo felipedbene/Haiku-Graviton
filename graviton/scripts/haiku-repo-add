@@ -42,6 +42,7 @@
 #                   (default: exit 0 -- the publish did complete -- with a PARTIAL line)
 #   ARCH            packaging arch (default arm64)
 #   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#   HAIKU_REPO_REGION    region of the HG_REPO_S3 bucket (default us-west-2)
 #   PKG_TOOL / PACKAGE_REPO_TOOL   tool paths (auto-detected under /opt/haiku if unset)
 #
 # Exit status:
@@ -62,7 +63,11 @@ PACKAGER="${HG_PACKAGER:-DeBeOS <packages@debene.dev>}"
 REPO_NAME="DeBeOS"
 ARCH="${ARCH:-arm64}"
 PKG_URL="${HG_REPO_URL:-http://packages.debene.dev/$ARCH}"
-region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+region="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+# The package repo (green/blue pools) lives in ONE region regardless of where
+# this runs, so repo-bucket calls sign for that region rather than the compute
+# one -- correct even for a client that does not follow S3 region redirects.
+repo_region="${HAIKU_REPO_REGION:-us-west-2}"
 
 # The vendor+packager re-stamp (step 3) is METADATA-ONLY (issue #41/#164): it
 # edits only the .PackageInfo and splices it back with `package add -f -i`, never
@@ -220,7 +225,7 @@ if [ -n "${HG_PUBLISHED_LIST_OUT:-}" ]; then
 fi
 
 echo "== 1. pull current repo packages from $HG_REPO_S3/packages/ =="
-"${AWS[@]}" s3 sync "${HG_REPO_S3%/}/packages/" "$RO/packages/" --region "$region" --only-show-errors
+"${AWS[@]}" s3 sync "${HG_REPO_S3%/}/packages/" "$RO/packages/" --region "$repo_region" --only-show-errors
 before="$(ls -1 "$RO/packages" 2>/dev/null | wc -l)"
 echo "   $before package(s) currently published"
 
@@ -568,9 +573,9 @@ echo "== 5. upload packages (new, immutable) then index (last) =="
 # the local (pruned) set so full rebuilds never see duplicates. Requires
 # s3:DeleteObject on the repo bucket, granted to the publisher role in the CDK
 # (DebeosOpsStack BuilderRole, PR #273).
-"${AWS[@]}" s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors --delete
+"${AWS[@]}" s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$repo_region" --only-show-errors --delete
 for k in repo repo.info repo.sha256; do
-	"${AWS[@]}" s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$region" --only-show-errors
+	"${AWS[@]}" s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$repo_region" --only-show-errors
 done
 
 # The published set is durable in the repo only now -- packages mirrored AND the

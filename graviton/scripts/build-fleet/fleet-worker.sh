@@ -43,7 +43,7 @@ if [ -z "$BUCKET" ]; then
 		echo "$(basename "$0"): cannot resolve the AWS account id; refresh credentials or set HAIKU_GRAVITON_BUCKET" >&2
 		exit 1 ;;
 	esac
-	BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-us-west-2}"
+	BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
 fi
 S3=s3://$BUCKET/hpkg/arm64/
 LOG=$FLEET/worker-$PORT.log

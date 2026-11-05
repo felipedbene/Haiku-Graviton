@@ -64,7 +64,7 @@ import sys
 import time
 
 TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
-REGION_DEFAULT = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+REGION_DEFAULT = (os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2")
 GSI = "by-build-state"
 
 # Timestamp attributes to source a backfilled `queued_at` from, best first. The GSI

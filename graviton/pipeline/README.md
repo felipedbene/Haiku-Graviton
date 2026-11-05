@@ -124,7 +124,7 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 | Context key | Env | Default | Notes |
 |---|---|---|---|
 | `haiku:account` | `HAIKU_ACCOUNT` | `CDK_DEFAULT_ACCOUNT` | The account your credentials point at. Not written down in this repo — it is public. Not set in `cdk.json`, and must not be added back as an empty string (an empty context value wins over the default). |
-| `haiku:region` | `HAIKU_REGION` | `us-west-2` | |
+| `haiku:region` | `HAIKU_REGION` | `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `us-west-2` | Not set in `cdk.json`, so the standard AWS variables reach it. `CDK_DEFAULT_REGION` (the profile's configured region) is deliberately ignored. Outside `us-west-2`, account-global IAM names gain a `-<region>` suffix, `DebeosOpsStack` references the state table instead of creating one (a global-table replica; `-c importPackageStateTable=` overrides), and `BuildVpc` takes that region's range from `BUILD_VPC_CIDRS` in `lib/ops-stack.ts`. |
 | `haiku:ssmOutBucketName` | `HAIKU_GRAVITON_BUCKET` | `haiku-graviton-<account>-<region>` | Bucket the builder's role writes `ssm-run` output to; the Test stage is granted read on it. Derived from the two rows above, so it needs no configuration. Same env var the scripts under `graviton/` honour. |
 | `haiku:repoOwner` | `HAIKU_REPO_OWNER` | — **required** | GitHub owner of the DeBeOS repository. |
 | `haiku:repoName` | `HAIKU_REPO_NAME` | `haiku` | |
@@ -171,7 +171,23 @@ at boot, baked key as fallback).
 ## Prerequisites before a deploy would work
 
 1. **CDK bootstrap** the account/region once:
-   `cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/us-west-2"`.
+   `cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/${HAIKU_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"`.
+   Run it from outside this directory (or pass `--qualifier`): `cdk.json` sets
+   the `debeosops` qualifier, so a bootstrap run here targets `CDKToolkit-DeBeOSOps`
+   only when you also pass `--toolkit-stack-name CDKToolkit-DeBeOSOps`.
+
+   **A second region** additionally needs, before `DebeosOpsStack` deploys there:
+   the three `/debeos/onprem/*` parameters; `/debeos/bake/workbucket-arn` (written
+   by that region's trunk bake pipeline, or a placeholder until one exists);
+   `/haiku-graviton/{canonical,builder}-ami-id` and the AMIs behind them; the
+   `haiku-uaf-ed25519` key pair and the `haiku-graviton/baron-ssh-key` secret the
+   perf gate uses; the `haiku-graviton-<account>-<region>` work bucket with
+   `tools/` seeded; and a `debeos-package-state` global-table replica added from
+   the home table (`aws dynamodb update-table --region us-west-2 --table-name
+   debeos-package-state --replica-updates 'Create={RegionName=<region>}'`, after
+   enabling a NEW_AND_OLD_IMAGES stream). The stack deploys without the replica
+   and the build wave fails at runtime until it exists. Do not carry
+   `HAIKU_TEST_SUBNET` / `HAIKU_TEST_SG` over from another region.
 2. **CodeConnections GitHub connection** — create in the console, complete the
    GitHub handshake, paste its ARN into `haiku:connectionArn`.
 3. **`vmimport` role** — already exists in this account (`arn:aws:iam::<account-id>:role/vmimport`).
@@ -198,8 +214,11 @@ npx cdk diff         # safe — compares against deployed state
 npx cdk deploy \
   -c haiku:repoOwner=<you> \
   -c haiku:repoName=<repo> \
-  -c haiku:connectionArn=arn:aws:codeconnections:us-west-2:<account-id>:connection/<uuid>
+  -c haiku:connectionArn=arn:aws:codeconnections:<region>:<account-id>:connection/<uuid>
 ```
+
+The connection is regional: a pipeline in another region needs its own,
+approved in that region's console.
 
 `haiku:account` is not passed: it defaults to `CDK_DEFAULT_ACCOUNT`, which the CDK
 CLI sets from the credentials you are already using. The connection ARN and the
@@ -207,19 +226,28 @@ builder instance id are not stored in `cdk.json` because both embed identifiers
 this repository does not carry; pass them per deploy, or export `HAIKU_*`.
 `haiku:repoName` defaults to `haiku`, which is not this fork's name — pass it too.
 
-> **`DebeosOpsStack` has its own required context, and omitting it deletes live
-> resources.** Its Site-to-Site VPN is gated on `-c onPremPublicIp=<ip>`
-> (`lib/ops-stack.ts:248-250`), and that value is deliberately never committed —
-> the on-prem public address is not public information and this repository is.
-> CloudFormation cannot tell "the operator did not pass this flag" from "delete
-> these", so a deploy without it destroys the VPN gateway, customer gateway,
-> connection, static route, route propagation and tunnel log group, plus the
-> `BuilderSg` ingress for SSH, remote desktop and ping from on-prem. The VPN
-> returns with new outside tunnel addresses and new pre-shared keys, so on-prem
-> has to be reconfigured. The flags are tabulated in
+> **`DebeosOpsStack` reads its on-prem VPN settings from SSM.** The customer
+> gateway IP, the VPN's static route and the `BuilderSg` on-prem range come from
+> the String parameters `/debeos/onprem/public-ip`, `/debeos/onprem/cidr` and
+> `/debeos/onprem/sg-cidr` in the target region, resolved by CloudFormation at
+> deploy time (`ONPREM_PARAMS` / `resolveOnPrem` in `lib/ops-stack.ts`). The VPN
+> is always synthesized: a missing parameter **fails the deploy** instead of
+> silently deleting the VPN, which is what forgetting the old
+> `-c onPremPublicIp` flag used to do. `-c onPremPublicIp` / `onPremCidr` /
+> `onPremSgCidr` still override the parameters; `-c noVpn=true` is the one
+> deliberate way to deploy without a VPN. A wrong public IP still REPLACES the
+> customer gateway (new tunnel IPs and PSKs), so change the parameter only to
+> match the on-prem router.
+>
+> **The first deploy after this change shows the customer gateway and the static
+> route as "may be replaced"**, because their properties change from literals to
+> SSM references. CloudFormation compares resolved values, so with the parameters
+> holding the live values nothing is replaced. Confirm that with a change set
+> before executing (`cdk deploy DebeosOpsStack --no-execute`, then
+> `aws cloudformation describe-change-set` showing no `Replacement: True` on the
+> CustomerGateway, VPNConnection or VPNConnectionRoute). See
 > [`graviton/docs/remote-desktop-public-endpoint.md`](../docs/remote-desktop-public-endpoint.md)
-> → *Context flags are not optional*. The check: if a diff of this stack shows
-> `AWS::EC2::VPNConnection … destroy`, a flag is missing — stop and add it.
+> → *Context flags are not optional*.
 
 > **Deploy from a `graviton` checkout that is synced with `origin`.** The
 > CodeBuild environment this deploy bakes in — the root volume size
