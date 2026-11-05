@@ -17,7 +17,7 @@ import sys
 
 import boto3
 
-REGION = os.environ.get("AWS_REGION") or "us-west-2"
+REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"
 
 
 def default_bucket() -> str:

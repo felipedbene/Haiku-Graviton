@@ -38,7 +38,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/haiku-aws-env.sh"
 
-REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
 # Keep in step with S3_CLIENTS in pipeline/ops-lambdas/run_ssm.py; the jest suite
 # asserts the two lists are identical.
 CANDIDATES="${S3_CLIENT_CANDIDATES:-/boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent}"

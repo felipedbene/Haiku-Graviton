@@ -307,7 +307,8 @@ def account_id(client_factory):
 
 def load_config(args, client_factory):
     region = (args.region or os.environ.get("HAIKU_GRAVITON_REGION")
-              or os.environ.get("AWS_REGION") or "us-west-2")
+              or os.environ.get("AWS_REGION")
+              or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2")
     acct = args.account or account_id(client_factory)
     pool_bucket = (args.pool_bucket or os.environ.get("HG_POOL_BUCKET")
                    or os.environ.get("HAIKU_PUBLISH_BUCKET")

@@ -21,10 +21,10 @@
 # waiting an hour for it to reach an approval gate. `--tag oven=true` is how those
 # throwaway images get reaped without touching trunk candidates.
 #
-# Region defaults to us-west-2; override with AWS_REGION.
+# Region defaults to us-west-2; override with AWS_REGION (or AWS_DEFAULT_REGION).
 set -euo pipefail
 
-REGION="${AWS_REGION:-us-west-2}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
 TAG_KEY="canonical"
 TAG_VAL="true"
 # Candidate AMIs (freshly baked, tagged candidate=true) accumulate every bake.
@@ -215,7 +215,7 @@ cmd_promote() {
 	# must never undo the canonical tag we just set, so it cannot abort promote.
 	if [ -n "${HG_REPO_S3:-}" ] && [ -x "$(dirname "$0")/haiku-devel-publish" ]; then
 		echo "== keeping repo haiku_devel matched to ${target} =="
-		AWS_REGION="$REGION" "$(dirname "$0")/haiku-devel-publish" "$target" \
+		AWS_REGION="$REGION" AWS_DEFAULT_REGION="$REGION" "$(dirname "$0")/haiku-devel-publish" "$target" \
 			|| echo "warning: haiku_devel publish did not complete; run haiku-devel-publish ${target} by hand (canonical tag is set regardless)" >&2
 	fi
 	cmd_check

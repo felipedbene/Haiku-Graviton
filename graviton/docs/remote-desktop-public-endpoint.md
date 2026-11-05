@@ -341,29 +341,33 @@ allowlist flag while keeping every other flag the stack needs.
 
 ## Context flags are not optional
 
-`DebeosOpsStack` has **two** independent context gates, and CloudFormation has
-no way to tell "the operator did not pass this flag" from "these resources
-should go away". Every flag a live resource depends on has to be on *every*
-deploy of this stack, not only the one that created it.
+CloudFormation has no way to tell "the operator did not pass this flag" from
+"these resources should go away", so every flag a live resource depends on has
+to be on *every* deploy of this stack, not only the one that created it. The
+VPN no longer depends on a flag: its settings are SSM String parameters in the
+target region (`/debeos/onprem/public-ip`, `/debeos/onprem/cidr`,
+`/debeos/onprem/sg-cidr`), resolved at deploy time, and a missing parameter fails
+the deploy rather than deleting the VPN. The broker endpoint is still a context
+gate.
 
 | flag | gates | leaving it off |
 |---|---|---|
-| `-c onPremPublicIp=<ip>` | the Site-to-Site VPN — VPN gateway, customer gateway, connection, static route, route propagation, tunnel log group, and the `BuilderSg` ingress for TCP 22 / TCP 10900-10902 / ICMP from on-prem (`ops-stack.ts:248-250`) | **destroys the live VPN.** It comes back with new outside tunnel IP addresses and new pre-shared keys, so on-prem has to be reconfigured; on-prem loses SSH, remote desktop and ping to the builders in the meantime |
+| `-c noVpn=true` | drops the Site-to-Site VPN — VPN gateway, customer gateway, connection, static route, route propagation, tunnel log group, and the `BuilderSg` ingress for TCP 22 / TCP 10900-10902 / ICMP from on-prem | the VPN is built from the SSM parameters (the normal case). **Passing it destroys the live VPN**, which comes back with new outside tunnel IPs and PSKs |
+| `-c onPremPublicIp=<ip>` | overrides `/debeos/onprem/public-ip`, the customer gateway's address | the parameter's value. A value that differs from the live one **replaces the customer gateway**: new outside tunnel IPs and PSKs, on-prem reconfigured by hand |
 | `-c brokerEndpointAllowCidrs=<cidr>[,…]` | the public endpoint — NLB, listener, target group, `BrokerEndpointSg` (`ops-stack.ts:401`) | no endpoint. This is the intended default, and the intended teardown |
 | `-c brokerEndpointQuic=true` | makes the endpoint's listener and target group a single `TCP_UDP` pair instead of `TCP` (`ops-stack.ts:398-400`, `:449`, `:475`) | endpoint carries `wss` only. **A modifier, not a gate** — on its own, with no allowlist, it produces nothing at all |
-| `-c onPremCidr=<cidr>` | the VPN's static route; defaults to `10.0.0.0/16` | the default, which is correct for this account |
-| `-c onPremSgCidr=<cidr>` | the `BuilderSg` on-prem ingress range only (`ops-stack.ts:336`); defaults to `onPremCidr` | the SG narrows to `onPremCidr`. **This account needs `10.0.0.0/8`** — the live rules cover peered VPCs, not just on-prem. Do not widen `onPremCidr` to do this instead: `10.0.0.0/8` as a *static route* is a supernet of `BuildVpc`'s own `10.128.0.0/16` |
+| `-c onPremCidr=<cidr>` | overrides `/debeos/onprem/cidr`, the VPN's static route (`10.0.0.0/16` in this account) | the parameter's value |
+| `-c onPremSgCidr=<cidr>` | overrides `/debeos/onprem/sg-cidr`, the `BuilderSg` on-prem ingress range only (`10.0.0.0/16` in this account) | the parameter's value. Do not widen the route (`cidr`) to cover more: `10.0.0.0/8` as a *static route* is a supernet of `BuildVpc`'s own range |
 
-`onPremPublicIp` is deliberately **not** committed anywhere: the on-prem public
-address is not public information and this repository is. That is why it has to
-be typed each time, and why it is easy to forget.
+The on-prem public address is deliberately **not** committed anywhere: it is not
+public information and this repository is. It lives in the SSM parameter
+instead, so nobody has to remember or retype it.
 
 Confirm what a deploy would do before running one. If the diff shows
 `AWS::EC2::VPNConnection … destroy`, a flag is missing — stop and add it.
 
 ```bash
 cdk diff DebeosOpsStack \
-  -c onPremPublicIp=<on-prem public ip> \
   -c brokerEndpointAllowCidrs=<your.public.ip>/32
 ```
 
@@ -373,11 +377,10 @@ cdk diff DebeosOpsStack \
 are for a human to execute after reviewing the above. Run from
 `graviton/pipeline`.
 
-Review the diff before anything else, with the VPN flag included:
+Review the diff before anything else:
 
 ```bash
 cdk diff DebeosOpsStack \
-  -c onPremPublicIp=<on-prem public ip> \
   -c brokerEndpointAllowCidrs=<your.public.ip>/32
 ```
 
@@ -388,7 +391,6 @@ comma-separated. Add `-c brokerEndpointQuic=true` to carry QUIC as well as
 
 ```bash
 cdk deploy DebeosOpsStack \
-  -c onPremPublicIp=<on-prem public ip> \
   -c brokerEndpointAllowCidrs=<your.public.ip>/32
 ```
 
@@ -429,19 +431,19 @@ aws elbv2 deregister-targets \
   --target-group-arn <BrokerEndpointTargetGroupArn> \
   --targets Id=<instance-id>
 
-cdk deploy DebeosOpsStack -c onPremPublicIp=<on-prem public ip>
+cdk deploy DebeosOpsStack
 ```
 
 The final deploy drops `brokerEndpointAllowCidrs` and so deletes the load
 balancer, listener, target group and security group, and removes the
 `BuilderSg` rule that referenced it. The monthly charge stops.
 
-**Keep `-c onPremPublicIp` on that command.** A bare `cdk deploy
-DebeosOpsStack` tears down the Site-to-Site VPN along with the endpoint — see
+The VPN is untouched by that deploy: its settings come from the SSM parameters,
+not from a flag — see
 [Context flags are not optional](#context-flags-are-not-optional).
 
 To rotate the allowlist without touching the target, re-deploy with a different
-`brokerEndpointAllowCidrs` (and the same `onPremPublicIp`).
+`brokerEndpointAllowCidrs`.
 
 ## Where the code lives
 

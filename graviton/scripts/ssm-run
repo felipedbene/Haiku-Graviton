@@ -41,7 +41,7 @@ set -uo pipefail
 # sit one variable away.
 . "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
 
-REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
 BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
 PREFIX="${HAIKU_GRAVITON_SSM_PREFIX:-ssm-out}"
 DEADLINE_SECS=900

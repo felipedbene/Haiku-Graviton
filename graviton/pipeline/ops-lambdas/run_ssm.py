@@ -221,8 +221,14 @@ def _wrapper(cmd, bucket, run_id, name, ok_grep, refresh="", prelude=""):
     change the verdict -- the build result is still real -- but the line then says
     LOG=UPLOAD_FAILED and the transfer error goes to stderr, instead of pointing at a
     key that does not exist."""
+    # The builder's tools default their bucket and region to the home region's
+    # names; hand them this wave's values so a builder launched in another region
+    # harvests to (and signs for) its own region's work bucket.
+    region = os.environ.get("AWS_REGION", "")
+    region_env = f"export AWS_REGION='{region}' AWS_DEFAULT_REGION='{region}'\n" if region else ""
     return f"""set -u
-LOG=/tmp/{name}.$$.log
+export HAIKU_GRAVITON_BUCKET='{bucket}'
+{region_env}LOG=/tmp/{name}.$$.log
 : > "$LOG"
 STALE=0
 XFER=0

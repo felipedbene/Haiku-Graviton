@@ -127,7 +127,7 @@
 #   REPO_HOSTS        comma-separated PUBLIC CDN aliases to invalidate
 #   HG_PROMOTE_PROJECT  CodeBuild project a local --apply delegates to
 #   ARCH              packaging arch (default arm64)
-#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#   HAIKU_REPO_REGION region of the package repo and its promote job (default us-west-2)
 
 import argparse
 import hashlib
@@ -139,7 +139,9 @@ import sys
 import time
 
 ARCH = os.environ.get("ARCH", "arm64")
-REGION = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION") or "us-west-2"
+# Everything this touches -- both pools, the promote plans, the promote CodeBuild
+# project -- lives in the package repo's region, never the caller's compute region.
+REGION = os.environ.get("HAIKU_REPO_REGION") or "us-west-2"
 # The two public hostnames that front the GREEN pool. Public DNS names, not
 # account-scoped ids: the distribution ids are resolved from these at runtime.
 DEFAULT_REPO_HOSTS = "packages.debene.dev,beta.repository.debene.dev"

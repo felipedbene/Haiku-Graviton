@@ -110,7 +110,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("report", nargs="?", default=MATCHED_DEFAULT)
     ap.add_argument("--table", default=os.environ.get("TABLE", "debeos-package-state"))
-    ap.add_argument("--region", default=os.environ.get("AWS_REGION", "us-west-2"))
+    ap.add_argument("--region", default=(os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"))
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
