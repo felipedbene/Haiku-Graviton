@@ -1,0 +1,1362 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-regress
+# instance: i-0819772133bf853fe   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: arm before: plain write/rm regression on seed1079 p4 nx4k and p5 ne2
+# start: 20261104T150312Z   end: 20261104T150330Z   rc: 1
+# script sha256: 38ad08abe5db6e56e3ee6916a90c83a925de9f122e8063dcc2c704489f5c1a54
+# ---- script ----
+# | #!/bin/sh
+# | # Plain write/rm regression (group V's, from graviton/evidence/1110/*_r2-*-regress.log; rerun for #1113) on the seed1079 volume's p4 "nx4k" (ext4) and p5 "ne2"
+# | # (ext2): write an 8 MiB random file and keep it, copy it, make 200 small files in a directory,
+# | # remove the copy and the directory, unmount, remount and check the kept file. The Linux check
+# | # afterwards runs e2fsck -fn and the md5 of "keep" again.
+# | set -x
+# | DD=""
+# | for d in /dev/disk/nvme/*; do [ -e $d/4 ] && [ ! -e $d/5 ] && DD=$d; done
+# | [ -n "$DD" ] || { echo "no 5-partition data disk"; exit 1; }
+# | dd if=/dev/urandom of=/boot/home/chunk8m bs=65536 count=128 2>/dev/null
+# | echo "chunk8m md5 $(md5sum < /boot/home/chunk8m)"
+# | for n in 3 4; do
+# | 	l=r$n; mkdir -p /$l && mount -t ext2 $DD/$n /$l || { echo "mount $n failed"; exit 1; }
+# | 	cd /$l; df -k . | tail -1
+# | 	cat /boot/home/chunk8m > keep; echo "write keep rc=$?"
+# | 	cp keep copy; echo "cp rc=$?"
+# | 	mkdir tree && i=0 && while [ $i -lt 200 ]; do echo $i > tree/f$i || break; i=$((i + 1)); done; echo "small files: $i"
+# | 	rm -rf copy tree; echo "rm rc=$?"
+# | 	ls -ls; df -k . | tail -1; sync; cd /
+# | 	unmount /$l; echo "unmount $n rc=$?"
+# | 	mount -t ext2 $DD/$n /$l; echo "remount $n rc=$?"
+# | 	echo "keep md5 after remount $(md5sum < /$l/keep)"
+# | 	lin=$(md5sum < /$l/lin-1m); echo "lin-1m md5 $lin"
+# | 	mkdir /$l/probe; echo "mkdir rc=$?"; rmdir /$l/probe; echo "rmdir rc=$?"
+# | 	unmount /$l; echo "unmount $n rc=$?"
+# | done
+# | sync
+# | grep -E "Mismatch" /var/log/syslog | tail -10
+# ---- raw output ----
+chunk8m md5 7e68ba2702b3f3e9ae4ddba3fc0d8ea3  -
+   Root Inode: 2
+write keep rc=0
+cp rc=0
+small files: 200
+rm rc=0
+total 9232
+8192 -rw-r--r-- 1 baron root 8388608 Nov  4 15:03 keep
+1024 -rw-rw-rw- 1 baron root 1048576 Nov  4 14:52 lin-1m
+  16 drwx------ 2 baron root   16384 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount 3 rc=0
+remount 3 rc=0
+keep md5 after remount 7e68ba2702b3f3e9ae4ddba3fc0d8ea3  -
+lin-1m md5 10d2b8b76bfdb666f50bd1599b1d7756  -
+mkdir rc=0
+rmdir rc=0
+unmount 3 rc=0
+   Root Inode: 2
+write keep rc=0
+cp rc=0
+small files: 200
+rm rc=0
+total 9248
+8204 -rw-r--r-- 1 baron root 8388608 Nov  4 15:03 keep
+1028 -rw-rw-rw- 1 baron root 1048576 Nov  4 14:52 lin-1m
+  16 drwx------ 2 baron root   16384 Nov  4 14:52 lost+found
+   Root Inode: 2
+unmount 4 rc=0
+remount 4 rc=0
+keep md5 after remount 7e68ba2702b3f3e9ae4ddba3fc0d8ea3  -
+lin-1m md5 10d2b8b76bfdb666f50bd1599b1d7756  -
+mkdir rc=0
+rmdir rc=0
+unmount 4 rc=0
++ DD=
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/0/4 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/1/4 ']'
++ for d in /dev/disk/nvme/*
++ '[' -e /dev/disk/nvme/2/4 ']'
++ '[' '!' -e /dev/disk/nvme/2/5 ']'
++ DD=/dev/disk/nvme/2
++ '[' -n /dev/disk/nvme/2 ']'
++ dd if=/dev/urandom of=/boot/home/chunk8m bs=65536 count=128
+++ md5sum
++ echo 'chunk8m md5 7e68ba2702b3f3e9ae4ddba3fc0d8ea3  -'
++ for n in 3 4
++ l=r3
++ mkdir -p /r3
++ mount -t ext2 /dev/disk/nvme/2/3 /r3
++ cd /r3
++ df -k .
++ tail -1
++ cat /boot/home/chunk8m
++ echo 'write keep rc=0'
++ cp keep copy
++ echo 'cp rc=0'
++ mkdir tree
++ i=0
++ '[' 0 -lt 200 ']'
++ echo 0
++ i=1
++ '[' 1 -lt 200 ']'
++ echo 1
++ i=2
++ '[' 2 -lt 200 ']'
++ echo 2
++ i=3
++ '[' 3 -lt 200 ']'
++ echo 3
++ i=4
++ '[' 4 -lt 200 ']'
++ echo 4
++ i=5
++ '[' 5 -lt 200 ']'
++ echo 5
++ i=6
++ '[' 6 -lt 200 ']'
++ echo 6
++ i=7
++ '[' 7 -lt 200 ']'
++ echo 7
++ i=8
++ '[' 8 -lt 200 ']'
++ echo 8
++ i=9
++ '[' 9 -lt 200 ']'
++ echo 9
++ i=10
++ '[' 10 -lt 200 ']'
++ echo 10
++ i=11
++ '[' 11 -lt 200 ']'
++ echo 11
++ i=12
++ '[' 12 -lt 200 ']'
++ echo 12
++ i=13
++ '[' 13 -lt 200 ']'
++ echo 13
++ i=14
++ '[' 14 -lt 200 ']'
++ echo 14
++ i=15
++ '[' 15 -lt 200 ']'
++ echo 15
++ i=16
++ '[' 16 -lt 200 ']'
++ echo 16
++ i=17
++ '[' 17 -lt 200 ']'
++ echo 17
++ i=18
++ '[' 18 -lt 200 ']'
++ echo 18
++ i=19
++ '[' 19 -lt 200 ']'
++ echo 19
++ i=20
++ '[' 20 -lt 200 ']'
++ echo 20
++ i=21
++ '[' 21 -lt 200 ']'
++ echo 21
++ i=22
++ '[' 22 -lt 200 ']'
++ echo 22
++ i=23
++ '[' 23 -lt 200 ']'
++ echo 23
++ i=24
++ '[' 24 -lt 200 ']'
++ echo 24
++ i=25
++ '[' 25 -lt 200 ']'
++ echo 25
++ i=26
++ '[' 26 -lt 200 ']'
++ echo 26
++ i=27
++ '[' 27 -lt 200 ']'
++ echo 27
++ i=28
++ '[' 28 -lt 200 ']'
++ echo 28
++ i=29
++ '[' 29 -lt 200 ']'
++ echo 29
++ i=30
++ '[' 30 -lt 200 ']'
++ echo 30
++ i=31
++ '[' 31 -lt 200 ']'
++ echo 31
++ i=32
++ '[' 32 -lt 200 ']'
++ echo 32
++ i=33
++ '[' 33 -lt 200 ']'
++ echo 33
++ i=34
++ '[' 34 -lt 200 ']'
++ echo 34
++ i=35
++ '[' 35 -lt 200 ']'
++ echo 35
++ i=36
++ '[' 36 -lt 200 ']'
++ echo 36
++ i=37
++ '[' 37 -lt 200 ']'
++ echo 37
++ i=38
++ '[' 38 -lt 200 ']'
++ echo 38
++ i=39
++ '[' 39 -lt 200 ']'
++ echo 39
++ i=40
++ '[' 40 -lt 200 ']'
++ echo 40
++ i=41
++ '[' 41 -lt 200 ']'
++ echo 41
++ i=42
++ '[' 42 -lt 200 ']'
++ echo 42
++ i=43
++ '[' 43 -lt 200 ']'
++ echo 43
++ i=44
++ '[' 44 -lt 200 ']'
++ echo 44
++ i=45
++ '[' 45 -lt 200 ']'
++ echo 45
++ i=46
++ '[' 46 -lt 200 ']'
++ echo 46
++ i=47
++ '[' 47 -lt 200 ']'
++ echo 47
++ i=48
++ '[' 48 -lt 200 ']'
++ echo 48
++ i=49
++ '[' 49 -lt 200 ']'
++ echo 49
++ i=50
++ '[' 50 -lt 200 ']'
++ echo 50
++ i=51
++ '[' 51 -lt 200 ']'
++ echo 51
++ i=52
++ '[' 52 -lt 200 ']'
++ echo 52
++ i=53
++ '[' 53 -lt 200 ']'
++ echo 53
++ i=54
++ '[' 54 -lt 200 ']'
++ echo 54
++ i=55
++ '[' 55 -lt 200 ']'
++ echo 55
++ i=56
++ '[' 56 -lt 200 ']'
++ echo 56
++ i=57
++ '[' 57 -lt 200 ']'
++ echo 57
++ i=58
++ '[' 58 -lt 200 ']'
++ echo 58
++ i=59
++ '[' 59 -lt 200 ']'
++ echo 59
++ i=60
++ '[' 60 -lt 200 ']'
++ echo 60
++ i=61
++ '[' 61 -lt 200 ']'
++ echo 61
++ i=62
++ '[' 62 -lt 200 ']'
++ echo 62
++ i=63
++ '[' 63 -lt 200 ']'
++ echo 63
++ i=64
++ '[' 64 -lt 200 ']'
++ echo 64
++ i=65
++ '[' 65 -lt 200 ']'
++ echo 65
++ i=66
++ '[' 66 -lt 200 ']'
++ echo 66
++ i=67
++ '[' 67 -lt 200 ']'
++ echo 67
++ i=68
++ '[' 68 -lt 200 ']'
++ echo 68
++ i=69
++ '[' 69 -lt 200 ']'
++ echo 69
++ i=70
++ '[' 70 -lt 200 ']'
++ echo 70
++ i=71
++ '[' 71 -lt 200 ']'
++ echo 71
++ i=72
++ '[' 72 -lt 200 ']'
++ echo 72
++ i=73
++ '[' 73 -lt 200 ']'
++ echo 73
++ i=74
++ '[' 74 -lt 200 ']'
++ echo 74
++ i=75
++ '[' 75 -lt 200 ']'
++ echo 75
++ i=76
++ '[' 76 -lt 200 ']'
++ echo 76
++ i=77
++ '[' 77 -lt 200 ']'
++ echo 77
++ i=78
++ '[' 78 -lt 200 ']'
++ echo 78
++ i=79
++ '[' 79 -lt 200 ']'
++ echo 79
++ i=80
++ '[' 80 -lt 200 ']'
++ echo 80
++ i=81
++ '[' 81 -lt 200 ']'
++ echo 81
++ i=82
++ '[' 82 -lt 200 ']'
++ echo 82
++ i=83
++ '[' 83 -lt 200 ']'
++ echo 83
++ i=84
++ '[' 84 -lt 200 ']'
++ echo 84
++ i=85
++ '[' 85 -lt 200 ']'
++ echo 85
++ i=86
++ '[' 86 -lt 200 ']'
++ echo 86
++ i=87
++ '[' 87 -lt 200 ']'
++ echo 87
++ i=88
++ '[' 88 -lt 200 ']'
++ echo 88
++ i=89
++ '[' 89 -lt 200 ']'
++ echo 89
++ i=90
++ '[' 90 -lt 200 ']'
++ echo 90
++ i=91
++ '[' 91 -lt 200 ']'
++ echo 91
++ i=92
++ '[' 92 -lt 200 ']'
++ echo 92
++ i=93
++ '[' 93 -lt 200 ']'
++ echo 93
++ i=94
++ '[' 94 -lt 200 ']'
++ echo 94
++ i=95
++ '[' 95 -lt 200 ']'
++ echo 95
++ i=96
++ '[' 96 -lt 200 ']'
++ echo 96
++ i=97
++ '[' 97 -lt 200 ']'
++ echo 97
++ i=98
++ '[' 98 -lt 200 ']'
++ echo 98
++ i=99
++ '[' 99 -lt 200 ']'
++ echo 99
++ i=100
++ '[' 100 -lt 200 ']'
++ echo 100
++ i=101
++ '[' 101 -lt 200 ']'
++ echo 101
++ i=102
++ '[' 102 -lt 200 ']'
++ echo 102
++ i=103
++ '[' 103 -lt 200 ']'
++ echo 103
++ i=104
++ '[' 104 -lt 200 ']'
++ echo 104
++ i=105
++ '[' 105 -lt 200 ']'
++ echo 105
++ i=106
++ '[' 106 -lt 200 ']'
++ echo 106
++ i=107
++ '[' 107 -lt 200 ']'
++ echo 107
++ i=108
++ '[' 108 -lt 200 ']'
++ echo 108
++ i=109
++ '[' 109 -lt 200 ']'
++ echo 109
++ i=110
++ '[' 110 -lt 200 ']'
++ echo 110
++ i=111
++ '[' 111 -lt 200 ']'
++ echo 111
++ i=112
++ '[' 112 -lt 200 ']'
++ echo 112
++ i=113
++ '[' 113 -lt 200 ']'
++ echo 113
++ i=114
++ '[' 114 -lt 200 ']'
++ echo 114
++ i=115
++ '[' 115 -lt 200 ']'
++ echo 115
++ i=116
++ '[' 116 -lt 200 ']'
++ echo 116
++ i=117
++ '[' 117 -lt 200 ']'
++ echo 117
++ i=118
++ '[' 118 -lt 200 ']'
++ echo 118
++ i=119
++ '[' 119 -lt 200 ']'
++ echo 119
++ i=120
++ '[' 120 -lt 200 ']'
++ echo 120
++ i=121
++ '[' 121 -lt 200 ']'
++ echo 121
++ i=122
++ '[' 122 -lt 200 ']'
++ echo 122
++ i=123
++ '[' 123 -lt 200 ']'
++ echo 123
++ i=124
++ '[' 124 -lt 200 ']'
++ echo 124
++ i=125
++ '[' 125 -lt 200 ']'
++ echo 125
++ i=126
++ '[' 126 -lt 200 ']'
++ echo 126
++ i=127
++ '[' 127 -lt 200 ']'
++ echo 127
++ i=128
++ '[' 128 -lt 200 ']'
++ echo 128
++ i=129
++ '[' 129 -lt 200 ']'
++ echo 129
++ i=130
++ '[' 130 -lt 200 ']'
++ echo 130
++ i=131
++ '[' 131 -lt 200 ']'
++ echo 131
++ i=132
++ '[' 132 -lt 200 ']'
++ echo 132
++ i=133
++ '[' 133 -lt 200 ']'
++ echo 133
++ i=134
++ '[' 134 -lt 200 ']'
++ echo 134
++ i=135
++ '[' 135 -lt 200 ']'
++ echo 135
++ i=136
++ '[' 136 -lt 200 ']'
++ echo 136
++ i=137
++ '[' 137 -lt 200 ']'
++ echo 137
++ i=138
++ '[' 138 -lt 200 ']'
++ echo 138
++ i=139
++ '[' 139 -lt 200 ']'
++ echo 139
++ i=140
++ '[' 140 -lt 200 ']'
++ echo 140
++ i=141
++ '[' 141 -lt 200 ']'
++ echo 141
++ i=142
++ '[' 142 -lt 200 ']'
++ echo 142
++ i=143
++ '[' 143 -lt 200 ']'
++ echo 143
++ i=144
++ '[' 144 -lt 200 ']'
++ echo 144
++ i=145
++ '[' 145 -lt 200 ']'
++ echo 145
++ i=146
++ '[' 146 -lt 200 ']'
++ echo 146
++ i=147
++ '[' 147 -lt 200 ']'
++ echo 147
++ i=148
++ '[' 148 -lt 200 ']'
++ echo 148
++ i=149
++ '[' 149 -lt 200 ']'
++ echo 149
++ i=150
++ '[' 150 -lt 200 ']'
++ echo 150
++ i=151
++ '[' 151 -lt 200 ']'
++ echo 151
++ i=152
++ '[' 152 -lt 200 ']'
++ echo 152
++ i=153
++ '[' 153 -lt 200 ']'
++ echo 153
++ i=154
++ '[' 154 -lt 200 ']'
++ echo 154
++ i=155
++ '[' 155 -lt 200 ']'
++ echo 155
++ i=156
++ '[' 156 -lt 200 ']'
++ echo 156
++ i=157
++ '[' 157 -lt 200 ']'
++ echo 157
++ i=158
++ '[' 158 -lt 200 ']'
++ echo 158
++ i=159
++ '[' 159 -lt 200 ']'
++ echo 159
++ i=160
++ '[' 160 -lt 200 ']'
++ echo 160
++ i=161
++ '[' 161 -lt 200 ']'
++ echo 161
++ i=162
++ '[' 162 -lt 200 ']'
++ echo 162
++ i=163
++ '[' 163 -lt 200 ']'
++ echo 163
++ i=164
++ '[' 164 -lt 200 ']'
++ echo 164
++ i=165
++ '[' 165 -lt 200 ']'
++ echo 165
++ i=166
++ '[' 166 -lt 200 ']'
++ echo 166
++ i=167
++ '[' 167 -lt 200 ']'
++ echo 167
++ i=168
++ '[' 168 -lt 200 ']'
++ echo 168
++ i=169
++ '[' 169 -lt 200 ']'
++ echo 169
++ i=170
++ '[' 170 -lt 200 ']'
++ echo 170
++ i=171
++ '[' 171 -lt 200 ']'
++ echo 171
++ i=172
++ '[' 172 -lt 200 ']'
++ echo 172
++ i=173
++ '[' 173 -lt 200 ']'
++ echo 173
++ i=174
++ '[' 174 -lt 200 ']'
++ echo 174
++ i=175
++ '[' 175 -lt 200 ']'
++ echo 175
++ i=176
++ '[' 176 -lt 200 ']'
++ echo 176
++ i=177
++ '[' 177 -lt 200 ']'
++ echo 177
++ i=178
++ '[' 178 -lt 200 ']'
++ echo 178
++ i=179
++ '[' 179 -lt 200 ']'
++ echo 179
++ i=180
++ '[' 180 -lt 200 ']'
++ echo 180
++ i=181
++ '[' 181 -lt 200 ']'
++ echo 181
++ i=182
++ '[' 182 -lt 200 ']'
++ echo 182
++ i=183
++ '[' 183 -lt 200 ']'
++ echo 183
++ i=184
++ '[' 184 -lt 200 ']'
++ echo 184
++ i=185
++ '[' 185 -lt 200 ']'
++ echo 185
++ i=186
++ '[' 186 -lt 200 ']'
++ echo 186
++ i=187
++ '[' 187 -lt 200 ']'
++ echo 187
++ i=188
++ '[' 188 -lt 200 ']'
++ echo 188
++ i=189
++ '[' 189 -lt 200 ']'
++ echo 189
++ i=190
++ '[' 190 -lt 200 ']'
++ echo 190
++ i=191
++ '[' 191 -lt 200 ']'
++ echo 191
++ i=192
++ '[' 192 -lt 200 ']'
++ echo 192
++ i=193
++ '[' 193 -lt 200 ']'
++ echo 193
++ i=194
++ '[' 194 -lt 200 ']'
++ echo 194
++ i=195
++ '[' 195 -lt 200 ']'
++ echo 195
++ i=196
++ '[' 196 -lt 200 ']'
++ echo 196
++ i=197
++ '[' 197 -lt 200 ']'
++ echo 197
++ i=198
++ '[' 198 -lt 200 ']'
++ echo 198
++ i=199
++ '[' 199 -lt 200 ']'
++ echo 199
++ i=200
++ '[' 200 -lt 200 ']'
++ echo 'small files: 200'
++ rm -rf copy tree
++ echo 'rm rc=0'
++ ls -ls
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /r3
++ echo 'unmount 3 rc=0'
++ mount -t ext2 /dev/disk/nvme/2/3 /r3
++ echo 'remount 3 rc=0'
+++ md5sum
++ echo 'keep md5 after remount 7e68ba2702b3f3e9ae4ddba3fc0d8ea3  -'
+++ md5sum
++ lin='10d2b8b76bfdb666f50bd1599b1d7756  -'
++ echo 'lin-1m md5 10d2b8b76bfdb666f50bd1599b1d7756  -'
++ mkdir /r3/probe
++ echo 'mkdir rc=0'
++ rmdir /r3/probe
++ echo 'rmdir rc=0'
++ unmount /r3
++ echo 'unmount 3 rc=0'
++ for n in 3 4
++ l=r4
++ mkdir -p /r4
++ mount -t ext2 /dev/disk/nvme/2/4 /r4
++ cd /r4
++ tail -1
++ df -k .
++ cat /boot/home/chunk8m
++ echo 'write keep rc=0'
++ cp keep copy
++ echo 'cp rc=0'
++ mkdir tree
++ i=0
++ '[' 0 -lt 200 ']'
++ echo 0
++ i=1
++ '[' 1 -lt 200 ']'
++ echo 1
++ i=2
++ '[' 2 -lt 200 ']'
++ echo 2
++ i=3
++ '[' 3 -lt 200 ']'
++ echo 3
++ i=4
++ '[' 4 -lt 200 ']'
++ echo 4
++ i=5
++ '[' 5 -lt 200 ']'
++ echo 5
++ i=6
++ '[' 6 -lt 200 ']'
++ echo 6
++ i=7
++ '[' 7 -lt 200 ']'
++ echo 7
++ i=8
++ '[' 8 -lt 200 ']'
++ echo 8
++ i=9
++ '[' 9 -lt 200 ']'
++ echo 9
++ i=10
++ '[' 10 -lt 200 ']'
++ echo 10
++ i=11
++ '[' 11 -lt 200 ']'
++ echo 11
++ i=12
++ '[' 12 -lt 200 ']'
++ echo 12
++ i=13
++ '[' 13 -lt 200 ']'
++ echo 13
++ i=14
++ '[' 14 -lt 200 ']'
++ echo 14
++ i=15
++ '[' 15 -lt 200 ']'
++ echo 15
++ i=16
++ '[' 16 -lt 200 ']'
++ echo 16
++ i=17
++ '[' 17 -lt 200 ']'
++ echo 17
++ i=18
++ '[' 18 -lt 200 ']'
++ echo 18
++ i=19
++ '[' 19 -lt 200 ']'
++ echo 19
++ i=20
++ '[' 20 -lt 200 ']'
++ echo 20
++ i=21
++ '[' 21 -lt 200 ']'
++ echo 21
++ i=22
++ '[' 22 -lt 200 ']'
++ echo 22
++ i=23
++ '[' 23 -lt 200 ']'
++ echo 23
++ i=24
++ '[' 24 -lt 200 ']'
++ echo 24
++ i=25
++ '[' 25 -lt 200 ']'
++ echo 25
++ i=26
++ '[' 26 -lt 200 ']'
++ echo 26
++ i=27
++ '[' 27 -lt 200 ']'
++ echo 27
++ i=28
++ '[' 28 -lt 200 ']'
++ echo 28
++ i=29
++ '[' 29 -lt 200 ']'
++ echo 29
++ i=30
++ '[' 30 -lt 200 ']'
++ echo 30
++ i=31
++ '[' 31 -lt 200 ']'
++ echo 31
++ i=32
++ '[' 32 -lt 200 ']'
++ echo 32
++ i=33
++ '[' 33 -lt 200 ']'
++ echo 33
++ i=34
++ '[' 34 -lt 200 ']'
++ echo 34
++ i=35
++ '[' 35 -lt 200 ']'
++ echo 35
++ i=36
++ '[' 36 -lt 200 ']'
++ echo 36
++ i=37
++ '[' 37 -lt 200 ']'
++ echo 37
++ i=38
++ '[' 38 -lt 200 ']'
++ echo 38
++ i=39
++ '[' 39 -lt 200 ']'
++ echo 39
++ i=40
++ '[' 40 -lt 200 ']'
++ echo 40
++ i=41
++ '[' 41 -lt 200 ']'
++ echo 41
++ i=42
++ '[' 42 -lt 200 ']'
++ echo 42
++ i=43
++ '[' 43 -lt 200 ']'
++ echo 43
++ i=44
++ '[' 44 -lt 200 ']'
++ echo 44
++ i=45
++ '[' 45 -lt 200 ']'
++ echo 45
++ i=46
++ '[' 46 -lt 200 ']'
++ echo 46
++ i=47
++ '[' 47 -lt 200 ']'
++ echo 47
++ i=48
++ '[' 48 -lt 200 ']'
++ echo 48
++ i=49
++ '[' 49 -lt 200 ']'
++ echo 49
++ i=50
++ '[' 50 -lt 200 ']'
++ echo 50
++ i=51
++ '[' 51 -lt 200 ']'
++ echo 51
++ i=52
++ '[' 52 -lt 200 ']'
++ echo 52
++ i=53
++ '[' 53 -lt 200 ']'
++ echo 53
++ i=54
++ '[' 54 -lt 200 ']'
++ echo 54
++ i=55
++ '[' 55 -lt 200 ']'
++ echo 55
++ i=56
++ '[' 56 -lt 200 ']'
++ echo 56
++ i=57
++ '[' 57 -lt 200 ']'
++ echo 57
++ i=58
++ '[' 58 -lt 200 ']'
++ echo 58
++ i=59
++ '[' 59 -lt 200 ']'
++ echo 59
++ i=60
++ '[' 60 -lt 200 ']'
++ echo 60
++ i=61
++ '[' 61 -lt 200 ']'
++ echo 61
++ i=62
++ '[' 62 -lt 200 ']'
++ echo 62
++ i=63
++ '[' 63 -lt 200 ']'
++ echo 63
++ i=64
++ '[' 64 -lt 200 ']'
++ echo 64
++ i=65
++ '[' 65 -lt 200 ']'
++ echo 65
++ i=66
++ '[' 66 -lt 200 ']'
++ echo 66
++ i=67
++ '[' 67 -lt 200 ']'
++ echo 67
++ i=68
++ '[' 68 -lt 200 ']'
++ echo 68
++ i=69
++ '[' 69 -lt 200 ']'
++ echo 69
++ i=70
++ '[' 70 -lt 200 ']'
++ echo 70
++ i=71
++ '[' 71 -lt 200 ']'
++ echo 71
++ i=72
++ '[' 72 -lt 200 ']'
++ echo 72
++ i=73
++ '[' 73 -lt 200 ']'
++ echo 73
++ i=74
++ '[' 74 -lt 200 ']'
++ echo 74
++ i=75
++ '[' 75 -lt 200 ']'
++ echo 75
++ i=76
++ '[' 76 -lt 200 ']'
++ echo 76
++ i=77
++ '[' 77 -lt 200 ']'
++ echo 77
++ i=78
++ '[' 78 -lt 200 ']'
++ echo 78
++ i=79
++ '[' 79 -lt 200 ']'
++ echo 79
++ i=80
++ '[' 80 -lt 200 ']'
++ echo 80
++ i=81
++ '[' 81 -lt 200 ']'
++ echo 81
++ i=82
++ '[' 82 -lt 200 ']'
++ echo 82
++ i=83
++ '[' 83 -lt 200 ']'
++ echo 83
++ i=84
++ '[' 84 -lt 200 ']'
++ echo 84
++ i=85
++ '[' 85 -lt 200 ']'
++ echo 85
++ i=86
++ '[' 86 -lt 200 ']'
++ echo 86
++ i=87
++ '[' 87 -lt 200 ']'
++ echo 87
++ i=88
++ '[' 88 -lt 200 ']'
++ echo 88
++ i=89
++ '[' 89 -lt 200 ']'
++ echo 89
++ i=90
++ '[' 90 -lt 200 ']'
++ echo 90
++ i=91
++ '[' 91 -lt 200 ']'
++ echo 91
++ i=92
++ '[' 92 -lt 200 ']'
++ echo 92
++ i=93
++ '[' 93 -lt 200 ']'
++ echo 93
++ i=94
++ '[' 94 -lt 200 ']'
++ echo 94
++ i=95
++ '[' 95 -lt 200 ']'
++ echo 95
++ i=96
++ '[' 96 -lt 200 ']'
++ echo 96
++ i=97
++ '[' 97 -lt 200 ']'
++ echo 97
++ i=98
++ '[' 98 -lt 200 ']'
++ echo 98
++ i=99
++ '[' 99 -lt 200 ']'
++ echo 99
++ i=100
++ '[' 100 -lt 200 ']'
++ echo 100
++ i=101
++ '[' 101 -lt 200 ']'
++ echo 101
++ i=102
++ '[' 102 -lt 200 ']'
++ echo 102
++ i=103
++ '[' 103 -lt 200 ']'
++ echo 103
++ i=104
++ '[' 104 -lt 200 ']'
++ echo 104
++ i=105
++ '[' 105 -lt 200 ']'
++ echo 105
++ i=106
++ '[' 106 -lt 200 ']'
++ echo 106
++ i=107
++ '[' 107 -lt 200 ']'
++ echo 107
++ i=108
++ '[' 108 -lt 200 ']'
++ echo 108
++ i=109
++ '[' 109 -lt 200 ']'
++ echo 109
++ i=110
++ '[' 110 -lt 200 ']'
++ echo 110
++ i=111
++ '[' 111 -lt 200 ']'
++ echo 111
++ i=112
++ '[' 112 -lt 200 ']'
++ echo 112
++ i=113
++ '[' 113 -lt 200 ']'
++ echo 113
++ i=114
++ '[' 114 -lt 200 ']'
++ echo 114
++ i=115
++ '[' 115 -lt 200 ']'
++ echo 115
++ i=116
++ '[' 116 -lt 200 ']'
++ echo 116
++ i=117
++ '[' 117 -lt 200 ']'
++ echo 117
++ i=118
++ '[' 118 -lt 200 ']'
++ echo 118
++ i=119
++ '[' 119 -lt 200 ']'
++ echo 119
++ i=120
++ '[' 120 -lt 200 ']'
++ echo 120
++ i=121
++ '[' 121 -lt 200 ']'
++ echo 121
++ i=122
++ '[' 122 -lt 200 ']'
++ echo 122
++ i=123
++ '[' 123 -lt 200 ']'
++ echo 123
++ i=124
++ '[' 124 -lt 200 ']'
++ echo 124
++ i=125
++ '[' 125 -lt 200 ']'
++ echo 125
++ i=126
++ '[' 126 -lt 200 ']'
++ echo 126
++ i=127
++ '[' 127 -lt 200 ']'
++ echo 127
++ i=128
++ '[' 128 -lt 200 ']'
++ echo 128
++ i=129
++ '[' 129 -lt 200 ']'
++ echo 129
++ i=130
++ '[' 130 -lt 200 ']'
++ echo 130
++ i=131
++ '[' 131 -lt 200 ']'
++ echo 131
++ i=132
++ '[' 132 -lt 200 ']'
++ echo 132
++ i=133
++ '[' 133 -lt 200 ']'
++ echo 133
++ i=134
++ '[' 134 -lt 200 ']'
++ echo 134
++ i=135
++ '[' 135 -lt 200 ']'
++ echo 135
++ i=136
++ '[' 136 -lt 200 ']'
++ echo 136
++ i=137
++ '[' 137 -lt 200 ']'
++ echo 137
++ i=138
++ '[' 138 -lt 200 ']'
++ echo 138
++ i=139
++ '[' 139 -lt 200 ']'
++ echo 139
++ i=140
++ '[' 140 -lt 200 ']'
++ echo 140
++ i=141
++ '[' 141 -lt 200 ']'
++ echo 141
++ i=142
++ '[' 142 -lt 200 ']'
++ echo 142
++ i=143
++ '[' 143 -lt 200 ']'
++ echo 143
++ i=144
++ '[' 144 -lt 200 ']'
++ echo 144
++ i=145
++ '[' 145 -lt 200 ']'
++ echo 145
++ i=146
++ '[' 146 -lt 200 ']'
++ echo 146
++ i=147
++ '[' 147 -lt 200 ']'
++ echo 147
++ i=148
++ '[' 148 -lt 200 ']'
++ echo 148
++ i=149
++ '[' 149 -lt 200 ']'
++ echo 149
++ i=150
++ '[' 150 -lt 200 ']'
++ echo 150
++ i=151
++ '[' 151 -lt 200 ']'
++ echo 151
++ i=152
++ '[' 152 -lt 200 ']'
++ echo 152
++ i=153
++ '[' 153 -lt 200 ']'
++ echo 153
++ i=154
++ '[' 154 -lt 200 ']'
++ echo 154
++ i=155
++ '[' 155 -lt 200 ']'
++ echo 155
++ i=156
++ '[' 156 -lt 200 ']'
++ echo 156
++ i=157
++ '[' 157 -lt 200 ']'
++ echo 157
++ i=158
++ '[' 158 -lt 200 ']'
++ echo 158
++ i=159
++ '[' 159 -lt 200 ']'
++ echo 159
++ i=160
++ '[' 160 -lt 200 ']'
++ echo 160
++ i=161
++ '[' 161 -lt 200 ']'
++ echo 161
++ i=162
++ '[' 162 -lt 200 ']'
++ echo 162
++ i=163
++ '[' 163 -lt 200 ']'
++ echo 163
++ i=164
++ '[' 164 -lt 200 ']'
++ echo 164
++ i=165
++ '[' 165 -lt 200 ']'
++ echo 165
++ i=166
++ '[' 166 -lt 200 ']'
++ echo 166
++ i=167
++ '[' 167 -lt 200 ']'
++ echo 167
++ i=168
++ '[' 168 -lt 200 ']'
++ echo 168
++ i=169
++ '[' 169 -lt 200 ']'
++ echo 169
++ i=170
++ '[' 170 -lt 200 ']'
++ echo 170
++ i=171
++ '[' 171 -lt 200 ']'
++ echo 171
++ i=172
++ '[' 172 -lt 200 ']'
++ echo 172
++ i=173
++ '[' 173 -lt 200 ']'
++ echo 173
++ i=174
++ '[' 174 -lt 200 ']'
++ echo 174
++ i=175
++ '[' 175 -lt 200 ']'
++ echo 175
++ i=176
++ '[' 176 -lt 200 ']'
++ echo 176
++ i=177
++ '[' 177 -lt 200 ']'
++ echo 177
++ i=178
++ '[' 178 -lt 200 ']'
++ echo 178
++ i=179
++ '[' 179 -lt 200 ']'
++ echo 179
++ i=180
++ '[' 180 -lt 200 ']'
++ echo 180
++ i=181
++ '[' 181 -lt 200 ']'
++ echo 181
++ i=182
++ '[' 182 -lt 200 ']'
++ echo 182
++ i=183
++ '[' 183 -lt 200 ']'
++ echo 183
++ i=184
++ '[' 184 -lt 200 ']'
++ echo 184
++ i=185
++ '[' 185 -lt 200 ']'
++ echo 185
++ i=186
++ '[' 186 -lt 200 ']'
++ echo 186
++ i=187
++ '[' 187 -lt 200 ']'
++ echo 187
++ i=188
++ '[' 188 -lt 200 ']'
++ echo 188
++ i=189
++ '[' 189 -lt 200 ']'
++ echo 189
++ i=190
++ '[' 190 -lt 200 ']'
++ echo 190
++ i=191
++ '[' 191 -lt 200 ']'
++ echo 191
++ i=192
++ '[' 192 -lt 200 ']'
++ echo 192
++ i=193
++ '[' 193 -lt 200 ']'
++ echo 193
++ i=194
++ '[' 194 -lt 200 ']'
++ echo 194
++ i=195
++ '[' 195 -lt 200 ']'
++ echo 195
++ i=196
++ '[' 196 -lt 200 ']'
++ echo 196
++ i=197
++ '[' 197 -lt 200 ']'
++ echo 197
++ i=198
++ '[' 198 -lt 200 ']'
++ echo 198
++ i=199
++ '[' 199 -lt 200 ']'
++ echo 199
++ i=200
++ '[' 200 -lt 200 ']'
++ echo 'small files: 200'
++ rm -rf copy tree
++ echo 'rm rc=0'
++ ls -ls
++ df -k .
++ tail -1
++ sync
++ cd /
++ unmount /r4
++ echo 'unmount 4 rc=0'
++ mount -t ext2 /dev/disk/nvme/2/4 /r4
++ echo 'remount 4 rc=0'
+++ md5sum
++ echo 'keep md5 after remount 7e68ba2702b3f3e9ae4ddba3fc0d8ea3  -'
+++ md5sum
++ lin='10d2b8b76bfdb666f50bd1599b1d7756  -'
++ echo 'lin-1m md5 10d2b8b76bfdb666f50bd1599b1d7756  -'
++ mkdir /r4/probe
++ echo 'mkdir rc=0'
++ rmdir /r4/probe
++ echo 'rmdir rc=0'
++ unmount /r4
++ echo 'unmount 4 rc=0'
++ sync
++ grep -E Mismatch /var/log/syslog
++ tail -10
+failed to run commands: exit status 1

@@ -1,0 +1,96 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed1113-p4
+# instance: i-04f9ec8e98b9e956b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: re-make seed1113 p4 m4k at 400 MiB so it has BLOCK_UNINIT groups
+# start: 20261104T145318Z   end: 20261104T145335Z   rc: 0
+# script sha256: 8548eaf70227c538a6c33c827f93f358f3bb7e312d00ab268b4663322a4ec4fd
+# ---- script ----
+# | # seed1113 p4 again: 256 MiB was exactly 2 groups, and mke2fs never leaves the last group BLOCK_UNINIT,
+# | # so m4k had none. Re-made at 400 MiB (4 groups) so that groups 1 and 2 are BLOCK_UNINIT.
+# | set -x
+# | dev() { D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_$(echo $1 | tr -d -) '$9 == v { print $11 }' | sed 's|.*/||'); echo /dev/$D; }
+# | D=$(dev vol-09386150fe9c3139d); echo "seed1113 device $D"
+# | sgdisk -d4 -n4:0:+400M $D || exit 1
+# | partprobe $D; sleep 2; P=${D}p; lsblk $D
+# | mkfs.ext4 -q -F -b 4096 -O ^has_journal,^orphan_file -L m4k ${P}4 || exit 1
+# | dumpe2fs -h ${P}4 2>/dev/null | grep -E "volume name|features|Block size|Block count|Free blocks|Free inodes|Blocks per group|Flex block group|Reserved GDT"
+# | dumpe2fs ${P}4 2>/dev/null | grep -E '^Group |superblock at|Block bitmap at|Inode table at|free blocks,'
+# | e2fsck -fn ${P}4 > /tmp/f.out 2>&1; echo "e2fsck ${P}4 rc=$?"; tail -1 /tmp/f.out
+# | for n in 1 2 3; do e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck ${P}$n rc=$?"; done
+# | sync
+# ---- raw output ----
+seed1113 device /dev/nvme1n1
+The operation has completed successfully.
+NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+nvme1n1     259:4    0    1G  0 disk 
+├─nvme1n1p1 259:11   0  400M  0 part 
+├─nvme1n1p2 259:12   0   64M  0 part 
+├─nvme1n1p3 259:13   0   64M  0 part 
+└─nvme1n1p4 259:14   0  400M  0 part 
+Filesystem volume name:   m4k
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum
+Block count:              102400
+Free blocks:              95833
+Free inodes:              102389
+Block size:               4096
+Reserved GDT blocks:      49
+Blocks per group:         32768
+Flex block group size:    16
+Group descriptor size:    64
+Group 0: (Blocks 0-32767) csum 0xa0ca
+  Primary superblock at 0, Group descriptors at 1-1
+  Block bitmap at 51 (+51), csum 0x8f73230c
+  Inode table at 59-1658 (+59)
+  26303 free blocks, 25589 free inodes, 2 directories, 25589 unused inodes
+Group 1: (Blocks 32768-65535) csum 0x439a [INODE_UNINIT, BLOCK_UNINIT]
+  Backup superblock at 32768, Group descriptors at 32769-32769
+  Block bitmap at 52 (bg #0 + 52), csum 0x00000000
+  Inode table at 1659-3258 (bg #0 + 1659)
+  32717 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 2: (Blocks 65536-98303) csum 0xb342 [INODE_UNINIT, BLOCK_UNINIT]
+  Block bitmap at 53 (bg #0 + 53), csum 0x00000000
+  Inode table at 3259-4858 (bg #0 + 3259)
+  32768 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+Group 3: (Blocks 98304-102399) csum 0xf101 [INODE_UNINIT]
+  Backup superblock at 98304, Group descriptors at 98305-98305
+  Block bitmap at 54 (bg #0 + 54), csum 0x1dc43a6a
+  Inode table at 4859-6458 (bg #0 + 4859)
+  4045 free blocks, 25600 free inodes, 0 directories, 25600 unused inodes
+e2fsck /dev/nvme1n1p4 rc=0
+m4k: 11/102400 files (0.0% non-contiguous), 6567/102400 blocks
+e2fsck /dev/nvme1n1p1 rc=0
+e2fsck /dev/nvme1n1p2 rc=0
+e2fsck /dev/nvme1n1p3 rc=0
+++ dev vol-09386150fe9c3139d
++++ ls -l /dev/disk/by-id/
++++ sed 's|.*/||'
+++++ echo vol-09386150fe9c3139d
+++++ tr -d -
++++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol09386150fe9c3139d '$9 == v { print $11 }'
+++ D=nvme1n1
+++ echo /dev/nvme1n1
++ D=/dev/nvme1n1
++ echo 'seed1113 device /dev/nvme1n1'
++ sgdisk -d4 -n4:0:+400M /dev/nvme1n1
++ partprobe /dev/nvme1n1
++ sleep 2
++ P=/dev/nvme1n1p
++ lsblk /dev/nvme1n1
++ mkfs.ext4 -q -F -b 4096 -O '^has_journal,^orphan_file' -L m4k /dev/nvme1n1p4
++ dumpe2fs -h /dev/nvme1n1p4
++ grep -E 'volume name|features|Block size|Block count|Free blocks|Free inodes|Blocks per group|Flex block group|Reserved GDT'
++ dumpe2fs /dev/nvme1n1p4
++ grep -E '^Group |superblock at|Block bitmap at|Inode table at|free blocks,'
++ e2fsck -fn /dev/nvme1n1p4
++ echo 'e2fsck /dev/nvme1n1p4 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck /dev/nvme1n1p1 rc=0'
++ for n in 1 2 3
++ e2fsck -fn /dev/nvme1n1p2
++ echo 'e2fsck /dev/nvme1n1p2 rc=0'
++ for n in 1 2 3
++ e2fsck -fn /dev/nvme1n1p3
++ echo 'e2fsck /dev/nvme1n1p3 rc=0'
++ sync

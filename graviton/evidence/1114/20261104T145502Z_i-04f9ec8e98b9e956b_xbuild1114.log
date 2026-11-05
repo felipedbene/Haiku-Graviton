@@ -1,0 +1,102 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild1114
+# instance: i-04f9ec8e98b9e956b   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-build ext2 v1111 and v1111+#1103 for the #1114 A/B
+# start: 20261104T145502Z   end: 20261104T145526Z   rc: 0
+# script sha256: 611adccf1b7194f9e2dfbadb7a91a2ccf48129210fa90efa9d934715c394bd41
+# ---- script ----
+# | # Cross-build the #1114 pair (same host and configure as xbuild): only #1103's commit differs.
+# | #  ext2.v1111      = group V's "after" arm: #1111 tip 0119de0da5 + #1107 tip f93d80b9a5 (no #1103)
+# | #  ext2.v1111p1103 = ext2.v1111 + e49747022e "ext2: let an extent hold its full 32768 blocks" (#1103, #1090)
+# | set -x
+# | export HOME=/root
+# | X=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/X
+# | G="git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid"
+# | cd /opt/t/hg/generated || exit 1
+# | O=/opt/t/out
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | mbuild() {
+# | 	l=$1 tree=$2
+# | 	t=$($G rev-parse HEAD^{tree}); echo "arm $l: HEAD $($G rev-parse HEAD) tree $t (expected $tree)"
+# | 	[ "$t" = "$tree" ] || { echo "TREE MISMATCH $l"; return 1; }
+# | 	rm -rf $A/ext2
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok"; tail -2 $O/jam-$l.log
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/" | grep -v "address-of-packed-member"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | $G checkout -q -f --detach 0119de0da5 || exit 1
+# | $G merge -q --no-edit origin/fix/1095-ext2-free-group-boundary || exit 1
+# | mbuild v1111 b4738d0eb55521f9555288eac884a894874119e2 || exit 1
+# | $G cherry-pick e49747022e > /dev/null || exit 1
+# | mbuild v1111p1103 a63e50e0c19190571cffc72269a1626e543f960c || exit 1
+# | cd $O
+# | sha256sum kernel_arm64.k1069 ext2.before ext2.after ext2.v1111 ext2.v1111p1103 | tee SHA256SUMS
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.v1111*' --include SHA256SUMS --include 'jam-v1111*.log' . $X/out/ && echo uploaded
+# ---- raw output ----
+Auto-merging src/add-ons/kernel/file_systems/ext2/BlockAllocator.cpp
+arm v1111: HEAD 5a6072654ba04600a1f7bc3c20aa9cc4f326f3ea tree b4738d0eb55521f9555288eac884a894874119e2 (expected b4738d0eb55521f9555288eac884a894874119e2)
+JAM ext2 v1111 ok
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 
+...updated 23 target(s)...
+arm v1111p1103: HEAD deec83156690ac4db13dca42bc7f264068f8cc3f tree a63e50e0c19190571cffc72269a1626e543f960c (expected a63e50e0c19190571cffc72269a1626e543f960c)
+JAM ext2 v1111p1103 ok
+Chmod1 objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 
+...updated 23 target(s)...
+c74348868114a1aa15e543641cc08c808b9385a0ea372422abb51ab03ae04542  kernel_arm64.k1069
+c848da31623d11d3f1848397df3203bf10b2452af039876eaf182f20e893c44a  ext2.before
+d54c96ee8c98ae64d00f7b743e18f612b0a7158c330c45a9df789507fd0634f9  ext2.after
+f56ce090d0f2a46e5ff5c5e18de6cc670e59d1e861fca77fb911199fa9c1ed00  ext2.v1111
+d2ac70853d6fc5bfc460803f3d9302154884f8ca0c804f7d546f9447c17f5a73  ext2.v1111p1103
+uploaded
++ export HOME=/root
++ HOME=/root
++ X=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/X
++ G='git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid'
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid checkout -q -f --detach 0119de0da5
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid merge -q --no-edit origin/fix/1095-ext2-free-group-boundary
++ mbuild v1111 b4738d0eb55521f9555288eac884a894874119e2
++ l=v1111
++ tree=b4738d0eb55521f9555288eac884a894874119e2
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse 'HEAD^{tree}'
++ t=b4738d0eb55521f9555288eac884a894874119e2
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse HEAD
++ echo 'arm v1111: HEAD 5a6072654ba04600a1f7bc3c20aa9cc4f326f3ea tree b4738d0eb55521f9555288eac884a894874119e2 (expected b4738d0eb55521f9555288eac884a894874119e2)'
++ '[' b4738d0eb55521f9555288eac884a894874119e2 = b4738d0eb55521f9555288eac884a894874119e2 ']'
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 v1111 ok'
++ tail -2 /opt/t/out/jam-v1111.log
++ grep -E 'warning:|error:' /opt/t/out/jam-v1111.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.v1111
++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid cherry-pick e49747022e
++ mbuild v1111p1103 a63e50e0c19190571cffc72269a1626e543f960c
++ l=v1111p1103
++ tree=a63e50e0c19190571cffc72269a1626e543f960c
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse 'HEAD^{tree}'
++ t=a63e50e0c19190571cffc72269a1626e543f960c
+++ git -C /opt/t/hg -c user.name=bf-X -c user.email=bf-X@invalid rev-parse HEAD
++ echo 'arm v1111p1103: HEAD deec83156690ac4db13dca42bc7f264068f8cc3f tree a63e50e0c19190571cffc72269a1626e543f960c (expected a63e50e0c19190571cffc72269a1626e543f960c)'
++ '[' a63e50e0c19190571cffc72269a1626e543f960c = a63e50e0c19190571cffc72269a1626e543f960c ']'
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 v1111p1103 ok'
++ tail -2 /opt/t/out/jam-v1111p1103.log
++ grep -E 'warning:|error:' /opt/t/out/jam-v1111p1103.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.v1111p1103
++ cd /opt/t/out
++ sha256sum kernel_arm64.k1069 ext2.before ext2.after ext2.v1111 ext2.v1111p1103
++ tee SHA256SUMS
++ aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.v1111*' --include SHA256SUMS --include 'jam-v1111*.log' . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/X/out/
++ echo uploaded

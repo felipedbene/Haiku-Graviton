@@ -88,7 +88,10 @@ struct ext2_super_block {
 	uint8	checksum_type;
 	uint16	_reserved4;
 	uint64	kb_written;
-	uint32	_reserved5[60];
+	uint32	_reserved5[51];
+	uint32	backup_block_groups[2];
+		// sparse_super2: the only groups with a superblock backup
+	uint32	_reserved5b[7];
 	uint32	checksum_seed;
 	uint32	_reserved6[98];
 	uint32	checksum;
@@ -147,6 +150,8 @@ struct ext2_super_block {
 		{ return B_LENDIAN_TO_HOST_INT32(hash_seed[i]); }
 	uint16 GroupDescriptorSize() const
 		{ return B_LENDIAN_TO_HOST_INT16(group_descriptor_size); }
+	uint32 BackupBlockGroup(uint8 i) const
+		{ return B_LENDIAN_TO_HOST_INT32(backup_block_groups[i]); }
 
 	void SetFreeInodes(uint32 freeInodes)
 		{ free_inodes = B_HOST_TO_LENDIAN_INT32(freeInodes); }
