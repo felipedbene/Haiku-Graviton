@@ -1,0 +1,82 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xsetup
+# instance: i-0d0dc1e4705977484   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: cross-build host setup at the #1105 branch tip
+# start: 20261104T104443Z   end: 20261104T104624Z   rc: 0
+# script sha256: 5cedf6f7ed65cf154ad4a305a59e2d6965d5e9c995d710b7fd068b62d328b324
+# ---- script ----
+# | # Cross-build host setup for #1108 (method of #1105's xsetup): toolchain, jam, cross-tools from the
+# | # oven's cache, configure at the #1105 branch tip (PR #1109), e2fsprogs + gdisk for the test volume.
+# | set -x
+# | export DEBIAN_FRONTEND=noninteractive HOME=/root
+# | WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
+# | apt-get update -qq && apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file e2fsprogs gdisk > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | command -v aws || { curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip && (cd /tmp && unzip -q a.zip && ./aws/install > /dev/null) ; }
+# | uname -r; mke2fs -V 2>&1 | head -1
+# | mkdir -p /opt/t/out && cd /opt/t
+# | rm -rf hg buildtools
+# | git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
+# | git -C hg fetch -q origin fix/1105-ext2-write-into-holes fix/1069-arm64-physmap-area
+# | git -C hg checkout -q 1c2651b4b6 && git -C hg log -1 --format='base %H %s'
+# | git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+# | BT=$(git -C buildtools rev-parse --short HEAD); echo "buildtools=$BT"
+# | (cd buildtools/jam && make > /tmp/jam-make.log 2>&1 && ./jam0 install > /dev/null 2>&1); command -v jam
+# | mkdir -p hg/generated && cd hg/generated
+# | aws s3 cp --quiet s3://$WB/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst || exit 1
+# | tar --zstd -xf /tmp/ct.tar.zst -C . && ls cross-tools-arm64/bin | head -2
+# | ../configure --cross-tools-prefix "$PWD/cross-tools-arm64/bin/aarch64-unknown-haiku-" --use-gcc-pipe -j$(nproc) 2>&1 | tail -2
+# | nproc; df -h /opt | tail -1
+# ---- raw output ----
+apt rc=0
+7.0.0-1014-aws
+mke2fs 1.47.0 (5-Feb-2023)
+base 1c2651b4b65f44f8066645dff06bb918428cf3cc evidence: ext2 writes into holes on Graviton for #1105 (EBS data volume)
+buildtools=d2e0a41eb
+/usr/local/bin/jam
+aarch64-unknown-haiku-addr2line
+aarch64-unknown-haiku-ar
+Configured successfully!
+32
+/dev/root        96G  5.9G   90G   7% /
++ export DEBIAN_FRONTEND=noninteractive HOME=/root
++ DEBIAN_FRONTEND=noninteractive
++ HOME=/root
++ WB=haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp
++ apt-get update -qq
++ apt-get install -y -qq --no-install-recommends git build-essential g++ make bison flex gawk nasm wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo gettext python3 python-is-python3 attr ca-certificates unzip file e2fsprogs gdisk
++ echo 'apt rc=0'
++ command -v aws
++ curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/a.zip
++ cd /tmp
++ unzip -q a.zip
++ ./aws/install
++ uname -r
++ mke2fs -V
++ head -1
++ mkdir -p /opt/t/out
++ cd /opt/t
++ rm -rf hg buildtools
++ git clone -q --filter=blob:none --branch graviton https://github.com/felipedbene/Haiku-Graviton.git hg
++ git -C hg fetch -q origin fix/1105-ext2-write-into-holes fix/1069-arm64-physmap-area
++ git -C hg checkout -q 1c2651b4b6
++ git -C hg log -1 '--format=base %H %s'
++ git clone -q --depth 1 --branch master https://github.com/felipedbene/buildtools.git buildtools
+++ git -C buildtools rev-parse --short HEAD
++ BT=d2e0a41eb
++ echo buildtools=d2e0a41eb
++ cd buildtools/jam
++ make
++ ./jam0 install
++ command -v jam
++ mkdir -p hg/generated
++ cd hg/generated
++ aws s3 cp --quiet s3://haikugravitonovenpipeline-workbucketf885502b-vgdwk79sxhhp/cache/cross-tools-arm64-d2e0a41eb.tar.zst /tmp/ct.tar.zst
++ tar --zstd -xf /tmp/ct.tar.zst -C .
++ ls cross-tools-arm64/bin
++ head -2
++ tail -2
+++ nproc
++ ../configure --cross-tools-prefix /opt/t/hg/generated/cross-tools-arm64/bin/aarch64-unknown-haiku- --use-gcc-pipe -j32
++ nproc
++ df -h /opt
++ tail -1

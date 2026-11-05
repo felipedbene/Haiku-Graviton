@@ -1,0 +1,175 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild2
+# instance: i-0d0dc1e4705977484   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: build ext2 b2 (before) and a2 (after), both with #1096/#1107/#1111
+# start: 20261104T140000Z   end: 20261104T140023Z   rc: 0
+# script sha256: b334ba8ca90f1a25255172242fe858bacbb449dfd756f8125fb0e9c7359740b7
+# ---- script ----
+# | # Build for #1108 (2nd), revision hrev59996. Both arms carry #1096, #1107 and #1111 (per review):
+# | #  D = dep-d82f7e78f9 (#1096) + dep-09e14f3c6b (#1107) + dep-d7f215261c (#1111), src/ only
+# | #  ext2.b2   #1109 tip 1c2651b4b6 + D                  (before)
+# | #  ext2.a2   1c2651b4b6 + D + fix1108-v2.diff (#1112 head f8d86e9448)   (after)
+# | #  kernel: kernel_arm64.k1069 from xbuild1 (#1086 tip e2ca7e9c68), unchanged
+# | set +e
+# | set -x
+# | cd /opt/t/out
+# | curl -sSf -o dep-d82f7e78f9.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/dep-d82f7e78f9.patch?<PRESIGNED>' || exit 1
+# | curl -sSf -o dep-09e14f3c6b.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/dep-09e14f3c6b.patch?<PRESIGNED>' || exit 1
+# | curl -sSf -o dep-d7f215261c.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/dep-d7f215261c.patch?<PRESIGNED>' || exit 1
+# | curl -sSf -o fix1108-v2.diff 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/fix1108-v2.diff?<PRESIGNED>' || exit 1
+# | cat > sums <<'S'
+# | 505b9c51810941936d74826b5e33e5deb1a4d54cc805e1cf82243c4308cec5b6  dep-d82f7e78f9.patch
+# | 22b94c5364eb720683e013b76b955389787ea9e9976e44894ee7a67ad906919b  dep-09e14f3c6b.patch
+# | 812d4902f08ed72a6e78f46371294f44bae74701c301445490c1ba8174816b34  dep-d7f215261c.patch
+# | 78322d253cfa491d3d15fe20792d563b4db20c6cf49b6e31555d4d906f502586  fix1108-v2.diff
+# | S
+# | sha256sum -c sums || exit 1
+# | cd /opt/t/hg/generated
+# | O=/opt/t/out
+# | A=objects/haiku/arm64/release/add-ons/kernel/file_systems
+# | mbuild() {
+# | 	l=$1; shift
+# | 	git -C .. checkout -q -f 1c2651b4b6 || return 1
+# | 	for p in "$@"; do git -C .. apply --check --include='src/*' $O/$p && git -C .. apply --include='src/*' $O/$p || return 1; done
+# | 	git -C .. status --short src | head
+# | 	rm -rf $A/ext2
+# | 	jam -q -j$(nproc) -sHAIKU_REVISION=hrev59996 ext2 > $O/jam-$l.log 2>&1 || { tail -40 $O/jam-$l.log; return 1; }
+# | 	echo "JAM ext2 $l ok"
+# | 	grep -E "warning:|error:" $O/jam-$l.log | grep "ext2/" | grep -v "address-of-packed-member"
+# | 	cp $(find $A/ext2 -maxdepth 1 -type f -name ext2) $O/ext2.$l || return 1
+# | }
+# | D="dep-d82f7e78f9.patch dep-09e14f3c6b.patch dep-d7f215261c.patch"
+# | mbuild b2 $D || exit 1
+# | mbuild a2 $D fix1108-v2.diff || exit 1
+# | mbuild a2r $D fix1108-v2.diff || exit 1
+# | git -C .. checkout -q -f 1c2651b4b6
+# | cd $O
+# | sha256sum kernel_arm64.k1069 ext2.b2 ext2.a2 ext2.a2r | tee SHA256SUMS2
+# | aws s3 cp --quiet --recursive --exclude '*' --include 'ext2.b2' --include 'ext2.a2' --include SHA256SUMS2 . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/U/out2/ && echo uploaded
+# ---- raw output ----
+dep-d82f7e78f9.patch: OK
+dep-09e14f3c6b.patch: OK
+dep-d7f215261c.patch: OK
+fix1108-v2.diff: OK
+ M src/add-ons/kernel/file_systems/ext2/BlockAllocator.cpp
+ M src/add-ons/kernel/file_systems/ext2/InodeAllocator.cpp
+ M src/add-ons/kernel/file_systems/ext2/Volume.cpp
+ M src/add-ons/kernel/file_systems/ext2/Volume.h
+ M src/add-ons/kernel/file_systems/ext2/kernel_interface.cpp
+JAM ext2 b2 ok
+ M src/add-ons/kernel/file_systems/ext2/BlockAllocator.cpp
+ M src/add-ons/kernel/file_systems/ext2/ExtentStream.cpp
+ M src/add-ons/kernel/file_systems/ext2/ExtentStream.h
+ M src/add-ons/kernel/file_systems/ext2/InodeAllocator.cpp
+ M src/add-ons/kernel/file_systems/ext2/Volume.cpp
+ M src/add-ons/kernel/file_systems/ext2/Volume.h
+ M src/add-ons/kernel/file_systems/ext2/kernel_interface.cpp
+JAM ext2 a2 ok
+ M src/add-ons/kernel/file_systems/ext2/BlockAllocator.cpp
+ M src/add-ons/kernel/file_systems/ext2/ExtentStream.cpp
+ M src/add-ons/kernel/file_systems/ext2/ExtentStream.h
+ M src/add-ons/kernel/file_systems/ext2/InodeAllocator.cpp
+ M src/add-ons/kernel/file_systems/ext2/Volume.cpp
+ M src/add-ons/kernel/file_systems/ext2/Volume.h
+ M src/add-ons/kernel/file_systems/ext2/kernel_interface.cpp
+JAM ext2 a2r ok
+9a74215c4a4e85e75bb55ca594b8cadfc01d86b14f2f60f92af80fce755d409f  kernel_arm64.k1069
+9b13ebdcfadb0a656b2f38cb9e79653ec4d6456369215e0530df67ccab1afbfa  ext2.b2
+c848da31623d11d3f1848397df3203bf10b2452af039876eaf182f20e893c44a  ext2.a2
+c848da31623d11d3f1848397df3203bf10b2452af039876eaf182f20e893c44a  ext2.a2r
+uploaded
++ cd /opt/t/out
++ curl -sSf -o dep-d82f7e78f9.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/dep-d82f7e78f9.patch?<PRESIGNED>'
++ curl -sSf -o dep-09e14f3c6b.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/dep-09e14f3c6b.patch?<PRESIGNED>'
++ curl -sSf -o dep-d7f215261c.patch 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/dep-d7f215261c.patch?<PRESIGNED>'
++ curl -sSf -o fix1108-v2.diff 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/bugfix/U/in/fix1108-v2.diff?<PRESIGNED>'
++ cat
++ sha256sum -c sums
++ cd /opt/t/hg/generated
++ O=/opt/t/out
++ A=objects/haiku/arm64/release/add-ons/kernel/file_systems
++ D='dep-d82f7e78f9.patch dep-09e14f3c6b.patch dep-d7f215261c.patch'
++ mbuild b2 dep-d82f7e78f9.patch dep-09e14f3c6b.patch dep-d7f215261c.patch
++ l=b2
++ shift
++ git -C .. checkout -q -f 1c2651b4b6
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-d82f7e78f9.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-d82f7e78f9.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-09e14f3c6b.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-09e14f3c6b.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-d7f215261c.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-d7f215261c.patch
++ git -C .. status --short src
++ head
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 b2 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-b2.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.b2
++ mbuild a2 dep-d82f7e78f9.patch dep-09e14f3c6b.patch dep-d7f215261c.patch fix1108-v2.diff
++ l=a2
++ shift
++ git -C .. checkout -q -f 1c2651b4b6
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-d82f7e78f9.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-d82f7e78f9.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-09e14f3c6b.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-09e14f3c6b.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-d7f215261c.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-d7f215261c.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/fix1108-v2.diff
++ git -C .. apply '--include=src/*' /opt/t/out/fix1108-v2.diff
++ git -C .. status --short src
++ head
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 a2 ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-a2.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.a2
++ mbuild a2r dep-d82f7e78f9.patch dep-09e14f3c6b.patch dep-d7f215261c.patch fix1108-v2.diff
++ l=a2r
++ shift
++ git -C .. checkout -q -f 1c2651b4b6
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-d82f7e78f9.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-d82f7e78f9.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-09e14f3c6b.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-09e14f3c6b.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/dep-d7f215261c.patch
++ git -C .. apply '--include=src/*' /opt/t/out/dep-d7f215261c.patch
++ for p in "$@"
++ git -C .. apply --check '--include=src/*' /opt/t/out/fix1108-v2.diff
++ git -C .. apply '--include=src/*' /opt/t/out/fix1108-v2.diff
++ git -C .. status --short src
++ head
++ rm -rf objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2
+++ nproc
++ jam -q -j32 -sHAIKU_REVISION=hrev59996 ext2
++ echo 'JAM ext2 a2r ok'
++ grep -E 'warning:|error:' /opt/t/out/jam-a2r.log
++ grep ext2/
++ grep -v address-of-packed-member
+++ find objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2 -maxdepth 1 -type f -name ext2
++ cp objects/haiku/arm64/release/add-ons/kernel/file_systems/ext2/ext2 /opt/t/out/ext2.a2r
++ git -C .. checkout -q -f 1c2651b4b6
++ cd /opt/t/out
++ sha256sum kernel_arm64.k1069 ext2.b2 ext2.a2 ext2.a2r
++ tee SHA256SUMS2
++ aws s3 cp --quiet --recursive --exclude '*' --include ext2.b2 --include ext2.a2 --include SHA256SUMS2 . s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/bugfix/U/out2/
++ echo uploaded

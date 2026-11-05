@@ -1,0 +1,305 @@
+# NOTE: the "depth N:" tree summaries in this log are wrong: the inline awk misparsed debugfs "ex" output and printed "depth 0:" for every file. graviton/scripts/ext2split1108.sh (shapes) prints the index nodes with debugfs "ex -n" instead; the shapes were not re-checked before the hardware A/B stopped (credentials).
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: seed1
+# instance: i-0d0dc1e4705977484   region: us-west-2   transport: SSM send-command (graviton/scripts/ssm-run)
+# what: partition the seed EBS volume for #1108 and make Linux files with full extent nodes
+# start: 20261104T104848Z   end: 20261104T104904Z   rc: 0
+# script sha256: b4e454f5a3643e6aa4527156cd8dfbed2adc671f2ebe940489b5fd89f124a68f
+# ---- script ----
+# | # Seed volume for #1108: one 2 GiB EBS volume, GPT, three ext4 file systems made by Ubuntu mke2fs
+# | # (no journal/orphan_file, as in #1105's seed), with files whose extent trees Linux filled:
+# | #  p1 x4k  ext4, 4 KiB blocks (a leaf holds 340), no metadata_csum, 900 MiB:
+# | #     fa   2000 written 1-block extents at even blocks, size 4000 blocks: depth 2, 5 full leaves
+# | #     fu   2000 preallocated (unwritten) 1-block extents at even blocks, size 4000 blocks: same shape
+# | #     gh   1360 unwritten extents at even blocks: depth 1, root and all 4 leaves full
+# | #     gd   1360 unwritten extents at even blocks, size = end of the last: for an append
+# | #     gk   1360 unwritten extents at odd blocks (leading hole), size = end of the last: for an append
+# | #     tf4  4 written 64 KiB extents: a full root in the inode
+# | #  p2 x1k  ext4, 1 KiB blocks (a leaf holds 84), no metadata_csum, 500 MiB:
+# | #     kd   28224 unwritten extents at even blocks: depth 2, every node full (4 x 84 x 84)
+# | #     ku   3000 unwritten extents at even blocks: depth 2, 35 full leaves
+# | #  p3 c4k  ext4, 4 KiB blocks, WITH metadata_csum, 400 MiB:
+# | #     cu   1360 unwritten extents at even blocks: depth 1, root and leaves full
+# | #     cw   700 written extents at even blocks: depth 1, 2 full leaves
+# | set -x
+# | D=$(ls -l /dev/disk/by-id/ | awk -v v=nvme-Amazon_Elastic_Block_Store_vol0a9314fdd41d0a566 '$9 == v { print $11 }' | sed 's|.*/||')
+# | D=/dev/$D; echo "seed device $D"; lsblk $D || exit 1
+# | sgdisk -Z $D > /dev/null; sgdisk -n1:0:+900M -n2:0:+500M -n3:0:+400M $D || exit 1
+# | partprobe $D; sleep 2; P=${D}p
+# | X="-O ^has_journal,^orphan_file,^metadata_csum"
+# | mkfs.ext4 -q -F $X -L x4k ${P}1 && mkfs.ext4 -q -F -b 1024 $X -L x1k ${P}2 && mkfs.ext4 -q -F -O ^has_journal,^orphan_file,metadata_csum -L c4k ${P}3 || exit 1
+# | dumpe2fs -h ${P}3 2>/dev/null | grep -i "features"
+# | cat > /opt/mk.py <<'PY'
+# | import os, sys
+# | # mk.py <path> <written|unwritten> <count> <first block> <step> <block size> [size in blocks]
+# | path, kind, count, first, step, bs = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6])
+# | fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0o666)
+# | for n in range(count):
+# | 	off = (first + n * step) * bs
+# | 	if kind == 'written':
+# | 		os.pwrite(fd, os.urandom(bs), off)
+# | 		if n % 64 == 63:
+# | 			os.fsync(fd)
+# | 	else:
+# | 		os.posix_fallocate(fd, off, bs)
+# | if len(sys.argv) > 7:
+# | 	os.ftruncate(fd, int(sys.argv[7]) * bs)
+# | os.fsync(fd)
+# | os.close(fd)
+# | PY
+# | mkdir -p /opt/seed/m && cd /opt/seed
+# | tree() { # depth, and per level: node count and entry counts
+# | 	debugfs -R "ex $2" $1 2>/dev/null | awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
+# | }
+# | show() { echo "== $2 $(stat -c '%s %b' m/$2) md5 $(md5sum < m/$2 | cut -d' ' -f1)"; tree $1 /$2; }
+# | mount ${P}1 m && (chmod 777 m
+# |  python3 /opt/mk.py m/fa written 2000 0 2 4096 4000
+# |  python3 /opt/mk.py m/fu unwritten 2000 0 2 4096 4000
+# |  python3 /opt/mk.py m/gh unwritten 1360 0 2 4096
+# |  python3 /opt/mk.py m/gd unwritten 1360 0 2 4096
+# |  python3 /opt/mk.py m/gk unwritten 1360 1 2 4096
+# |  python3 /opt/mk.py m/tf4 written 4 0 32 65536 128
+# |  sync; chmod 666 m/*); umount m
+# | mount ${P}2 m && (chmod 777 m
+# |  python3 /opt/mk.py m/kd unwritten 28224 0 2 1024
+# |  python3 /opt/mk.py m/ku unwritten 3000 0 2 1024
+# |  sync; chmod 666 m/*); umount m
+# | mount ${P}3 m && (chmod 777 m
+# |  python3 /opt/mk.py m/cu unwritten 1360 0 2 4096
+# |  python3 /opt/mk.py m/cw written 700 0 2 4096
+# |  sync; chmod 666 m/*); umount m
+# | for n in 1 2 3; do mount -o ro ${P}$n m; for f in $(ls m | grep -v lost); do show ${P}$n $f; done; umount m; done
+# | for n in 1 2 3; do echo "== p$n"; e2fsck -fn ${P}$n > /tmp/f.out 2>&1; echo "e2fsck p$n rc=$?"; tail -1 /tmp/f.out; done
+# | # keep copies of the Linux-made files, to check the contents after Haiku's writes
+# | rm -rf /opt/seed/orig; mkdir -p /opt/seed/orig && for n in 1 2 3; do mount -o ro ${P}$n m && cp --sparse=always m/[a-z]* /opt/seed/orig/ 2>/dev/null; umount m; done; ls -ls /opt/seed/orig
+# | sync
+# ---- raw output ----
+seed device /dev/nvme1n1
+NAME    MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+nvme1n1 259:1    0   2G  0 disk 
+Creating new GPT entries in memory.
+The operation has completed successfully.
+Filesystem features:      ext_attr resize_inode dir_index filetype extent 64bit flex_bg sparse_super large_file huge_file dir_nlink extra_isize metadata_csum
+== fa 16384000 16056 md5 6bf00e2040d923df3352474ba28afa14
+depth 0:
+== fu 16384000 16056 md5 1fc8c2cf87873321dab7385a4228160a
+depth 0:
+== gd 11137024 10912 md5 245dc5aa9ed11a1028ff5040cfa07e46
+depth 0:
+== gh 11137024 10912 md5 245dc5aa9ed11a1028ff5040cfa07e46
+depth 0:
+== gk 11141120 10912 md5 b87676c6131846852ba416df4a4db1ef
+depth 0:
+== tf4 8388608 512 md5 82b66f63b12daec9d16ae2f213fe45b3
+depth 0:
+== kd 57801728 57128 md5 a1ec7ab9e9e77f1124939fae2b4d39d8
+depth 0:
+== ku 6142976 6074 md5 f665ce0fa14e42f1191c9b3192eefe71
+depth 0:
+== cu 11137024 10912 md5 245dc5aa9ed11a1028ff5040cfa07e46
+depth 0:
+== cw 5730304 5624 md5 cc1a1fb6d8c21530acb618a3cefc852f
+depth 0:
+== p1
+e2fsck p1 rc=0
+x4k: 17/57600 files (35.3% non-contiguous), 12362/230400 blocks
+== p2
+e2fsck p2 rc=0
+x1k: 13/128016 files (7.7% non-contiguous), 66095/512000 blocks
+== p3
+e2fsck p3 rc=0
+c4k: 13/102400 files (15.4% non-contiguous), 8634/102400 blocks
+total 11056
+   0 -rw-r--r-- 1 root root 11137024 Nov  4 10:48 cu
+2800 -rw-r--r-- 1 root root  5730304 Nov  4 10:48 cw
+8000 -rw-r--r-- 1 root root 16384000 Nov  4 10:48 fa
+   0 -rw-r--r-- 1 root root 16384000 Nov  4 10:48 fu
+   0 -rw-r--r-- 1 root root 11137024 Nov  4 10:48 gd
+   0 -rw-r--r-- 1 root root 11137024 Nov  4 10:48 gh
+   0 -rw-r--r-- 1 root root 11141120 Nov  4 10:48 gk
+   0 -rw-r--r-- 1 root root 57801728 Nov  4 10:48 kd
+   0 -rw-r--r-- 1 root root  6142976 Nov  4 10:48 ku
+ 256 -rw-r--r-- 1 root root  8388608 Nov  4 10:48 tf4
+++ ls -l /dev/disk/by-id/
+++ awk -v v=nvme-Amazon_Elastic_Block_Store_vol0a9314fdd41d0a566 '$9 == v { print $11 }'
+++ sed 's|.*/||'
++ D=nvme1n1
++ D=/dev/nvme1n1
++ echo 'seed device /dev/nvme1n1'
++ lsblk /dev/nvme1n1
++ sgdisk -Z /dev/nvme1n1
++ sgdisk -n1:0:+900M -n2:0:+500M -n3:0:+400M /dev/nvme1n1
++ partprobe /dev/nvme1n1
++ sleep 2
++ P=/dev/nvme1n1p
++ X='-O ^has_journal,^orphan_file,^metadata_csum'
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,^metadata_csum' -L x4k /dev/nvme1n1p1
++ mkfs.ext4 -q -F -b 1024 -O '^has_journal,^orphan_file,^metadata_csum' -L x1k /dev/nvme1n1p2
+Warning: specified blocksize 1024 is less than device physical sectorsize 4096
++ mkfs.ext4 -q -F -O '^has_journal,^orphan_file,metadata_csum' -L c4k /dev/nvme1n1p3
++ dumpe2fs -h /dev/nvme1n1p3
++ grep -i features
++ cat
++ mkdir -p /opt/seed/m
++ cd /opt/seed
++ mount /dev/nvme1n1p1 m
++ chmod 777 m
++ python3 /opt/mk.py m/fa written 2000 0 2 4096 4000
++ python3 /opt/mk.py m/fu unwritten 2000 0 2 4096 4000
++ python3 /opt/mk.py m/gh unwritten 1360 0 2 4096
++ python3 /opt/mk.py m/gd unwritten 1360 0 2 4096
++ python3 /opt/mk.py m/gk unwritten 1360 1 2 4096
++ python3 /opt/mk.py m/tf4 written 4 0 32 65536 128
++ sync
++ chmod 666 m/fa m/fu m/gd m/gh m/gk m/lost+found m/tf4
++ umount m
++ mount /dev/nvme1n1p2 m
++ chmod 777 m
++ python3 /opt/mk.py m/kd unwritten 28224 0 2 1024
++ python3 /opt/mk.py m/ku unwritten 3000 0 2 1024
++ sync
++ chmod 666 m/kd m/ku m/lost+found
++ umount m
++ mount /dev/nvme1n1p3 m
++ chmod 777 m
++ python3 /opt/mk.py m/cu unwritten 1360 0 2 4096
++ python3 /opt/mk.py m/cw written 700 0 2 4096
++ sync
++ chmod 666 m/cu m/cw m/lost+found
++ umount m
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p1 m
+++ ls m
+++ grep -v lost
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p1 fa
+++ stat -c '%s %b' m/fa
+++ md5sum
+++ cut '-d ' -f1
++ echo '== fa 16384000 16056 md5 6bf00e2040d923df3352474ba28afa14'
++ tree /dev/nvme1n1p1 /fa
++ debugfs -R 'ex /fa' /dev/nvme1n1p1
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p1 fu
+++ stat -c '%s %b' m/fu
+++ md5sum
+++ cut '-d ' -f1
++ echo '== fu 16384000 16056 md5 1fc8c2cf87873321dab7385a4228160a'
++ tree /dev/nvme1n1p1 /fu
++ debugfs -R 'ex /fu' /dev/nvme1n1p1
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p1 gd
+++ stat -c '%s %b' m/gd
+++ md5sum
+++ cut '-d ' -f1
++ echo '== gd 11137024 10912 md5 245dc5aa9ed11a1028ff5040cfa07e46'
++ tree /dev/nvme1n1p1 /gd
++ debugfs -R 'ex /gd' /dev/nvme1n1p1
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p1 gh
+++ stat -c '%s %b' m/gh
+++ md5sum
+++ cut '-d ' -f1
++ echo '== gh 11137024 10912 md5 245dc5aa9ed11a1028ff5040cfa07e46'
++ tree /dev/nvme1n1p1 /gh
++ debugfs -R 'ex /gh' /dev/nvme1n1p1
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p1 gk
+++ stat -c '%s %b' m/gk
+++ md5sum
+++ cut '-d ' -f1
++ echo '== gk 11141120 10912 md5 b87676c6131846852ba416df4a4db1ef'
++ tree /dev/nvme1n1p1 /gk
++ debugfs -R 'ex /gk' /dev/nvme1n1p1
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p1 tf4
+++ stat -c '%s %b' m/tf4
+++ md5sum
+++ cut '-d ' -f1
++ echo '== tf4 8388608 512 md5 82b66f63b12daec9d16ae2f213fe45b3'
++ tree /dev/nvme1n1p1 /tf4
++ debugfs -R 'ex /tf4' /dev/nvme1n1p1
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ umount m
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p2 m
+++ ls m
+++ grep -v lost
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p2 kd
+++ stat -c '%s %b' m/kd
+++ md5sum
+++ cut '-d ' -f1
++ echo '== kd 57801728 57128 md5 a1ec7ab9e9e77f1124939fae2b4d39d8'
++ tree /dev/nvme1n1p2 /kd
++ debugfs -R 'ex /kd' /dev/nvme1n1p2
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p2 ku
+++ stat -c '%s %b' m/ku
+++ md5sum
+++ cut '-d ' -f1
++ echo '== ku 6142976 6074 md5 f665ce0fa14e42f1191c9b3192eefe71'
++ tree /dev/nvme1n1p2 /ku
++ debugfs -R 'ex /ku' /dev/nvme1n1p2
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ umount m
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p3 m
+++ ls m
+++ grep -v lost
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p3 cu
+++ stat -c '%s %b' m/cu
+++ md5sum
+++ cut '-d ' -f1
++ echo '== cu 11137024 10912 md5 245dc5aa9ed11a1028ff5040cfa07e46'
++ tree /dev/nvme1n1p3 /cu
++ debugfs -R 'ex /cu' /dev/nvme1n1p3
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ for f in $(ls m | grep -v lost)
++ show /dev/nvme1n1p3 cw
+++ stat -c '%s %b' m/cw
+++ md5sum
+++ cut '-d ' -f1
++ echo '== cw 5730304 5624 md5 cc1a1fb6d8c21530acb618a3cefc852f'
++ tree /dev/nvme1n1p3 /cw
++ debugfs -R 'ex /cw' /dev/nvme1n1p3
++ awk 'NR > 1 { split($1, a, "/"); split($2, b, "/"); lvl = a[1]; if (!(lvl SUBSEP $0 in seen)) {} ; key = lvl ":" b[1]; if (!(key in nodes)) { nodes[key] = b[2]; cnt[lvl]++; if (b[2] == b[3]) full[lvl]++ } ; maxd = a[2] } END { printf "depth %d:", maxd; for (l = 0; l <= maxd; l++) printf " L%d %d nodes (%d full)", l, cnt[l], full[l]; print "" }'
++ umount m
++ for n in 1 2 3
++ echo '== p1'
++ e2fsck -fn /dev/nvme1n1p1
++ echo 'e2fsck p1 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3
++ echo '== p2'
++ e2fsck -fn /dev/nvme1n1p2
++ echo 'e2fsck p2 rc=0'
++ tail -1 /tmp/f.out
++ for n in 1 2 3
++ echo '== p3'
++ e2fsck -fn /dev/nvme1n1p3
++ echo 'e2fsck p3 rc=0'
++ tail -1 /tmp/f.out
++ rm -rf /opt/seed/orig
++ mkdir -p /opt/seed/orig
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p1 m
++ cp --sparse=always m/fa m/fu m/gd m/gh m/gk m/lost+found m/tf4 /opt/seed/orig/
++ umount m
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p2 m
++ cp --sparse=always m/kd m/ku m/lost+found /opt/seed/orig/
++ umount m
++ for n in 1 2 3
++ mount -o ro /dev/nvme1n1p3 m
++ cp --sparse=always m/cu m/cw m/lost+found /opt/seed/orig/
++ umount m
++ ls -ls /opt/seed/orig
++ sync
