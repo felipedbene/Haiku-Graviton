@@ -308,11 +308,11 @@ def account_id(client_factory):
 def load_config(args, client_factory):
     region = (args.region or os.environ.get("HAIKU_GRAVITON_REGION")
               or os.environ.get("AWS_REGION")
-              or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2")
+              or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2")
     acct = args.account or account_id(client_factory)
     pool_bucket = (args.pool_bucket or os.environ.get("HG_POOL_BUCKET")
                    or os.environ.get("HAIKU_PUBLISH_BUCKET")
-                   or "haiku-graviton-hpkg-%s" % acct)
+                   or "haiku-graviton-hpkg-%s-us-east-2" % acct)
     work_bucket = (args.work_bucket or os.environ.get("HG_WORK_BUCKET")
                    or os.environ.get("HAIKU_GRAVITON_BUCKET")
                    or "haiku-graviton-%s-%s" % (acct, region))
@@ -445,7 +445,7 @@ def build_parser():
                         "buckets (skips any over --max-objects).")
     p.add_argument("--arch", default=ARCH_DEFAULT, help="pool architecture (default arm64)")
     p.add_argument("--account", help="account id (default: from sts get-caller-identity)")
-    p.add_argument("--region", help="AWS region (default: us-west-2)")
+    p.add_argument("--region", help="AWS region (default: us-east-2)")
     p.add_argument("--pool-bucket", help="override the pool bucket")
     p.add_argument("--work-bucket", help="override the work bucket")
     p.add_argument("--max-objects", type=int, default=2000,

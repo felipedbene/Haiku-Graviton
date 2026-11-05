@@ -204,7 +204,7 @@ def main():
         description="Mine UNMATCHED build-failure logs for new porting-playbook classes "
                     "(#90/#136). Read-only: reads DDB + S3, writes a local report only.")
     ap.add_argument("--table", default=TABLE_DEFAULT)
-    ap.add_argument("--region", default=(os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"))
+    ap.add_argument("--region", default=(os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2"))
     ap.add_argument("--triage-class", default="UNMATCHED",
                     help="mine only this triage_class (default UNMATCHED).")
     ap.add_argument("--all", action="store_true",

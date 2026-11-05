@@ -98,7 +98,7 @@
 
 set -euo pipefail
 
-REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
+REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}}"
 
 # Resolve this account's credentials the same way every tool here does: obey an
 # explicit choice, keep working ambient credentials, else adopt the project

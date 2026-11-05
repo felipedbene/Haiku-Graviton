@@ -124,7 +124,9 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 | Context key | Env | Default | Notes |
 |---|---|---|---|
 | `haiku:account` | `HAIKU_ACCOUNT` | `CDK_DEFAULT_ACCOUNT` | The account your credentials point at. Not written down in this repo — it is public. Not set in `cdk.json`, and must not be added back as an empty string (an empty context value wins over the default). |
-| `haiku:region` | `HAIKU_REGION` | `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `us-west-2` | Not set in `cdk.json`, so the standard AWS variables reach it. `CDK_DEFAULT_REGION` (the profile's configured region) is deliberately ignored. Outside `us-west-2`, account-global IAM names gain a `-<region>` suffix, `DebeosOpsStack` references the state table instead of creating one (a global-table replica; `-c importPackageStateTable=` overrides), and `BuildVpc` takes that region's range from `BUILD_VPC_CIDRS` in `lib/ops-stack.ts`. |
+| `haiku:region` | `HAIKU_REGION` | `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `us-east-2` (`DEFAULT_REGION`) | Not set in `cdk.json`, so the standard AWS variables reach it. `CDK_DEFAULT_REGION` (the profile's configured region) is deliberately ignored. `us-west-2` stays the naming home (`HOME_REGION`): outside it, account-global IAM names gain a `-<region>` suffix, `DebeosOpsStack` references the state table instead of creating one (a global-table replica; `-c importPackageStateTable=` overrides), and `BuildVpc` takes that region's range from `BUILD_VPC_CIDRS` in `lib/ops-stack.ts`. |
+| `haiku:publishBucketName` | `HAIKU_PUBLISH_BUCKET` | SSM `/debeos/repo/bucket` | The package repo (green + blue pools). ONE bucket for every region; unset, `DebeosOpsStack` reads the parameter at deploy time, and a missing parameter fails the deploy. |
+| `haiku:repoRegion` | `HAIKU_REPO_REGION` | SSM `/debeos/repo/region` | The repo bucket's region, handed to the publish and promote jobs as `HAIKU_REPO_REGION`. |
 | `haiku:ssmOutBucketName` | `HAIKU_GRAVITON_BUCKET` | `haiku-graviton-<account>-<region>` | Bucket the builder's role writes `ssm-run` output to; the Test stage is granted read on it. Derived from the two rows above, so it needs no configuration. Same env var the scripts under `graviton/` honour. |
 | `haiku:repoOwner` | `HAIKU_REPO_OWNER` | — **required** | GitHub owner of the DeBeOS repository. |
 | `haiku:repoName` | `HAIKU_REPO_NAME` | `haiku` | |
@@ -171,13 +173,14 @@ at boot, baked key as fallback).
 ## Prerequisites before a deploy would work
 
 1. **CDK bootstrap** the account/region once:
-   `cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/${HAIKU_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"`.
+   `cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/${HAIKU_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}}"`.
    Run it from outside this directory (or pass `--qualifier`): `cdk.json` sets
    the `debeosops` qualifier, so a bootstrap run here targets `CDKToolkit-DeBeOSOps`
    only when you also pass `--toolkit-stack-name CDKToolkit-DeBeOSOps`.
 
    **A second region** additionally needs, before `DebeosOpsStack` deploys there:
-   the three `/debeos/onprem/*` parameters; `/debeos/bake/workbucket-arn` (written
+   the three `/debeos/onprem/*` parameters; the two `/debeos/repo/{bucket,region}`
+   parameters (every region names the same repo); `/debeos/bake/workbucket-arn` (written
    by that region's trunk bake pipeline, or a placeholder until one exists);
    `/haiku-graviton/{canonical,builder}-ami-id` and the AMIs behind them; the
    `haiku-uaf-ed25519` key pair and the `haiku-graviton/baron-ssh-key` secret the

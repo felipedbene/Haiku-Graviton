@@ -23,7 +23,7 @@ set -eu
 # sit one variable away.
 . "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
 
-REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}"
 DRYRUN=0
 while [ $# -gt 0 ]; do
   case "$1" in

@@ -15,7 +15,7 @@ exec >> $LOG 2>&1
 # no AWS account id is written down in a public tree. HAIKU_GRAVITON_BUCKET
 # overrides it. Same convention as graviton/scripts/ssm-run, which explains why
 # the lookup is validated rather than interpolated blind: an empty account id
-# composes "haiku-graviton--us-west-2", a valid bucket name that is nobody's.
+# composes "haiku-graviton--us-east-2", a valid bucket name that is nobody's.
 BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
 if [ -z "$BUCKET" ]; then
   ACCT=$(aws sts get-caller-identity --query Account --output text) || ACCT=""
@@ -23,7 +23,7 @@ if [ -z "$BUCKET" ]; then
     echo "$(basename "$0"): cannot resolve the AWS account id; refresh credentials or set HAIKU_GRAVITON_BUCKET" >&2
     exit 1 ;;
   esac
-  BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+  BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}"
 fi
 S3="s3://$BUCKET/hpkg/arm64/"
 echo "=== WORKER-FULL $PORT START $(date) : $* ==="

@@ -41,8 +41,8 @@
 #   HG_STRICT_PARTIAL  1 => exit 2 when SOME packages published and some failed
 #                   (default: exit 0 -- the publish did complete -- with a PARTIAL line)
 #   ARCH            packaging arch (default arm64)
-#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
-#   HAIKU_REPO_REGION    region of the HG_REPO_S3 bucket (default us-west-2)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-east-2)
+#   HAIKU_REPO_REGION    region of the HG_REPO_S3 bucket (default us-east-2)
 #   PKG_TOOL / PACKAGE_REPO_TOOL   tool paths (auto-detected under /opt/haiku if unset)
 #
 # Exit status:
@@ -63,11 +63,11 @@ PACKAGER="${HG_PACKAGER:-DeBeOS <packages@debene.dev>}"
 REPO_NAME="DeBeOS"
 ARCH="${ARCH:-arm64}"
 PKG_URL="${HG_REPO_URL:-http://packages.debene.dev/$ARCH}"
-region="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+region="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}"
 # The package repo (green/blue pools) lives in ONE region regardless of where
 # this runs, so repo-bucket calls sign for that region rather than the compute
 # one -- correct even for a client that does not follow S3 region redirects.
-repo_region="${HAIKU_REPO_REGION:-us-west-2}"
+repo_region="${HAIKU_REPO_REGION:-us-east-2}"
 
 # The vendor+packager re-stamp (step 3) is METADATA-ONLY (issue #41/#164): it
 # edits only the .PackageInfo and splices it back with `package add -f -i`, never

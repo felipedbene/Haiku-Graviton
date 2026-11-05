@@ -20,7 +20,7 @@ REF=${1:?usage: oven-crossbuild-repro <ref> [phase[:index]...]}; shift
 : "${WORK_BUCKET:?set WORK_BUCKET}"
 export WORK_BUCKET
 export DEBIAN_FRONTEND=noninteractive
-export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-west-2} HAIKU_REVISION=${HAIKU_REVISION:-hrev59996}
+export AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-2} HAIKU_REVISION=${HAIKU_REVISION:-hrev59996}
 export HG_SSH_DIR=/opt/haiku/ssh IMPORT_PREFIX=import CACHE_PREFIX=cache
 export BUILDTOOLS_REPO=https://github.com/felipedbene/buildtools.git BUILDTOOLS_BRANCH=master
 export HAIKU_ON_EC2_REPO=https://github.com/felipedbene/haiku-on-ec2.git HAIKU_ON_EC2_BRANCH=main

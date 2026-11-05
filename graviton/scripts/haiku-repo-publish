@@ -64,7 +64,7 @@
 # Publish config (env, so no account-scoped names live in this tracked file):
 #   HG_REPO_S3   s3://<bucket>/<prefix>/arm64   destination prefix for the repo
 #   HG_CF_DIST   CloudFront distribution id to invalidate /repo* after upload
-#   HAIKU_REPO_REGION  region of the HG_REPO_S3 bucket      (default us-west-2)
+#   HAIKU_REPO_REGION  region of the HG_REPO_S3 bucket      (default us-east-2)
 #
 set -euo pipefail
 
@@ -297,7 +297,7 @@ do_publish() {
 	# Upload packages first (immutable), then the index files last, so a client
 	# refreshing mid-publish never sees an index that points at absent packages.
 	# The repo bucket lives in one region wherever this runs (HAIKU_REPO_REGION).
-	local region="${HAIKU_REPO_REGION:-us-west-2}"
+	local region="${HAIKU_REPO_REGION:-us-east-2}"
 	echo "==> uploading packages/ -> $HG_REPO_S3/packages/"
 	"${AWS[@]}" s3 sync "$ro/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors
 	echo "==> uploading index (repo, repo.info, repo.sha256)"

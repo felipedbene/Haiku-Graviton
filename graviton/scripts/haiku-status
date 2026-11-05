@@ -19,7 +19,7 @@
 
 set -uo pipefail
 
-REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
+REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}}"
 # Directory holding this script, so sibling helpers (haiku-canonical) can be
 # invoked no matter what cwd a hook runs us from.
 HERE="$(cd -- "$(dirname -- "$0")" && pwd)"
@@ -130,9 +130,11 @@ done
 # pool by however far the two had diverged -- 3192 vs 3189 raw objects on
 # 2026-10-14, with 13 green-only and 10 blue-only names. Report both, label which
 # one is live, and name the gate between them (haiku-repo-promote-green).
+# The pool lives in the repo region (HAIKU_REPO_REGION), not the compute region.
+REPO_BUCKET="${HAIKU_PUBLISH_BUCKET:-haiku-graviton-hpkg-${ident}-us-east-2}"
 count_pool() {  # $1 = pool prefix
-	timeout 20 aws --region "$REGION" s3 ls \
-		"s3://haiku-graviton-hpkg-${ident}/$1/arm64/packages/" 2>/dev/null \
+	timeout 20 aws --region "${HAIKU_REPO_REGION:-us-east-2}" s3 ls \
+		"s3://${REPO_BUCKET}/$1/arm64/packages/" 2>/dev/null \
 		| awk '{print $4}' | sed -E 's/-[0-9].*//' \
 		| grep -vE '_devel$|_debuginfo$|_tools$|_doc$|_source$|_bin$' | sort -u | wc -l
 }

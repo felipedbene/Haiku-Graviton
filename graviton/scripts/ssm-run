@@ -41,7 +41,7 @@ set -uo pipefail
 # sit one variable away.
 . "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
 
-REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
+REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}}"
 BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
 PREFIX="${HAIKU_GRAVITON_SSM_PREFIX:-ssm-out}"
 DEADLINE_SECS=900
@@ -59,7 +59,7 @@ chatter() { [ "$QUIET" = 1 ] || printf 'ssm-run: %s\n' "$*" >&2; }
 # bucket outright and skips the lookup.
 #
 # The account id is checked rather than interpolated blind. A failed or empty
-# lookup would otherwise compose "haiku-graviton--us-west-2": a syntactically
+# lookup would otherwise compose "haiku-graviton--us-east-2": a syntactically
 # valid bucket name that belongs to nobody, so the run would fail later with an
 # access error pointing at the wrong thing. Failing here names the real problem.
 if [ -z "$BUCKET" ]; then

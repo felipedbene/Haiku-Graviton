@@ -17,7 +17,7 @@
 # Region: $AWS_DEFAULT_REGION / $AWS_REGION (s5cmd reads these too).
 set -uo pipefail
 
-REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}"
 have_s5() { command -v s5cmd >/dev/null 2>&1; }
 
 verb="${1:?usage: haiku-s3 get|put|sync-down|sync-up <src> <dst>}"; src="${2:?src}"; dst="${3:?dst}"
