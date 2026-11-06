@@ -160,19 +160,19 @@ a live sequence token. Metrics kept publishing in the same run. Query it with:
 
 ```bash
 aws logs describe-log-streams --log-group-name DeBeOS/syslog \
-  --log-stream-name-prefix <i-...> --region us-west-2
+  --log-stream-name-prefix <i-...> --region us-east-2
 aws logs get-log-events --log-group-name DeBeOS/syslog \
-  --log-stream-name <i-...> --start-from-head --limit 20 --region us-west-2
+  --log-stream-name <i-...> --start-from-head --limit 20 --region us-east-2
 ```
 
 ## Verifying after a bake
 
 ```bash
-aws cloudwatch list-metrics --namespace DeBeOS/Host --region us-west-2
+aws cloudwatch list-metrics --namespace DeBeOS/Host --region us-east-2
 aws cloudwatch get-metric-statistics --namespace DeBeOS/Host \
   --metric-name CPUUtilization --dimensions Name=InstanceId,Value=<i-...> \
   --start-time <T-10m> --end-time <now> --period 60 --statistics Average \
-  --region us-west-2
+  --region us-east-2
 ```
 
 A sane `CPUUtilization` (single-digit percent on an idle box, not ~0.02%) plus

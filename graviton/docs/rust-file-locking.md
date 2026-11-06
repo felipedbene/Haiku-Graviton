@@ -178,7 +178,8 @@ an available move.** Two independent verifications:
 
 So the shipped `rust_bin` is a **DeBeOS-built artifact, cross-compiled from the Linux
 desk**, and its inputs are preserved out of band in
-`s3://haiku-graviton-668984504585-us-west-2/rust/` (all dated 2026-08-26):
+`s3://haiku-graviton-668984504585-us-east-2/rust/` (all dated 2026-08-26; copied there
+from the legacy us-west-2 work bucket in the 2026-11-05 region move):
 
 | key | what it is |
 |---|---|
