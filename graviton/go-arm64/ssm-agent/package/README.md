@@ -47,7 +47,7 @@ Current: `amazon_ssm_agent-3.3.3270.0-3-arm64.hpkg` — **zlib-compressed**
 (36,848,167 bytes; `package create -z zlib`, sha256
 `25eaabcb443f7a6b152220d5a79b9e56b0d1c11d6836db9eb5573ff69a6026cf`, stamped
 `DeBeOS-Source-Digest: sha256:38d71b5057788931e6163bcb828d4b5d0faee613978526aea2eb1c11c8b4955f`).
-Staged at `s3://haiku-graviton-668984504585-us-west-2/staging/ssm-agent/`. `-3`
+Staged at `s3://haiku-graviton-668984504585-us-east-2/staging/ssm-agent/`. `-3`
 carries the fsnotify polling backend (#847: Run Command and session completion
 drop from ~65 s to under 2 s) and is the first agent built with toolchain patch
 `0005` (the #843 signal-`g` fix), hardware-verified as described in

@@ -865,7 +865,11 @@ named per entry.
     executions and makes fleet compliance look bad, but it does **not** block
     RunShellScript. Do not halt a wave for it.
 
-  Verified state of this account (`668984504585`, `us-west-2`) as of **2026-10-15**:
+  Verified state of this account (`668984504585`) in the legacy region `us-west-2` as of
+  **2026-10-15**. The home region is now `us-east-2`, whose associations are a separate
+  set with different ids: re-run the checks below there rather than assuming this table.
+  On 2026-11-05 `AWS-UpdateSSMAgent` in us-east-2 still targeted `InstanceIds:*`, i.e.
+  the pre-2026-10-04 shape described next.
 
   | Association | Targets | Status | Hits a fresh Haiku builder? |
   |---|---|---|---|
@@ -902,16 +906,19 @@ named per entry.
 
   ```bash
   # 1. Is any association actually targeting every instance?
-  aws ssm list-associations --region us-west-2 \
+  aws ssm list-associations --region us-east-2 \
     --query 'Associations[].{Name:Name,Targets:Targets,Status:Overview.Status}'
 
   # 2. Has AWS-UpdateSSMAgent been re-widened to InstanceIds:* ? (expect the tag target)
-  aws ssm describe-association --region us-west-2 \
-    --association-id a1c5c244-4b1f-4fd2-aef0-ade825d85b61 \
+  #    (association ids are per region; this looks it up by name)
+  aws ssm describe-association --region us-east-2 \
+    --association-id "$(aws ssm list-associations --region us-east-2 \
+      --association-filter-list key=Name,value=AWS-UpdateSSMAgent \
+      --query 'Associations[0].AssociationId' --output text)" \
     --query 'AssociationDescription.{Version:AssociationVersion,Targets:Targets}'
 
   # 3. Is the command channel actually wedged, or just noisy?
-  aws ssm list-command-invocations --region us-west-2 --instance-id <i-…> \
+  aws ssm list-command-invocations --region us-east-2 --instance-id <i-…> \
     --query 'CommandInvocations[].[RequestedDateTime,DocumentName,Status]' --output text
   ```
 

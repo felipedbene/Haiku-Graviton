@@ -185,12 +185,14 @@ at boot, baked key as fallback).
 
    **A second region** additionally needs, before `DebeosOpsStack` deploys there:
    the three `/debeos/onprem/*` parameters; `/debeos/bake/workbucket-arn` (written
-   by that region's trunk bake pipeline, or a placeholder until one exists);
+   by that region's trunk bake pipeline, or a placeholder until one exists -- the
+   trunk stack creates the parameter itself, so delete the placeholder immediately
+   before its first deploy, or CloudFormation fails on the existing name);
    `/haiku-graviton/{canonical,builder}-ami-id` and the AMIs behind them; the
    `haiku-uaf-ed25519` key pair and the `haiku-graviton/baron-ssh-key` secret the
    perf gate uses; the `haiku-graviton-<account>-<region>` work bucket with
    `tools/` seeded; and a `debeos-package-state` global-table replica added from
-   the home table (`aws dynamodb update-table --region us-west-2 --table-name
+   the writer table in us-east-2 (`aws dynamodb update-table --region us-east-2 --table-name
    debeos-package-state --replica-updates 'Create={RegionName=<region>}'`, after
    enabling a NEW_AND_OLD_IMAGES stream). The stack deploys without the replica
    and the build wave fails at runtime until it exists. Do not carry
@@ -309,8 +311,8 @@ peer per run, so an apparatus failure there does not block manual validation):
   its log group. No EC2/AMI permissions — it only compiles.
 - **Register** role: read/write `import/*`; `ec2:ImportSnapshot`,
   `Describe{ImportSnapshotTasks,Snapshots,Images}`, `RegisterImage`, and
-  `CreateTags`, all constrained to `us-west-2` via an `aws:RequestedRegion`
-  condition. (These EC2 actions don't support resource-level scoping, so the
+  `CreateTags`, all constrained to the stack's own region (us-east-2 for the live
+  pipelines) via an `aws:RequestedRegion` condition. (These EC2 actions don't support resource-level scoping, so the
   region condition is the tightest available bound.)
 - **PerfTest** role: `RunInstances`/`DescribeInstances`/`DescribeImages`/
   `CreateTags` region-scoped (the gate launches two ephemeral instances — the
@@ -353,7 +355,7 @@ All the logic is in `graviton/scripts/haiku-perf-gate`, which takes an AMI id an
 runs standalone — that is how it gets debugged:
 
 ```sh
-HG_TEST_SG=sg-0b99fabc8cb8bce88 AWS_REGION=us-west-2 \
+HG_TEST_SG=<the stack's PerfGateTestSecurityGroupId output> AWS_REGION=us-east-2 \
   bash graviton/scripts/haiku-perf-gate <ami-id>
 ```
 
@@ -495,7 +497,11 @@ CDK-imported (immutable) role can be.
 **One step is still manual — seed the work bucket** before the first bake:
 
 1. `cache/cross-tools-arm64.tar.zst` — skips the ~1h cross-tools build. Copy from
-   any existing pipeline's work bucket.
+   any existing pipeline's work bucket. For the **trunk** pipeline copy the whole
+   `cache/` prefix: `cache/host-tools/` is what `debeos-repo-publish` and
+   `debeos-repo-promote-green` fetch through `/debeos/bake/workbucket-arn`, and
+   `DebeosOpsStack` must be redeployed after that parameter changes, because its
+   read grant on the bucket is resolved at deploy time.
 2. The whole `hpkg-pool/` prefix — the build-feature packages
    (`openssl3`/`openssl3_devel`, **`zstd`/`zstd_devel`**, `ca_root_certificates`, …).
    An empty or incomplete pool **silently disables build features**
@@ -504,7 +510,10 @@ CDK-imported (immutable) role can be.
    `zstd_devel` left `ZstdCompressionAlgorithm` a `B_NOT_SUPPORTED` stub, so
    zstd-compressed hpkgs like upstream `ca_root_certificates` failed to
    decompress). **Verify the pool has every `*_devel` a build feature needs** — the
-   failure mode is a quietly feature-capped image, not a build error.
+   failure mode is a quietly feature-capped image, not a build error. It must
+   also carry the exact `icu74` file `graviton/ssh/UserBuildConfig` force-adds
+   (`local icuFileName = ...`); the pool guard in `cross-build.yml` fails the bake
+   without it.
 
 ```sh
 SRC=s3://<existing-pipeline-work-bucket>
@@ -614,7 +623,7 @@ be tagged `pass`.
 Pick one:
 
 ```sh
-aws ec2 describe-images --owners self --region us-west-2 \
+aws ec2 describe-images --owners self --region us-east-2 \
   --filters Name=tag:oven,Values=true Name=tag:perf-gate,Values=pass \
   --query 'reverse(sort_by(Images,&CreationDate))[].[CreationDate,ImageId,
             Tags[?Key==`perf-rx-mbps`].Value|[0],Tags[?Key==`source-commit`].Value|[0]]' \

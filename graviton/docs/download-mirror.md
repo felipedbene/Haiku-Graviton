@@ -27,7 +27,7 @@ A DeBeOS-owned mirror, laid out to match haikuporter's fallback URL exactly:
 | Piece | Value |
 |---|---|
 | Host | `https://sources.debene.dev` |
-| Origin bucket / prefix | `s3://haiku-graviton-668984504585-us-west-2/download-mirror/<recipeDir>/<file>` |
+| Origin bucket / prefix | `s3://haiku-graviton-668984504585-us-east-2/download-mirror/<recipeDir>/<file>` (origin `s3-download-mirror-use2`; the legacy us-west-2 origin `s3-download-mirror` is still defined on the dist for rollback, frozen pending retirement) |
 | CloudFront distribution | `E1CR5FIE6NETHG` (domain `d1a6zp21bblqer.cloudfront.net`), OriginPath `/download-mirror`, OAC `debeos-sources-mirror-oac` |
 | ACM cert (us-east-1) | `sources.debene.dev`, DNS-validated |
 | DNS | Cloudflare zone `debene.dev`, `sources` CNAME → the dist, **proxied OFF** (DNS-only), mirroring `packages.debene.dev` |
@@ -62,8 +62,8 @@ bytes match a pinned recipe `CHECKSUM_SHA256`:
    ```
    haiku-mirror-sync \
        --tree /path/to/haikuports \
-       --srccache s3://haiku-graviton-668984504585-us-west-2/srccache \
-       --mirror   s3://haiku-graviton-668984504585-us-west-2/download-mirror
+       --srccache s3://haiku-graviton-668984504585-us-east-2/srccache \
+       --mirror   s3://haiku-graviton-668984504585-us-east-2/download-mirror
    ```
 
 haikuporter re-verifies whatever it fetches **from** the mirror against the

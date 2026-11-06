@@ -23,15 +23,20 @@ should build here without the recipe cuts they seemed to need in the guests.
 
 ## Stand up a builder
 
+Builders run in **us-east-2**, the home region: the canonical and builder AMIs, `BuildVpc`
+and the work bucket are there. us-west-2 is legacy and frozen pending retirement, so never
+launch a builder or harvest into it.
+
 ```bash
+export AWS_REGION=us-east-2
 # 1. Launch a Graviton instance from the canonical DeBeOS AMI. ALWAYS resolve the latest
 #    canonical AMI from the SSM parameter — never hardcode an ami-id (any specific id, e.g.
 #    ami-05a424c43ddfed717, is just whatever was canonical at the time).
 AMI=$(aws ssm get-parameter --name /haiku-graviton/canonical-ami-id \
         --query Parameter.Value --output text)   # authoritative source of the canonical AMI
 aws ec2 run-instances --image-id "$AMI" --instance-type c8g.2xlarge \
-  --security-group-ids sg-008114891fd207df1 --key-name haiku-graviton \
-  --iam-instance-profile Name=AWSSupportPatchwork-SSMRoleForInstances \
+  --subnet-id <a BuildVpc buildersSubnet> --security-group-ids <DebeosOpsStack BuilderSg> \
+  --key-name haiku-graviton --iam-instance-profile Name=ssm-instance-profile \
 #    auto-stop=no is NOT optional -- see "The janitor will stop your builder" below.
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=haiku-native-builder},{Key=Project,Value=haiku-graviton},{Key=auto-stop,Value=no}]'
 

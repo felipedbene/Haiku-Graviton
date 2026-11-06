@@ -111,7 +111,13 @@ Building for ARM/ARM64 also needs `mkimage` installed (see `ReadMe.Compiling.md`
 
 ### AWS Graviton test target
 
-Booting is verified on real AWS Graviton (arm64) EC2 instances in **us-west-2**.
+Booting is verified on real AWS Graviton (arm64) EC2 instances in **us-east-2**
+(Ohio), DeBeOS's home region. The canonical and candidate AMIs, the SSM-managed
+test nodes, the bake pipelines and the package repo bucket
+(`haiku-graviton-hpkg-<acct>-us-east-2`, behind packages.debene.dev) all live
+there, and the in-tree scripts default to it when `AWS_REGION` is unset.
+**us-west-2 is legacy**: frozen (no waves, no publishes, no bakes) pending
+retirement. Read from it if you must; never build, publish or test there.
 
 - Each build is baked into an AMI named `haiku-<feature>-<ts>` and tagged
   `Project=haiku-graviton`. The **golden** image is whichever AMI carries the
