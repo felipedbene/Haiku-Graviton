@@ -1,4 +1,5 @@
 import { Construct } from 'constructs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 
 /**
  * Tags every DeBeOS-owned stack applies. `auto-stop`/`auto-delete` are the
@@ -35,8 +36,8 @@ export interface HaikuPipelineConfig {
    */
   readonly account: string;
   /**
-   * Target region. Defaults to {@link HOME_REGION}; see {@link resolveRegion} for
-   * how AWS_REGION / AWS_DEFAULT_REGION and the context key feed it.
+   * Target region. Defaults to {@link DEFAULT_REGION}; see {@link resolveRegion}
+   * for how AWS_REGION / AWS_DEFAULT_REGION and the context key feed it.
    */
   readonly region: string;
 
@@ -119,12 +120,19 @@ export interface HaikuPipelineConfig {
 
   // ---- shared DeBeOS constants (consumed by BOTH the bake and the ops stack) --
   /**
-   * Published hpkg pool bucket (CDN-backed via packages.debene.dev), named
-   * `haiku-graviton-hpkg-<account>` by convention. The bake archives haiku_devel
-   * here; the ops build-wave publishes rebuilt packages here. Defaulted from
-   * {@link account} so the id is never written down.
+   * Published hpkg pool bucket (CDN-backed via packages.debene.dev). The ops
+   * build-wave publishes rebuilt packages here. There is ONE pool for every
+   * region, so this is an explicit override only (`HAIKU_PUBLISH_BUCKET` or
+   * `-c haiku:publishBucketName=`). Unset, a stack reads it from the
+   * {@link REPO_PARAMS} SSM parameter at deploy time; see {@link repoBucketName}.
    */
-  readonly publishBucketName: string;
+  readonly publishBucketName?: string;
+  /**
+   * Region of {@link publishBucketName}, handed to the publish and promote jobs
+   * as HAIKU_REPO_REGION. Override only (`HAIKU_REPO_REGION` or
+   * `-c haiku:repoRegion=`); unset, it comes from SSM like the bucket.
+   */
+  readonly repoRegion?: string;
   /** SSM param holding the BUILDER AMI id (toolchain+haikuporter image). */
   readonly builderAmiParam: string;
   /** SSM param holding the CANONICAL (lean runtime) AMI id. */
@@ -186,16 +194,52 @@ export interface HaikuPipelineConfig {
 }
 
 /**
- * The region DeBeOS has always run in, and the default when nothing names
- * another. Also the region whose resource names are left unsuffixed by
- * {@link regionalName}, so every name that exists today stays exactly as it is.
+ * The region DeBeOS first ran in. It is the region whose resource names are left
+ * unsuffixed by {@link regionalName}, and the region whose DebeosOpsStack owns the
+ * package-state table, so every name and resource that exists there stays exactly
+ * as it is. It is NOT the default region any more: see {@link DEFAULT_REGION}.
  */
 export const HOME_REGION = 'us-west-2';
 
 /**
+ * The region a deploy targets when nothing names one. DeBeOS is moving to
+ * us-east-2, so that is where an unqualified deploy lands. This is deliberately a
+ * separate constant from {@link HOME_REGION}: moving the naming home as well would
+ * rename every IAM role in both regions, and renaming a live role replaces it.
+ */
+export const DEFAULT_REGION = 'us-east-2';
+
+/**
+ * SSM String parameters naming the package repo: one bucket and one region for
+ * every publisher, wherever it runs. Create both in each region a stack deploys
+ * to; a stack deployed without them fails, rather than publishing somewhere else.
+ */
+export const REPO_PARAMS = {
+  bucket: '/debeos/repo/bucket',
+  region: '/debeos/repo/region',
+} as const;
+
+/**
+ * The repo bucket for a stack: the explicit override if one was given, otherwise
+ * a reference to {@link REPO_PARAMS}.bucket that CloudFormation resolves at
+ * deploy time (not `valueFromLookup`, which would cache it in cdk.context.json).
+ * `scope` must be inside a Stack.
+ */
+export function repoBucketName(scope: Construct, cfg: Pick<SharedConfig, 'publishBucketName'>): string {
+  return cfg.publishBucketName
+    ?? ssm.StringParameter.valueForStringParameter(scope, REPO_PARAMS.bucket);
+}
+
+/** The repo region for a stack, resolved like {@link repoBucketName}. */
+export function repoRegionName(scope: Construct, cfg: Pick<SharedConfig, 'repoRegion'>): string {
+  return cfg.repoRegion
+    ?? ssm.StringParameter.valueForStringParameter(scope, REPO_PARAMS.region);
+}
+
+/**
  * Region resolution, most specific first: HAIKU_REGION, then `-c haiku:region`,
  * then the standard AWS_REGION / AWS_DEFAULT_REGION (only if it is one of
- * {@link DEBEOS_REGIONS}), then {@link HOME_REGION}.
+ * {@link DEBEOS_REGIONS}), then {@link DEFAULT_REGION}.
  * CDK_DEFAULT_REGION is deliberately NOT consulted: it is whatever the deploying
  * profile's config says (us-east-1 on a stock workstation), and a stack must not
  * silently move region because of a laptop's ~/.aws/config.
@@ -205,7 +249,7 @@ export function resolveRegion(scope: Construct): string {
   const explicit = process.env.HAIKU_REGION || fromCtx;
   if (explicit) return explicit;
   const ambient = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
-  if (!ambient) return HOME_REGION;
+  if (!ambient) return DEFAULT_REGION;
   // A region picked up from the ambient AWS variables -- which a shell may carry
   // for unrelated work -- must be one DeBeOS already runs in. Anything else would
   // quietly stand up whole new pipelines there; name it explicitly instead.
@@ -248,7 +292,7 @@ function ctx(scope: Construct, key: string, envKey: string, fallback?: string): 
  * (connectionArn, peerAmiParam, ...).
  */
 export type SharedConfig = Pick<HaikuPipelineConfig,
-  'account' | 'region' | 'ssmOutBucketName' | 'publishBucketName'
+  'account' | 'region' | 'ssmOutBucketName' | 'publishBucketName' | 'repoRegion'
   | 'builderAmiParam' | 'canonicalAmiParam' | 'repoCloudFrontDistId'>;
 
 export function loadSharedConfig(scope: Construct): SharedConfig {
@@ -259,13 +303,20 @@ export function loadSharedConfig(scope: Construct): SharedConfig {
   // undefined when neither env nor context supplies it.
   const repoCloudFrontDistId = process.env.HAIKU_REPO_CF_DIST
     ?? (scope.node.tryGetContext('haiku:repoCloudFrontDistId') as string | undefined);
+  // Optional the same way: unset means "read it from SSM in the stack".
+  // An empty env var counts as unset, so it cannot hide a -c value.
+  const optional = (key: string, envKey: string): string | undefined => {
+    const fromEnv = process.env[envKey];
+    const v = fromEnv !== undefined && fromEnv !== '' ? fromEnv : scope.node.tryGetContext(key);
+    return v === undefined || v === '' ? undefined : String(v);
+  };
   return {
     account,
     region,
     ssmOutBucketName: ctx(scope, 'haiku:ssmOutBucketName', 'HAIKU_GRAVITON_BUCKET',
       `haiku-graviton-${account}-${region}`),
-    publishBucketName: ctx(scope, 'haiku:publishBucketName', 'HAIKU_PUBLISH_BUCKET',
-      `haiku-graviton-hpkg-${account}`),
+    publishBucketName: optional('haiku:publishBucketName', 'HAIKU_PUBLISH_BUCKET'),
+    repoRegion: optional('haiku:repoRegion', 'HAIKU_REPO_REGION'),
     builderAmiParam: ctx(scope, 'haiku:builderAmiParam', 'HAIKU_BUILDER_AMI_PARAM',
       '/haiku-graviton/builder-ami-id'),
     canonicalAmiParam: ctx(scope, 'haiku:canonicalAmiParam', 'HAIKU_CANONICAL_AMI_PARAM',

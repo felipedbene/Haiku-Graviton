@@ -73,14 +73,14 @@
 #   HG_LOCK_SETTLE     seconds to wait after our write before the read-back verify (default 5)
 #   HG_LOCK_MODE       wait|abort -- on contention, block until free (default) or exit 1 at once
 #   HG_LOCK_DISABLE    set to 1 to bypass the lock entirely (escape hatch; logs a warning)
-#   HAIKU_REPO_REGION  region of the repo bucket holding the lock (default us-west-2)
+#   HAIKU_REPO_REGION  region of the repo bucket holding the lock (default us-east-2)
 #
 
 # ---- resolved once at source time ----------------------------------------
 : "${HG_REPO_S3:?haiku-publish-lock: set HG_REPO_S3 before sourcing}"
 # The lock object lives in the repo bucket, so it takes the repo region, never the
 # compute region: one lock for every publisher, wherever it runs.
-_PL_REGION="${HAIKU_REPO_REGION:-us-west-2}"
+_PL_REGION="${HAIKU_REPO_REGION:-us-east-2}"
 _PL_KEY="${HG_LOCK_KEY:-${HG_REPO_S3%/}/.publish.lock}"
 _PL_TTL="${HG_LOCK_TTL:-300}"
 _PL_WAIT="${HG_LOCK_WAIT:-3600}"

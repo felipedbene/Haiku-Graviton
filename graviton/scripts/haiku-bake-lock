@@ -33,7 +33,7 @@ set -uo pipefail
 # sit one variable away.
 . "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
 
-REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}"
 PIPELINE="haiku-graviton-bake"
 OWNER="${HAIKU_BAKE_OWNER:-$(hostname 2>/dev/null || echo unknown)-$$}"
 PURPOSE=""

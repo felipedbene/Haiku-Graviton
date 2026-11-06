@@ -11,7 +11,8 @@ import {
   parseBrokerEndpointAllowList, readNativebuildVersion,
 } from '../lib/ops-stack';
 import {
-  HOME_REGION, HaikuPipelineConfig, loadConfig, loadSharedConfig, regionalName,
+  DEFAULT_REGION, HOME_REGION, HaikuPipelineConfig, REPO_PARAMS, loadConfig, loadSharedConfig,
+  regionalName,
 } from '../lib/config';
 
 // Obviously-synthetic values throughout -- all-zero ids in the same style as the
@@ -3965,16 +3966,17 @@ function opsTemplate(region: string, context: Record<string, unknown> = {}): Tem
   return Template.fromStack(stack);
 }
 
-test('region: HAIKU_REGION, then context, then AWS_REGION/AWS_DEFAULT_REGION, then us-west-2', () => {
+test('region: HAIKU_REGION, then context, then AWS_REGION/AWS_DEFAULT_REGION, then us-east-2', () => {
   const saved = { ...process.env };
   try {
     for (const k of ['HAIKU_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION', 'HAIKU_GRAVITON_BUCKET']) {
       delete process.env[k];
     }
     process.env.HAIKU_ACCOUNT = ACCOUNT;
-    expect(loadSharedConfig(new cdk.App()).region).toBe('us-west-2');
-    process.env.AWS_DEFAULT_REGION = 'us-east-2';
+    expect(DEFAULT_REGION).toBe('us-east-2');
     expect(loadSharedConfig(new cdk.App()).region).toBe('us-east-2');
+    process.env.AWS_DEFAULT_REGION = 'us-west-2';
+    expect(loadSharedConfig(new cdk.App()).region).toBe('us-west-2');
     // An ambient region DeBeOS does not run in is refused, not silently adopted.
     process.env.AWS_DEFAULT_REGION = 'eu-west-1';
     expect(() => loadSharedConfig(new cdk.App())).toThrow(/not a DeBeOS region/);
@@ -4087,4 +4089,92 @@ test('-c values override the SSM parameters; -c noVpn=true is the only way to dr
   none.resourceCountIs('AWS::EC2::VPNConnection', 0);
   expect(Object.values(none.toJSON().Parameters ?? {})
     .map((p: any) => p.Default)).not.toContain(ONPREM_PARAMS.publicIp);
+});
+
+// ---- the package repo comes from SSM, one bucket for every region -------------
+// The pool moved to us-east-2; its bucket and region are SSM parameters so no
+// stack, in either region, can keep publishing to the old one by default.
+function opsTemplateNoRepoOverride(region: string, cfg: Partial<typeof config> = {}) {
+  const app = new cdk.App();
+  const { publishBucketName: _b, ...rest } = config;
+  const stack = new OpsStack(app, 'RepoOpsStack', {
+    env: { account: config.account, region },
+    config: { ...rest, region, ...cfg },
+  });
+  return Template.fromStack(stack);
+}
+
+function projectEnv(t: Template, name: string): Record<string, any> {
+  const projects = t.findResources('AWS::CodeBuild::Project', {
+    Properties: { Name: name },
+  });
+  const [p] = Object.values(projects);
+  expect(p).toBeDefined();
+  const out: Record<string, any> = {};
+  for (const v of (p as any).Properties.Environment.EnvironmentVariables) out[v.Name] = v.Value;
+  return out;
+}
+
+test.each(['us-west-2', 'us-east-2'])(
+  'repo bucket and region are SSM references by default (%s)', (region) => {
+    const t = opsTemplateNoRepoOverride(region);
+    const params = t.toJSON().Parameters as Record<string, any>;
+    const idFor = (name: string) => {
+      const id = Object.keys(params).find((k) => params[k].Default === name);
+      expect(id).toBeDefined();
+      expect(params[id!].Type).toBe('AWS::SSM::Parameter::Value<String>');
+      return id!;
+    };
+    const bucketRef = idFor(REPO_PARAMS.bucket);
+    const regionRef = idFor(REPO_PARAMS.region);
+    const json = JSON.stringify(t.toJSON().Resources);
+    expect(json).not.toContain('haiku-graviton-hpkg-');
+    const publish = projectEnv(t, 'debeos-repo-publish');
+    expect(JSON.stringify(publish.HG_REPO_S3)).toContain(bucketRef);
+    expect(publish.HAIKU_REPO_REGION).toEqual({ Ref: regionRef });
+    const promote = projectEnv(t, 'debeos-repo-promote-green');
+    expect(JSON.stringify(promote.HG_GREEN_S3)).toContain(bucketRef);
+    expect(JSON.stringify(promote.HG_BLUE_S3)).toContain(bucketRef);
+    expect(promote.HAIKU_REPO_REGION).toEqual({ Ref: regionRef });
+  });
+
+test('an explicit repo bucket and region override the SSM parameters', () => {
+  const t = opsTemplateNoRepoOverride('us-east-2', {
+    publishBucketName: 'example-repo-bucket', repoRegion: 'us-east-2',
+  });
+  const defaults = Object.values(t.toJSON().Parameters ?? {}).map((p: any) => p.Default);
+  expect(defaults).not.toContain(REPO_PARAMS.bucket);
+  expect(defaults).not.toContain(REPO_PARAMS.region);
+  const publish = projectEnv(t, 'debeos-repo-publish');
+  expect(publish.HG_REPO_S3).toBe('s3://example-repo-bucket/debeos-repo/arm64');
+  expect(publish.HAIKU_REPO_REGION).toBe('us-east-2');
+});
+
+test('HAIKU_PUBLISH_BUCKET / HAIKU_REPO_REGION reach the shared config; unset means SSM', () => {
+  const saved = { ...process.env };
+  try {
+    for (const k of ['HAIKU_PUBLISH_BUCKET', 'HAIKU_REPO_REGION']) delete process.env[k];
+    process.env.HAIKU_ACCOUNT = ACCOUNT;
+    process.env.AWS_REGION = 'us-east-2';
+    const unset = loadSharedConfig(new cdk.App());
+    expect(unset.publishBucketName).toBeUndefined();
+    expect(unset.repoRegion).toBeUndefined();
+    process.env.HAIKU_PUBLISH_BUCKET = 'example-repo-bucket';
+    process.env.HAIKU_REPO_REGION = 'us-east-2';
+    const set = loadSharedConfig(new cdk.App());
+    expect(set.publishBucketName).toBe('example-repo-bucket');
+    expect(set.repoRegion).toBe('us-east-2');
+    expect(loadSharedConfig(new cdk.App({ context: { 'haiku:publishBucketName': 'ctx-bucket' } }))
+      .publishBucketName).toBe('example-repo-bucket');
+    delete process.env.HAIKU_PUBLISH_BUCKET;
+    expect(loadSharedConfig(new cdk.App({ context: { 'haiku:publishBucketName': 'ctx-bucket' } }))
+      .publishBucketName).toBe('ctx-bucket');
+    // A set-but-empty env var is unset: it must not hide the -c value.
+    process.env.HAIKU_PUBLISH_BUCKET = '';
+    expect(loadSharedConfig(new cdk.App({ context: { 'haiku:publishBucketName': 'ctx-bucket' } }))
+      .publishBucketName).toBe('ctx-bucket');
+    expect(loadSharedConfig(new cdk.App()).publishBucketName).toBeUndefined();
+  } finally {
+    process.env = saved;
+  }
 });

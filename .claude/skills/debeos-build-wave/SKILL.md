@@ -12,7 +12,8 @@ the deterministic scripts (`state-sync.py`, `depclosure.py`,
 `haiku-repo-publish-ephemeral`) execute. Never reimplement them.
 
 ## Environment (state it to any worker you spawn)
-- `export AWS_PROFILE=haiku-graviton`; acct 668984504585; us-west-2.
+- `export AWS_PROFILE=haiku-graviton`; acct 668984504585; us-east-2 (repo bucket
+  `haiku-graviton-hpkg-668984504585-us-east-2`).
 - Trunk is `graviton` — never commit there; work in your own worktree off
   `origin/graviton`, land code via PR. Run tracked tooling from `origin/graviton`,
   not the parked primary checkout (SOP §8).

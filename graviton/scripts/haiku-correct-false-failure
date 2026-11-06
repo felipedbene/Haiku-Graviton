@@ -54,7 +54,7 @@ import sys
 import time
 
 TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
-REGION_DEFAULT = (os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2")
+REGION_DEFAULT = (os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2")
 
 # The one definition of the `pkg` primary-key contract (#487). This tool takes port
 # names from argv, which is exactly the shape that produced the phantom row: a

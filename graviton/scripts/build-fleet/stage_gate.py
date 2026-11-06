@@ -17,7 +17,7 @@ import sys
 
 import boto3
 
-REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2"
+REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2"
 
 
 def default_bucket() -> str:
@@ -31,7 +31,7 @@ def default_bucket() -> str:
     STS via boto3 rather than a shell-out to `aws`, because the host this runs on
     has no CLI installed (see the module docstring). A failed lookup is fatal
     rather than falling back, because interpolating an empty account id composes
-    "haiku-graviton--us-west-2": a valid bucket name that belongs to nobody, so
+    "haiku-graviton--us-east-2": a valid bucket name that belongs to nobody, so
     the upload would fail later with an access error naming the wrong problem.
     """
     try:

@@ -308,16 +308,19 @@ def account_id(client_factory):
 def load_config(args, client_factory):
     region = (args.region or os.environ.get("HAIKU_GRAVITON_REGION")
               or os.environ.get("AWS_REGION")
-              or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2")
+              or os.environ.get("AWS_DEFAULT_REGION") or "us-east-2")
     acct = args.account or account_id(client_factory)
     pool_bucket = (args.pool_bucket or os.environ.get("HG_POOL_BUCKET")
                    or os.environ.get("HAIKU_PUBLISH_BUCKET")
-                   or "haiku-graviton-hpkg-%s" % acct)
+                   or "haiku-graviton-hpkg-%s-us-east-2" % acct)
     work_bucket = (args.work_bucket or os.environ.get("HG_WORK_BUCKET")
                    or os.environ.get("HAIKU_GRAVITON_BUCKET")
                    or "haiku-graviton-%s-%s" % (acct, region))
     arch = args.arch
-    return {"region": region, "account": acct, "pool_bucket": pool_bucket,
+    # The pool lives in the repo region, the work bucket in the compute region.
+    repo_region = os.environ.get("HAIKU_REPO_REGION") or "us-east-2"
+    return {"region": region, "repo_region": repo_region, "account": acct,
+            "pool_bucket": pool_bucket,
             "work_bucket": work_bucket, "arch": arch,
             "blue": (pool_bucket, "%s/%s" % (BLUE_PREFIX % arch, INDEX_NAME)),
             "green": (pool_bucket, "%s/%s" % (GREEN_PREFIX % arch, INDEX_NAME))}
@@ -395,6 +398,7 @@ def print_report(results, age_hours, out):
 def run(args, client_factory):
     cfg = load_config(args, client_factory)
     s3 = S3(client_factory("s3", cfg["region"]))
+    pool_s3 = S3(client_factory("s3", cfg["repo_region"]))
     now = datetime.datetime.utcnow()
 
     def log(m):
@@ -405,7 +409,7 @@ def run(args, client_factory):
     pool = PoolIndex()
     for label, (bucket, key) in (("blue", cfg["blue"]), ("green", cfg["green"])):
         try:
-            pkgs = s3.read_index(bucket, key)
+            pkgs = pool_s3.read_index(bucket, key)
         except Exception as exc:  # noqa: BLE001
             die("could not read %s pool index s3://%s/%s (%s) -- refusing to "
                 "reconcile against an unknown pool" % (label, bucket, key, exc))
@@ -415,7 +419,8 @@ def run(args, client_factory):
     prefixes = resolve_prefixes(args, cfg)
     results = []
     for bucket, prefix in prefixes:
-        results += reconcile_prefix(s3, bucket, prefix, pool, now,
+        client = pool_s3 if bucket == cfg["pool_bucket"] else s3
+        results += reconcile_prefix(client, bucket, prefix, pool, now,
                                     args.max_objects, log)
 
     if args.json:
@@ -445,7 +450,7 @@ def build_parser():
                         "buckets (skips any over --max-objects).")
     p.add_argument("--arch", default=ARCH_DEFAULT, help="pool architecture (default arm64)")
     p.add_argument("--account", help="account id (default: from sts get-caller-identity)")
-    p.add_argument("--region", help="AWS region (default: us-west-2)")
+    p.add_argument("--region", help="AWS region (default: us-east-2)")
     p.add_argument("--pool-bucket", help="override the pool bucket")
     p.add_argument("--work-bucket", help="override the work bucket")
     p.add_argument("--max-objects", type=int, default=2000,

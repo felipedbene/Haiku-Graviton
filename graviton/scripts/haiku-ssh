@@ -27,12 +27,12 @@
 # Env:
 #     AWS_PROFILE      defaults to haiku-graviton if unset and no ambient
 #                      credentials are present
-#     AWS_REGION       defaults to us-west-2
+#     AWS_REGION       defaults to us-east-2
 #     HG_BARON_SECRET  Secrets Manager id (default haiku-graviton/baron-ssh-key)
 
 set -eu
 
-REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}}"
+REGION="${HAIKU_GRAVITON_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}}"
 SECRET="${HG_BARON_SECRET:-haiku-graviton/baron-ssh-key}"
 
 # Resolve this account's credentials the same way every tool here does: an

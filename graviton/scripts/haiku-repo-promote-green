@@ -127,7 +127,7 @@
 #   REPO_HOSTS        comma-separated PUBLIC CDN aliases to invalidate
 #   HG_PROMOTE_PROJECT  CodeBuild project a local --apply delegates to
 #   ARCH              packaging arch (default arm64)
-#   HAIKU_REPO_REGION region of the package repo and its promote job (default us-west-2)
+#   HAIKU_REPO_REGION region of the package repo and its promote job (default us-east-2)
 
 import argparse
 import hashlib
@@ -139,9 +139,13 @@ import sys
 import time
 
 ARCH = os.environ.get("ARCH", "arm64")
-# Everything this touches -- both pools, the promote plans, the promote CodeBuild
-# project -- lives in the package repo's region, never the caller's compute region.
-REGION = os.environ.get("HAIKU_REPO_REGION") or "us-west-2"
+# Both pools and the promote CodeBuild project live in the package repo's region,
+# never the caller's compute region.
+REGION = os.environ.get("HAIKU_REPO_REGION") or "us-east-2"
+# The plans and the per-run snapshot live in the WORK bucket, which is the compute
+# region's own bucket -- not necessarily the repo's region.
+WORK_REGION = (os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+               or REGION)
 # The two public hostnames that front the GREEN pool. Public DNS names, not
 # account-scoped ids: the distribution ids are resolved from these at runtime.
 DEFAULT_REPO_HOSTS = "packages.debene.dev,beta.repository.debene.dev"
@@ -164,7 +168,8 @@ def log(msg):
 def aws(*args, **kw):
     """Run the aws CLI. Returns stdout; raises CalledProcessError on failure
     unless check=False, in which case it returns None."""
-    cmd = ["aws", "--region", REGION] + [str(a) for a in args]
+    region = kw.pop("region", REGION)
+    cmd = ["aws", "--region", region] + [str(a) for a in args]
     check = kw.pop("check", True)
     try:
         out = subprocess.run(cmd, check=True, stdout=subprocess.PIPE,
@@ -544,7 +549,7 @@ def cmd_plan(cfg, write):
         log("   --no-write: plan NOT stored; apply has nothing to reference")
         return plan
     key = "%s/%s.json" % (cfg["plans"].rstrip("/"), plan_id)
-    p = subprocess.run(["aws", "--region", REGION, "s3", "cp", "-", key,
+    p = subprocess.run(["aws", "--region", WORK_REGION, "s3", "cp", "-", key,
                         "--content-type", "application/json", "--only-show-errors"],
                        input=json.dumps(plan, indent=1).encode(), check=False)
     if p.returncode != 0:
@@ -560,7 +565,7 @@ def cmd_plan(cfg, write):
 # ---- apply --------------------------------------------------------------
 def fetch_plan(cfg, plan_id):
     key = "%s/%s.json" % (cfg["plans"].rstrip("/"), plan_id)
-    out = aws("s3", "cp", key, "-", check=False)
+    out = aws("s3", "cp", key, "-", check=False, region=WORK_REGION)
     if not out:
         die("no plan %s at %s (run a plan first)" % (plan_id, key))
     try:
@@ -663,7 +668,8 @@ def cmd_apply(cfg, plan_id, in_process):
         "OWN incoming prefix on success, so it is pointed at this copy)")
     for a in adds:
         src = "%s/packages/%s" % (cfg["blue"].rstrip("/"), a["file"])
-        aws("s3", "cp", src, "%s/%s" % (incoming, a["file"]), "--only-show-errors")
+        aws("s3", "cp", src, "%s/%s" % (incoming, a["file"]), "--only-show-errors",
+            "--source-region", REGION, region=WORK_REGION)
     log("   snapshotted %d package(s)" % len(adds))
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -722,7 +728,7 @@ def cmd_apply(cfg, plan_id, in_process):
     # it cannot fail the promote.
     for a in adds:
         aws("s3", "rm", "%s/%s" % (incoming, a["file"]), "--only-show-errors",
-            check=False)
+            check=False, region=WORK_REGION)
     log("")
     log("PROMOTED %d package(s) to LIVE (%s); withheld %d."
         % (len(adds), cfg["green"], len(plan.get("withheld") or [])))

@@ -14,7 +14,9 @@ import * as s3assets from 'aws-cdk-lib/aws-s3-assets';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { SharedConfig, DEBEOS_TAGS, HOME_REGION, regionalName } from './config';
+import {
+  SharedConfig, DEBEOS_TAGS, HOME_REGION, regionalName, repoBucketName, repoRegionName,
+} from './config';
 
 /**
  * #506: extract the NATIVEBUILD_VERSION marker from the tree's build driver at synth
@@ -200,7 +202,11 @@ export class OpsStack extends cdk.Stack {
     // Buckets + builder AMI param come from the SHARED config (same source the
     // bake pipeline uses) -- no hardcoded account-scoped names here anymore.
     const workBucket = props.config.ssmOutBucketName;
-    const publishBucket = props.config.publishBucketName;
+    // The package repo is ONE bucket for every region (an SSM reference unless
+    // overridden; see repoBucketName), and its region travels with it to every job
+    // that signs repo calls, so a publisher never guesses it from its own region.
+    const publishBucket = repoBucketName(this, props.config);
+    const repoRegion = repoRegionName(this, props.config);
     const builderAmiParam = props.config.builderAmiParam;
 
     // ---- Phase 1: state/backlog table ------------------------------------
@@ -956,6 +962,7 @@ export class OpsStack extends cdk.Stack {
       },
       environmentVariables: {
         HG_REPO_S3: { value: `s3://${publishBucket}/debeos-repo/arm64` }, // live repo (packages.debene.dev/arm64)
+        HAIKU_REPO_REGION: { value: repoRegion },                         // region of HG_REPO_S3 + its #164 lock
         HARVEST_S3: { value: `s3://${workBucket}/hpkg/arm64` },           // wave harvest (durable)
         INCOMING_BASE: { value: `s3://${workBucket}/hpkg/arm64-incoming` }, // per-run disposable snapshot
         HG_CF_DIST: { value: props.config.repoCloudFrontDistId ?? '' },   // '' => skip invalidation
@@ -1173,6 +1180,7 @@ export class OpsStack extends cdk.Stack {
         PLAN_ID: { value: '' },
         HG_BLUE_S3: { value: `s3://${publishBucket}/debeos-repo/arm64` },        // staging (READ-ONLY)
         HG_GREEN_S3: { value: `s3://${publishBucket}/debeos-repo-green/arm64` }, // LIVE (write target)
+        HAIKU_REPO_REGION: { value: repoRegion },                                // region of both pools
         HG_PLAN_S3: { value: `s3://${workBucket}/promote-plans` },
         HG_INCOMING_BASE: { value: `s3://${workBucket}/promote-incoming` },
         // The PUBLIC hostnames of the two distributions that serve green. Both go

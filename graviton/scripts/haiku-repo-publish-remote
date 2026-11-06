@@ -24,13 +24,13 @@
 #   HG_CF_DIST      CloudFront distribution id to invalidate (optional but recommended)
 #   HG_REPO_URL     public base URL for repo.info (optional; haiku-repo-add default)
 #   ARCH            packaging arch (default arm64)
-#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-east-2)
 #
 # Usage: haiku-repo-publish-remote <pkg1.hpkg> [<pkg2.hpkg> ...]
 #
 set -euo pipefail
 
-region="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+region="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-2}}"
 ARCH="${ARCH:-arm64}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -69,7 +69,7 @@ done
 echo "==> running haiku-repo-add on the build host over SSM"
 addb64="$(base64 -w0 "$HERE/haiku-repo-add" 2>/dev/null || base64 "$HERE/haiku-repo-add" | tr -d '\n')"
 # Export config into the remote shell, materialise the script, run it.
-remote="export HG_REPO_S3='$HG_REPO_S3' HG_INCOMING_S3='$HG_INCOMING_S3' HG_CF_DIST='${HG_CF_DIST:-}' HG_REPO_URL='${HG_REPO_URL:-}' ARCH='$ARCH' AWS_DEFAULT_REGION='$region' AWS_REGION='$region' HAIKU_REPO_REGION='${HAIKU_REPO_REGION:-us-west-2}'; echo $addb64 | base64 -d > /tmp/haiku-repo-add; bash /tmp/haiku-repo-add"
+remote="export HG_REPO_S3='$HG_REPO_S3' HG_INCOMING_S3='$HG_INCOMING_S3' HG_CF_DIST='${HG_CF_DIST:-}' HG_REPO_URL='${HG_REPO_URL:-}' ARCH='$ARCH' AWS_DEFAULT_REGION='$region' AWS_REGION='$region' HAIKU_REPO_REGION='${HAIKU_REPO_REGION:-us-east-2}'; echo $addb64 | base64 -d > /tmp/haiku-repo-add; bash /tmp/haiku-repo-add"
 cmd_id="$(aws ssm send-command --region "$region" --instance-ids "$HG_BUILDER_ID" \
 	--document-name AWS-RunShellScript --comment "haiku-repo-add (remote publish)" \
 	--parameters commands="[$(printf '%s' "$remote" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')]" \
