@@ -11,7 +11,7 @@ import {
   parseBrokerEndpointAllowList, readNativebuildVersion,
 } from '../lib/ops-stack';
 import {
-  DEFAULT_REGION, HOME_REGION, HaikuPipelineConfig, REPO_PARAMS, loadConfig, loadSharedConfig,
+  DEFAULT_REGION, HOME_REGION, PACKAGE_STATE_REGION, HaikuPipelineConfig, REPO_PARAMS, loadConfig, loadSharedConfig,
   regionalName,
 } from '../lib/config';
 
@@ -4001,23 +4001,47 @@ test('regionalName leaves home-region names untouched and suffixes every other r
   expect(regionalName('debeos-operator', 'us-east-2')).toBe('debeos-operator-us-east-2');
 });
 
-test('home region: operator role, table and BuildVpc range are exactly as before', () => {
+test('home region: operator role and BuildVpc range are exactly as before, no state table', () => {
   const t = opsTemplate('us-west-2');
   t.hasResourceProperties('AWS::IAM::Role', { RoleName: 'debeos-operator' });
-  t.hasResourceProperties('AWS::DynamoDB::Table', { TableName: 'debeos-package-state' });
+  // us-west-2 no longer owns the board (PACKAGE_STATE_REGION is us-east-2).
+  t.resourceCountIs('AWS::DynamoDB::Table', 0);
   t.hasResourceProperties('AWS::EC2::VPC', { CidrBlock: '10.128.0.0/16' });
 });
 
-test('second region: suffixed IAM names, no second state table, its own BuildVpc range', () => {
+test('us-east-2: suffixed IAM names, owns the protected state table, its own BuildVpc range', () => {
+  expect(PACKAGE_STATE_REGION).toBe('us-east-2');
   const t = opsTemplate('us-east-2');
   t.hasResourceProperties('AWS::IAM::Role', { RoleName: 'debeos-operator-us-east-2' });
-  // References the (global-table replica) board, never creates a second one.
-  t.resourceCountIs('AWS::DynamoDB::Table', 0);
+  t.resourceCountIs('AWS::DynamoDB::Table', 1);
+  // Must match the live table that was imported (key schema, GSI, PITR, stream),
+  // and carry the SpringClean retention tag and deletion protection.
+  t.hasResource('AWS::DynamoDB::Table', {
+    DeletionPolicy: 'Retain',
+    UpdateReplacePolicy: 'Retain',
+    Properties: Match.objectLike({
+      TableName: 'debeos-package-state',
+      BillingMode: 'PAY_PER_REQUEST',
+      KeySchema: [{ AttributeName: 'pkg', KeyType: 'HASH' }],
+      DeletionProtectionEnabled: true,
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+      StreamSpecification: { StreamViewType: 'NEW_AND_OLD_IMAGES' },
+      GlobalSecondaryIndexes: [Match.objectLike({
+        IndexName: 'by-build-state',
+        KeySchema: [
+          { AttributeName: 'build_state', KeyType: 'HASH' },
+          { AttributeName: 'queued_at', KeyType: 'RANGE' },
+        ],
+        Projection: { ProjectionType: 'ALL' },
+      })],
+      Tags: Match.arrayWith([{ Key: 'auto-delete', Value: 'no' }]),
+    }),
+  });
   t.hasResourceProperties('AWS::EC2::VPC', { CidrBlock: '10.129.0.0/16' });
-  // ...and the explicit override still lets the home region import, or another create.
-  opsTemplate('us-west-2', { importPackageStateTable: 'true' })
+  // ...and the explicit override still lets either region import, or create.
+  opsTemplate('us-east-2', { importPackageStateTable: 'true' })
     .resourceCountIs('AWS::DynamoDB::Table', 0);
-  opsTemplate('us-east-2', { importPackageStateTable: 'false' })
+  opsTemplate('us-west-2', { importPackageStateTable: 'false' })
     .resourceCountIs('AWS::DynamoDB::Table', 1);
 });
 
