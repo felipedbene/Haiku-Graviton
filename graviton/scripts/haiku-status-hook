@@ -14,6 +14,13 @@
 
 set -uo pipefail
 
+# Pin the snapshot to the DeBeOS region. A Claude Code session on Bedrock sets
+# AWS_REGION for the model endpoint (us-west-2 here), and haiku-status would
+# otherwise inherit it and report the retired region as empty. Override with
+# HAIKU_GRAVITON_REGION.
+export HAIKU_GRAVITON_REGION="${HAIKU_GRAVITON_REGION:-us-east-2}"
+export AWS_REGION="$HAIKU_GRAVITON_REGION"
+
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 status_script="$here/haiku-status"
 

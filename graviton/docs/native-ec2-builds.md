@@ -24,7 +24,7 @@ should build here without the recipe cuts they seemed to need in the guests.
 ## Stand up a builder
 
 Builders run in **us-east-2**, the home region: the canonical and builder AMIs, `BuildVpc`
-and the work bucket are there. us-west-2 is legacy and frozen pending retirement, so never
+and the work bucket are there. us-west-2 is retired (2026-11-06), so never
 launch a builder or harvest into it.
 
 ```bash

@@ -10,7 +10,7 @@ Source of truth:
   freshness or CVEs by hand.
 - **What DeBeOS ships:** the published pool
   `s3://haiku-graviton-hpkg-<acct>-us-east-2/debeos-repo/arm64/packages/`
-  (us-east-2; the us-west-2 `haiku-graviton-hpkg-<acct>` pool is frozen).
+  (us-east-2; the us-west-2 `haiku-graviton-hpkg-<acct>` pool is retired).
 - **State + backlog:** DynamoDB `debeos-package-state` (PK `pkg`, GSI
   `by-build-state`). This is the only durable state — do not keep a side copy.
 

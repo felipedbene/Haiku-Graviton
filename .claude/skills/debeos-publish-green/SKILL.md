@@ -6,7 +6,7 @@ description: Publish newly-built DeBeOS hpkgs to the green package pool — chun
 # Publish to the green pool
 
 Add built hpkgs to the green pool `s3://haiku-graviton-hpkg-668984504585-us-east-2/debeos-repo-green/arm64/`
-(us-east-2, `HAIKU_REPO_REGION=us-east-2`; the us-west-2 `haiku-graviton-hpkg-668984504585` pool is frozen)
+(us-east-2, `HAIKU_REPO_REGION=us-east-2`; the us-west-2 `haiku-graviton-hpkg-668984504585` pool is retired)
 so prod (packages.debene.dev, prod dist `EZBGMRSQZAMKW` origin `/debeos-repo-green`)
 and beta (`E531VGN7VDNBL`) serve them. **Read `graviton/ops/SOPs.md` §3 first.**
 `export AWS_PROFILE=haiku-graviton`; run tooling from `origin/graviton` (§8).

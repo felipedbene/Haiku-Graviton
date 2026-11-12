@@ -116,8 +116,11 @@ Booting is verified on real AWS Graviton (arm64) EC2 instances in **us-east-2**
 test nodes, the bake pipelines and the package repo bucket
 (`haiku-graviton-hpkg-<acct>-us-east-2`, behind packages.debene.dev) all live
 there, and the in-tree scripts default to it when `AWS_REGION` is unset.
-**us-west-2 is legacy**: frozen (no waves, no publishes, no bakes) pending
-retirement. Read from it if you must; never build, publish or test there.
+**us-west-2 is retired** (2026-11-06): no waves, no publishes, no bakes, and
+the package-state table is gone from it. Never build, publish or test there.
+A Claude Code session on Bedrock exports `AWS_REGION=us-west-2` for the model
+endpoint; that value is not DeBeOS's region, so pass `--region us-east-2` (or
+set `AWS_REGION=us-east-2` per command) for every DeBeOS AWS call.
 
 - Each build is baked into an AMI named `haiku-<feature>-<ts>` and tagged
   `Project=haiku-graviton`. The **golden** image is whichever AMI carries the

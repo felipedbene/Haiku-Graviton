@@ -19,7 +19,7 @@ conclusion but the issue body's specifics have drifted, so start from what is
 actually true today (2026-10-15, account 668984504585, us-west-2).
 
 > **Region note (2026-11-05).** The ids, CIDRs and AZs in this section are the legacy
-> us-west-2 `BuildVpc` (`10.128.0.0/16`), which is frozen pending retirement. The
+> us-west-2 `BuildVpc` (`10.128.0.0/16`), which was retired on 2026-11-06. The
 > endpoint belongs in the home region, us-east-2, whose `BuildVpc` is
 > `10.129.0.0/16`; set `AWS_REGION=us-east-2` and re-read the subnet and security-group
 > ids there before applying anything below. The reasoning is unchanged.
