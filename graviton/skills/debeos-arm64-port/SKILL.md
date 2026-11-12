@@ -35,7 +35,7 @@ Cross-references (GitHub): #71 (`uname -m`), #47 (CMake policy floor),
 ## Environment
 
 - `export AWS_PROFILE=haiku-graviton`; region us-east-2 (`export AWS_REGION=us-east-2`).
-  us-west-2 is legacy and frozen: never build, publish or test there.
+  us-west-2 is retired: never build, publish or test there.
 - Trunk is `graviton` — **never commit there.** Work in your own topic branch off
   `origin/graviton`; land via PR.
 - Overlay recipes live in `graviton/haikuports-patches/recipes/` as **complete

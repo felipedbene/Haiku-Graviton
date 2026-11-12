@@ -34,7 +34,7 @@ debeos-aws version
 
 Credentials come from the default AWS chain — on a headless Graviton box that
 is the **EC2 instance-role provider over IMDS**. Region: `--region`,
-`AWS_REGION`/`AWS_DEFAULT_REGION`, or IMDS placement (defaults to `us-west-2`).
+`AWS_REGION`/`AWS_DEFAULT_REGION`, or IMDS placement (defaults to `us-east-2`).
 
 `sync` uses the awscli default comparator (copy if the destination is missing,
 the size differs, or the source is newer) and supports ordered

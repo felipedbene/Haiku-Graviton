@@ -27,7 +27,7 @@ at the pipeline's Approve stage, and any failed build or failed hardware workloa
 - **scoreboard_path** (required): Absolute path to the run scoreboard, normally `<repo>/graviton/audit/review/overnight-scoreboard.md` (or `slice-scoreboard.md`). Its "surviving/adjudicated real-bugs" list (plus the diffs in the matching `*-review.md`) is the work queue.
 - **repo_root** (required): Absolute path to the DeBeOS checkout (e.g. `/local/home/benfelip/Projects/Haiku-Graviton`).
 - **pipeline_name** (optional, default: `haiku-graviton-bake`): the CodePipeline that builds, bakes, and gates promotion. Its source branch and CDK config live with the pipeline; the deploy-branch discipline in `graviton/pipeline/README.md` applies (the pipeline builds from the branch it is pointed at, not necessarily `graviton`).
-- **aws_region** (optional, default: `us-east-2`): Region of the pipeline and test fleet. us-east-2 is the home region; us-west-2 is legacy and frozen, so never point this at it.
+- **aws_region** (optional, default: `us-east-2`): Region of the pipeline and test fleet. us-east-2 is the home region; us-west-2 is retired, so never point this at it.
 - **approve_promotion** (optional, default: `false`): MUST stay `false` until a human explicitly approves at the pipeline's Approve stage. No value other than an explicit human "yes" at runtime authorizes advancing the Promote stage.
 
 **Constraints for parameter acquisition:**

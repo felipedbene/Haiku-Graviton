@@ -15,7 +15,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import {
-  SharedConfig, DEBEOS_TAGS, HOME_REGION, regionalName, repoBucketName, repoRegionName,
+  SharedConfig, DEBEOS_TAGS, PACKAGE_STATE_REGION, regionalName, repoBucketName, repoRegionName,
 } from './config';
 
 /**
@@ -210,16 +210,14 @@ export class OpsStack extends cdk.Stack {
     const builderAmiParam = props.config.builderAmiParam;
 
     // ---- Phase 1: state/backlog table ------------------------------------
-    // There is ONE package-state board. The home region's stack owns the table;
-    // a stack in any other region REFERENCES a same-named table in its own
-    // region -- a global-table replica added from the home table -- and never
-    // creates one. Creating it would split the board in two, and would also make
-    // the replica impossible to add later (a replica cannot be created over an
-    // existing table). Override with -c importPackageStateTable=true|false.
+    // There is ONE package-state board, owned by the PACKAGE_STATE_REGION stack;
+    // a stack in any other region REFERENCES a same-named table in its own region
+    // and never creates one, since creating it would split the board in two.
+    // Override with -c importPackageStateTable=true|false.
     const tableName = props.tableName ?? 'debeos-package-state';
     const rawImport = this.node.tryGetContext('importPackageStateTable');
     const importTable = rawImport === undefined
-      ? props.config.region !== HOME_REGION
+      ? props.config.region !== PACKAGE_STATE_REGION
       : (rawImport === true || rawImport === 'true');
     if (importTable) {
       this.table = dynamodb.Table.fromTableAttributes(this, 'PackageState', {
@@ -232,7 +230,15 @@ export class OpsStack extends cdk.Stack {
         partitionKey: { name: 'pkg', type: dynamodb.AttributeType.STRING },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+        // The board is the only copy of every package's build/publish state:
+        // retained on stack delete, and refused by DeleteTable until protection
+        // is explicitly lifted.
+        deletionProtection: true,
         removalPolicy: cdk.RemovalPolicy.RETAIN,
+        // The live table carries a NEW_AND_OLD_IMAGES stream from its time as a
+        // global-table replica. Declared so the template matches the imported
+        // table, and so a replica can be added again without a table update.
+        stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       });
       table.addGlobalSecondaryIndex({
         indexName: 'by-build-state',

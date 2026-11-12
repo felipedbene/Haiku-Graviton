@@ -195,11 +195,22 @@ export interface HaikuPipelineConfig {
 
 /**
  * The region DeBeOS first ran in. It is the region whose resource names are left
- * unsuffixed by {@link regionalName}, and the region whose DebeosOpsStack owns the
- * package-state table, so every name and resource that exists there stays exactly
- * as it is. It is NOT the default region any more: see {@link DEFAULT_REGION}.
+ * unsuffixed by {@link regionalName}, so every IAM name that exists there stays
+ * exactly as it is. It is NOT the default region any more (see
+ * {@link DEFAULT_REGION}), and it no longer owns the package-state table (see
+ * {@link PACKAGE_STATE_REGION}).
  */
 export const HOME_REGION = 'us-west-2';
+
+/**
+ * The region whose DebeosOpsStack owns the `debeos-package-state` table. A stack
+ * in any other region references a same-named table instead of creating one.
+ * The board lived in {@link HOME_REGION} until us-west-2 was retired on
+ * 2026-11-06; the surviving us-east-2 table (created 2026-11-06 outside
+ * CloudFormation) was then imported into the us-east-2 stack, so the board is
+ * stack-managed and carries the stack's retention tags again.
+ */
+export const PACKAGE_STATE_REGION = 'us-east-2';
 
 /**
  * The region a deploy targets when nothing names one. DeBeOS is moving to
