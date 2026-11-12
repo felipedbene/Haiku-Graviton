@@ -102,7 +102,7 @@ func loadConfig(ctx context.Context, region string) (aws.Config, error) {
 	if cfg.Region == "" {
 		// IMDS did not yield a region and none was configured; default to the
 		// project's home region rather than failing with an opaque SDK error.
-		cfg.Region = "us-west-2"
+		cfg.Region = "us-east-2"
 	}
 	return cfg, nil
 }
